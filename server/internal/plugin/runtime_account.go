@@ -229,7 +229,9 @@ func (rt *runtime) jsTexturesImportBase64(call goja.FunctionCall) goja.Value {
 	if typ != "" {
 		filename = typ + ".png"
 	}
-	v, created, uerr := svc.UploadTextureMeta(ctx, id.ID, typ, model, rt.jsUploadMeta(call, desc, false), raw, rt.accountMeta(filename, nil))
+	um := rt.jsUploadMeta(call, desc, false)
+	um.Public = false // importBase64 is always private, even if JS passes public:true
+	v, created, uerr := svc.UploadTextureMeta(ctx, id.ID, typ, model, um, raw, rt.accountMeta(filename, nil))
 	if uerr != nil {
 		return rt.jsFail(uerr)
 	}
