@@ -187,8 +187,25 @@ func TestIntegrationJobsLifecycle(t *testing.T) {
 	if err != nil || claimed == nil || claimed.ID != "job-a" {
 		t.Fatalf("claim = %+v %v", claimed, err)
 	}
-	if ok, err := js.SaveStep(ctx, "job-a", "w1", []byte(`{"page":2}`), 50, "page 2"); err != nil || !ok {
+	if ok, err := js.SaveStep(ctx, "job-a", "w1", []byte(`{"page":2}`), 50, "page 2", 0); err != nil || !ok {
 		t.Fatalf("save step ok=%v err=%v", ok, err)
+	}
+	// Steps must release the lease, otherwise the next step waits 30s for
+	// expiry and cancel/resume blow the one-step budget.
+	if got, _ := js.Get(ctx, "job-a"); got.State != "queued" || got.LeaseOwner != "" {
+		t.Fatalf("after step = %+v, want queued without lease", got)
+	}
+	if claimed, err := js.Claim(ctx, "w2", time.Now(), time.Minute); err != nil || claimed == nil || claimed.ID != "job-a" {
+		t.Fatalf("claim after step = %+v %v", claimed, err)
+	}
+	if ok, err := js.SaveStep(ctx, "job-a", "w2", []byte(`{"page":3}`), 60, "page 3", time.Second); err != nil || !ok {
+		t.Fatalf("delayed save step ok=%v err=%v", ok, err)
+	}
+	if claimed, err := js.Claim(ctx, "w1", time.Now(), time.Minute); err != nil || claimed != nil {
+		t.Fatalf("claimed before delay = %+v %v", claimed, err)
+	}
+	if claimed, err := js.Claim(ctx, "w1", time.Now().Add(2*time.Second), time.Minute); err != nil || claimed == nil || claimed.ID != "job-a" {
+		t.Fatalf("claim after delay = %+v %v", claimed, err)
 	}
 	if err := js.Finish(ctx, "job-a", "w1", []byte(`{"imported":2}`)); err != nil {
 		t.Fatal(err)

@@ -398,15 +398,19 @@ manifest 声明处理器：
 ```js
 skin.jobs.register("blessing-import", function (job) {
   // job = {jobId, attempt, payload, cursor, cancelRequested}
-  return { done: false, cursor: {...}, progress: 40, message: "..." };
+  // delayMS: 可选，0–60000；到点前不会被再次领取
+  return { done: false, cursor: {...}, progress: 40, message: "...", delayMS: 250 };
 });
 skin.jobs.submit("blessing-import", {...}); // 仅 admin 路由
 skin.jobs.list(1) / status(id) / cancel(id) / resume(id); // 仅 admin 路由
 ```
 
-- 任务持久化在 `host_jobs`，按 step 保存 `cursor/progress`；worker 崩溃/重启后可从 cursor 续跑。
+- 任务持久化在 `host_jobs`，按 step 保存 `cursor/progress`；每步结束释放租约并重新排队，
+  下一次 tick 即可继续（不会等 30s 租约过期）；worker 崩溃/重启后从 cursor 续跑。
+- **一个 step 只做少量上游请求**：`net.http` 默认每 host 4 次/秒窗口，把整页（list + 每项 info/texture）
+  塞进一个 step 会触发 `net.rate_limited`。用 `delayMS` 拉开步距，长任务拆成多条记录级 step。
 - 每个 step 在插件专属 job VM 中执行（不占请求 VM 锁）；超时/异常按 `maxAttempts` 退避重试。
-- 取消在 step 之间生效；`cancel` 后任务状态为 `cancelling/cancelled`，`resume` 可重新排队。
+- 取消在 step 之间生效（含排队中的任务）；`cancel` 后任务状态为 `cancelling/cancelled`，`resume` 可重新排队。
 - 仅管理员可提交/查看/取消/恢复；任务载荷与进度不对普通用户开放。
 
 ## 11. 示例与官方插件

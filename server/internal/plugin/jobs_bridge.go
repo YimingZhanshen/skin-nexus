@@ -24,6 +24,7 @@ type jobStepResult struct {
 	Progress int
 	Message  string
 	Result   []byte
+	DelayMS  int
 }
 
 func (rt *runtime) regJob(call goja.FunctionCall) goja.Value {
@@ -245,6 +246,18 @@ func (rt *runtime) runJobStep(ctx context.Context, j *jobs.Job) (jobStepResult, 
 	}
 	if v, ok := out["message"].(string); ok {
 		res.Message = v
+	}
+	switch v := out["delayMS"].(type) {
+	case int64:
+		res.DelayMS = int(v)
+	case float64:
+		res.DelayMS = int(v)
+	}
+	if res.DelayMS < 0 {
+		res.DelayMS = 0
+	}
+	if res.DelayMS > 60000 {
+		res.DelayMS = 60000
 	}
 	if v, exists := out["cursor"]; exists {
 		if b, err := json.Marshal(v); err == nil {

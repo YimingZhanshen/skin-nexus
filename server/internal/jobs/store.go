@@ -180,11 +180,23 @@ func (s *Store) Claim(ctx context.Context, worker string, now time.Time, lease t
 	return &j, nil
 }
 
-func (s *Store) SaveStep(ctx context.Context, id, worker string, cursor []byte, progress int, message string) (bool, error) {
+// SaveStep persists the cursor and releases the lease so the next tick can
+// claim the job again. Keeping the lease would stall every step until it
+// expires (30s), which also delays cancel/resume past the one-step budget.
+// delay lets a plugin space upstream calls without blocking its VM.
+func (s *Store) SaveStep(ctx context.Context, id, worker string, cursor []byte, progress int, message string, delay time.Duration) (bool, error) {
+	if delay < 0 {
+		delay = 0
+	}
+	if delay > time.Minute {
+		delay = time.Minute
+	}
+	runAfter := time.Now().Add(delay).Truncate(time.Millisecond)
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE host_jobs SET job_cursor=?, progress=?, message=?, lease_until=DATE_ADD(NOW(3), INTERVAL 30 SECOND), updated_at=NOW(3)
+		`UPDATE host_jobs SET job_cursor=?, progress=?, message=?, state='queued',
+		 run_after=?, lease_owner='', lease_until=NULL, updated_at=NOW(3)
 		 WHERE id=? AND state='running' AND lease_owner=?`,
-		jsonOrNil(cursor), progress, message, id, worker)
+		jsonOrNil(cursor), progress, message, runAfter, id, worker)
 	if err != nil {
 		return false, err
 	}

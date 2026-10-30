@@ -55,7 +55,8 @@ func (m *Manager) runOneJob(worker string) {
 		}
 		return
 	}
-	ok, err := m.cfg.Jobs.SaveStep(ctx, j.ID, worker, res.Cursor, res.Progress, res.Message)
+	ok, err := m.cfg.Jobs.SaveStep(ctx, j.ID, worker, res.Cursor, res.Progress, res.Message,
+		time.Duration(res.DelayMS)*time.Millisecond)
 	if err != nil || !ok {
 		// Lost lease or cancelled: do not overwrite a terminal state.
 		_ = m.cfg.Jobs.MarkCancelled(ctx, j.ID, worker)
