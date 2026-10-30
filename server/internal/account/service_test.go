@@ -28,3 +28,18 @@ func TestErrorMappingCodes(t *testing.T) {
 		t.Fatalf("err = %+v", e)
 	}
 }
+
+func TestValidSourceURL(t *testing.T) {
+	for raw, want := range map[string]bool{
+		"https://example.com/a":      true,
+		"http://example.com":         true,
+		"ftp://example.com/x":        false,
+		"javascript:alert(1)":        false,
+		"https://user@example.com/x": false,
+		"https://":                   false,
+	} {
+		if got := validSourceURL(raw); got != want {
+			t.Errorf("validSourceURL(%q) = %v, want %v", raw, got, want)
+		}
+	}
+}

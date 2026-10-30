@@ -43,6 +43,8 @@ const (
 	CodeLibraryNotFnd = "library.not_found"
 	CodeForbidden     = "account.forbidden"
 	CodeDuplicatePub  = "texture.duplicate_public"
+	CodeSourceURLReq  = "texture.source_url_required"
+	CodeSourceURLBad  = "texture.source_url_invalid"
 	CodeInternal      = "internal"
 )
 
@@ -72,6 +74,15 @@ func (m CallMeta) via() string {
 	return "web"
 }
 
+// UploadMeta is the user-editable metadata accepted on upload/import.
+type UploadMeta struct {
+	Name      string
+	DetailMD  string
+	Source    string
+	SourceURL string
+	Public    bool
+}
+
 // Player is the neutral row shape shared by both transports.
 type Player struct {
 	ID        int64
@@ -92,6 +103,9 @@ type TextureView struct {
 	Hash        string `json:"hash"`
 	Model       string `json:"model,omitempty"`
 	Description string `json:"description,omitempty"`
+	DetailMD    string `json:"detail,omitempty"`
+	Source      string `json:"source,omitempty"`
+	SourceURL   string `json:"sourceUrl,omitempty"`
 	URL         string `json:"url"`
 	PreviewURL  string `json:"previewUrl,omitempty"`
 	AvatarURL   string `json:"avatarUrl,omitempty"`
@@ -126,6 +140,9 @@ type SiteLimits struct {
 type LibraryItem struct {
 	TID        int64  `json:"tid"`
 	Name       string `json:"name"`
+	Source     string `json:"source,omitempty"`
+	SourceURL  string `json:"sourceUrl,omitempty"`
+	DetailMD   string `json:"detail,omitempty"`
 	Type       string `json:"type"`
 	Model      string `json:"model"`
 	Hash       string `json:"hash"`

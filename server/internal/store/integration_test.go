@@ -40,7 +40,7 @@ var testTables = []string{
 	"ygg_join_sessions", "ygg_tokens", "uuid_map", "textures", "players", "users",
 	"invitation_codes", "user_closet", "password_reset_tokens", "access_logs", "schema_migrations",
 	"plugin_meta", "plugin_secrets", "plugin_kv", "plugin_docs", "plugin_migrations", "plugin_install_tx",
-	"host_jobs",
+	"host_jobs", "texture_reports",
 	"legacy_users", "legacy_players", "legacy_textures", "legacy_uuid",
 	"legacy_options", "legacy_user_closet", "legacy_invitation_codes",
 }
@@ -111,11 +111,11 @@ func TestIntegrationPublicTextureDedupe(t *testing.T) {
 	u1, u2 := seedUser(t, m), seedUser(t, m)
 	hash := strings.Repeat("a", 64)
 
-	tid, err := m.AddTexture(ctx, u1, "skin", hash, "default", "first")
+	tid, err := m.AddTexture(ctx, u1, "skin", hash, "default", TextureMeta{Description: "first"})
 	if err != nil {
 		t.Fatalf("first public texture: %v", err)
 	}
-	if _, err := m.AddTexture(ctx, u2, "skin", hash, "default", "duplicate"); !errors.Is(err, ErrDuplicatePublic) {
+	if _, err := m.AddTexture(ctx, u2, "skin", hash, "default", TextureMeta{Description: "duplicate"}); !errors.Is(err, ErrDuplicatePublic) {
 		t.Fatalf("second public texture err = %v, want ErrDuplicatePublic", err)
 	}
 	if got, ok, err := m.PublicTextureByHash(ctx, "skin", hash); err != nil || !ok || got.ID != tid {
@@ -123,7 +123,7 @@ func TestIntegrationPublicTextureDedupe(t *testing.T) {
 	}
 
 	// Private copies are allowed and never satisfy the public lookup.
-	if _, err := m.AddTexturePrivate(ctx, u2, "skin", hash, "default", "private"); err != nil {
+	if _, err := m.AddTexturePrivate(ctx, u2, "skin", hash, "default", TextureMeta{Description: "private"}); err != nil {
 		t.Fatalf("private duplicate: %v", err)
 	}
 	// Publishing the private copy must collide with the existing public row.
@@ -133,7 +133,7 @@ func TestIntegrationPublicTextureDedupe(t *testing.T) {
 		`SELECT id FROM textures WHERE uid=? AND hash=? AND public=0 LIMIT 1`, u2, hash).Scan(&privateID); err != nil {
 		t.Fatalf("find private: %v", err)
 	}
-	if err := m.UpdateTextureMeta(ctx, privateID, u2, nil, &allow); !errors.Is(err, ErrDuplicatePublic) {
+	if err := m.UpdateTextureMeta(ctx, privateID, u2, TextureMetaPatch{Public: &allow}); !errors.Is(err, ErrDuplicatePublic) {
 		t.Fatalf("publish duplicate err = %v, want ErrDuplicatePublic", err)
 	}
 
@@ -692,7 +692,7 @@ func TestIntegrationCloset(t *testing.T) {
 	ctx := context.Background()
 	uid := seedUser(t, m)
 	owner := seedUser(t, m)
-	tid, err := m.AddTexture(ctx, owner, "skin", "abc123hash", "", "seed")
+	tid, err := m.AddTexture(ctx, owner, "skin", "abc123hash", "", TextureMeta{Description: "seed"})
 	if err != nil {
 		t.Fatalf("seed texture: %v", err)
 	}
@@ -844,7 +844,7 @@ func TestIntegrationAdminPlayers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create player: %v", err)
 	}
-	tid, err := m.AddTexture(ctx, uid, "skin", "padminhash00000000000000000000000000000000000000000000000000000", "", "seed")
+	tid, err := m.AddTexture(ctx, uid, "skin", "padminhash00000000000000000000000000000000000000000000000000000", "", TextureMeta{Description: "seed"})
 	if err != nil {
 		t.Fatalf("seed texture: %v", err)
 	}
@@ -1216,5 +1216,37 @@ func TestIntegrationSkinlibOneAndPublicIDs(t *testing.T) {
 	// limit respected
 	if ids2, err := m.PublicTextureIDs(ctx, 1); err != nil || len(ids2) != 1 {
 		t.Fatalf("limit=1: %v err=%v", ids2, err)
+	}
+}
+
+func TestIntegrationTextureReports(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	owner := seedUser(t, m)
+	reporter := seedUser(t, m)
+	admin := seedUser(t, m)
+	tid, err := m.AddTexture(ctx, owner, "skin", "reporthash", "default", TextureMeta{Description: "reported"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := m.CreateReport(ctx, tid, reporter, "copyright", "looks copied")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.CreateReport(ctx, tid, reporter, "spam", ""); !errors.Is(err, ErrDuplicateReport) {
+		t.Fatalf("duplicate report err = %v", err)
+	}
+	if err := m.ResolveReport(ctx, id, "bogus", admin); err == nil {
+		t.Fatal("invalid report status accepted")
+	}
+	rows, total, err := m.ListReports(ctx, ReportOpts{Status: "open", Page: 1, PerPage: 20})
+	if err != nil || total != 1 || len(rows) != 1 || rows[0].TextureID != tid {
+		t.Fatalf("list reports total=%d rows=%+v err=%v", total, rows, err)
+	}
+	if err := m.ResolveReport(ctx, id, "dismissed", admin); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := m.CountReportsByUserSince(ctx, reporter, time.Now().Add(-time.Hour)); n != 1 {
+		t.Fatalf("count = %d", n)
 	}
 }

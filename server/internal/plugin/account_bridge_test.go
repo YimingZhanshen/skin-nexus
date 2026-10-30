@@ -54,6 +54,10 @@ func (f *fakeAccount) UploadTexture(_ context.Context, uid int64, _, _, _ string
 	f.uid, f.png = uid, png
 	return TextureView{ID: 3, Hash: "abc"}, true, nil
 }
+func (f *fakeAccount) UploadTextureMeta(_ context.Context, uid int64, _, _ string, um UploadMeta, png []byte, _ AccountCallMeta) (TextureView, bool, error) {
+	f.uid, f.png = uid, png
+	return TextureView{ID: 3, Hash: "abc", Source: um.Source, SourceURL: um.SourceURL, DetailMD: um.DetailMD}, true, nil
+}
 func (f *fakeAccount) ImportPrivateTexture(_ context.Context, uid int64, _, _, _ string, png []byte, _ AccountCallMeta) (TextureView, bool, error) {
 	f.uid, f.png = uid, png
 	return TextureView{ID: 3, Hash: "abc"}, true, nil

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, defineAsyncComponent } from 'vue'
+import { ref, computed, watch, onMounted, defineAsyncComponent, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from './api.js'
 import PageLoading from './components/PageLoading.vue'
@@ -32,6 +32,7 @@ const user = ref(null)
 // it — normal users never do. `permission` comes from GET /api/v1/me
 // (0 = normal, >0 = admin, -1 = banned).
 const isAdmin = computed(() => Number(user.value && user.value.permission) > 0)
+provide('sessionUser', user)
 // login | register | setup | device | dashboard | closet | players |
 // profile | apps | union | admin
 const view = ref('login')

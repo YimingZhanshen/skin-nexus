@@ -161,6 +161,28 @@ func (rt *runtime) jsTexturesList(call goja.FunctionCall) goja.Value {
 	return rt.jsOK(v)
 }
 
+func (rt *runtime) jsUploadMeta(call goja.FunctionCall, desc string, public bool) UploadMeta {
+	um := UploadMeta{Name: desc, Public: public}
+	v := call.Argument(4)
+	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
+		return um
+	}
+	obj := v.ToObject(rt.vm)
+	if x := obj.Get("detail"); x != nil && !goja.IsUndefined(x) {
+		um.DetailMD = x.String()
+	}
+	if x := obj.Get("source"); x != nil && !goja.IsUndefined(x) {
+		um.Source = x.String()
+	}
+	if x := obj.Get("sourceUrl"); x != nil && !goja.IsUndefined(x) {
+		um.SourceURL = x.String()
+	}
+	if x := obj.Get("public"); x != nil && !goja.IsUndefined(x) {
+		um.Public = x.ToBoolean()
+	}
+	return um
+}
+
 func (rt *runtime) jsTexturesUpload(call goja.FunctionCall) goja.Value {
 	svc, id, ctx := rt.accountContext(PermEditTextures)
 	typ := call.Argument(0).String()
@@ -174,7 +196,7 @@ func (rt *runtime) jsTexturesUpload(call goja.FunctionCall) goja.Value {
 	if typ != "" {
 		filename = typ + ".png"
 	}
-	v, created, uerr := svc.UploadTexture(ctx, id.ID, typ, model, desc, raw, rt.accountMeta(filename, nil))
+	v, created, uerr := svc.UploadTextureMeta(ctx, id.ID, typ, model, rt.jsUploadMeta(call, desc, true), raw, rt.accountMeta(filename, nil))
 	if uerr != nil {
 		return rt.jsFail(uerr)
 	}
@@ -207,7 +229,7 @@ func (rt *runtime) jsTexturesImportBase64(call goja.FunctionCall) goja.Value {
 	if typ != "" {
 		filename = typ + ".png"
 	}
-	v, created, uerr := svc.ImportPrivateTexture(ctx, id.ID, typ, model, desc, raw, rt.accountMeta(filename, nil))
+	v, created, uerr := svc.UploadTextureMeta(ctx, id.ID, typ, model, rt.jsUploadMeta(call, desc, false), raw, rt.accountMeta(filename, nil))
 	if uerr != nil {
 		return rt.jsFail(uerr)
 	}

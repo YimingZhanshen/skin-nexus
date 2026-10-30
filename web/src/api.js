@@ -84,20 +84,43 @@ export const union = {
   remapuuid: (me, target) => req('POST', '/api/v1/union/remapuuid', { me, target }),
 }
 
-export async function uploadTexture(type, file, model, description, pluginData) {
-  const fd = new FormData()
-  fd.append('type', type)
-  fd.append('file', file)
-  if (model) fd.append('model', model)
-  if (description) fd.append('description', description)
-  if (pluginData && Object.keys(pluginData).length) fd.append('pluginData', JSON.stringify(pluginData))
-  const res = await fetchWithTimeout('/api/v1/me/textures', { method: 'POST', body: fd }, 60000)
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) {
-    const err = new Error(data.message || data.error || `HTTP ${res.status}`)
-    err.status = res.status
-    err.data = data
-    throw err
-  }
-  return data
+export function uploadTexture(type, file, model, description, pluginData, meta = {}) {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData()
+    fd.append('type', type)
+    fd.append('file', file)
+    if (model) fd.append('model', model)
+    if (description) fd.append('description', description)
+    if (meta.detail) fd.append('detail', meta.detail)
+    fd.append('source', meta.source || '')
+    if (meta.sourceUrl) fd.append('sourceUrl', meta.sourceUrl)
+    fd.append('public', meta.public === false ? 'false' : 'true')
+    if (pluginData && Object.keys(pluginData).length) fd.append('pluginData', JSON.stringify(pluginData))
+
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', '/api/v1/me/textures')
+    xhr.withCredentials = true
+    xhr.timeout = 60000
+    if (xhr.upload && meta.onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) meta.onProgress(Math.round((e.loaded / e.total) * 100))
+      }
+    }
+    xhr.onload = () => {
+      let data = {}
+      try { data = JSON.parse(xhr.responseText || '{}') } catch { /* non-JSON error page */ }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data)
+        return
+      }
+      const err = new Error(data.message || data.error || `HTTP ${xhr.status}`)
+      err.status = xhr.status
+      err.data = data
+      reject(err)
+    }
+    xhr.onerror = () => reject(new Error('网络异常，请稍后重试'))
+    xhr.ontimeout = () => reject(new Error('上传超时，请重试'))
+    xhr.send(fd)
+  })
 }
+

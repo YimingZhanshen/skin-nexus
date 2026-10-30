@@ -80,6 +80,8 @@ func (b *Backend) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/v1/users", b.auth(b.handleUsers))
 	mux.HandleFunc("GET /api/admin/v1/textures", b.auth(b.handleTextures))
 	mux.HandleFunc("GET /api/admin/v1/audit", b.auth(b.handleAudit))
+	mux.HandleFunc("GET /api/admin/v1/reports", b.auth(b.handleReportsList))
+	mux.HandleFunc("POST /api/admin/v1/reports/{id}/resolve", b.auth(b.handleReportResolve))
 	// Access/communication logs (2026-10-26 运维观测面): web + launcher
 	// logins, ygg server traffic, union traffic — filterable/paged.
 	mux.HandleFunc("GET /api/admin/v1/access-logs", b.auth(b.handleAccessLogs))

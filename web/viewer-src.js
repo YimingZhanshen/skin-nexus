@@ -82,5 +82,51 @@ function wireLikeButton() {
   })
 }
 
+function wireReportButton() {
+  const btn = document.getElementById('report-btn')
+  const dlg = document.getElementById('report-dialog')
+  const form = document.getElementById('report-form')
+  if (!btn || !dlg || !form) return
+  const err = document.getElementById('report-error')
+  const cancel = document.getElementById('report-cancel')
+  const show = (msg) => { err.textContent = msg; err.hidden = !msg }
+  btn.addEventListener('click', () => { show(''); dlg.showModal() })
+  cancel.addEventListener('click', () => dlg.close())
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    const tid = btn.getAttribute('data-tid')
+    const submit = form.querySelector('button[type="submit"]')
+    submit.disabled = true
+    show('')
+    try {
+      const reason = document.getElementById('report-reason').value
+      const detail = document.getElementById('report-detail').value.trim()
+      const res = await fetch(`/api/v1/skinlib/${encodeURIComponent(tid)}/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason, detail }),
+      })
+      if (res.status === 401) {
+        location.href = '/login?next=' + encodeURIComponent(location.pathname)
+        return
+      }
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        form.replaceChildren(Object.assign(document.createElement('p'), {
+          className: 'muted',
+          textContent: '举报已提交，管理员会尽快处理。',
+        }))
+        return
+      }
+      show(data.message || (res.status === 409 ? '你已经举报过该材质。' : '提交失败，请稍后重试。'))
+    } catch {
+      show('网络异常，请稍后重试。')
+    } finally {
+      submit.disabled = false
+    }
+  })
+}
+
 upgradeViewer()
 wireLikeButton()
+wireReportButton()

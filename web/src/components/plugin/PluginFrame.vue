@@ -1,8 +1,10 @@
+
+
 <script setup>
 // Sandboxed plugin UI. The frame never receives cookies or the admin token;
 // every API call goes through the host bridge, which applies the plugin route
 // tier, CSRF and rate limits.
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { inject, onBeforeUnmount, onMounted, ref } from 'vue'
 import { assetURL } from '../../pluginUI.js'
 
 const props = defineProps({
@@ -13,10 +15,15 @@ const props = defineProps({
 })
 const frame = ref(null)
 const height = ref(props.height)
+const frameKey = ref(0)
+const state = ref('loading') // loading | ready | error
 const nonce = Math.random().toString(36).slice(2) + Date.now().toString(36)
+const sessionUser = inject('sessionUser', null)
+const csrfCache = new Map()
 let csrf = ''
 let user = null
 let ready = false
+let readyTimer = null
 
 function cssVar(name, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
@@ -72,9 +79,23 @@ async function init() {
 async function loadContext() {
   if (csrf) return
   try {
-    const r = await fetch(`/api/plugins/${encodeURIComponent(props.plugin)}/_csrf`, { credentials: 'same-origin' })
-    if (r.ok) csrf = (await r.json()).token || ''
+    const cached = csrfCache.get(props.plugin)
+    if (cached) {
+      csrf = cached
+    } else {
+      const r = await fetch(`/api/plugins/${encodeURIComponent(props.plugin)}/_csrf`, { credentials: 'same-origin' })
+      if (r.ok) {
+        csrf = (await r.json()).token || ''
+        csrfCache.set(props.plugin, csrf)
+      }
+    }
   } catch { /* public page or plugin disabled */ }
+  // App boot already resolved the session; only fall back to /me when this
+  // frame is mounted outside the SPA shell (defensive).
+  if (sessionUser && sessionUser.value) {
+    user = sessionUser.value
+    return
+  }
   try {
     const r = await fetch('/api/v1/me', { credentials: 'same-origin' })
     if (r.ok) user = await r.json()
@@ -105,7 +126,13 @@ function onMessage(ev) {
   if (ev.origin !== location.origin && ev.origin !== 'null') return
   const msg = ev.data
   if (!msg || msg.v !== 1) return
-  if (msg.type === 'ready') { ready = true; init(); return }
+  if (msg.type === 'ready') {
+    ready = true
+    state.value = 'ready'
+    if (readyTimer) { clearTimeout(readyTimer); readyTimer = null }
+    init()
+    return
+  }
   if (!ready || msg.nonce !== nonce) return
   const p = msg.payload || {}
   switch (msg.type) {
@@ -127,19 +154,60 @@ function onMessage(ev) {
   }
 }
 
+function armReadyTimeout() {
+  if (readyTimer) clearTimeout(readyTimer)
+  readyTimer = setTimeout(() => {
+    if (!ready) state.value = 'error'
+  }, 8000)
+}
+
+function retry() {
+  ready = false
+  state.value = 'loading'
+  frameKey.value++
+  armReadyTimeout()
+}
+
 onMounted(() => {
   window.addEventListener('message', onMessage)
+  armReadyTimeout()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('message', onMessage)
+  if (readyTimer) clearTimeout(readyTimer)
 })
 </script>
 
 <template>
   <div class="plugin-frame" data-skin-plugin-frame :data-plugin="plugin">
-    <iframe ref="frame" :src="assetURL(plugin, src)" :title="title || plugin"
+    <div v-if="state === 'loading'" class="plugin-loading" role="status" aria-live="polite">
+      <span class="spinner" aria-hidden="true"></span>
+      <span class="muted">加载插件界面…</span>
+    </div>
+    <div v-else-if="state === 'error'" class="plugin-loading">
+      <span class="muted">插件界面加载失败</span>
+      <button class="secondary" @click="retry">重试</button>
+    </div>
+    <iframe :key="frameKey" ref="frame" :src="assetURL(plugin, src)" :title="title || plugin"
             sandbox="allow-scripts allow-forms"
             :style="{ width: '100%', height: height + 'px', border: 0 }"
             @load="init" />
   </div>
 </template>
+
+<style scoped>
+.plugin-frame { position: relative; }
+.plugin-loading {
+  position: absolute; inset: 0; z-index: 1; display: flex;
+  align-items: center; justify-content: center; gap: 10px;
+  background: var(--bg, #101825); color: var(--text, #e9edf1);
+}
+.plugin-loading .spinner {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid var(--border, rgba(169,138,95,.3));
+  border-top-color: var(--accent, #b0453a);
+  animation: plugin-spin .8s linear infinite;
+}
+@keyframes plugin-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .plugin-loading .spinner { animation-duration: 2.4s; } }
+</style>

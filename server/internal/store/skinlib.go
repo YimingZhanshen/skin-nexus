@@ -24,17 +24,20 @@ import (
 
 // SkinlibRow is one library entry with uploader + like state.
 type SkinlibRow struct {
-	TID      int64
-	UID      int64
-	Name     string
-	Type     string
-	Model    string
-	Hash     string
-	Public   bool
-	Nickname string
-	Likes    int64
-	Liked    bool
-	UploadAt sql.NullTime
+	TID       int64
+	UID       int64
+	Name      string
+	Type      string
+	Model     string
+	Hash      string
+	Public    bool
+	Nickname  string
+	Likes     int64
+	Liked     bool
+	DetailMD  string
+	Source    string
+	SourceURL string
+	UploadAt  sql.NullTime
 }
 
 // SkinlibOpts filters one library page.
@@ -134,7 +137,8 @@ func (m *Mysql) SkinlibList(ctx context.Context, opt SkinlibOpts) ([]SkinlibRow,
 		       COALESCE(t.model,'default'), t.hash, t.public,
 		       t.upload_at, u.nickname,
 		       (SELECT COUNT(*) FROM user_closet c WHERE c.texture_tid = t.id) AS likes,
-		       EXISTS(SELECT 1 FROM user_closet c WHERE c.texture_tid = t.id AND c.user_uid = ?) AS liked
+		       EXISTS(SELECT 1 FROM user_closet c WHERE c.texture_tid = t.id AND c.user_uid = ?) AS liked,
+		       COALESCE(t.detail_md,''), COALESCE(t.source,''), COALESCE(t.source_url,'')
 		FROM textures t
 		JOIN users u ON u.id = t.uid
 		WHERE %s
@@ -152,7 +156,8 @@ func (m *Mysql) SkinlibList(ctx context.Context, opt SkinlibOpts) ([]SkinlibRow,
 	for rows.Next() {
 		var r SkinlibRow
 		if err := rows.Scan(&r.TID, &r.UID, &r.Name, &r.Type, &r.Model, &r.Hash,
-			&r.Public, &r.UploadAt, &r.Nickname, &r.Likes, &r.Liked); err != nil {
+			&r.Public, &r.UploadAt, &r.Nickname, &r.Likes, &r.Liked,
+			&r.DetailMD, &r.Source, &r.SourceURL); err != nil {
 			return nil, 0, fmt.Errorf("skinlib scan: %w", err)
 		}
 		out = append(out, r)
@@ -179,7 +184,8 @@ func (m *Mysql) SkinlibOne(ctx context.Context, tid, viewerUID int64, viewerAdmi
 		       COALESCE(t.model,'default'), t.hash, t.public,
 		       t.upload_at, u.nickname,
 		       (SELECT COUNT(*) FROM user_closet c WHERE c.texture_tid = t.id) AS likes,
-		       EXISTS(SELECT 1 FROM user_closet c WHERE c.texture_tid = t.id AND c.user_uid = ?) AS liked
+		       EXISTS(SELECT 1 FROM user_closet c WHERE c.texture_tid = t.id AND c.user_uid = ?) AS liked,
+		       COALESCE(t.detail_md,''), COALESCE(t.source,''), COALESCE(t.source_url,'')
 		FROM textures t
 		JOIN users u ON u.id = t.uid
 		WHERE t.id = ? AND %s`, clause)
@@ -188,7 +194,8 @@ func (m *Mysql) SkinlibOne(ctx context.Context, tid, viewerUID int64, viewerAdmi
 
 	var r SkinlibRow
 	err := m.db.QueryRowContext(ctx, sel, qargs...).Scan(&r.TID, &r.UID, &r.Name, &r.Type,
-		&r.Model, &r.Hash, &r.Public, &r.UploadAt, &r.Nickname, &r.Likes, &r.Liked)
+		&r.Model, &r.Hash, &r.Public, &r.UploadAt, &r.Nickname, &r.Likes, &r.Liked,
+		&r.DetailMD, &r.Source, &r.SourceURL)
 	if errors.Is(err, sql.ErrNoRows) {
 		return SkinlibRow{}, ErrNotFound
 	}
@@ -252,18 +259,38 @@ func (m *Mysql) RemoveClosetEntryByTID(ctx context.Context, uid, tid int64) erro
 	return nil
 }
 
-// UpdateTextureMeta renames (description) and/or flips visibility of one
-// texture. ownerUID scopes the UPDATE to the owner; pass 0 for admin
-// (blessing SkinlibController rename/privacy are owner-or-admin).
-func (m *Mysql) UpdateTextureMeta(ctx context.Context, tid, ownerUID int64, name *string, public *bool) error {
-	sets := make([]string, 0, 2)
-	args := make([]any, 0, 4)
-	if name != nil {
+// TextureMetaPatch edits display metadata; nil fields stay unchanged.
+type TextureMetaPatch struct {
+	Name      *string
+	DetailMD  *string
+	Source    *string
+	SourceURL *string
+	Public    *bool
+}
+
+// UpdateTextureMeta edits display metadata and/or visibility of one texture.
+// ownerUID scopes the UPDATE to the owner; pass 0 for admin.
+func (m *Mysql) UpdateTextureMeta(ctx context.Context, tid, ownerUID int64, patch TextureMetaPatch) error {
+	sets := make([]string, 0, 6)
+	args := make([]any, 0, 8)
+	if patch.Name != nil {
 		sets = append(sets, "description = ?")
-		args = append(args, *name)
+		args = append(args, *patch.Name)
 	}
-	if public != nil {
-		if *public {
+	if patch.DetailMD != nil {
+		sets = append(sets, "detail_md = ?")
+		args = append(args, nullableStr(*patch.DetailMD))
+	}
+	if patch.Source != nil {
+		sets = append(sets, "source = ?")
+		args = append(args, *patch.Source)
+	}
+	if patch.SourceURL != nil {
+		sets = append(sets, "source_url = ?")
+		args = append(args, nullableStr(*patch.SourceURL))
+	}
+	if patch.Public != nil {
+		if *patch.Public {
 			sets = append(sets, "public = 1", "public_dedupe = CONCAT(type, ':', hash)")
 		} else {
 			sets = append(sets, "public = 0", "public_dedupe = NULL")
@@ -286,13 +313,16 @@ func (m *Mysql) UpdateTextureMeta(ctx context.Context, tid, ownerUID int64, name
 		return fmt.Errorf("texture meta update: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		// Distinguish "no such texture" from "not yours".
-		var one int
+		// MySQL reports changed rows, not matched rows: a no-op edit (same
+		// name/visibility) must still succeed for the authorized caller.
+		var owner int64
 		if err := m.db.QueryRowContext(ctx,
-			`SELECT id FROM textures WHERE id = ?`, tid).Scan(&one); errors.Is(err, sql.ErrNoRows) {
+			`SELECT uid FROM textures WHERE id = ?`, tid).Scan(&owner); errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
-		return ErrForbidden
+		if ownerUID != 0 && owner != ownerUID {
+			return ErrForbidden
+		}
 	}
 	return nil
 }

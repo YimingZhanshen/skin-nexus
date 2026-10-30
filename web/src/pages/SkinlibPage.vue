@@ -29,6 +29,11 @@ const me = computed(() => props.user)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage)))
 const canEdit = (it) => me.value && (me.value.id === it.uploader || me.value.permission > 0)
+const sourceBadge = (source) => ({
+  original: t('dashboard.sourceOriginalBadge'),
+  derivative: t('dashboard.sourceDerivativeBadge'),
+  repost: t('dashboard.sourceRepostBadge'),
+}[source] || '')
 
 let reqSeq = 0
 async function load() {
@@ -173,6 +178,9 @@ onMounted(() => { load() })
             <span v-if="it.type !== 'cape'" class="badge" :class="it.model === 'slim' ? 'alex' : 'steve'">
               {{ it.model === 'slim' ? 'Alex' : 'Steve' }}
             </span>
+            <span v-if="sourceBadge(it.source)" class="badge source-badge" :class="'source-' + it.source">
+              {{ sourceBadge(it.source) }}
+            </span>
             <span class="uploader">{{ it.nickname }}</span>
           </div>
           <div class="skin-card-actions">
@@ -206,6 +214,10 @@ onMounted(() => { load() })
 }
 .tabs button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .mine-on { border-color: var(--accent) !important; color: var(--accent) !important; }
+.source-badge { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
+.source-original { color: var(--jade, #7dd3a0); border-color: currentColor; }
+.source-derivative { color: var(--gold, #d5a84f); border-color: currentColor; }
+.source-repost { color: var(--accent); border-color: currentColor; }
 
 .skinlib-grid {
   display: grid;

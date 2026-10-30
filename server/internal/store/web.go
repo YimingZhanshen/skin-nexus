@@ -223,10 +223,12 @@ func (m *Mysql) SetUserPermission(ctx context.Context, uid int64, perm int) erro
 
 // AddTexture inserts a public texture record and returns its id. The
 // public_dedupe unique key rejects concurrent duplicate content.
-func (m *Mysql) AddTexture(ctx context.Context, uid int64, typ, hash, model, desc string) (int64, error) {
+func (m *Mysql) AddTexture(ctx context.Context, uid int64, typ, hash, model string, meta TextureMeta) (int64, error) {
 	res, err := m.db.ExecContext(ctx,
-		`INSERT INTO textures (uid, type, hash, model, description, public_dedupe) VALUES (?,?,?,?,?,?)`,
-		uid, typ, hash, nullableStr(model), nullableStr(desc), typ+":"+hash)
+		`INSERT INTO textures (uid, type, hash, model, description, detail_md, source, source_url, public_dedupe)
+		 VALUES (?,?,?,?,?,?,?,?,?)`,
+		uid, typ, hash, nullableStr(model), nullableStr(meta.Description),
+		nullableStr(meta.DetailMD), meta.Source, nullableStr(meta.SourceURL), typ+":"+hash)
 	if err != nil {
 		if isDuplicateKey(err) {
 			return 0, ErrDuplicatePublic
@@ -239,10 +241,12 @@ func (m *Mysql) AddTexture(ctx context.Context, uid int64, typ, hash, model, des
 // AddTexturePrivate inserts a library import as a private copy (no file copy;
 // the content-addressed blob already exists). public_dedupe stays NULL, so
 // private copies may coexist with a public row.
-func (m *Mysql) AddTexturePrivate(ctx context.Context, uid int64, typ, hash, model, desc string) (int64, error) {
+func (m *Mysql) AddTexturePrivate(ctx context.Context, uid int64, typ, hash, model string, meta TextureMeta) (int64, error) {
 	res, err := m.db.ExecContext(ctx,
-		`INSERT INTO textures (uid, type, hash, model, description, public, public_dedupe) VALUES (?,?,?,?,?,0,NULL)`,
-		uid, typ, hash, nullableStr(model), nullableStr(desc))
+		`INSERT INTO textures (uid, type, hash, model, description, detail_md, source, source_url, public, public_dedupe)
+		 VALUES (?,?,?,?,?,?,?,?,0,NULL)`,
+		uid, typ, hash, nullableStr(model), nullableStr(meta.Description),
+		nullableStr(meta.DetailMD), meta.Source, nullableStr(meta.SourceURL))
 	if err != nil {
 		return 0, err
 	}
@@ -254,9 +258,11 @@ func (m *Mysql) AddTexturePrivate(ctx context.Context, uid int64, typ, hash, mod
 func (m *Mysql) TextureByOwnerHash(ctx context.Context, uid int64, typ, hash string) (TextureRow, bool, error) {
 	var row TextureRow
 	err := m.db.QueryRowContext(ctx,
-		`SELECT id, type, hash, COALESCE(model,''), COALESCE(description,''), upload_at
+		`SELECT id, type, hash, COALESCE(model,''), COALESCE(description,''),
+		         COALESCE(detail_md,''), COALESCE(source,''), COALESCE(source_url,''), upload_at
 		   FROM textures WHERE uid = ? AND type = ? AND hash = ? ORDER BY id LIMIT 1`,
-		uid, typ, hash).Scan(&row.ID, &row.Type, &row.Hash, &row.Model, &row.Description, &row.UploadAt)
+		uid, typ, hash).Scan(&row.ID, &row.Type, &row.Hash, &row.Model, &row.Description,
+		&row.DetailMD, &row.Source, &row.SourceURL, &row.UploadAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return TextureRow{}, false, nil
 	}
@@ -272,9 +278,11 @@ func (m *Mysql) TextureByOwnerHash(ctx context.Context, uid int64, typ, hash str
 func (m *Mysql) PublicTextureByHash(ctx context.Context, typ, hash string) (TextureRow, bool, error) {
 	var row TextureRow
 	err := m.db.QueryRowContext(ctx,
-		`SELECT id, type, hash, COALESCE(model,''), COALESCE(description,''), upload_at
+		`SELECT id, type, hash, COALESCE(model,''), COALESCE(description,''),
+		         COALESCE(detail_md,''), COALESCE(source,''), COALESCE(source_url,''), upload_at
 		   FROM textures WHERE public = 1 AND type = ? AND hash = ? ORDER BY id LIMIT 1`,
-		typ, hash).Scan(&row.ID, &row.Type, &row.Hash, &row.Model, &row.Description, &row.UploadAt)
+		typ, hash).Scan(&row.ID, &row.Type, &row.Hash, &row.Model, &row.Description,
+		&row.DetailMD, &row.Source, &row.SourceURL, &row.UploadAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return TextureRow{}, false, nil
 	}
@@ -317,7 +325,8 @@ func (m *Mysql) TextureByHash(ctx context.Context, hash string) (id, uid int64, 
 // ListTextures returns a user's textures.
 func (m *Mysql) ListTextures(ctx context.Context, uid int64) ([]TextureRow, error) {
 	rows, err := m.db.QueryContext(ctx,
-		`SELECT id, type, hash, COALESCE(model,''), COALESCE(description,''), upload_at
+		`SELECT id, type, hash, COALESCE(model,''), COALESCE(description,''),
+		        COALESCE(detail_md,''), COALESCE(source,''), COALESCE(source_url,''), upload_at
 		 FROM textures WHERE uid = ? ORDER BY id DESC`, uid)
 	if err != nil {
 		return nil, err
@@ -326,7 +335,8 @@ func (m *Mysql) ListTextures(ctx context.Context, uid int64) ([]TextureRow, erro
 	var out []TextureRow
 	for rows.Next() {
 		var t TextureRow
-		if err := rows.Scan(&t.ID, &t.Type, &t.Hash, &t.Model, &t.Description, &t.UploadAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Type, &t.Hash, &t.Model, &t.Description,
+			&t.DetailMD, &t.Source, &t.SourceURL, &t.UploadAt); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
@@ -340,7 +350,19 @@ type TextureRow struct {
 	Hash        string
 	Model       string
 	Description string
+	DetailMD    string
+	Source      string
+	SourceURL   string
 	UploadAt    time.Time
+}
+
+// TextureMeta carries the user-editable fields written on upload/import.
+// Description is the short display name; DetailMD is the long Markdown body.
+type TextureMeta struct {
+	Description string
+	DetailMD    string
+	Source      string
+	SourceURL   string
 }
 
 // TextureOwner returns the owning user id of a texture.

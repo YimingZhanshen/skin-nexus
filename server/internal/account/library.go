@@ -11,6 +11,7 @@ import (
 func (s *Service) libraryItem(ctx context.Context, uid int64, row store.SkinlibRow) LibraryItem {
 	item := LibraryItem{
 		TID: row.TID, Name: row.Name, Type: row.Type, Model: row.Model, Hash: row.Hash,
+		Source: row.Source, SourceURL: row.SourceURL, DetailMD: row.DetailMD,
 		Uploader: row.Nickname, Likes: row.Likes, Liked: row.Liked, Public: row.Public,
 		Owned: row.UID == uid, TextureURL: s.textureURL(row.Hash),
 	}
@@ -89,12 +90,15 @@ func (s *Service) ImportLibraryTexture(ctx context.Context, uid, tid int64, meta
 	if row.Type != "skin" {
 		model = ""
 	}
-	newTID, err := s.Store.AddTexturePrivate(ctx, uid, row.Type, row.Hash, model, row.Name)
+	newTID, err := s.Store.AddTexturePrivate(ctx, uid, row.Type, row.Hash, model, store.TextureMeta{
+		Description: row.Name, DetailMD: row.DetailMD, Source: row.Source, SourceURL: row.SourceURL,
+	})
 	if err != nil {
 		return TextureView{}, false, errf(CodeInternal, "导入纹理失败", err)
 	}
 	s.audit(ctx, uid, meta, "", "plugin_texture_import", map[string]any{
 		"tid": newTID, "sourceTid": tid, "hash": row.Hash, "type": row.Type,
 	})
-	return s.textureView(ctx, newTID, row.Type, row.Hash, model, row.Name, time.Now()), true, nil
+	return s.textureView(ctx, newTID, row.Type, row.Hash, model, row.Name,
+		row.DetailMD, row.Source, row.SourceURL, time.Now()), true, nil
 }

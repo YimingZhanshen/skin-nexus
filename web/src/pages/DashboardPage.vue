@@ -22,6 +22,13 @@ const announcement = ref('')
 
 const uploadType = ref('skin')
 const uploadModel = ref('default')
+const uploadName = ref('')
+const uploadDetail = ref('')
+const uploadSource = ref('original')
+const uploadSourceUrl = ref('')
+const uploadPublic = ref(true)
+const detailTab = ref('edit')
+const uploadProgress = ref(0)
 const uploadFile = ref(null)
 const fileInput = ref(null)
 const uploading = ref(false)
@@ -49,6 +56,7 @@ function clearPreview() {
 }
 // cape has no body render — show the flat texture instead of the 3D canvas
 const previewIsCape = computed(() => uploadType.value === 'cape')
+const sourceNeedsURL = computed(() => uploadSource.value === 'derivative' || uploadSource.value === 'repost')
 
 function onDrop(e) {
   dragging.value = false
@@ -73,6 +81,10 @@ const announcementHtml = computed(() => {
   if (!announcement.value) return ''
   const raw = md.render(announcement.value)
   return DOMPurify.sanitize(raw)
+})
+const detailHtml = computed(() => {
+  if (!uploadDetail.value.trim()) return ''
+  return DOMPurify.sanitize(md.render(uploadDetail.value))
 })
 
 // ---- usage card ----
@@ -140,11 +152,42 @@ async function addToCloset(tx) {
 }
 
 async function doUpload() {
+  const name = uploadName.value.trim()
   if (!uploadFile.value) { uploadErr.value = t('dashboard.pickPng'); return }
-  uploadErr.value = ''; uploadOk.value = ''; uploadDup.value = null; uploading.value = true
+  if (!name) { uploadErr.value = t('dashboard.nameRequired'); return }
+  if ([...name].length > 50) { uploadErr.value = t('dashboard.nameTooLong'); return }
+  if ([...uploadDetail.value].length > 4000) { uploadErr.value = t('dashboard.detailTooLong'); return }
+  if (sourceNeedsURL.value) {
+    const raw = uploadSourceUrl.value.trim()
+    let ok = false
+    try {
+      const u = new URL(raw)
+      ok = (u.protocol === 'http:' || u.protocol === 'https:') && !!u.host
+    } catch { ok = false }
+    if (!ok) { uploadErr.value = t('dashboard.sourceUrlRequired'); return }
+  }
+  uploadErr.value = ''; uploadOk.value = ''; uploadDup.value = null
+  uploading.value = true; uploadProgress.value = 0
   try {
-    const d = await uploadTexture(uploadType.value, uploadFile.value, uploadType.value === 'skin' ? uploadModel.value : '', '', uploadPluginData.value)
-    uploadOk.value = d.created === false ? t('dashboard.uploadAlreadyOwned') : t('dashboard.uploadSuccess')
+    const d = await uploadTexture(
+      uploadType.value, uploadFile.value,
+      uploadType.value === 'skin' ? uploadModel.value : '',
+      name, uploadPluginData.value,
+      {
+        detail: uploadDetail.value, source: uploadSource.value,
+        sourceUrl: uploadSourceUrl.value.trim(), public: uploadPublic.value,
+        onProgress: (p) => { uploadProgress.value = p },
+      },
+    )
+    uploadOk.value = d.created === false
+      ? t('dashboard.uploadAlreadyOwned')
+      : (uploadPublic.value ? t('dashboard.uploadSuccess') : t('dashboard.uploadPrivateSuccess'))
+    uploadName.value = ''
+    uploadDetail.value = ''
+    uploadSource.value = 'original'
+    uploadSourceUrl.value = ''
+    uploadPublic.value = true
+    detailTab.value = 'edit'
     clearPreview()
     await load()
   } catch (e) {
@@ -153,7 +196,7 @@ async function doUpload() {
     } else if (!guard401(e)) {
       uploadErr.value = e.message
     }
-  } finally { uploading.value = false }
+  } finally { uploading.value = false; uploadProgress.value = 0 }
 }
 
 function onPick(e) {
@@ -195,6 +238,21 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
     <h2>{{ t('dashboard.uploadTitle') }}</h2>
     <div class="up-grid">
       <div class="up-controls">
+        <label>{{ t('dashboard.materialName') }}
+          <input v-model="uploadName" maxlength="50" :placeholder="t('dashboard.materialNameHint')" />
+        </label>
+        <div>
+          <div class="field-label">{{ t('dashboard.materialSource') }}</div>
+          <div class="radio-row">
+            <label><input type="radio" value="original" v-model="uploadSource" /> {{ t('dashboard.sourceOriginal') }}</label>
+            <label><input type="radio" value="derivative" v-model="uploadSource" /> {{ t('dashboard.sourceDerivative') }}</label>
+            <label><input type="radio" value="repost" v-model="uploadSource" /> {{ t('dashboard.sourceRepost') }}</label>
+          </div>
+        </div>
+        <label v-if="sourceNeedsURL">{{ t('dashboard.sourceUrl') }}
+          <input v-model="uploadSourceUrl" type="url" placeholder="https://" />
+          <span class="muted source-hint">{{ t('dashboard.sourceUrlHint') }}</span>
+        </label>
         <div class="row">
           <select v-model="uploadType" style="width: 120px;">
             <option value="skin">{{ t('dashboard.typeSkin') }}</option>
@@ -215,10 +273,28 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
           </template>
           <span v-else class="muted">{{ t('dashboard.dropHint') }}</span>
         </div>
+        <div class="detail-editor">
+          <div class="tabs detail-tabs">
+            <button type="button" :class="{ active: detailTab === 'edit' }" @click="detailTab = 'edit'">{{ t('dashboard.detailEdit') }}</button>
+            <button type="button" :class="{ active: detailTab === 'preview' }" @click="detailTab = 'preview'">{{ t('dashboard.detailPreview') }}</button>
+            <span class="muted char-count">{{ [...uploadDetail].length }} / 4000</span>
+          </div>
+          <textarea v-if="detailTab === 'edit'" v-model="uploadDetail" rows="6" maxlength="4000"
+                    :placeholder="t('dashboard.detailHint')"></textarea>
+          <div v-else class="md detail-preview">
+            <div v-if="detailHtml" v-html="detailHtml"></div>
+            <span v-else class="muted">{{ t('dashboard.detailEmpty') }}</span>
+          </div>
+        </div>
+        <label class="check-line"><input type="checkbox" v-model="uploadPublic" /> {{ t('dashboard.privateUpload') }}</label>
         <div class="row">
           <button :disabled="uploading || !uploadFile" @click="doUpload">
             {{ uploading ? t('dashboard.uploading') : t('dashboard.upload') }}
           </button>
+        </div>
+        <div class="upload-progress" v-if="uploading">
+          <div class="bar"><i :style="{ width: uploadProgress + '%' }"></i></div>
+          <span class="muted">{{ uploadProgress }}%</span>
         </div>
         <div class="error" v-if="uploadErr">{{ uploadErr }}</div>
         <div class="error" v-if="uploadDup">
@@ -292,6 +368,23 @@ h3 { font-size: var(--fs-s); margin: 16px 0 4px; color: var(--muted); font-weigh
 /* 上传卡 v3：双栏（控件 | 即时预览）、拖放区、披风平面图 */
 .up-grid { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 16px; align-items: start; }
 .up-controls { display: flex; flex-direction: column; gap: 12px; }
+.field-label { font-size: var(--fs-s); color: var(--muted); margin-bottom: 6px; }
+.radio-row { display: flex; flex-wrap: wrap; gap: 14px; }
+.radio-row label, .check-line { display: flex; gap: 6px; align-items: center; font-size: var(--fs-s); }
+.source-hint { display: block; margin-top: 4px; font-size: var(--fs-xs); }
+.detail-tabs { display: flex; align-items: center; gap: 6px; }
+.detail-tabs button {
+  padding: 6px 12px; border: 1px solid var(--border); background: transparent;
+  color: var(--muted); border-radius: var(--r-s); cursor: pointer;
+}
+.detail-tabs button.active { border-color: var(--accent); color: var(--accent); }
+.detail-tabs .char-count { margin-left: auto; font-size: var(--fs-xs); }
+.detail-editor textarea { width: 100%; resize: vertical; }
+.detail-preview { min-height: 120px; border: 1px solid var(--border); border-radius: var(--r-m);
+  padding: 10px 12px; background: var(--bg); }
+.upload-progress { display: flex; align-items: center; gap: 10px; }
+.upload-progress .bar { flex: 1; height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.upload-progress .bar i { display: block; height: 100%; background: var(--accent); transition: width .15s linear; }
 .drop-zone {
   display: flex; align-items: center; gap: 8px;
   border: 1px dashed var(--line-strong); border-radius: var(--r-m);

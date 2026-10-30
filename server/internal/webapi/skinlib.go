@@ -8,8 +8,10 @@ package webapi
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"skin-nexus/server/internal/avatargen"
 	"skin-nexus/server/internal/store"
@@ -61,6 +63,8 @@ func (b *Backend) handleSkinlibList(w http.ResponseWriter, r *http.Request) {
 			"likes":      row.Likes,
 			"liked":      row.Liked,
 			"uploadAt":   uploadAt,
+			"source":     row.Source,
+			"sourceUrl":  row.SourceURL,
 			"textureURL": b.textureURL(r.Context(), row.Hash, row.Type),
 		}
 		// Renderer version in the URL: previews are immutable-cached for a
@@ -139,8 +143,11 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Name   *string `json:"name"`
-		Public *bool   `json:"public"`
+		Name      *string `json:"name"`
+		Detail    *string `json:"detail"`
+		Source    *string `json:"source"`
+		SourceURL *string `json:"sourceUrl"`
+		Public    *bool   `json:"public"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid JSON")
@@ -153,12 +160,67 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if req.Detail != nil {
+		*req.Detail = strings.TrimSpace(*req.Detail)
+		if len([]rune(*req.Detail)) > 4000 {
+			writeErr(w, http.StatusBadRequest, "描述最多 4000 个字")
+			return
+		}
+	}
+	if req.Source != nil {
+		*req.Source = strings.ToLower(strings.TrimSpace(*req.Source))
+		switch *req.Source {
+		case "", "original":
+			if req.SourceURL != nil {
+				*req.SourceURL = ""
+			}
+		case "derivative", "repost":
+			if req.SourceURL == nil || strings.TrimSpace(*req.SourceURL) == "" {
+				writeErr(w, http.StatusBadRequest, "二创/转载必须填写原始发布地址")
+				return
+			}
+			if !validSourceURL(*req.SourceURL) {
+				writeErr(w, http.StatusBadRequest, "原始发布地址必须是 http(s) 链接")
+				return
+			}
+		default:
+			writeErr(w, http.StatusBadRequest, "材质来源不合法")
+			return
+		}
+	}
+	if req.SourceURL != nil {
+		*req.SourceURL = strings.TrimSpace(*req.SourceURL)
+		if len(*req.SourceURL) > 512 {
+			writeErr(w, http.StatusBadRequest, "来源地址过长")
+			return
+		}
+	}
 	// Owner-scoped unless admin (admins may fix any row).
 	owner := uid
 	if perm, err := b.Store.UserPermission(r.Context(), uid); err == nil && perm > 0 {
 		owner = 0
 	}
-	if err := b.Store.UpdateTextureMeta(r.Context(), tid, owner, req.Name, req.Public); errors.Is(err, store.ErrNotFound) {
+	// Validate the resulting provenance even when only one of
+	// source/sourceUrl is being edited.
+	cur, curErr := b.Store.SkinlibOne(r.Context(), tid, uid, owner == 0)
+	if curErr == nil {
+		src := cur.Source
+		srcURL := cur.SourceURL
+		if req.Source != nil {
+			src = *req.Source
+		}
+		if req.SourceURL != nil {
+			srcURL = *req.SourceURL
+		}
+		if (src == "derivative" || src == "repost") && !validSourceURL(srcURL) {
+			writeErr(w, http.StatusBadRequest, "二创/转载必须填写合法的原始发布地址")
+			return
+		}
+	}
+	patch := store.TextureMetaPatch{
+		Name: req.Name, DetailMD: req.Detail, Source: req.Source, SourceURL: req.SourceURL, Public: req.Public,
+	}
+	if err := b.Store.UpdateTextureMeta(r.Context(), tid, owner, patch); errors.Is(err, store.ErrNotFound) {
 		writeErr(w, http.StatusNotFound, "纹理不存在")
 		return
 	} else if errors.Is(err, store.ErrForbidden) {
@@ -169,4 +231,80 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func validSourceURL(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || len(raw) > 512 {
+		return false
+	}
+	u, err := url.Parse(raw)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && u.User == nil
+}
+
+var reportReasons = map[string]bool{
+	"copyright": true, "sexual": true, "violence": true,
+	"hate": true, "spam": true, "other": true,
+}
+
+func (b *Backend) handleTextureReport(w http.ResponseWriter, r *http.Request) {
+	uid, err := b.currentUser(r)
+	if err != nil {
+		writeErr(w, http.StatusUnauthorized, "请先登录")
+		return
+	}
+	tid, perr := strconv.ParseInt(r.PathValue("tid"), 10, 64)
+	if perr != nil || tid <= 0 {
+		writeErr(w, http.StatusBadRequest, "bad tid")
+		return
+	}
+	var req struct {
+		Reason string `json:"reason"`
+		Detail string `json:"detail"`
+	}
+	if err := jsonDecode(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	req.Reason = strings.ToLower(strings.TrimSpace(req.Reason))
+	req.Detail = strings.TrimSpace(req.Detail)
+	if !reportReasons[req.Reason] {
+		writeErr(w, http.StatusBadRequest, "举报原因不合法")
+		return
+	}
+	if len([]rune(req.Detail)) > 500 {
+		writeErr(w, http.StatusBadRequest, "补充说明最多 500 个字")
+		return
+	}
+	pub, err := b.Store.TextureIsPublic(r.Context(), tid)
+	if err != nil || !pub {
+		writeErr(w, http.StatusNotFound, "纹理不存在或未公开")
+		return
+	}
+	owner, err := b.Store.TextureOwner(r.Context(), tid)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "纹理不存在")
+		return
+	}
+	if owner == uid {
+		writeErr(w, http.StatusBadRequest, "不能举报自己的材质")
+		return
+	}
+	since := time.Now().Add(-24 * time.Hour)
+	if n, err := b.Store.CountReportsByUserSince(r.Context(), uid, since); err == nil && n >= 10 {
+		writeErr(w, http.StatusTooManyRequests, "今日举报次数过多，请稍后再试")
+		return
+	}
+	if n, err := b.Store.CountReportsByTextureSince(r.Context(), tid, since); err == nil && n >= 50 {
+		writeErr(w, http.StatusTooManyRequests, "该材质今日举报次数过多")
+		return
+	}
+	if _, err := b.Store.CreateReport(r.Context(), tid, uid, req.Reason, req.Detail); errors.Is(err, store.ErrDuplicateReport) {
+		writeErr(w, http.StatusConflict, "你已经举报过该材质")
+		return
+	} else if err != nil {
+		writeErr(w, http.StatusInternalServerError, "提交举报失败")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"ok": true})
 }

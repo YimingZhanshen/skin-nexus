@@ -257,6 +257,7 @@ func (b *Backend) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/skinlib/{tid}/like", b.handleSkinlibLike)
 	mux.HandleFunc("DELETE /api/v1/skinlib/{tid}/like", b.handleSkinlibUnlike)
 	mux.HandleFunc("PATCH /api/v1/skinlib/{tid}", b.handleSkinlibPatch)
+	mux.HandleFunc("POST /api/v1/skinlib/{tid}/report", b.handleTextureReport)
 	mux.HandleFunc("GET /api/v1/stats", b.handleStats)
 	// Site announcement (blessing parity): public read, admin-edited via
 	// the settings panel (option `announcement`). Markdown source; the
@@ -716,6 +717,9 @@ func (b *Backend) handleListTextures(w http.ResponseWriter, r *http.Request) {
 		Hash        string `json:"hash"`
 		Model       string `json:"model"`
 		Description string `json:"description"`
+		Detail      string `json:"detail,omitempty"`
+		Source      string `json:"source,omitempty"`
+		SourceURL   string `json:"sourceUrl,omitempty"`
 		URL         string `json:"url"`
 		UploadAt    string `json:"uploadAt"`
 	}
@@ -723,9 +727,10 @@ func (b *Backend) handleListTextures(w http.ResponseWriter, r *http.Request) {
 	for _, t := range rows {
 		out = append(out, item{
 			ID: t.ID, Type: t.Type, Hash: t.Hash, Model: t.Model,
-			Description: t.Description,
-			URL:         b.textureURL(r.Context(), t.Hash, t.Type),
-			UploadAt:    t.UploadAt.Format(time.RFC3339),
+			Description: t.Description, Detail: t.DetailMD,
+			Source: t.Source, SourceURL: t.SourceURL,
+			URL:      b.textureURL(r.Context(), t.Hash, t.Type),
+			UploadAt: t.UploadAt.Format(time.RFC3339),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"textures": out})
@@ -757,13 +762,19 @@ func (b *Backend) handleUploadTexture(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "read upload failed")
 		return
 	}
-	desc := strings.TrimSpace(r.FormValue("description"))
+	detail := strings.TrimSpace(r.FormValue("detail"))
+	source := strings.ToLower(strings.TrimSpace(r.FormValue("source")))
+	sourceURL := strings.TrimSpace(r.FormValue("sourceUrl"))
+	public := r.FormValue("public") != "false"
 	pluginData, perr := b.pluginFormDataJSON("texture.upload", r.FormValue("pluginData"))
 	if perr != nil {
 		writePluginFormError(w, perr)
 		return
 	}
-	v, created, aerr := b.Account.UploadTexture(r.Context(), uid, string(typ), r.FormValue("model"), desc, data, account.CallMeta{
+	v, created, aerr := b.Account.UploadTextureMeta(r.Context(), uid, string(typ), r.FormValue("model"), account.UploadMeta{
+		Name: strings.TrimSpace(r.FormValue("description")), DetailMD: detail,
+		Source: source, SourceURL: sourceURL, Public: public,
+	}, data, account.CallMeta{
 		IP: ygg.ClientIP(r), Filename: hdr.Filename, PluginData: pluginData,
 	})
 	if aerr != nil {
@@ -777,6 +788,8 @@ func (b *Backend) handleUploadTexture(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, map[string]interface{}{
 		"id": v.ID, "type": v.Type, "hash": v.Hash,
 		"url": b.textureURL(r.Context(), v.Hash, v.Type), "created": created,
+		"description": v.Description, "detail": v.DetailMD,
+		"source": v.Source, "sourceUrl": v.SourceURL, "public": public,
 	})
 }
 

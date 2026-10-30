@@ -128,6 +128,17 @@ func (p pluginAccount) UploadTexture(ctx context.Context, uid int64, typ, model,
 	return convertView[plugin.TextureView](v), created, nil
 }
 
+func (p pluginAccount) UploadTextureMeta(ctx context.Context, uid int64, typ, model string, um plugin.UploadMeta, png []byte, meta plugin.AccountCallMeta) (plugin.TextureView, bool, error) {
+	v, created, err := p.svc.UploadTextureMeta(ctx, uid, typ, model, account.UploadMeta{
+		Name: um.Name, DetailMD: um.DetailMD, Source: um.Source,
+		SourceURL: um.SourceURL, Public: um.Public,
+	}, png, p.meta(meta))
+	if err != nil {
+		return plugin.TextureView{}, false, pluginAccountErr(err)
+	}
+	return convertView[plugin.TextureView](v), created, nil
+}
+
 func (p pluginAccount) ImportPrivateTexture(ctx context.Context, uid int64, typ, model, desc string, png []byte, meta plugin.AccountCallMeta) (plugin.TextureView, bool, error) {
 	v, created, err := p.svc.ImportPrivateTexture(ctx, uid, typ, model, desc, png, p.meta(meta))
 	if err != nil {

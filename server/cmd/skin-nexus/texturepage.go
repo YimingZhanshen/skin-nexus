@@ -26,6 +26,7 @@ import (
 	"skin-nexus/server/internal/avatargen"
 	"skin-nexus/server/internal/seo"
 	"skin-nexus/server/internal/store"
+	"skin-nexus/server/internal/texturemd"
 )
 
 // texDetailData feeds the detail template.
@@ -44,6 +45,11 @@ type texDetailData struct {
 	ViewerURL     string // absolute, background-normalized sheet for skinview3d
 	PreviewURL    string // relative preview image (skin: /preview/{tid}; cape: flat)
 	PreviewAbsURL string // absolute preview URL (og:image + JSON-LD)
+	DetailHTML    template.HTML
+	Source        string
+	SourceLabel   string
+	SourceURL     string
+	Summary       string
 	Year          int
 
 	HeadAnchors template.HTML
@@ -132,6 +138,16 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   footer { position: relative; margin-top: 32px; padding-top: 16px; text-align: center;
            font-size: 12px; color: var(--moon-2); border-top: 1px solid var(--line); }
   footer a { color: var(--gold); }
+  .detail-block { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .detail-block h2 { font-size: var(--fs-m); margin: 0 0 8px; }
+  .source-line { margin: 0 0 8px; color: var(--muted); font-size: var(--fs-s); }
+  .source-line a { color: var(--jade); }
+  .report-dialog { border: 1px solid var(--border); border-radius: var(--r-m); background: var(--panel);
+    color: var(--text); max-width: 420px; width: calc(100% - 32px); padding: 18px; }
+  .report-dialog label { display: block; margin: 10px 0; font-size: var(--fs-s); }
+  .report-dialog select, .report-dialog textarea { width: 100%; margin-top: 4px; }
+  .report-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  .report-error { color: var(--danger, #d9564c); font-size: var(--fs-s); }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
   @media (max-width: 560px) { h1 { font-size: 21px; } .viewer { min-height: 240px; } }
 </style>
@@ -155,10 +171,18 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
         {{if .UploadAt}}<div><dt>上传时间</dt><dd>{{.UploadAt}}</dd></div>{{end}}
         <div><dt>可见性</dt><dd>{{if .Public}}公开{{else}}私密{{end}}</dd></div>
       </dl>
+      {{if or .DetailHTML .SourceLabel}}
+      <section class="detail-block">
+        <h2>材质描述</h2>
+        {{if .SourceLabel}}<p class="source-line">来源：{{if .SourceURL}}<a href="{{.SourceURL}}" target="_blank" rel="nofollow noopener">{{.SourceLabel}}</a>{{else}}{{.SourceLabel}}{{end}}</p>{{end}}
+        {{if .DetailHTML}}<div class="md">{{.DetailHTML}}</div>{{end}}
+      </section>
+      {{end}}
       <div class="actions">
         <button class="alt like-btn{{if .Liked}} liked{{end}}" data-like="{{.TID}}" data-liked="{{if .Liked}}1{{else}}0{{end}}">♥ <span>喜欢 / 加入衣柜</span></button>
         <a class="primary" href="{{.TextureURL}}" download>下载纹理 PNG</a>
         <a class="alt" href="/register">注册使用同款</a>
+        {{if .Public}}<button class="alt report-btn" id="report-btn" data-tid="{{.TID}}">举报</button>{{end}}
       </div>
     </article>
     {{.PluginSlot}}
@@ -167,6 +191,29 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
     Powered by <a href="https://github.com/YimingZhanshen/skin-nexus">SkinNexus</a>
     · © {{.Year}} {{.SiteName}}
   </footer>
+  <dialog id="report-dialog" class="report-dialog">
+    <form id="report-form" method="dialog">
+      <h2>举报材质</h2>
+      <label>原因
+        <select id="report-reason">
+          <option value="copyright">侵权 / 无授权转载</option>
+          <option value="sexual">色情或擦边内容</option>
+          <option value="violence">暴力或血腥</option>
+          <option value="hate">仇恨或歧视</option>
+          <option value="spam">垃圾或误导信息</option>
+          <option value="other">其他</option>
+        </select>
+      </label>
+      <label>补充说明（选填）
+        <textarea id="report-detail" rows="3" maxlength="500"></textarea>
+      </label>
+      <p class="report-error" id="report-error" hidden></p>
+      <div class="report-actions">
+        <button type="button" class="alt" id="report-cancel">取消</button>
+        <button type="submit" value="submit">提交举报</button>
+      </div>
+    </form>
+  </dialog>
   <script type="module" src="/assets/viewer.js?v=1"></script>
   {{.BodyAnchor}}
 </body>
@@ -260,15 +307,20 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 		}
 
 		d := texDetailData{
-			SiteName: siteName,
-			TID:      row.TID,
-			Name:     row.Name,
-			Type:     row.Type,
-			Model:    row.Model,
-			Nickname: row.Nickname,
-			Likes:    row.Likes,
-			Liked:    row.Liked,
-			Public:   row.Public,
+			SiteName:    siteName,
+			TID:         row.TID,
+			Name:        row.Name,
+			Type:        row.Type,
+			Model:       row.Model,
+			Nickname:    row.Nickname,
+			Likes:       row.Likes,
+			Liked:       row.Liked,
+			Public:      row.Public,
+			Source:      row.Source,
+			SourceURL:   row.SourceURL,
+			DetailHTML:  template.HTML(texturemd.Render(row.DetailMD)),
+			Summary:     texturemd.Excerpt(row.DetailMD, 160),
+			SourceLabel: sourceLabel(row.Source),
 		}
 		if d.Name == "" {
 			d.Name = "材质 #" + strconv.FormatInt(row.TID, 10)
@@ -348,7 +400,11 @@ func texDescription(d texDetailData) string {
 			model = "，Steve 常规模型"
 		}
 	}
-	return d.Name + " — " + d.SiteName + "皮肤库中的 Minecraft " + kind + model +
+	intro := d.Name
+	if d.Summary != "" {
+		intro += "：" + d.Summary
+	}
+	return intro + " — " + d.SiteName + "皮肤库中的 Minecraft " + kind + model +
 		"，由 " + d.Nickname + " 上传，" + strconv.FormatInt(d.Likes, 10) +
 		" 人喜欢。注册账号即可一键使用。"
 }
@@ -366,4 +422,17 @@ func writeTexNotFound(ctx context.Context, w http.ResponseWriter, siteName strin
 		html = appearEng.Render(ctx, html)
 	}
 	_, _ = w.Write([]byte(html))
+}
+
+func sourceLabel(source string) string {
+	switch source {
+	case "original":
+		return "原创"
+	case "derivative":
+		return "二创"
+	case "repost":
+		return "转载"
+	default:
+		return ""
+	}
 }

@@ -27,6 +27,9 @@ type TextureView struct {
 	Hash        string `json:"hash"`
 	Model       string `json:"model,omitempty"`
 	Description string `json:"description,omitempty"`
+	DetailMD    string `json:"detail,omitempty"`
+	Source      string `json:"source,omitempty"`
+	SourceURL   string `json:"sourceUrl,omitempty"`
 	URL         string `json:"url"`
 	PreviewURL  string `json:"previewUrl,omitempty"`
 	AvatarURL   string `json:"avatarUrl,omitempty"`
@@ -69,6 +72,15 @@ type LibraryPage struct {
 // AccountCallMeta is request context supplied by the host. Plugin JavaScript
 // can only provide the filename/pluginData values; identity fields are
 // overwritten by the runtime bridge.
+// UploadMeta is the optional fifth argument for texture upload/import.
+type UploadMeta struct {
+	Name      string
+	DetailMD  string
+	Source    string
+	SourceURL string
+	Public    bool
+}
+
 type AccountCallMeta struct {
 	IP         string
 	Filename   string
@@ -100,6 +112,7 @@ type AccountService interface {
 	SetTexture(ctx context.Context, uid, pid int64, kind string, tid int64, meta AccountCallMeta) (PlayerView, error)
 	ListTextures(ctx context.Context, uid int64) ([]TextureView, error)
 	UploadTexture(ctx context.Context, uid int64, typ, model, desc string, png []byte, meta AccountCallMeta) (TextureView, bool, error)
+	UploadTextureMeta(ctx context.Context, uid int64, typ, model string, um UploadMeta, png []byte, meta AccountCallMeta) (TextureView, bool, error)
 	ImportPrivateTexture(ctx context.Context, uid int64, typ, model, desc string, png []byte, meta AccountCallMeta) (TextureView, bool, error)
 	ListLibrary(ctx context.Context, uid int64, q LibraryQuery) (LibraryPage, error)
 	GetLibrary(ctx context.Context, uid, tid int64) (LibraryItem, error)
