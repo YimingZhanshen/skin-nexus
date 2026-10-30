@@ -28,11 +28,14 @@
 - 皮肤库：公开纹理搜索/详情、导入为私有副本后应用到角色
 
 错误为 `{"error":"stable.code","message":"..."}`；限流返回 `429 + Retry-After`。
+宿主 `0.5.0+` 起，独立上传遇到公共库相同 `(type,hash)` 会返回
+`409 texture.duplicate_public`，并附 `textureId/url`；同用户重复上传仍是 `200`。
 完整端点、字段、错误码与重试语义见上面的规范。
 
 ## 服务端要求
 
-- 宿主 `>=0.4.0`（`bearer-auth.v1`、`binary-body.v1`、`account.v1`）。
+- 宿主 `>=0.4.0`（`bearer-auth.v1`、`binary-body.v1`、`account.v1`）；
+  公共纹理去重错误码需 `>=0.5.0`。
 - 安装并启用签名插件 `launcher-api`；它需要 `http:routes`、
   `http:routes:bearer`、`account:read`、`players:read`、`players:write`、
   `textures:read`、`textures:write`。

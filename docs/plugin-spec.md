@@ -73,6 +73,8 @@ player-notes_1.2.0.zip
 | `store` | ⬜ | v2 命名空间数据声明（见 §6） |
 | `routes` | ⬜ | v2 路由声明（见 §7） |
 | `ui` | ⬜ | v2 页面/插槽/表单/资源/i18n（见 §8） |
+| `net` | ⬜ | 受控出站 HTTP（见 §10.4） |
+| `jobs` | ⬜ | 持久任务处理器（见 §10.5） |
 | `media` | ⬜ | 外部媒体重定向白名单，如 `{"avatarHosts":["cdn.example.com"]}`（见 §10.1） |
 | `requires` / `conflicts` | ⬜ | P2 依赖解析预留；当前解析但不执行 |
 
@@ -103,7 +105,9 @@ player-notes_1.2.0.zip
 | `players:read` / `players:write` | `skin.players.list/get` / `create/rename/delete/setTexture` |
 | `events:subscribe` | `skin.events.on` |
 | `auth:guards` | `skin.guards.on` |
-| `net:http` / `mail:send` / `schedule:jobs` / `cli:commands` | 预留（当前无运行时实现） |
+| `net:http` | `skin.net.get`；manifest 必须声明 `net.http` |
+| `mail:send` / `cli:commands` | 预留（当前无运行时实现） |
+| `schedule:jobs` | `skin.jobs.register/submit/list/status/cancel/resume`；manifest 必须声明 `jobs` |
 | `plugins:read` | `skin.host.info()` / `skin.host.hasPlugin()` 只读内省 |
 
 ## 5. 配置（`skin.config`）
@@ -326,7 +330,7 @@ skin.host.hasPlugin("player-notes");
 ```
 
 能力表（`capabilities`）：`host.introspect.v1`、`slots.v1`、`forms.v1`、
-`avatar.filter.v1`、`bearer-auth.v1`、`binary-body.v1`、`account.v1`。
+`avatar.filter.v1`、`bearer-auth.v1`、`binary-body.v1`、`account.v1`、`net.http.v1`、`jobs.v1`。
 新能力只增不改；插件应据此降级，而不是试探报错。
 
 ### 10.3 账号/角色/纹理桥（`skin.account` / `players` / `textures` / `library`）
@@ -337,16 +341,69 @@ skin.host.hasPlugin("player-notes");
 skin.account.get() / limits()
 skin.players.list() / get(pid) / create(name) / rename(pid,name) / delete(pid)
 skin.players.setTexture(pid, "skin"|"cape", textureId)   // 0 = 清除
-skin.textures.list() / uploadBase64(type, model, desc, b64) / importLibrary(tid)
+skin.textures.list() / uploadBase64(type, model, desc, b64) / importBase64(type, model, desc, b64) / importLibrary(tid)
 skin.library.list({type,q,sort,page,perPage}) / get(tid)
 ```
 
 - 返回 `{ok:true,data}` 或 `{ok:false,error:{code,message}}`；非认证路由返回
   `account.required`，宿主未接线返回 `account.unavailable`。
+- `uploadBase64` 是普通上传：同用户重复返回 `created:false`；公共库已有同 `(type,hash)`
+  时返回 `texture.duplicate_public`，`error.details` 带 `textureId/url`。
+- `importBase64` 是私有导入：写入当前用户的私有纹理，跳过公共重复检查（供导入后再应用到角色）。
 - 权限：`account:read`、`players:read/write`、`textures:read/write`。
 - 所有所有权、名称规则、数量上限、guard、事件、审计与 Union 同步由宿主
   `internal/account` 执行；插件只做映射。视图不含 email/uid。
-- 示例：`launcher-api`（启动器 API v1，见 [`launcher-api.md`](launcher-api.md)）。
+- 示例：`launcher-api`、`skin-importer`（见 [`launcher-api.md`](launcher-api.md)）。
+
+### 10.4 受控出站（`skin.net`，需 `net:http`）
+
+manifest 必须声明 `net.http`：
+
+```json
+"net": {
+  "http": {
+    "hosts": ["api.mojang.com", "sessionserver.mojang.com", "textures.minecraft.net"],
+    "allowUserHosts": true,
+    "userHostPaths": ["/skinlib/list", "/skinlib/info/", "/textures/"],
+    "maxBytes": 2097152,
+    "timeoutMS": 4000
+  }
+}
+```
+
+```js
+skin.net.get(url) // -> {ok:true,data:{status,contentType,bytes,bodyBase64,retryAfter}}
+```
+
+- 只允许 http/https、80/443、无 userinfo、无重定向、固定 UA、无 Cookie/Authorization。
+- 静态 `hosts` 精确/`*.` 后缀匹配；用户提供的域名还必须命中 `userHostPaths`。
+- 传输层只拨号公网 IP（拒绝 loopback/私网/链路本地/云元数据，防 DNS rebinding），
+  响应受 `maxBytes` 与 `timeoutMS` 限制；每 host 2 req/s（burst 4）。
+- 失败码：`net.invalid_url`、`net.blocked_host`、`net.blocked_redirect`、
+  `net.too_large`、`net.timeout`、`net.rate_limited`、`net.unavailable`。
+- 不要把它用于用户可控的任意目标；只在产品确实需要外部源时声明。
+
+### 10.5 持久任务（`skin.jobs`，需 `schedule:jobs`）
+
+manifest 声明处理器：
+
+```json
+"jobs": [{ "name": "blessing-import", "timeoutMS": 30000, "maxAttempts": 3 }]
+```
+
+```js
+skin.jobs.register("blessing-import", function (job) {
+  // job = {jobId, attempt, payload, cursor, cancelRequested}
+  return { done: false, cursor: {...}, progress: 40, message: "..." };
+});
+skin.jobs.submit("blessing-import", {...}); // 仅 admin 路由
+skin.jobs.list(1) / status(id) / cancel(id) / resume(id); // 仅 admin 路由
+```
+
+- 任务持久化在 `host_jobs`，按 step 保存 `cursor/progress`；worker 崩溃/重启后可从 cursor 续跑。
+- 每个 step 在插件专属 job VM 中执行（不占请求 VM 锁）；超时/异常按 `maxAttempts` 退避重试。
+- 取消在 step 之间生效；`cancel` 后任务状态为 `cancelling/cancelled`，`resume` 可重新排队。
+- 仅管理员可提交/查看/取消/恢复；任务载荷与进度不对普通用户开放。
 
 ## 11. 示例与官方插件
 
@@ -355,9 +412,9 @@ skin.library.list({type,q,sort,page,perPage}) / get(tid)
 - `examples/plugins/hello-world`：零权限日志；
 - `examples/plugins/hello-ui`：iframe 页面 + slot。
 
-完整官方插件（11 个：config-greeter / nav-links / player-notes / texture-cdn /
+完整官方插件（12 个：config-greeter / nav-links / player-notes / texture-cdn /
 lifecycle-log / signup-guard / texture-provenance / signup-survey / avatar-cdn /
-name-policy / launcher-api）的源码与签名市场在独立公开仓库：
+name-policy / launcher-api / skin-importer）的源码与签名市场在独立公开仓库：
 <https://github.com/YimingZhanshen/skin-nexus-plugins>。
 
 投稿流程：插件仓库提 PR → CI `skin-plugin lint`（无密钥）→ 维护者评审合并 →
@@ -366,12 +423,14 @@ CI 环境密钥签名并更新 registry/Pages → 主站市场 10 分钟内可�
 
 ## 12. 非目标与后续路线
 
-- **v0.4.0（当前）**：slot 全接线、`ui.forms` 注册/上传字段、`media:avatar` 头像重定向、资料/角色改名 guard、
+- **v0.4.0**：slot 全接线、`ui.forms` 注册/上传字段、`media:avatar` 头像重定向、资料/角色改名 guard、
   宿主能力内省、本地包信任分级与来源标识；官方插件仓库 `skin-nexus-plugins` 统一源码，
   PR 投稿 + `skin-plugin lint` + CI 签名/续签/Pages 发布；主站默认官方 registry，下游可用
   `SKIN_PLUGIN_MARKET_URL` 覆盖；新增 Bearer 路由档、账号/角色/纹理桥与二进制上传，
   官方 `launcher-api` 提供启动器 API v1。
-- **后续按需**：多 registry、插件级 HTTP/mail/cron/CLI、主题 v2、sidecar/native、评分/评论。
+- **v0.5.0（开发中）**：公共纹理 `(type,hash)` 去重与普通上传重复拒绝；受控出站 `net:http`
+  与持久任务 `schedule:jobs`；官方 `skin-importer` 提供 Mojang/Blessing 单条导入和管理员批量收录。
+- **后续按需**：多 registry、mail/CLI、主题 v2、sidecar/native、评分/评论。
 - **不做**：插件直接访问数据库/宿主表/任意文件系统/任意网络；不允许第三方 Vue/Twig/HTML 注入主 SPA。
 - **兼容策略**：项目尚无存量第三方生态，只维护 `hookApi: 2`；不提供旧版/blessing 插件兼容层。
 
@@ -379,7 +438,8 @@ CI 环境密钥签名并更新 registry/Pages → 主站市场 10 分钟内可�
 
 > 为 SkinNexus 插件宿主 v2 写一个插件：目录 `<name>/` 含 `plugin.json`（必要时加 `ui/` 与 `index.js`）。
 > 约束：`hookApi=2`；只声明必需权限（config / store:kv / store:docs / ui:forms / media:avatar /
-> http:routes:session 等）；数据只用 `skin.store`，配置只用 `skin.config`，路由必须与 manifest `routes`
-> 完全一致；UI 页面/插槽用 iframe + postMessage bridge，表单字段用 `ui.forms`（不收集密码/密钥）；
+> http:routes:session / net:http / schedule:jobs 等）；数据只用 `skin.store`，配置只用 `skin.config`，
+> 路由必须与 manifest `routes` 完全一致；外部请求只能走 `skin.net.get` 并在 manifest `net.http` 声明 host/path；
+> 长任务只能用 `skin.jobs` 的 step + cursor，不得把循环爬取塞进一次请求；UI 页面/插槽用 iframe + postMessage bridge，表单字段用 `ui.forms`（不收集密码/密钥）；
 > guard 必须显式 `onError`；头像外链 host 必须写进 `media.avatarHosts`；
 > 过滤器/事件 fail-open，不改变 Yggdrasil 的 204/错误体/签名顺序。产物需通过 manifest 校验并在管理面板启用。

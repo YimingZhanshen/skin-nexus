@@ -132,7 +132,7 @@ Measured on a 2-core / 3.5 GB production VPS: ~600 RPS landing, 5182 RPS texture
 
 **Appearance & content**
 - Theme packs (zero build: `theme.json` + CSS + optional JS) with an [AI prompt template](docs/theme-spec.md)
-- Plugin platform v2 (goja): single hookApi 2 with config/secrets, namespaced data, tiered routes, events/guards, sandboxed iframe UI; P2 adds signed bundle install/upgrade/rollback, a single-source signed market and the `skin-plugin` publishing CLI; official plugin sources and market live in [skin-nexus-plugins](https://github.com/YimingZhanshen/skin-nexus-plugins) with PR contributions signed by CI; the `launcher-api` plugin exposes a Bearer character API for desktop launchers ([spec](docs/launcher-api.md)); see [docs/plugin-spec.md](docs/plugin-spec.md)
+- Plugin platform v2 (goja): single hookApi 2 with config/secrets, namespaced data, tiered routes, events/guards, sandboxed iframe UI; P2 adds signed bundle install/upgrade/rollback, a single-source signed market and the `skin-plugin` publishing CLI; v0.5 adds scoped outbound `net:http` and durable `schedule:jobs`; official plugin sources and market live in [skin-nexus-plugins](https://github.com/YimingZhanshen/skin-nexus-plugins) with PR contributions signed by CI; `launcher-api` exposes a Bearer character API for desktop launchers ([spec](docs/launcher-api.md)), and `skin-importer` imports Mojang/Blessing skins singly or in admin batches; see [docs/plugin-spec.md](docs/plugin-spec.md)
 - zh-CN / en built in, language packs extensible
 - SEO: SSR landing and skin detail pages, sitemap, robots, optional site-wide noindex for staging
 
@@ -190,7 +190,7 @@ Most detailed docs are currently in Chinese.
 | Status | Item |
 |---|---|
 | ✅ Done | Phases 1–3: full Yggdrasil, OIDC passwordless, Union module, i18n / SEO / theme packs, migration toolchain, admin panel; production migration and cutover; v0.2.0 (password reset / Mojang fallback / ops logs / SEO); v0.3.0 (signed plugin install/market/rollback + publishing CLI); v0.4.0 (all slots wired, plugin form fields, avatar CDN, profile/rename guards, capability introspection, local bundle trust levels) |
-| 🔶 In progress | Plugin platform v2 (config/data/routes/events/UI) + P2 signed install/market; real-device launcher acceptance (SJMCL and community launchers: OAuth → character select → join) |
+| 🔶 In progress | v0.5.0: public texture hash dedupe, scoped outbound HTTP, durable jobs and `skin-importer`; real-device launcher acceptance (SJMCL and community launchers: OAuth → character select → join) |
 | ⬜ Planned | Official-account binding (second Auth Source), email verification, plugin marketplace operations / sidecar isolation / first-party native plugins |
 
 ## Frozen compatibility contracts

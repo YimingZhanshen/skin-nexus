@@ -124,7 +124,7 @@ docker run -d --name skin-nexus --restart unless-stopped -p 8080:8080 \
 
 **外观与内容**
 - 主题包体系（零构建：`theme.json` + CSS + 可选 JS）与 [AI 生成提示词模板](docs/theme-spec.md)
-- 插件平台 v2（goja）：统一 hookApi 2 + 配置/密钥、命名空间数据、三档路由、事件/guard、sandbox iframe UI；P2 起签名 bundle 安装/升级/回滚、单源签名市场与 `skin-plugin` 发布工具链；官方插件源码与市场仓库 [skin-nexus-plugins](https://github.com/YimingZhanshen/skin-nexus-plugins) 采用 PR 投稿 + CI 签名；`launcher-api` 插件为启动器提供 Bearer 角色管理 API（[规范](docs/launcher-api.md)）；规范见 [docs/plugin-spec.md](docs/plugin-spec.md)
+- 插件平台 v2（goja）：统一 hookApi 2 + 配置/密钥、命名空间数据、三档路由、事件/guard、sandbox iframe UI；P2 起签名 bundle 安装/升级/回滚、单源签名市场与 `skin-plugin` 发布工具链；v0.5 新增受控出站 `net:http` 与持久任务 `schedule:jobs`；官方插件源码与市场仓库 [skin-nexus-plugins](https://github.com/YimingZhanshen/skin-nexus-plugins) 采用 PR 投稿 + CI 签名；`launcher-api` 提供启动器 Bearer API（[规范](docs/launcher-api.md)），`skin-importer` 提供 Mojang/Blessing 单条与批量导入；规范见 [docs/plugin-spec.md](docs/plugin-spec.md)
 - 中英双语（zh-CN / en），语言包可扩展
 - SEO：SSR 落地页与皮肤详情页、sitemap、robots、可整站 noindex（预发环境）
 
@@ -181,7 +181,7 @@ docker compose up -d
 | 状态 | 内容 |
 |---|---|
 | ✅ 已完成 | 一期–三期：Yggdrasil 全量、OIDC 免密、Union 模块、i18n / SEO / 主题包、迁移工具链、管理面板；生产全量迁移与切流；v0.2.0（自助找回 / 官方兜底 / 运维日志 / SEO）；v0.3.0（签名插件安装/市场/回滚 + 发布工具链）；v0.4.0（slot 全接线、注册/上传插件字段、头像 CDN、资料/改名 guard、能力内省、本地包信任分级） |
-| 🔶 进行中 | 真机启动器验收（SJMCL 及社区启动器：OAuth 免密 → 选角 → 进服） |
+| 🔶 进行中 | v0.5.0：公共纹理哈希去重、受控出站、持久任务队列与 `skin-importer` 导入插件 |
 | ⬜ 规划中 | 正版账号绑定（Auth Source 第二实现）、邮箱验证流、插件市场运营 / sidecar 隔离 / 第一方原生插件 |
 
 ## 兼容契约（不可破坏）
