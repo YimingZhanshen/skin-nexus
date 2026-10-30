@@ -234,6 +234,28 @@ func TestIntegrationJobsLifecycle(t *testing.T) {
 	if claimed, err := js.Claim(ctx, "w2", now, time.Minute); err != nil || claimed == nil || claimed.ID != "job-b" {
 		t.Fatalf("resumed claim = %+v %v", claimed, err)
 	}
+
+	// A +08 MySQL session must not delay resume/requeue by 8h: scheduling
+	// writes use the Go clock, not SQL NOW(3).
+	dbTZ, err := sql.Open("mysql", os.Getenv("SKIN_TEST_DSN")+"&time_zone=%27%2B08%3A00%27")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dbTZ.Close()
+	jsTZ := jobs.New(dbTZ)
+	mk("job-c")
+	if _, err := jsTZ.Claim(ctx, "w3", time.Now(), time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if err := jsTZ.Fail(ctx, "job-c", "w3", errors.New("boom"), 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := jsTZ.Resume(ctx, "job-c"); err != nil {
+		t.Fatal(err)
+	}
+	if claimed, err := jsTZ.Claim(ctx, "w3", time.Now().Add(2*time.Second), time.Minute); err != nil || claimed == nil || claimed.ID != "job-c" {
+		t.Fatalf("resume on +08 session = %+v %v", claimed, err)
+	}
 }
 
 // ---- bootstrap super admin ----

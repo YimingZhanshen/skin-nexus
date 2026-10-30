@@ -249,9 +249,13 @@ func (s *Store) RequestCancel(ctx context.Context, id string) error {
 }
 
 func (s *Store) Resume(ctx context.Context, id string) error {
+	// Scheduling columns must be written from the same clock the worker
+	// compares against. SQL NOW(3) follows the MySQL session time zone; on
+	// a +08 database that put a resumed job 8h into the future.
+	runAfter := time.Now().Truncate(time.Millisecond)
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE host_jobs SET state='queued', run_after=NOW(3), attempts=0, lease_owner='', lease_until=NULL,
-		 updated_at=NOW(3) WHERE id=? AND state IN ('cancelled','failed','paused')`, id)
+		`UPDATE host_jobs SET state='queued', run_after=?, attempts=0, lease_owner='', lease_until=NULL,
+		 updated_at=NOW(3) WHERE id=? AND state IN ('cancelled','failed','paused')`, runAfter, id)
 	if err != nil {
 		return err
 	}
@@ -270,8 +274,9 @@ func (s *Store) PausePlugin(ctx context.Context, plugin string) error {
 // Requeue releases a lease without consuming an attempt (plugin not loaded
 // yet, host shutting down, etc.).
 func (s *Store) Requeue(ctx context.Context, id, worker string) error {
+	runAfter := time.Now().Truncate(time.Millisecond)
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE host_jobs SET state='queued', run_after=NOW(3), lease_owner='', lease_until=NULL,
-		 updated_at=NOW(3) WHERE id=? AND state='running' AND lease_owner=?`, id, worker)
+		`UPDATE host_jobs SET state='queued', run_after=?, lease_owner='', lease_until=NULL,
+		 updated_at=NOW(3) WHERE id=? AND state='running' AND lease_owner=?`, runAfter, id, worker)
 	return err
 }
