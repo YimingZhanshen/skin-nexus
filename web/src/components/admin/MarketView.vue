@@ -5,6 +5,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { api } from '../../api.js'
+import { loadPluginUI } from '../../pluginUI.js'
 
 const { t } = useI18n()
 const packages = ref([])
@@ -146,6 +147,7 @@ async function confirmInstall() {
     })
     selected.value = null
     await load()
+    await loadPluginUI()
     if (d && d.state) actionError.value = ''
   } catch (e) {
     actionError.value = e.message

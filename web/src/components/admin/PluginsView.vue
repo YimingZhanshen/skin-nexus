@@ -5,6 +5,7 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON, needToken } from '../../adminApi.js'
 import { api } from '../../api.js'
+import { loadPluginUI } from '../../pluginUI.js'
 import SchemaForm from '../SchemaForm.vue'
 
 const { t } = useI18n()
@@ -85,6 +86,7 @@ async function rollback(p) {
   try {
     await fetchJSON(`/api/admin/v1/plugins/${encodeURIComponent(p.name)}/rollback`, { method: 'POST' })
     await load()
+    await loadPluginUI()
   } catch (e) { actionError.value = e.message }
 }
 
@@ -94,6 +96,7 @@ async function uninstall(p) {
   try {
     await fetchJSON(`/api/admin/v1/plugins/${encodeURIComponent(p.name)}`, { method: 'DELETE' })
     await load()
+    await loadPluginUI()
   } catch (e) { actionError.value = e.message }
 }
 
@@ -116,6 +119,7 @@ async function act(p, action) {
   try {
     await fetchJSON(`/api/admin/v1/plugins/${encodeURIComponent(p.name)}/${action}`, { method: 'POST' })
     await load()
+    await loadPluginUI()
   } catch (e) {
     actionError.value = e.message
   }
