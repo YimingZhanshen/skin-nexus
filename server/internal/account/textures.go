@@ -107,6 +107,10 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 		model = ""
 	}
 	desc := strings.TrimSpace(um.Name)
+	if !utf8.ValidString(desc) || !utf8.ValidString(um.DetailMD) ||
+		!utf8.ValidString(um.Source) || !utf8.ValidString(um.SourceURL) {
+		return TextureView{}, false, errf(CodeInvalid, "材质信息必须是 UTF-8 文本", nil)
+	}
 	if utf8.RuneCountInString(desc) > 50 {
 		return TextureView{}, false, errf(CodeInvalid, "纹理备注最多 50 个字", nil)
 	}
