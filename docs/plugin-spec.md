@@ -258,7 +258,9 @@ v2 的 UI 采用**固定插槽 + iframe/schema 页面**，不允许第三方直�
 - `iframe` 页面/插槽从 `/plugin-assets/<name>/...` 加载，`sandbox="allow-scripts allow-forms"`；
   **不带 `allow-same-origin`**，iframe 无法读取宿主 cookie/localStorage。
 - iframe bridge（`postMessage`，信封 `{v:1, nonce, id, type, payload}`）：
-  - 宿主→frame：`init`（plugin/src/origin/path/locale/user/csrf）；`path` 是宿主当前 URL，便于 slot 识别上下文；
+  - 宿主→frame：`init`（plugin/src/origin/path/locale/user/csrf/theme）；`path` 是宿主当前 URL，便于 slot 识别上下文；
+    `theme` 提供 `{bg,panel,border,text,muted,accent,dark}`，插件页面应把它写入自己的 CSS 变量，
+    不要硬编码浅色文字/透明背景（iframe 不继承宿主样式）；
   - frame→宿主：`ready`、`resize`、`toast`、`navigate`、`confirm`、`request`。
   - `request` 由宿主代发到该插件路由，自动带 cookie/CSRF，返回 `{status, body}`。
   - iframe 首次 `ready` 可用 `targetOrigin: "*"`（此时 origin 为 opaque）；之后用 init 里的 `origin`。

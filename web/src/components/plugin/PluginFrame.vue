@@ -18,6 +18,41 @@ let csrf = ''
 let user = null
 let ready = false
 
+function cssVar(name, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return v || fallback
+}
+
+function isDarkColor(value) {
+  const s = String(value || '').trim()
+  let m = /^#([0-9a-f]{3})$/i.exec(s)
+  if (m) {
+    const h = m[1]
+    return (parseInt(h[0] + h[0], 16) * 299 + parseInt(h[1] + h[1], 16) * 587 + parseInt(h[2] + h[2], 16) * 114) / 1000 < 128
+  }
+  m = /^#([0-9a-f]{6})$/i.exec(s)
+  if (m) {
+    const h = m[1]
+    return (parseInt(h.slice(0, 2), 16) * 299 + parseInt(h.slice(2, 4), 16) * 587 + parseInt(h.slice(4, 6), 16) * 114) / 1000 < 128
+  }
+  m = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i.exec(s)
+  if (m) return (Number(m[1]) * 299 + Number(m[2]) * 587 + Number(m[3]) * 114) / 1000 < 128
+  return true
+}
+
+function themePayload() {
+  const bg = cssVar('--bg', '#101825')
+  return {
+    bg,
+    panel: cssVar('--panel', '#16202e'),
+    border: cssVar('--border', 'rgba(169,138,95,.24)'),
+    text: cssVar('--text', '#e9edf1'),
+    muted: cssVar('--muted', '#a8b4c3'),
+    accent: cssVar('--accent', '#b0453a'),
+    dark: isDarkColor(bg),
+  }
+}
+
 function send(type, payload, id) {
   const win = frame.value && frame.value.contentWindow
   if (!win) return
@@ -30,7 +65,7 @@ async function init() {
   send('init', {
     plugin: props.plugin, src: props.src, origin: location.origin,
     path: location.pathname + location.search,
-    locale: document.documentElement.lang || 'zh-CN', user, csrf,
+    locale: document.documentElement.lang || 'zh-CN', user, csrf, theme: themePayload(),
   })
 }
 
