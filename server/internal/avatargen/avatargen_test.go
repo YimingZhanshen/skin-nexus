@@ -327,3 +327,19 @@ func TestBackgroundKeyDropsWhiteOverlay(t *testing.T) {
 		t.Fatalf("alpha sheet center = %v, want the white helmet", c)
 	}
 }
+
+// The body back face must sample the 64×64 sheet at (32,20); it previously
+// used (36,20), which is the left-arm sheet and made every skin's back look
+// like a random limb texture.
+func TestBodyBackFaceUV(t *testing.T) {
+	want := uvRect{32, 20, 8, 12}
+	for _, b := range modelParts(false, true) {
+		if b.min == [3]float64{-4, 12, -2} && b.max == [3]float64{4, 24, 2} {
+			if got := b.faces[5]; got != want {
+				t.Fatalf("body back UV = %+v, want %+v", got, want)
+			}
+			return
+		}
+	}
+	t.Fatal("body box not found in modelParts")
+}

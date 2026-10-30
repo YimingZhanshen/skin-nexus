@@ -39,8 +39,9 @@ import (
 // (`/preview/{tid}?v=N`) so month-long immutable caches re-fetch instead of
 // serving stale renders — 2026-10-25: v2 downscaled HD (lost detail), v3
 // keeps the sheet native and maps UVs onto it (halo layer detection fixed),
-// v4 drops the legacy background color (white overlay layers).
-const RenderVersion = "4"
+// v4 drops the legacy background color (white overlay layers); v5 fixes the
+// body back-face UV (36→32, was sampling the left-arm sheet).
+const RenderVersion = "5"
 
 //go:embed av_default2d.png av_default3d.png
 var defaultFS embed.FS
@@ -117,7 +118,7 @@ func modelParts(slim, hasLayer2 bool) []box {
 	}
 	armR := box{min: [3]float64{float64(-4 - armRW), 12, -2}, max: [3]float64{-4, 24, 2}, faces: armRFaces}
 	body := box{min: [3]float64{-4, 12, -2}, max: [3]float64{4, 24, 2}, faces: [6]uvRect{
-		{16, 20, 4, 12}, {28, 20, 4, 12}, {20, 16, 8, 4}, {28, 16, 8, 4}, {20, 20, 8, 12}, {36, 20, 8, 12}}}
+		{16, 20, 4, 12}, {28, 20, 4, 12}, {20, 16, 8, 4}, {28, 16, 8, 4}, {20, 20, 8, 12}, {32, 20, 8, 12}}}
 	head := box{min: [3]float64{-4, 24, -4}, max: [3]float64{4, 32, 4}, faces: [6]uvRect{
 		{0, 8, 8, 8}, {16, 8, 8, 8}, {8, 0, 8, 8}, {16, 0, 8, 8}, {8, 8, 8, 8}, {24, 8, 8, 8}}}
 
