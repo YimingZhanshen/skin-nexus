@@ -127,6 +127,47 @@ function wireReportButton() {
   })
 }
 
+function wireEditButton() {
+  const btn = document.getElementById('edit-btn')
+  const dlg = document.getElementById('edit-dialog')
+  const form = document.getElementById('edit-form')
+  if (!btn || !dlg || !form) return
+  const err = document.getElementById('edit-error')
+  const show = (msg) => { err.textContent = msg; err.hidden = !msg }
+  btn.addEventListener('click', () => { show(''); dlg.showModal() })
+  document.getElementById('edit-cancel').addEventListener('click', () => dlg.close())
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    const tid = btn.closest('article')?.querySelector('[data-like]')?.getAttribute('data-like') ||
+      location.pathname.split('/').pop()
+    const src = document.getElementById('edit-source').value
+    const sourceUrl = document.getElementById('edit-source-url').value.trim()
+    const body = {
+      name: document.getElementById('edit-name').value.trim(),
+      detail: document.getElementById('edit-detail').value,
+      source: src,
+      sourceUrl,
+    }
+    if ((src === 'derivative' || src === 'repost') && !/^https?:\/\//i.test(sourceUrl)) {
+      show('二创/转载必须填写 http(s) 原始发布地址')
+      return
+    }
+    const submit = form.querySelector('button[type="submit"]')
+    submit.disabled = true
+    try {
+      const res = await fetch(`/api/v1/skinlib/${encodeURIComponent(tid)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      })
+      if (res.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.pathname); return }
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { show(data.message || '保存失败，请稍后重试'); return }
+      location.reload()
+    } catch { show('网络异常，请稍后重试') }
+    finally { submit.disabled = false }
+  })
+}
+
 upgradeViewer()
 wireLikeButton()
 wireReportButton()
+wireEditButton()

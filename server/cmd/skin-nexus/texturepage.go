@@ -50,6 +50,8 @@ type texDetailData struct {
 	SourceLabel   string
 	SourceURL     string
 	Summary       string
+	DetailRaw     string
+	CanEdit       bool
 	Year          int
 
 	HeadAnchors template.HTML
@@ -182,6 +184,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
         <button class="alt like-btn{{if .Liked}} liked{{end}}" data-like="{{.TID}}" data-liked="{{if .Liked}}1{{else}}0{{end}}">♥ <span>喜欢 / 加入衣柜</span></button>
         <a class="primary" href="{{.TextureURL}}" download>下载纹理 PNG</a>
         <a class="alt" href="/register">注册使用同款</a>
+        {{if .CanEdit}}<button class="alt" id="edit-btn">编辑资料</button>{{end}}
         {{if .Public}}<button class="alt report-btn" id="report-btn" data-tid="{{.TID}}">举报</button>{{end}}
       </div>
     </article>
@@ -191,6 +194,28 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
     Powered by <a href="https://github.com/YimingZhanshen/skin-nexus">SkinNexus</a>
     · © {{.Year}} {{.SiteName}}
   </footer>
+  {{if .CanEdit}}
+  <dialog id="edit-dialog" class="report-dialog">
+    <form id="edit-form" method="dialog">
+      <h2>编辑材质资料</h2>
+      <label>名称<input id="edit-name" maxlength="50" value="{{.Name}}" /></label>
+      <label>来源
+        <select id="edit-source">
+          <option value="original"{{if eq .Source "original"}} selected{{end}}>原创</option>
+          <option value="derivative"{{if eq .Source "derivative"}} selected{{end}}>二创</option>
+          <option value="repost"{{if eq .Source "repost"}} selected{{end}}>转载</option>
+        </select>
+      </label>
+      <label>原始发布地址<input id="edit-source-url" type="url" value="{{.SourceURL}}" placeholder="https://" /></label>
+      <label>描述（Markdown）<textarea id="edit-detail" rows="5" maxlength="4000">{{.DetailRaw}}</textarea></label>
+      <p class="report-error" id="edit-error" hidden></p>
+      <div class="report-actions">
+        <button type="button" class="alt" id="edit-cancel">取消</button>
+        <button type="submit">保存</button>
+      </div>
+    </form>
+  </dialog>
+  {{end}}
   <dialog id="report-dialog" class="report-dialog">
     <form id="report-form" method="dialog">
       <h2>举报材质</h2>
@@ -321,6 +346,8 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 			DetailHTML:  template.HTML(texturemd.Render(row.DetailMD)),
 			Summary:     texturemd.Excerpt(row.DetailMD, 160),
 			SourceLabel: sourceLabel(row.Source),
+			DetailRaw:   row.DetailMD,
+			CanEdit:     uid != 0 && (uid == row.UID || admin),
 		}
 		if d.Name == "" {
 			d.Name = "材质 #" + strconv.FormatInt(row.TID, 10)
