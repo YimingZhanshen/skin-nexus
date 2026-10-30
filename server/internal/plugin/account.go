@@ -56,6 +56,9 @@ type LibraryItem struct {
 	Liked      bool   `json:"liked"`
 	Public     bool   `json:"public"`
 	Owned      bool   `json:"owned"`
+	Source     string `json:"source,omitempty"`
+	SourceURL  string `json:"sourceUrl,omitempty"`
+	DetailMD   string `json:"detail,omitempty"`
 	TextureURL string `json:"textureUrl"`
 	PreviewURL string `json:"previewUrl,omitempty"`
 	AvatarURL  string `json:"avatarUrl,omitempty"`
