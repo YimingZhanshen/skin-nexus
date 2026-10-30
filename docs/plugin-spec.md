@@ -140,6 +140,7 @@ player-notes_1.2.0.zip
 ```json
 "store": {
   "schemaVersion": 1,
+  "kv": { "maxKeys": 50000 },
   "collections": { "notes": { "maxRows": 1000, "maxBytes": 65536 } }
 }
 ```
@@ -151,7 +152,8 @@ skin.store.collection("notes").put("id1", { text: "hello" });
 skin.store.collection("notes").list({ prefix: "", limit: 100 });
 ```
 
-- KV：单值 ≤64 KiB，每插件 ≤1000 keys；支持 TTL。
+- KV：单值 ≤64 KiB；默认每插件 ≤1000 keys，可用 `store.kv.maxKeys` opt-in（硬顶 50000，
+  适合需要按条目记录游标的导入类插件）；支持 TTL。
 - 集合：单文档 ≤256 KiB（且受 `maxBytes` 约束），每集合 ≤1 万行（且受 `maxRows` 约束）。
 - 宿主托管迁移：`schemaVersion` 递增时，在启用/重载时调用
   `skin.store.onInstall(fn)`（0→N）或 `skin.store.onUpgrade(fn)`（旧→新，`fn` 收到 `{from,to}`）；

@@ -23,7 +23,14 @@ type ConfigSpec struct {
 // SQL/table access: only these collections (plus KV) are addressable.
 type StoreSpec struct {
 	SchemaVersion int                       `json:"schemaVersion,omitempty"`
+	KV            *KVSpec                   `json:"kv,omitempty"`
 	Collections   map[string]CollectionSpec `json:"collections,omitempty"`
+}
+
+// KVSpec lets a trusted plugin opt into a larger KV namespace. The host
+// clamps it to hardMaxKVKeys; the default stays bounded for small plugins.
+type KVSpec struct {
+	MaxKeys int `json:"maxKeys,omitempty"`
 }
 
 type CollectionSpec struct {
@@ -198,6 +205,9 @@ func validateV2Manifest(m *Manifest, dir string) error {
 	if err := validateStoreSpec(m.Store); err != nil {
 		return err
 	}
+	if m.Store != nil && m.Store.KV != nil && !m.hasPermission(PermStoreKV) {
+		return errors.New("store.kv requires the store:kv permission")
+	}
 	if err := validateRoutes(m); err != nil {
 		return err
 	}
@@ -314,6 +324,9 @@ func validateStoreSpec(s *StoreSpec) error {
 	}
 	if s.SchemaVersion < 0 {
 		return errors.New("store.schemaVersion must be >= 0")
+	}
+	if s.KV != nil && (s.KV.MaxKeys < 0 || s.KV.MaxKeys > hardMaxKVKeys) {
+		return fmt.Errorf("store.kv.maxKeys must be 0..%d", hardMaxKVKeys)
 	}
 	if len(s.Collections) > 20 {
 		return errors.New("too many store collections (max 20)")

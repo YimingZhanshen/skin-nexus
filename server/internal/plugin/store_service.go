@@ -10,11 +10,12 @@ import (
 )
 
 const (
-	maxKVValue      = 64 << 10
-	maxKVKeys       = 1000
-	maxDocBytes     = 256 << 10
-	maxDocsPerColl  = 10000
-	maxStoreTimeout = 800 * time.Millisecond
+	maxKVValue       = 64 << 10
+	defaultMaxKVKeys = 1000
+	hardMaxKVKeys    = 50000
+	maxDocBytes      = 256 << 10
+	maxDocsPerColl   = 10000
+	maxStoreTimeout  = 800 * time.Millisecond
 )
 
 // storeService is the host-mediated data API. There is deliberately no SQL,
@@ -26,10 +27,18 @@ type storeService struct {
 	spec     *StoreSpec
 	allowKV  bool
 	allowDoc bool
+	maxKeys  int
 }
 
 func newStoreService(st PlatformStore, pluginName string, spec *StoreSpec, allowKV, allowDoc bool) *storeService {
-	return &storeService{st: st, plugin: pluginName, spec: spec, allowKV: allowKV, allowDoc: allowDoc}
+	maxKeys := defaultMaxKVKeys
+	if spec != nil && spec.KV != nil && spec.KV.MaxKeys > 0 {
+		maxKeys = spec.KV.MaxKeys
+		if maxKeys > hardMaxKVKeys {
+			maxKeys = hardMaxKVKeys
+		}
+	}
+	return &storeService{st: st, plugin: pluginName, spec: spec, allowKV: allowKV, allowDoc: allowDoc, maxKeys: maxKeys}
 }
 
 func (s *storeService) ctx() (context.Context, context.CancelFunc) {
@@ -77,8 +86,8 @@ func (s *storeService) kvSet(key, value string, ttl *time.Time) error {
 		if err != nil {
 			return err
 		}
-		if n >= maxKVKeys {
-			return fmt.Errorf("plugin KV quota exceeded (%d keys)", maxKVKeys)
+		if n >= s.maxKeys {
+			return fmt.Errorf("plugin KV quota exceeded (%d keys)", s.maxKeys)
 		}
 	}
 	return s.st.SetPluginKV(ctx, s.plugin, "", key, value, ttl)
