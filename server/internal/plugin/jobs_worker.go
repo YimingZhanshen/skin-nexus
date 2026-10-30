@@ -60,6 +60,13 @@ func (m *Manager) runOneJob(worker string) {
 	}
 	res, err := inst.jobRt.runJobStep(ctx, j)
 	if err != nil {
+		// Cancel may have arrived mid-step. Fail is guarded by
+		// state='running', so without this the job would be stranded in
+		// 'cancelling' with no claim path.
+		if cur, gerr := m.cfg.Jobs.Get(ctx, j.ID); gerr == nil && cur.State == "cancelling" {
+			_ = m.cfg.Jobs.MarkCancelled(ctx, j.ID, worker)
+			return
+		}
 		_ = m.cfg.Jobs.Fail(ctx, j.ID, worker, err, j.Attempts+1, j.MaxAttempts)
 		return
 	}
