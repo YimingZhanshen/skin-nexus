@@ -243,12 +243,26 @@ func (d *avatarDeps) servePreview(w http.ResponseWriter, r *http.Request, hash, 
 // white-overlay rule so no-alpha skins (white helmet layers) look the same
 // in WebGL as in the server-rendered preview.
 func (d *avatarDeps) handleViewerTexture(w http.ResponseWriter, r *http.Request) {
-	f, err := d.ts.Open(r.PathValue("hash"))
+	hash := r.PathValue("hash")
+	typ, _, err := d.st.TextureMetaByHash(r.Context(), hash)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	f, err := d.ts.Open(hash)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	defer f.Close()
+	// The background-keyed UV map only applies to skins; capes keep their
+	// raw bytes even if someone requests this route directly.
+	if typ != "skin" {
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		http.ServeContent(w, r, "", zeroTime(), f)
+		return
+	}
 	skin, lerr := avatargen.LoadSkinReader(f)
 	if lerr != nil {
 		w.WriteHeader(http.StatusNotFound)
