@@ -17,6 +17,24 @@
 - **当前版本**：v0.4.0（2026-10-28）· 迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
 - **许可**：AGPL-3.0 · **发起人 / 著作权人**：YMZS
 
+## 10 分钟部署（Docker Compose）
+
+```bash
+git clone https://github.com/YimingZhanshen/skin-nexus.git && cd skin-nexus
+cat > .env <<EOF
+# 改成你的公开地址（首次启动前定好）
+SKIN_BASE_URL=https://skin.example.com
+SKIN_DB_PASSWORD=$(openssl rand -hex 16)
+SKIN_DB_ROOT_PASSWORD=$(openssl rand -hex 16)
+SKIN_ADMIN_TOKEN=$(openssl rand -hex 32)
+EOF
+docker compose -f docker-compose.quickstart.yml up -d
+```
+
+打开 `http://<主机>:8080/setup`，完成站点名、管理员与皮肤域配置即可。
+
+**从 blessing-skin-server 无损迁移**：按 [`docs/migration.md`](docs/migration.md) 的 `preflight → dry-run → import` 执行，小站通常 10 分钟内跑完，全程可回滚。外部 MySQL、反向代理、升级与备份见 [`docs/deploy.md`](docs/deploy.md)。
+
 ## 界面预览
 
 <p align="center"><img src="docs/assets/showcase/landing.jpg" alt="落地页" width="100%"></p>

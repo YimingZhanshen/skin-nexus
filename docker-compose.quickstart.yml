@@ -1,0 +1,55 @@
+# One-command quick start: no file editing required.
+#
+#   cat > .env <<EOF
+#   SKIN_BASE_URL=https://skin.example.com
+#   SKIN_DB_PASSWORD=$(openssl rand -hex 16)
+#   SKIN_DB_ROOT_PASSWORD=$(openssl rand -hex 16)
+#   SKIN_ADMIN_TOKEN=$(openssl rand -hex 32)
+#   EOF
+#   docker compose -f docker-compose.quickstart.yml up -d
+#
+# This file is the zero-edit variant of docker-compose.yml: every required
+# value comes from .env or the shell. For external MySQL, pinned images,
+# reverse-proxy notes and backups, use docker-compose.yml and docs/deploy.md.
+
+services:
+  skin-nexus:
+    image: ghcr.io/yimingzhanshen/skin-nexus:${SKIN_IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    ports:
+      - '${SKIN_PORT:-8080}:8080'
+    environment:
+      SKIN_LISTEN: ':8080'
+      SKIN_BASE_URL: '${SKIN_BASE_URL:?set SKIN_BASE_URL in .env}'
+      SKIN_DATABASE_DSN: 'skin:${SKIN_DB_PASSWORD:?set SKIN_DB_PASSWORD in .env}@tcp(db:3306)/skin_nexus?parseTime=true&charset=utf8mb4'
+      SKIN_DATA_DIR: /data
+      SKIN_AUTO_MIGRATE: 'true'
+      SKIN_ADMIN_TOKEN: '${SKIN_ADMIN_TOKEN:?set SKIN_ADMIN_TOKEN in .env}'
+      SKIN_PLUGIN_MARKET_URL: '${SKIN_PLUGIN_MARKET_URL:-https://yimingzhanshen.github.io/skin-nexus-plugins/v1/registry.json}'
+      SKIN_PLUGIN_TRUST_KEYS: '${SKIN_PLUGIN_TRUST_KEYS:-market-2026-10:ID2EWgcfs1E4UbGCCX9WjD0aCgTof3oeuHV03IpdGNY=}'
+    volumes:
+      - skin-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: skin_nexus
+      MYSQL_USER: skin
+      MYSQL_PASSWORD: '${SKIN_DB_PASSWORD:?set SKIN_DB_PASSWORD in .env}'
+      MYSQL_ROOT_PASSWORD: '${SKIN_DB_ROOT_PASSWORD:?set SKIN_DB_ROOT_PASSWORD in .env}'
+    volumes:
+      - skin-db:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  skin-data: {}
+  skin-db: {}

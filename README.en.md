@@ -19,6 +19,28 @@ It is a modern rewrite of [blessing-skin-server](https://github.com/bs-community
 - **Release**: v0.4.0 (2026-10-28) · iteration history in [`docs/CHANGELOG.md`](docs/CHANGELOG.md) (Chinese)
 - **License**: AGPL-3.0 · **Author / copyright holder**: YMZS
 
+## Deploy in 10 minutes (Docker Compose)
+
+```bash
+git clone https://github.com/YimingZhanshen/skin-nexus.git && cd skin-nexus
+cat > .env <<EOF
+# your public URL, set before first start
+SKIN_BASE_URL=https://skin.example.com
+SKIN_DB_PASSWORD=$(openssl rand -hex 16)
+SKIN_DB_ROOT_PASSWORD=$(openssl rand -hex 16)
+SKIN_ADMIN_TOKEN=$(openssl rand -hex 32)
+EOF
+docker compose -f docker-compose.quickstart.yml up -d
+```
+
+Open `http://<host>:8080/setup` and finish the site name, admin account and
+skin-domain wizard.
+
+**Lossless migration from blessing-skin-server**: run `preflight → dry-run →
+import` from [`docs/migration.md`](docs/migration.md); small sites usually
+finish in about 10 minutes, fully rollback-able. External MySQL, reverse proxy,
+upgrades and backups: [`docs/deploy.md`](docs/deploy.md).
+
 ## Screenshots
 
 <p align="center"><img src="docs/assets/showcase/landing.jpg" alt="Landing page" width="100%"></p>

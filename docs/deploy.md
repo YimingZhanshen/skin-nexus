@@ -15,7 +15,22 @@
 
 ### 2.1 准备 compose 文件
 
-仓库根的 [`docker-compose.yml`](../docker-compose.yml) 即成品，复制到部署目录：
+**零编辑快速开始**：仓库根的 [`docker-compose.quickstart.yml`](../docker-compose.quickstart.yml)
+把所有必填值改为 `.env` 插值，新站无需改文件：
+
+```bash
+git clone https://github.com/YimingZhanshen/skin-nexus.git && cd skin-nexus
+cat > .env <<EOF
+SKIN_BASE_URL=https://skin.example.com
+SKIN_DB_PASSWORD=$(openssl rand -hex 16)
+SKIN_DB_ROOT_PASSWORD=$(openssl rand -hex 16)
+SKIN_ADMIN_TOKEN=$(openssl rand -hex 32)
+EOF
+docker compose -f docker-compose.quickstart.yml up -d
+```
+
+需要外部 MySQL、固定镜像 tag 或反代细节时，继续用下面的成品
+[`docker-compose.yml`](../docker-compose.yml)：
 
 ```bash
 mkdir -p /opt/skin-nexus && cd /opt/skin-nexus
