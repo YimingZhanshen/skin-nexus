@@ -167,7 +167,8 @@ func writeAccountErr(w http.ResponseWriter, err *account.Error) {
 		status = http.StatusForbidden
 	case account.CodeNameTaken:
 		status = http.StatusConflict
-	case account.CodeInvalidName, account.CodeInvalid, account.CodeTypeMismatch:
+	case account.CodeInvalidName, account.CodeInvalid, account.CodeTypeMismatch,
+		account.CodeSourceURLReq, account.CodeSourceURLBad:
 		status = http.StatusBadRequest
 	case account.CodeTooLarge:
 		status = http.StatusRequestEntityTooLarge
