@@ -257,6 +257,8 @@ v2 的 UI 采用**固定插槽 + iframe/schema 页面**，不允许第三方直�
 - 页面落在 `/ext/<name>/<page>`；服务端只对已启用插件的已声明页面返回 SPA shell，未知路径仍 404。
 - `iframe` 页面/插槽从 `/plugin-assets/<name>/...` 加载，`sandbox="allow-scripts allow-forms"`；
   **不带 `allow-same-origin`**，iframe 无法读取宿主 cookie/localStorage。
+- 资产 URL 自动追加 `?v=<插件版本>`，响应头为 `Cache-Control: public, max-age=0, must-revalidate`：
+  升级插件后浏览器最多做一次 304 校验即可拿到新文件，不需要清缓存；升级时**必须递增版本号**。
 - iframe bridge（`postMessage`，信封 `{v:1, nonce, id, type, payload}`）：
   - 宿主→frame：`init`（plugin/src/origin/path/locale/user/csrf/theme）；`path` 是宿主当前 URL，便于 slot 识别上下文；
     `theme` 提供 `{bg,panel,border,text,muted,accent,dark}`，插件页面应把它写入自己的 CSS 变量，
