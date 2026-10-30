@@ -19,6 +19,20 @@ It is a modern rewrite of [blessing-skin-server](https://github.com/bs-community
 - **Release**: v0.4.0 (2026-10-28) · iteration history in [`docs/CHANGELOG.md`](docs/CHANGELOG.md) (Chinese)
 - **License**: AGPL-3.0 · **Author / copyright holder**: YMZS
 
+## Screenshots
+
+<p align="center"><img src="docs/assets/showcase/landing.jpg" alt="Landing page" width="100%"></p>
+
+<p align="center">
+  <img src="docs/assets/showcase/skinlib.jpg" alt="Skin library" width="49%">
+  <img src="docs/assets/showcase/market.jpg" alt="Plugin market" width="49%">
+</p>
+
+<p align="center"><img src="docs/assets/showcase/launcher-plugin.jpg" alt="Launcher API plugin" width="100%"></p>
+
+> Taken from a real production instance. The site name and sensitive settings are
+> replaced; skins and nicknames come from the public skin library.
+
 ## Why SkinNexus
 
 - **Migration keeps your data** — primary keys preserved, UUIDs never drift, all password algorithms still verify (12 legacy schemes + argon2id lazy rehash). `preflight → dry-run → import`, fully rollback-able.

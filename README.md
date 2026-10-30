@@ -17,6 +17,19 @@
 - **当前版本**：v0.4.0（2026-10-28）· 迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
 - **许可**：AGPL-3.0 · **发起人 / 著作权人**：YMZS
 
+## 界面预览
+
+<p align="center"><img src="docs/assets/showcase/landing.jpg" alt="落地页" width="100%"></p>
+
+<p align="center">
+  <img src="docs/assets/showcase/skinlib.jpg" alt="皮肤库" width="49%">
+  <img src="docs/assets/showcase/market.jpg" alt="插件市场" width="49%">
+</p>
+
+<p align="center"><img src="docs/assets/showcase/launcher-plugin.jpg" alt="Launcher API 插件" width="100%"></p>
+
+> 截图来自真实生产实例；站名与敏感配置已替换，皮肤与昵称取自公开皮肤库。
+
 ## 为什么选 SkinNexus
 
 - **迁移不丢数据**：主键保留、UUID 零漂移、密码全兼容（12 种旧算式 + argon2id 惰性重哈希）；`preflight → dry-run → import` 三步可回滚，不是「导 CSV 碰运气」。
