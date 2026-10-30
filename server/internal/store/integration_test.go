@@ -213,6 +213,7 @@ func TestIntegrationJobsLifecycle(t *testing.T) {
 	if err := js.Resume(ctx, "job-b"); err != nil {
 		t.Fatal(err)
 	}
+	now = time.Now().Add(time.Second) // Resume sets run_after=NOW(3)
 	if claimed, err := js.Claim(ctx, "w2", now, time.Minute); err != nil || claimed == nil || claimed.ID != "job-b" {
 		t.Fatalf("resumed claim = %+v %v", claimed, err)
 	}
