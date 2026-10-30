@@ -107,6 +107,98 @@ func (rt *runtime) jobCtx() context.Context {
 	return context.Background()
 }
 
+func (rt *runtime) adminJobs() *jobs.Store {
+	if !rt.info.hasPermission(PermScheduleJobs) || rt.jobStore == nil {
+		rt.throw(errors.New("jobs.unavailable: queue is not configured"))
+	}
+	if rt.routeUser == nil || rt.routeUser.Permission <= 0 {
+		rt.throw(errors.New("jobs.forbidden: admin identity required"))
+	}
+	return rt.jobStore
+}
+
+func jobMap(j jobs.Job) map[string]any {
+	out := map[string]any{
+		"id": j.ID, "plugin": j.Plugin, "handler": j.Handler,
+		"state": j.State, "progress": j.Progress, "message": j.Message,
+		"lastError": j.LastError, "attempts": j.Attempts, "maxAttempts": j.MaxAttempts,
+		"createdAt": j.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+		"updatedAt": j.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+	}
+	if len(j.Payload) > 0 {
+		var v any
+		if json.Unmarshal(j.Payload, &v) == nil {
+			out["payload"] = v
+		}
+	}
+	if len(j.Cursor) > 0 {
+		var v any
+		if json.Unmarshal(j.Cursor, &v) == nil {
+			out["cursor"] = v
+		}
+	}
+	if len(j.Result) > 0 {
+		var v any
+		if json.Unmarshal(j.Result, &v) == nil {
+			out["result"] = v
+		}
+	}
+	return out
+}
+
+func (rt *runtime) jsJobList(call goja.FunctionCall) goja.Value {
+	store := rt.adminJobs()
+	page := int64(1)
+	if v := call.Argument(0); v != nil && !goja.IsUndefined(v) {
+		page = v.ToInteger()
+	}
+	list, total, err := store.List(rt.jobCtx(), rt.info.Name, "", int(page), 50)
+	if err != nil {
+		rt.throw(err)
+	}
+	jobs := make([]any, 0, len(list))
+	for _, j := range list {
+		jobs = append(jobs, jobMap(j))
+	}
+	return rt.vm.ToValue(map[string]any{"jobs": jobs, "total": total})
+}
+
+func (rt *runtime) jsJobStatus(call goja.FunctionCall) goja.Value {
+	store := rt.adminJobs()
+	id := call.Argument(0).String()
+	j, err := store.Get(rt.jobCtx(), id)
+	if err != nil || j.Plugin != rt.info.Name {
+		rt.throw(errors.New("jobs.not_found"))
+	}
+	return rt.vm.ToValue(jobMap(j))
+}
+
+func (rt *runtime) jsJobCancel(call goja.FunctionCall) goja.Value {
+	store := rt.adminJobs()
+	id := call.Argument(0).String()
+	j, err := store.Get(rt.jobCtx(), id)
+	if err != nil || j.Plugin != rt.info.Name {
+		rt.throw(errors.New("jobs.not_found"))
+	}
+	if err := store.RequestCancel(rt.jobCtx(), id); err != nil {
+		rt.throw(err)
+	}
+	return rt.vm.ToValue(true)
+}
+
+func (rt *runtime) jsJobResume(call goja.FunctionCall) goja.Value {
+	store := rt.adminJobs()
+	id := call.Argument(0).String()
+	j, err := store.Get(rt.jobCtx(), id)
+	if err != nil || j.Plugin != rt.info.Name {
+		rt.throw(errors.New("jobs.not_found"))
+	}
+	if err := store.Resume(rt.jobCtx(), id); err != nil {
+		rt.throw(err)
+	}
+	return rt.vm.ToValue(true)
+}
+
 // runJobStep executes one manifest-declared job handler in this runtime. The
 // caller must use a dedicated job VM; the route VM's mutex is never touched.
 func (rt *runtime) runJobStep(ctx context.Context, j *jobs.Job) (jobStepResult, error) {

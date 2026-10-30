@@ -217,6 +217,10 @@ func (rt *runtime) installAPI() {
 		"jobs": map[string]interface{}{
 			"register": rt.regJob,
 			"submit":   rt.jsJobSubmit,
+			"list":     rt.jsJobList,
+			"status":   rt.jsJobStatus,
+			"cancel":   rt.jsJobCancel,
+			"resume":   rt.jsJobResume,
 		},
 		"account": map[string]interface{}{
 			"get":    rt.jsAccountGet,
