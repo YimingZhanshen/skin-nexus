@@ -194,7 +194,7 @@ func (s *Store) SaveStep(ctx context.Context, id, worker string, cursor []byte, 
 	runAfter := time.Now().Add(delay).Truncate(time.Millisecond)
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE host_jobs SET job_cursor=?, progress=?, message=?, state='queued',
-		 run_after=?, lease_owner='', lease_until=NULL, updated_at=NOW(3)
+		 run_after=?, attempts=0, last_error='', lease_owner='', lease_until=NULL, updated_at=NOW(3)
 		 WHERE id=? AND state='running' AND lease_owner=?`,
 		jsonOrNil(cursor), progress, message, runAfter, id, worker)
 	if err != nil {
