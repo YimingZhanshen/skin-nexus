@@ -237,6 +237,26 @@ func (d *avatarDeps) servePreview(w http.ResponseWriter, r *http.Request, hash, 
 	writePNG(w, avatargen.RenderPreview(skin, slim), "public, max-age=31536000, immutable")
 }
 
+// handleViewerTexture serves the background-normalized sheet used by the
+// detail-page skinview3d viewer. The raw /textures/{hash} file is returned
+// for downloads and plugin URL filters; this variant applies the legacy
+// white-overlay rule so no-alpha skins (white helmet layers) look the same
+// in WebGL as in the server-rendered preview.
+func (d *avatarDeps) handleViewerTexture(w http.ResponseWriter, r *http.Request) {
+	f, err := d.ts.Open(r.PathValue("hash"))
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+	skin, lerr := avatargen.LoadSkinReader(f)
+	if lerr != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	writePNG(w, avatargen.NormalizeBackground(skin), "public, max-age=31536000, immutable")
+}
+
 func writePNG(w http.ResponseWriter, img image.Image, cache string) {
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", cache)

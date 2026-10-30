@@ -20,7 +20,7 @@ func makeSkin() *image.NRGBA {
 		}
 	}
 	// Head faces.
-	fill(8, 8, 8, 8, color.NRGBA{255, 0, 255, 255})   // front
+	fill(8, 8, 8, 8, color.NRGBA{255, 0, 255, 255})  // front
 	fill(0, 8, 8, 8, color.NRGBA{255, 0, 0, 255})    // right side
 	fill(16, 8, 8, 8, color.NRGBA{0, 255, 0, 255})   // left side
 	fill(24, 8, 8, 8, color.NRGBA{0, 0, 255, 255})   // back
@@ -264,4 +264,66 @@ func TestLoadSkinReaderHD(t *testing.T) {
 			t.Fatal("128×64 legacy sheet must NOT have the overlay layer")
 		}
 	})
+}
+
+// A no-alpha sheet whose corner is one opaque color is the legacy
+// "background color" case: white overlay layers must vanish, while white
+// pixels inside the base head/body UVs stay opaque.
+func TestBackgroundKeyDropsWhiteOverlay(t *testing.T) {
+	white := color.NRGBA{255, 255, 255, 255}
+	build := func(cornerAlpha uint8) *image.NRGBA {
+		s := image.NewNRGBA(image.Rect(0, 0, 64, 64))
+		for y := 0; y < 64; y++ {
+			for x := 0; x < 64; x++ {
+				s.SetNRGBA(x, y, white)
+			}
+		}
+		for y := 8; y < 16; y++ {
+			for x := 8; x < 16; x++ {
+				s.SetNRGBA(x, y, color.NRGBA{255, 0, 255, 255})
+			}
+		}
+		s.SetNRGBA(9, 9, white) // a legitimate white base pixel (eye)
+		s.SetNRGBA(0, 0, color.NRGBA{255, 255, 255, cornerAlpha})
+		return s
+	}
+
+	keyed := build(255)
+	if k, ok := backgroundKey(keyed); !ok || k != white {
+		t.Fatalf("backgroundKey = %v %v, want white/true", k, ok)
+	}
+	if !baseOpaqueTexel(9, 9) || baseOpaqueTexel(44, 12) {
+		t.Fatal("baseOpaqueTexel must keep the head face and drop the helmet face")
+	}
+	out := RenderAvatar(keyed, 64, false)
+	if c := out.NRGBAAt(32, 32); c.R < 200 || c.B < 200 || c.G > 50 {
+		t.Fatalf("center = %v, want magenta face (white helmet dropped)", c)
+	}
+	whitePx := 0
+	for y := 0; y < 64; y++ {
+		for x := 0; x < 64; x++ {
+			if c := out.NRGBAAt(x, y); c.A == 255 && c.R > 240 && c.G > 240 && c.B > 240 {
+				whitePx++
+			}
+		}
+	}
+	if whitePx == 0 {
+		t.Fatal("white base pixel inside the head face was also dropped")
+	}
+
+	// A normal alpha sheet (transparent corner) must keep its white overlay.
+	alpha := build(0)
+	if _, ok := backgroundKey(alpha); ok {
+		t.Fatal("transparent corner must not be treated as a background color")
+	}
+	norm := NormalizeBackground(keyed)
+	if c := norm.NRGBAAt(44, 12); c.A != 0 {
+		t.Fatalf("viewer sheet helmet pixel = %v, want transparent", c)
+	}
+	if c := norm.NRGBAAt(9, 9); c.A != 255 {
+		t.Fatalf("viewer sheet base pixel = %v, want opaque", c)
+	}
+	if c := RenderAvatar(alpha, 64, false).NRGBAAt(32, 32); c.R < 240 || c.G < 240 || c.B < 240 {
+		t.Fatalf("alpha sheet center = %v, want the white helmet", c)
+	}
 }

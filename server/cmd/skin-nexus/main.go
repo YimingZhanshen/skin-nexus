@@ -31,6 +31,7 @@ import (
 	"skin-nexus/server/internal/adminapi"
 	"skin-nexus/server/internal/appearance"
 	"skin-nexus/server/internal/auth"
+	"skin-nexus/server/internal/avatargen"
 	"skin-nexus/server/internal/config"
 	"skin-nexus/server/internal/jobs"
 	"skin-nexus/server/internal/migrate"
@@ -712,6 +713,7 @@ func main() {
 	root.HandleFunc("GET /avatar/{tid}", av.handleAvatarTID)
 	root.HandleFunc("GET /preview/hash/{hash}", av.handlePreviewHash)
 	root.HandleFunc("GET /preview/{tid}", av.handlePreviewTID)
+	root.HandleFunc("GET /texture-render/{hash}", av.handleViewerTexture)
 	// Phase 3 public surface: health probe, SEO outputs, theme assets.
 	root.Handle("GET /healthz", healthzHandler(st))
 	root.Handle("GET /sitemap.xml", sitemapHandler(seoEng, st, cfg.BaseURL))
@@ -749,7 +751,7 @@ func main() {
 				}
 				// Same split as the skinlib UI: skins preview rendered, capes
 				// flat texture (a cape through the body renderer 404s).
-				u := "/preview/" + strconv.FormatInt(r.TID, 10)
+				u := "/preview/" + strconv.FormatInt(r.TID, 10) + "?v=" + avatargen.RenderVersion
 				if r.Type == "cape" {
 					u = "/textures/" + r.Hash
 				}

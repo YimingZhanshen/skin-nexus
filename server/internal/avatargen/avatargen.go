@@ -38,8 +38,9 @@ import (
 // sampling or scaling changes). Callers embed it in preview/avatar URLs
 // (`/preview/{tid}?v=N`) so month-long immutable caches re-fetch instead of
 // serving stale renders — 2026-10-25: v2 downscaled HD (lost detail), v3
-// keeps the sheet native and maps UVs onto it (halo layer detection fixed).
-const RenderVersion = "3"
+// keeps the sheet native and maps UVs onto it (halo layer detection fixed),
+// v4 drops the legacy background color (white overlay layers).
+const RenderVersion = "4"
 
 //go:embed av_default2d.png av_default3d.png
 var defaultFS embed.FS
@@ -238,12 +239,23 @@ func render(skin *image.NRGBA, parts []box, c cam, ratio float64, pad int) *imag
 	if sbx.Dy()*2 == sbx.Dx() { // 64×32 legacy ratio (incl. its HD upscales)
 		syf = float64(sbx.Dy()) / 32
 	}
+	key, keyed := backgroundKey(skin)
 	sample := func(fu, fv float64) color.NRGBA {
 		u, v := int(fu*sxf), int(fv*syf)
 		if u < 0 || v < 0 || u >= sbx.Dx() || v >= sbx.Dy() {
 			return color.NRGBA{}
 		}
-		return skin.NRGBAAt(u, v)
+		c := skin.NRGBAAt(u, v)
+		// Legacy renderer parity: an opaque uniform corner marks the sheet's
+		// background color; pixels of that color outside the base UV regions
+		// are dropped. This removes white 1.8 overlay layers from skins saved
+		// without alpha (e.g. littleskin #594824) without eating white pixels
+		// that belong to the base head/body.
+		if keyed && c.A == 255 && c.R == key.R && c.G == key.G && c.B == key.B &&
+			!baseOpaqueTexel(int(fu), int(fv)) {
+			return color.NRGBA{}
+		}
+		return c
 	}
 	over := func(x, y int, cl color.NRGBA) {
 		if cl.A == 0 {
@@ -302,6 +314,90 @@ func render(skin *image.NRGBA, parts []box, c cam, ratio float64, pad int) *imag
 		}
 	}
 	return canvas
+}
+
+// backgroundKey mirrors the legacy renderer's "fix for weird rendering
+// skins": when the top-left 8×8 pixel block is one fully opaque color, that
+// color is the sheet background. Images whose corner is transparent (normal
+// alpha skins) never match, so their overlays are rendered unchanged.
+func backgroundKey(skin *image.NRGBA) (color.NRGBA, bool) {
+	b := skin.Bounds()
+	if b.Dx() < 8 || b.Dy() < 8 {
+		return color.NRGBA{}, false
+	}
+	key := skin.NRGBAAt(b.Min.X, b.Min.Y)
+	if key.A != 255 {
+		return color.NRGBA{}, false
+	}
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			if skin.NRGBAAt(b.Min.X+x, b.Min.Y+y) != key {
+				return color.NRGBA{}, false
+			}
+		}
+	}
+	return key, true
+}
+
+// baseOpaqueTexel lists the 64-space rectangles the legacy renderer keeps
+// opaque when it keys out the background color. Overlay rows (v 32..47) and
+// the helmet faces (u 32..63) are intentionally absent so white overlay
+// layers disappear; the left-limb overlay net (v 48..63) is kept.
+func baseOpaqueTexel(u, v int) bool {
+	switch {
+	case u >= 8 && u <= 23 && v >= 0 && v <= 7:
+		return true
+	case u >= 0 && u <= 31 && v >= 8 && v <= 15:
+		return true
+	case u >= 4 && u <= 11 && v >= 16 && v <= 19:
+		return true
+	case u >= 20 && u <= 35 && v >= 16 && v <= 19:
+		return true
+	case u >= 44 && u <= 51 && v >= 16 && v <= 19:
+		return true
+	case u >= 0 && u <= 54 && v >= 20 && v <= 31:
+		return true
+	case u >= 20 && u <= 27 && v >= 48 && v <= 51:
+		return true
+	case u >= 36 && u <= 43 && v >= 48 && v <= 51:
+		return true
+	case u >= 16 && u <= 47 && v >= 52 && v <= 63:
+		return true
+	}
+	return false
+}
+
+// NormalizeBackground returns a viewer-ready copy of skin with the legacy
+// background color made transparent outside the base UV regions. The stored
+// file and its hash stay untouched — this only feeds clients (skinview3d)
+// that cannot apply the legacy white-overlay fix themselves.
+func NormalizeBackground(skin *image.NRGBA) *image.NRGBA {
+	key, ok := backgroundKey(skin)
+	if !ok {
+		return skin
+	}
+	out := image.NewNRGBA(skin.Bounds())
+	draw.Draw(out, out.Bounds(), skin, skin.Bounds().Min, draw.Src)
+	b := skin.Bounds()
+	sx := float64(b.Dx()) / 64
+	sy := sx
+	if b.Dy()*2 == b.Dx() {
+		sy = float64(b.Dy()) / 32
+	}
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			c := out.NRGBAAt(x, y)
+			if c.A != 255 || c.R != key.R || c.G != key.G || c.B != key.B {
+				continue
+			}
+			u := int(float64(x-b.Min.X) / sx)
+			v := int(float64(y-b.Min.Y) / sy)
+			if !baseOpaqueTexel(u, v) {
+				out.SetNRGBA(x, y, color.NRGBA{})
+			}
+		}
+	}
+	return out
 }
 
 // tightBounds returns the alpha bounding box of img (content may be

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"skin-nexus/server/internal/appearance"
+	"skin-nexus/server/internal/avatargen"
 	"skin-nexus/server/internal/seo"
 	"skin-nexus/server/internal/store"
 )
@@ -40,6 +41,7 @@ type texDetailData struct {
 	Public        bool
 	UploadAt      string // "2006-01-02"-style display date, "" when unknown
 	TextureURL    string // absolute, for download + JSON-LD
+	ViewerURL     string // absolute, background-normalized sheet for skinview3d
 	PreviewURL    string // relative preview image (skin: /preview/{tid}; cape: flat)
 	PreviewAbsURL string // absolute preview URL (og:image + JSON-LD)
 	Year          int
@@ -144,7 +146,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
       <p class="sub">Minecraft {{if eq .Type "cape"}}披风{{else}}皮肤{{end}} · 上传者 <span itemprop="author">{{.Nickname}}</span></p>
       <div class="viewer" id="tex-viewer">
         <img class="static" src="{{.PreviewURL}}" alt="{{.Name}} 的 Minecraft {{if eq .Type "cape"}}披风{{else}}皮肤{{end}} 预览图" itemprop="image" />
-        {{if eq .Type "skin"}}<canvas data-skinview3d data-texture="{{.TextureURL}}" data-model="{{.Model}}" width="320" height="420"></canvas>{{end}}
+        {{if eq .Type "skin"}}<canvas data-skinview3d data-texture="{{.ViewerURL}}" data-model="{{.Model}}" width="320" height="420"></canvas>{{end}}
       </div>
       <dl class="meta">
         <div><dt>类型</dt><dd>{{if eq .Type "cape"}}披风{{else if eq .Model "slim"}}皮肤（Alex 瘦臂）{{else}}皮肤（Steve 常规）{{end}}</dd></div>
@@ -278,7 +280,7 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 		// server-rendered body preview, capes the flat texture (a cape
 		// through the body renderer is garbage).
 		if row.Type == "skin" {
-			d.PreviewURL = "/preview/" + strconv.FormatInt(row.TID, 10)
+			d.PreviewURL = "/preview/" + strconv.FormatInt(row.TID, 10) + "?v=" + avatargen.RenderVersion
 		} else {
 			d.PreviewURL = "/textures/" + row.Hash
 		}
@@ -287,6 +289,7 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 			d.TextureURL = texURL(r.Context(), row.Hash, d.TextureURL, row.Type)
 		}
 		d.PreviewAbsURL = absURL(base, d.PreviewURL)
+		d.ViewerURL = absURL(base, "/texture-render/"+row.Hash+"?v="+avatargen.RenderVersion)
 		if slotHTML != nil {
 			d.PluginSlot = template.HTML(slotHTML("skinlib.detail.sidebar", map[string]string{
 				"tid":  strconv.FormatInt(row.TID, 10),
