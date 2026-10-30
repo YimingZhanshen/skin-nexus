@@ -7,7 +7,7 @@ CREATE TABLE host_jobs (
   owner_uid     BIGINT NOT NULL,
   state         VARCHAR(16) NOT NULL,
   payload       JSON NOT NULL,
-  cursor        JSON NULL,
+  job_cursor    JSON NULL,
   result        JSON NULL,
   progress      TINYINT NOT NULL DEFAULT 0,
   message       VARCHAR(255) NOT NULL DEFAULT '',

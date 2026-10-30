@@ -39,7 +39,7 @@ type Store struct{ db *sql.DB }
 
 func New(db *sql.DB) *Store { return &Store{db: db} }
 
-const cols = `id, plugin, handler, owner_uid, state, payload, cursor, result,
+const cols = `id, plugin, handler, owner_uid, state, payload, job_cursor, result,
  progress, message, COALESCE(last_error,''), attempts, max_attempts, reclaims,
  run_after, lease_owner, lease_until, created_at, updated_at, started_at, finished_at`
 
@@ -77,7 +77,7 @@ func jsonOrNil(b []byte) any {
 
 func (s *Store) Create(ctx context.Context, j Job) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO host_jobs (id, plugin, handler, owner_uid, state, payload, cursor, progress,
+		`INSERT INTO host_jobs (id, plugin, handler, owner_uid, state, payload, job_cursor, progress,
 		 message, attempts, max_attempts, run_after, created_at, updated_at)
 		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		j.ID, j.Plugin, j.Handler, j.OwnerUID, j.State, j.Payload, jsonOrNil(j.Cursor),
@@ -169,7 +169,7 @@ func (s *Store) Claim(ctx context.Context, worker string, now time.Time, lease t
 
 func (s *Store) SaveStep(ctx context.Context, id, worker string, cursor []byte, progress int, message string) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE host_jobs SET cursor=?, progress=?, message=?, lease_until=DATE_ADD(NOW(3), INTERVAL 30 SECOND), updated_at=NOW(3)
+		`UPDATE host_jobs SET job_cursor=?, progress=?, message=?, lease_until=DATE_ADD(NOW(3), INTERVAL 30 SECOND), updated_at=NOW(3)
 		 WHERE id=? AND state='running' AND lease_owner=?`,
 		jsonOrNil(cursor), progress, message, id, worker)
 	if err != nil {
