@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"regexp"
@@ -197,6 +198,7 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 				return TextureView{}, false, s.duplicatePublic(pub)
 			}
 		}
+		log.Printf("texture insert failed: %v", err)
 		return TextureView{}, false, errf(CodeInternal, "写入纹理失败", err)
 	}
 	if s.OnTextureUploaded != nil {
