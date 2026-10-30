@@ -25,7 +25,7 @@ var md = goldmark.New(
 // off-site NSFW content cannot ride along with a description.
 var policy = func() *bluemonday.Policy {
 	p := bluemonday.NewPolicy()
-	p.AllowStandardURLs()
+	p.AllowURLSchemes("http", "https")
 	p.AllowAttrs("href", "title").OnElements("a")
 	p.RequireNoFollowOnLinks(true)
 	p.RequireNoReferrerOnLinks(true)
