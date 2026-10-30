@@ -397,6 +397,7 @@ func (b *Backend) handleSiteConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"invite_required": b.inviteRequired(r.Context()),
 		"mail_configured": b.smtpConfig(r.Context()) != nil,
+		"union_enabled":   b.union != nil && b.union.Enabled(),
 	})
 }
 

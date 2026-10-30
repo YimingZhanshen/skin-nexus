@@ -53,11 +53,15 @@ const resetDone = ref(false)
 // the deployment's real configuration — invite field required-or-absent,
 // email field + forgot flow available-or-hidden. Until the fetch resolves
 // (or if it fails) the pre-config UI stays = today's behavior.
-const siteConf = ref({ invite_required: false, mail_configured: false })
+const siteConf = ref({ invite_required: false, mail_configured: false, union_enabled: false })
 const confLoaded = ref(false)
-const inviteFieldShown = computed(() => !confLoaded.value || siteConf.value.invite_required)
+// Invite field is absent unless the server says it is required. The old
+// "show an optional box while config loads" behavior produced a dead
+// "邀请码（选填）" field on sites that never use invitations.
+const inviteFieldShown = computed(() => confLoaded.value && siteConf.value.invite_required)
 const inviteIsRequired = computed(() => confLoaded.value && siteConf.value.invite_required)
 const mailEnabled = computed(() => !confLoaded.value || siteConf.value.mail_configured)
+const unionEnabled = computed(() => confLoaded.value && siteConf.value.union_enabled)
 
 // Sidebar nav (blessing parity: 用户中心/管理 两组). device/apps/union are
 // user-center entries too — kept out of the sidebar to preserve the
@@ -87,7 +91,7 @@ const navGroups = computed(() => {
       { id: 'players', labelKey: 'nav.players', icon: navIcons.players },
       { id: 'profile', labelKey: 'nav.profile', icon: navIcons.profile },
       { id: 'apps', labelKey: 'nav.apps', icon: navIcons.apps },
-      { id: 'union', labelKey: 'nav.union', icon: navIcons.union },
+      ...(unionEnabled.value ? [{ id: 'union', labelKey: 'nav.union', icon: navIcons.union }] : []),
       ...pluginItems,
     ],
   }]
@@ -136,6 +140,11 @@ let syncingURL = false
 watch(view, (v) => {
   const u = viewURLs[v]
   if (u && location.pathname !== u && !syncingURL) history.pushState({ view: v }, '', u)
+})
+// Union is a hot module: if it is disabled while the bind page is open,
+// leave the now-hidden page instead of showing a dead surface.
+watch(unionEnabled, (on) => {
+  if (!on && view.value === 'union') view.value = 'dashboard'
 })
 function onPopState() {
   syncingURL = true
@@ -375,7 +384,7 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
       <label>{{ t('auth.passwordMin') }}</label>
       <input v-model="password" type="password" @keyup.enter="doRegister" />
       <template v-if="inviteFieldShown">
-        <label :class="{ required: inviteIsRequired }">{{ inviteIsRequired ? t('auth.invitationCodeRequired') : t('auth.invitationCode') }}</label>
+        <label class="required">{{ t('auth.invitationCodeRequired') }}</label>
         <input v-model="invitationCode" @keyup.enter="doRegister" />
       </template>
       <PluginFields form="auth.register" v-model="pluginFormData" />

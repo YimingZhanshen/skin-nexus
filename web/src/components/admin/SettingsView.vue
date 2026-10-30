@@ -7,6 +7,7 @@ import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 
 const { t } = useI18n()
+const emit = defineEmits(['settings-changed'])
 
 // Settings panel: env-migrated site knobs
 const settings = ref([])
@@ -30,10 +31,16 @@ const secretKeys = new Set(['union_member_key', 'smtp_pass'])
 // `group`; this list is the display order (unknown ids fall to the end,
 // keeping the API forward-compatible).
 const GROUP_ORDER = ['basic', 'register', 'mail', 'security', 'ygg', 'texture', 'union']
+const unionOn = computed(() => String(settings.value.find((s) => s.key === 'union_enabled')?.value || '0') === '1')
+// When Union is off, hide its configuration pages; keep the enable switch
+// under Security so it can be turned back on.
+const visibleSettings = computed(() => settings.value.filter((s) =>
+  unionOn.value || s.key === 'union_enabled' || !s.key.startsWith('union_')
+))
 const groupedSettings = computed(() => {
   const buckets = new Map()
-  for (const s of settings.value) {
-    const g = s.group || 'other'
+  for (const s of visibleSettings.value) {
+    const g = s.key === 'union_enabled' && !unionOn.value ? 'security' : (s.group || 'other')
     if (!buckets.has(g)) buckets.set(g, [])
     buckets.get(g).push(s)
   }
@@ -75,6 +82,7 @@ async function saveSetting(s) {
       body: JSON.stringify({ key: s.key, value: s.value }),
     })
     setOk.value = t('common.saved')
+    emit('settings-changed', s.key, s.value)
     await loadSettings()
   } catch (e) {
     // review P2-10: refetch so the UI doesn't keep a toggled-but-unsaved value

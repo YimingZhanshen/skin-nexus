@@ -2,7 +2,7 @@
 // AdminPanel shell (B1 refactor, 2026-10-24): sidebar + per-domain views.
 // The old single-file card flow moved to components/admin/*; App.vue still
 // mounts this at view === 'admin' (routing untouched).
-import { ref, shallowRef, onMounted } from 'vue'
+import { ref, shallowRef, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { token, needToken, fetchJSON, persistToken } from '../adminApi.js'
@@ -40,6 +40,23 @@ const currentComp = shallowRef(DashboardView)
 const currentPlugin = ref('')
 const pluginPages = ref([])
 const myPerm = ref(0)
+// Module switches hide their admin surfaces; defaults stay visible until the
+// public capability endpoint answers (failure should never hide an entry).
+const flags = ref({ invite_required: true, union_enabled: true })
+const visibleNav = computed(() => nav.filter((n) =>
+  (n.id !== 'invitation' || flags.value.invite_required) &&
+  (n.id !== 'union' || flags.value.union_enabled)
+))
+
+async function loadFlags() {
+  try { flags.value = { ...flags.value, ...(await api.siteConfig()) } } catch { /* keep defaults */ }
+}
+
+function onSettingsChanged(key, value) {
+  if (key === 'invite_required') flags.value.invite_required = value === '1'
+  if (key === 'union_enabled') flags.value.union_enabled = value === '1'
+  if (!visibleNav.value.some((n) => n.id === current.value)) go('dashboard')
+}
 
 function go(id) {
   const item = nav.find((n) => n.id === id)
@@ -79,6 +96,7 @@ onMounted(async () => {
   } catch { /* no usable session — the token fallback stays visible */ }
   await loadPluginUI()
   pluginPages.value = navPages('admin').filter((p) => myPerm.value >= Number(p.perm || 0))
+  await loadFlags()
   if (!needToken.value || token.value) {
     ready.value = true
     reloadTick.value++
@@ -96,7 +114,7 @@ onMounted(async () => {
         <button @click="submitToken">{{ t('admin.load') }}</button>
       </div>
       <nav class="admin-nav">
-        <button v-for="n in nav" :key="n.id" class="admin-nav-item"
+        <button v-for="n in visibleNav" :key="n.id" class="admin-nav-item"
                 :class="{ active: current === n.id }" @click="go(n.id)">
           {{ t(n.labelKey) }}
         </button>
@@ -109,7 +127,7 @@ onMounted(async () => {
     <main class="admin-main">
       <!-- key bump remounts the active view => its onMounted refetches -->
       <PluginPage v-if="ready && currentPlugin" :path="currentPlugin" />
-      <component v-else-if="ready" :is="currentComp" :key="`${current}-${reloadTick}`" @go="go" />
+      <component v-else-if="ready" :is="currentComp" :key="`${current}-${reloadTick}`" @go="go" @settings-changed="onSettingsChanged" />
       <div v-else class="card muted">{{ t('admin.enterTokenHint') }}</div>
     </main>
   </div>
