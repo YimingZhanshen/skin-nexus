@@ -76,6 +76,19 @@ func jsonOrNil(b []byte) any {
 }
 
 func (s *Store) Create(ctx context.Context, j Job) error {
+	now := time.Now()
+	if j.RunAfter.IsZero() {
+		j.RunAfter = now
+	}
+	// MySQL 5.7 DATETIME(3) rounds sub-millisecond values; truncate so a
+	// job created with the same instant a worker polls is immediately due.
+	j.RunAfter = j.RunAfter.Truncate(time.Millisecond)
+	if j.CreatedAt.IsZero() {
+		j.CreatedAt = now
+	}
+	if j.UpdatedAt.IsZero() {
+		j.UpdatedAt = now
+	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO host_jobs (id, plugin, handler, owner_uid, state, payload, job_cursor, progress,
 		 message, attempts, max_attempts, run_after, created_at, updated_at)
