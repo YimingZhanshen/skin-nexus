@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"skin-nexus/server/internal/accesslog"
 )
@@ -610,22 +611,82 @@ func writeJSON(w http.ResponseWriter, v interface{}) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// clientIP returns the client address for rate limiting. X-Forwarded-For is
-// only honoured when the direct peer is a trusted proxy (loopback/private —
-// our nginx sits on the docker bridge), and the LAST entry is taken: that is
-// the hop our proxy appended. Client-supplied leading entries are spoofing
-// attempts and are ignored (review P1, 2026-10-23: first-entry trust let any
-// caller rotate fake XFF values to bypass the IP sliding window).
+// DefaultCDNHeaders is the ordered list used when CDN mode is enabled and no
+// custom list is configured. CDN-specific headers win over X-Forwarded-For
+// because a plain XFF chain usually ends at the CDN node, not the player.
+func DefaultCDNHeaders() []string {
+	return []string{"CF-Connecting-IP", "True-Client-IP", "Ali-CDN-Real-IP", "X-Real-IP", "X-Forwarded-For"}
+}
+
+type clientIPPolicy struct {
+	enabled bool
+	headers []string
+}
+
+var clientIPPolicyStore atomic.Value // clientIPPolicy
+
+// ConfigureClientIP applies the admin CDN setting. It is safe to call while
+// requests are in flight; an empty header list falls back to DefaultCDNHeaders.
+func ConfigureClientIP(enabled bool, headers []string) {
+	clean := make([]string, 0, len(headers))
+	for _, h := range headers {
+		if h = strings.TrimSpace(h); h != "" {
+			clean = append(clean, http.CanonicalHeaderKey(h))
+		}
+	}
+	if len(clean) == 0 {
+		clean = DefaultCDNHeaders()
+	}
+	clientIPPolicyStore.Store(clientIPPolicy{enabled: enabled, headers: clean})
+}
+
+// clientIP returns the client address for rate limiting. The direct peer
+// must be a trusted proxy (loopback/private). In CDN mode the configured
+// headers are checked in order; X-Forwarded-For keeps the last-hop rule so a
+// client cannot rotate spoofed leading entries. Without CDN mode the legacy
+// XFF-last behaviour is unchanged.
 func clientIP(r *http.Request) string {
 	host := r.RemoteAddr
 	if i := strings.LastIndex(host, ":"); i > 0 {
 		host = host[:i]
 	}
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" && isTrustedProxy(host) {
+	if !isTrustedProxy(host) {
+		return host
+	}
+	if p, ok := clientIPPolicyStore.Load().(clientIPPolicy); ok && p.enabled {
+		for _, name := range p.headers {
+			raw := strings.TrimSpace(r.Header.Get(name))
+			if raw == "" {
+				continue
+			}
+			if strings.EqualFold(name, "X-Forwarded-For") {
+				parts := strings.Split(raw, ",")
+				raw = parts[len(parts)-1]
+			}
+			if ip := normalizeIP(raw); ip != "" {
+				return ip
+			}
+		}
+	}
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		parts := strings.Split(xff, ",")
 		return strings.TrimSpace(parts[len(parts)-1])
 	}
 	return host
+}
+
+// normalizeIP accepts bare IPs and host:port forms (IPv4 and [IPv6]).
+func normalizeIP(raw string) string {
+	s := strings.Trim(strings.TrimSpace(raw), `"`)
+	if host, _, err := net.SplitHostPort(s); err == nil {
+		s = host
+	}
+	s = strings.Trim(s, "[]")
+	ip := net.ParseIP(s)
+	if ip == nil {
+		return ""
+	}
+	return ip.String()
 }
 
 // isTrustedProxy reports whether the peer address is inside the local trust

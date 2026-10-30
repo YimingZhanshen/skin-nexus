@@ -117,6 +117,24 @@ func main() {
 		v, ok, err := st.GetOption(context.Background(), key)
 		return v, err == nil && ok
 	}, cfg.BaseURL)
+
+	// CDN client-IP policy: option-first, hot-applied from the settings panel.
+	// Headers are only trusted when the direct peer is loopback/RFC1918.
+	applyCDN := func() {
+		enabled := false
+		if v, ok, err := st.GetOption(context.Background(), "cdn_enabled"); err == nil && ok {
+			switch strings.ToLower(strings.TrimSpace(v)) {
+			case "1", "true", "on", "yes":
+				enabled = true
+			}
+		}
+		headers := ygg.DefaultCDNHeaders()
+		if v, ok, err := st.GetOption(context.Background(), "cdn_headers"); err == nil && ok && strings.TrimSpace(v) != "" {
+			headers = strings.Split(v, ",")
+		}
+		ygg.ConfigureClientIP(enabled, headers)
+	}
+	applyCDN()
 	if os.Getenv("SKIN_SKIN_DOMAINS") == "" {
 		if v, ok, err := st.GetOption(context.Background(), "skin_domains"); err == nil && ok && v != "" {
 			for _, d := range strings.Split(v, ",") {
@@ -454,6 +472,9 @@ func main() {
 			}
 		case "union_member_key":
 			ustack.setMemberKey(value)
+		case "cdn_enabled", "cdn_headers":
+			applyCDN()
+			log.Printf("cdn: hot apply %s=%s", key, value)
 		}
 	}
 	// Dashboard storage card: sum of texture files on disk (the textures
@@ -484,6 +505,8 @@ func main() {
 		"require_verification":   boolStr(cfg.RequireVerification),
 		"rate_limit_auth":        strconv.Itoa(cfg.RateLimitAuth),
 		"login_fail_limit":       strconv.Itoa(cfg.LoginFailLimit),
+		"cdn_enabled":            "0",
+		"cdn_headers":            strings.Join(ygg.DefaultCDNHeaders(), ","),
 		"announcement":           "",
 		"regs_per_ip":            "3",
 		"max_upload_file_size":   "1024",

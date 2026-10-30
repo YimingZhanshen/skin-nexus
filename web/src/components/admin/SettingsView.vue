@@ -17,11 +17,11 @@ const setOk = ref('')
 const boolKeys = new Set([
   'invite_required', 'require_verification',
   'union_enabled', 'union_enable_update', 'union_enable_oauth2',
-  'ygg_mojang_fallback',
+  'ygg_mojang_fallback', 'cdn_enabled',
 ])
 const textKeys = new Set([
   'skin_domains', 'announcement', 'custom_player_name_regexp', 'texture_name_regexp',
-  'union_oauth2_sig_private_key', 'union_oauth2_sig_public_key',
+  'union_oauth2_sig_private_key', 'union_oauth2_sig_public_key', 'cdn_headers',
 ])
 // secrets never render as plain text inputs
 const secretKeys = new Set(['union_member_key', 'smtp_pass'])

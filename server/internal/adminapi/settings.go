@@ -45,6 +45,8 @@ var settingsWhitelist = []struct {
 	{"smtp_from", false, "mail", "发件人（留空=用 smtp_user；可写 Name <a@b.c> 形式）"},
 	{"rate_limit_auth", true, "security", "认证端点每 IP 每 10 分钟请求数上限（0=关闭；重启后生效）"},
 	{"login_fail_limit", true, "security", "同账号连续失败锁定阈值（0=关闭；重启后生效）"},
+	{"cdn_enabled", false, "security", "CDN 加速开关（启用后按下方头顺序解析真实客户端 IP；仅当 Nginx/CDN 会覆盖这些头时开启，立即生效）"},
+	{"cdn_headers", false, "security", "CDN 真实 IP 头（按顺序匹配，逗号分隔；默认 CF-Connecting-IP,True-Client-IP,Ali-CDN-Real-IP,X-Real-IP,X-Forwarded-For）"},
 	{"skin_domains", true, "ygg", "皮肤域名（CSV，ygg metadata 皮肤来源）"},
 	{"ygg_token_expire_1", false, "ygg", "ygg 令牌软窗口（秒，默认 259200=3 天）：validate/join 有效期，过后可 refresh 换新"}, // B5（blessing yggdrasil-connect 原名，callbacks.php:93-98 默认值）
 	{"ygg_token_expire_2", false, "ygg", "ygg 令牌硬窗口（秒，默认 604800=7 天）：refresh 有效期，过后须重新登录"},
@@ -112,7 +114,7 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 	}
 	val := strings.TrimSpace(req.Value)
 	switch req.Key {
-	case "invite_required", "require_verification", "union_enabled", "union_enable_update", "union_enable_oauth2", "ygg_mojang_fallback":
+	case "invite_required", "require_verification", "union_enabled", "union_enable_update", "union_enable_oauth2", "ygg_mojang_fallback", "cdn_enabled":
 		normalized, ok := normalizeBool(val)
 		if !ok {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "布尔值需为 1/0/true/false/on/off/yes/no"})
@@ -124,6 +126,30 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		val = strings.Join(strings.FieldsFunc(val, func(r rune) bool {
 			return r == ',' || r == '\n' || r == ' '
 		}), ",")
+	case "cdn_headers":
+		parts := strings.FieldsFunc(val, func(r rune) bool { return r == ',' || r == '\n' || r == ' ' })
+		clean := make([]string, 0, len(parts))
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			if len(p) > 64 || !regexp.MustCompile(`^[A-Za-z0-9-]+$`).MatchString(p) {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "CDN 头名称只能包含字母、数字与连字符"})
+				return
+			}
+			switch strings.ToLower(p) {
+			case "authorization", "cookie", "host", "content-length", "content-type":
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "不允许使用该头作为客户端 IP 来源"})
+				return
+			}
+			clean = append(clean, http.CanonicalHeaderKey(p))
+		}
+		if len(clean) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "至少保留一个 CDN 头"})
+			return
+		}
+		val = strings.Join(clean, ",")
 	case "rate_limit_auth", "login_fail_limit", "regs_per_ip", "player_name_length_min", "player_name_length_max",
 		"ygg_token_expire_1", "ygg_token_expire_2", "ygg_tokens_limit", "ygg_rate_limit":
 		// numeric knobs (review P2: garbage silently desynced panel vs boot

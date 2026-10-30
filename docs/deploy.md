@@ -221,7 +221,33 @@ location / {
 > 信任区时才采信 XFF 的**最后一跳**（防伪造绕限流），所以反代必须用
 > `$proxy_add_x_forwarded_for` 或 `$remote_addr` 追加真实地址，不要透传客户端原样头。
 >
-> `X-Real-IP` 服务端并不读取（只认 `X-Forwarded-For` / `X-Forwarded-Proto`），保留无妨。
+> `X-Real-IP` 默认不读取；开启 CDN 开关后才按配置的头顺序读取（见下）。
+
+### CDN 场景（Cloudflare / 阿里云 CDN 等）
+
+CDN → Nginx → 容器时，XFF 最后一跳通常是 CDN 节点，不是玩家。后台
+**安全与限流 → CDN 加速开关**打开后，服务端按「CDN 真实 IP 头」列表从前往后
+匹配第一个合法 IP：
+
+```
+CF-Connecting-IP, True-Client-IP, Ali-CDN-Real-IP, X-Real-IP, X-Forwarded-For
+```
+
+- 头列表可在面板里增删/排序；只接受字母、数字、连字符，拒绝 `Authorization`/`Cookie` 等。
+- 仍只在对端为 loopback/RFC1918 时采信，直连公网伪造头无效。
+- `X-Forwarded-For` 仍取最后一跳，所以有 CDN 专用头时优先用专用头。
+- 配置即时生效，无需重启。
+
+Nginx 侧建议显式覆盖，避免客户端伪造透传：
+
+```nginx
+proxy_set_header CF-Connecting-IP $http_cf_connecting_ip;
+proxy_set_header True-Client-IP $http_true_client_ip;
+proxy_set_header Ali-CDN-Real-IP $http_ali_cdn_real_ip;
+```
+
+> 只有确认 Nginx/CDN 会覆盖这些头时才开启开关；若站点直接暴露 8080，
+> 客户端可以自带同名头，不要启用。
 
 ## 四、从老站迁移
 
