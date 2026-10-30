@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -98,6 +99,67 @@ func seedUserAs(t *testing.T, m *Mysql, email, nick string) int64 {
 		t.Fatalf("create user: %v", err)
 	}
 	return uid
+}
+
+// ---- 0015 public texture hash dedupe ----
+
+func TestIntegrationPublicTextureDedupe(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	u1, u2 := seedUser(t, m), seedUser(t, m)
+	hash := strings.Repeat("a", 64)
+
+	tid, err := m.AddTexture(ctx, u1, "skin", hash, "default", "first")
+	if err != nil {
+		t.Fatalf("first public texture: %v", err)
+	}
+	if _, err := m.AddTexture(ctx, u2, "skin", hash, "default", "duplicate"); !errors.Is(err, ErrDuplicatePublic) {
+		t.Fatalf("second public texture err = %v, want ErrDuplicatePublic", err)
+	}
+	if got, ok, err := m.PublicTextureByHash(ctx, "skin", hash); err != nil || !ok || got.ID != tid {
+		t.Fatalf("public lookup = %+v ok=%v err=%v, want id %d", got, ok, err, tid)
+	}
+
+	// Private copies are allowed and never satisfy the public lookup.
+	if _, err := m.AddTexturePrivate(ctx, u2, "skin", hash, "default", "private"); err != nil {
+		t.Fatalf("private duplicate: %v", err)
+	}
+	// Publishing the private copy must collide with the existing public row.
+	allow := true
+	var privateID int64
+	if err := m.db.QueryRowContext(ctx,
+		`SELECT id FROM textures WHERE uid=? AND hash=? AND public=0 LIMIT 1`, u2, hash).Scan(&privateID); err != nil {
+		t.Fatalf("find private: %v", err)
+	}
+	if err := m.UpdateTextureMeta(ctx, privateID, u2, nil, &allow); !errors.Is(err, ErrDuplicatePublic) {
+		t.Fatalf("publish duplicate err = %v, want ErrDuplicatePublic", err)
+	}
+
+	// Legacy duplicate rows (pre-0015, NULL key) do not block startup; the
+	// backfill fills exactly one winner and leaves the duplicate NULL.
+	legacyHash := strings.Repeat("b", 64)
+	for i := 0; i < 2; i++ {
+		if _, err := m.db.ExecContext(ctx,
+			`INSERT INTO textures (uid,type,hash,model,description,public) VALUES (?,?,?,?,?,1)`,
+			u1, "skin", legacyHash, "default", "legacy"); err != nil {
+			t.Fatalf("insert legacy duplicate: %v", err)
+		}
+	}
+	if _, err := m.BackfillPublicDedupe(ctx); err != nil {
+		t.Fatalf("backfill: %v", err)
+	}
+	var filled, nulls int
+	if err := m.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM textures WHERE hash=? AND public_dedupe IS NOT NULL`, legacyHash).Scan(&filled); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM textures WHERE hash=? AND public_dedupe IS NULL`, legacyHash).Scan(&nulls); err != nil {
+		t.Fatal(err)
+	}
+	if filled != 1 || nulls != 1 {
+		t.Fatalf("backfill filled=%d nulls=%d, want 1/1", filled, nulls)
+	}
 }
 
 // ---- 0003 OIDC tables ----

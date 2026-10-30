@@ -28,6 +28,7 @@ const uploading = ref(false)
 const pageErr = ref('') // 页面级数据错误（不混进上传卡）
 const uploadErr = ref('')
 const uploadOk = ref('')
+const uploadDup = ref(null)
 const uploadPluginData = ref({})
 // 选中文件的本地预览（objectURL，随选择换新、卸载时回收）
 const previewURL = ref('')
@@ -140,13 +141,19 @@ async function addToCloset(tx) {
 
 async function doUpload() {
   if (!uploadFile.value) { uploadErr.value = t('dashboard.pickPng'); return }
-  uploadErr.value = ''; uploadOk.value = ''; uploading.value = true
+  uploadErr.value = ''; uploadOk.value = ''; uploadDup.value = null; uploading.value = true
   try {
-    await uploadTexture(uploadType.value, uploadFile.value, uploadType.value === 'skin' ? uploadModel.value : '', '', uploadPluginData.value)
-    uploadOk.value = t('dashboard.uploadSuccess')
+    const d = await uploadTexture(uploadType.value, uploadFile.value, uploadType.value === 'skin' ? uploadModel.value : '', '', uploadPluginData.value)
+    uploadOk.value = d.created === false ? t('dashboard.uploadAlreadyOwned') : t('dashboard.uploadSuccess')
     clearPreview()
     await load()
-  } catch (e) { if (!guard401(e)) uploadErr.value = e.message } finally { uploading.value = false }
+  } catch (e) {
+    if (e.data && e.data.textureId) {
+      uploadDup.value = e.data
+    } else if (!guard401(e)) {
+      uploadErr.value = e.message
+    }
+  } finally { uploading.value = false }
 }
 
 function onPick(e) {
@@ -214,6 +221,10 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
           </button>
         </div>
         <div class="error" v-if="uploadErr">{{ uploadErr }}</div>
+        <div class="error" v-if="uploadDup">
+          {{ t('dashboard.uploadDuplicate') }}
+          <a :href="uploadDup.url">{{ t('dashboard.uploadExisting') }}</a>
+        </div>
         <div class="success" v-if="uploadOk">{{ uploadOk }}</div>
         <PluginFields form="texture.upload" v-model="uploadPluginData" />
         <div class="muted">{{ t('dashboard.uploadHint') }}</div>

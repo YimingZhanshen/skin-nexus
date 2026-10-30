@@ -31,7 +31,7 @@ func convertView[T any](in any) T {
 func pluginAccountErr(err error) error {
 	var ae *account.Error
 	if errors.As(err, &ae) {
-		return &plugin.AccountError{Code: ae.Code, Message: ae.Message}
+		return &plugin.AccountError{Code: ae.Code, Message: ae.Message, Details: ae.Details}
 	}
 	return err
 }
@@ -122,6 +122,14 @@ func (p pluginAccount) ListTextures(ctx context.Context, uid int64) ([]plugin.Te
 
 func (p pluginAccount) UploadTexture(ctx context.Context, uid int64, typ, model, desc string, png []byte, meta plugin.AccountCallMeta) (plugin.TextureView, bool, error) {
 	v, created, err := p.svc.UploadTexture(ctx, uid, typ, model, desc, png, p.meta(meta))
+	if err != nil {
+		return plugin.TextureView{}, false, pluginAccountErr(err)
+	}
+	return convertView[plugin.TextureView](v), created, nil
+}
+
+func (p pluginAccount) ImportPrivateTexture(ctx context.Context, uid int64, typ, model, desc string, png []byte, meta plugin.AccountCallMeta) (plugin.TextureView, bool, error) {
+	v, created, err := p.svc.ImportPrivateTexture(ctx, uid, typ, model, desc, png, p.meta(meta))
 	if err != nil {
 		return plugin.TextureView{}, false, pluginAccountErr(err)
 	}

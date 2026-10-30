@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"regexp"
 	"strings"
@@ -56,6 +57,17 @@ func (s *Service) ListTextures(ctx context.Context, uid int64) ([]TextureView, *
 }
 
 func (s *Service) UploadTexture(ctx context.Context, uid int64, typ, model, desc string, png []byte, meta CallMeta) (TextureView, bool, *Error) {
+	return s.uploadTexture(ctx, uid, typ, model, desc, png, meta, true)
+}
+
+// ImportPrivateTexture is the user-import path: it stores a private copy and
+// deliberately skips the public-content check (the user needs an owned tid to
+// apply it to a character). Same-owner duplicates remain idempotent.
+func (s *Service) ImportPrivateTexture(ctx context.Context, uid int64, typ, model, desc string, png []byte, meta CallMeta) (TextureView, bool, *Error) {
+	return s.uploadTexture(ctx, uid, typ, model, desc, png, meta, false)
+}
+
+func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model, desc string, png []byte, meta CallMeta, public bool) (TextureView, bool, *Error) {
 	if e := s.ensure(); e != nil {
 		return TextureView{}, false, e
 	}
@@ -109,8 +121,26 @@ func (s *Service) UploadTexture(ctx context.Context, uid int64, typ, model, desc
 	if existing, ok, err := s.Store.TextureByOwnerHash(ctx, uid, typ, res.Hash); err == nil && ok {
 		return s.textureRowView(ctx, existing), false, nil
 	}
-	tid, err := s.Store.AddTexture(ctx, uid, typ, res.Hash, res.Model, desc)
+	if public {
+		if pub, ok, err := s.Store.PublicTextureByHash(ctx, typ, res.Hash); err == nil && ok {
+			return TextureView{}, false, s.duplicatePublic(pub)
+		}
+	}
+	var tid int64
+	if public {
+		tid, err = s.Store.AddTexture(ctx, uid, typ, res.Hash, res.Model, desc)
+	} else {
+		tid, err = s.Store.AddTexturePrivate(ctx, uid, typ, res.Hash, res.Model, desc)
+	}
 	if err != nil {
+		if errors.Is(err, store.ErrDuplicatePublic) {
+			if existing, ok, lookupErr := s.Store.TextureByOwnerHash(ctx, uid, typ, res.Hash); lookupErr == nil && ok {
+				return s.textureRowView(ctx, existing), false, nil
+			}
+			if pub, ok, lookupErr := s.Store.PublicTextureByHash(ctx, typ, res.Hash); lookupErr == nil && ok {
+				return TextureView{}, false, s.duplicatePublic(pub)
+			}
+		}
 		return TextureView{}, false, errf(CodeInternal, "写入纹理失败", err)
 	}
 	if s.OnTextureUploaded != nil {
@@ -129,4 +159,11 @@ func (s *Service) UploadTexture(ctx context.Context, uid int64, typ, model, desc
 		"tid": tid, "hash": res.Hash, "type": typ,
 	})
 	return s.textureView(ctx, tid, typ, res.Hash, res.Model, desc, time.Now()), true, nil
+}
+
+func (s *Service) duplicatePublic(pub store.TextureRow) *Error {
+	return errDetails(CodeDuplicatePub, "该皮肤已在公共皮肤库", map[string]any{
+		"textureId": pub.ID,
+		"url":       fmt.Sprintf("%s/skinlib/%d", s.base(), pub.ID),
+	})
 }

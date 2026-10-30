@@ -61,7 +61,11 @@ func (rt *runtime) jsOKExtra(v any, extra map[string]any) goja.Value {
 func (rt *runtime) jsFail(err error) goja.Value {
 	var ae *AccountError
 	if errors.As(err, &ae) {
-		return rt.vm.ToValue(map[string]any{"ok": false, "error": map[string]any{"code": ae.Code, "message": ae.Message}})
+		out := map[string]any{"code": ae.Code, "message": ae.Message}
+		if len(ae.Details) > 0 {
+			out["details"] = ae.Details
+		}
+		return rt.vm.ToValue(map[string]any{"ok": false, "error": out})
 	}
 	return rt.vm.ToValue(map[string]any{"ok": false, "error": map[string]any{"code": "internal", "message": err.Error()}})
 }
@@ -178,6 +182,30 @@ func (rt *runtime) jsTexturesImport(call goja.FunctionCall) goja.Value {
 	v, created, err := svc.ImportLibrary(ctx, id.ID, pidArg(call), rt.accountMeta("", nil))
 	if err != nil {
 		return rt.jsFail(err)
+	}
+	return rt.jsOKExtra(v, map[string]any{"created": created})
+}
+
+// jsTexturesImportBase64 stores an externally fetched PNG as a PRIVATE
+// texture owned by the caller (used by import plugins). It intentionally
+// bypasses the public-library duplicate rejection so the user can apply an
+// already-public image to their own character.
+func (rt *runtime) jsTexturesImportBase64(call goja.FunctionCall) goja.Value {
+	svc, id, ctx := rt.accountContext(PermEditTextures)
+	typ := call.Argument(0).String()
+	model := call.Argument(1).String()
+	desc := call.Argument(2).String()
+	raw, err := base64.StdEncoding.DecodeString(call.Argument(3).String())
+	if err != nil {
+		return rt.jsFail(&AccountError{Code: "texture.invalid", Message: "invalid base64 payload"})
+	}
+	filename := "import.png"
+	if typ != "" {
+		filename = typ + ".png"
+	}
+	v, created, uerr := svc.ImportPrivateTexture(ctx, id.ID, typ, model, desc, raw, rt.accountMeta(filename, nil))
+	if uerr != nil {
+		return rt.jsFail(uerr)
 	}
 	return rt.jsOKExtra(v, map[string]any{"created": created})
 }

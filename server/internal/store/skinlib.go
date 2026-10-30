@@ -263,12 +263,11 @@ func (m *Mysql) UpdateTextureMeta(ctx context.Context, tid, ownerUID int64, name
 		args = append(args, *name)
 	}
 	if public != nil {
-		v := 0
 		if *public {
-			v = 1
+			sets = append(sets, "public = 1", "public_dedupe = CONCAT(type, ':', hash)")
+		} else {
+			sets = append(sets, "public = 0", "public_dedupe = NULL")
 		}
-		sets = append(sets, "public = ?")
-		args = append(args, v)
 	}
 	if len(sets) == 0 {
 		return nil
@@ -281,6 +280,9 @@ func (m *Mysql) UpdateTextureMeta(ctx context.Context, tid, ownerUID int64, name
 	}
 	res, err := m.db.ExecContext(ctx, q, args...)
 	if err != nil {
+		if isDuplicateKey(err) {
+			return ErrDuplicatePublic
+		}
 		return fmt.Errorf("texture meta update: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {

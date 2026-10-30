@@ -94,6 +94,11 @@ func main() {
 			log.Fatalf("schema: %v", err)
 		}
 	}
+	if n, err := st.BackfillPublicDedupe(context.Background()); err != nil {
+		log.Printf("dedupe: backfill public hashes: %v", err)
+	} else if n > 0 {
+		log.Printf("dedupe: backfilled %d public texture hashes", n)
+	}
 
 	// Setup wizard writes site_name/skin_domains to options; they override the
 	// env defaults here (explicit env SKIN_SKIN_DOMAINS/SKIN_SITE_NAME wins).

@@ -19,6 +19,7 @@ type Error struct {
 	Code    string
 	Message string
 	Err     error
+	Details map[string]any
 }
 
 func (e *Error) Error() string {
@@ -41,11 +42,16 @@ const (
 	CodeTypeMismatch  = "texture.type_mismatch"
 	CodeLibraryNotFnd = "library.not_found"
 	CodeForbidden     = "account.forbidden"
+	CodeDuplicatePub  = "texture.duplicate_public"
 	CodeInternal      = "internal"
 )
 
 func errf(code, msg string, err error) *Error {
 	return &Error{Code: code, Message: msg, Err: err}
+}
+
+func errDetails(code, msg string, details map[string]any) *Error {
+	return &Error{Code: code, Message: msg, Details: details}
 }
 
 // CallMeta carries request context that must not come from plugin JavaScript.

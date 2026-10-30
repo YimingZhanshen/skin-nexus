@@ -82,6 +82,7 @@ type AccountCallMeta struct {
 type AccountError struct {
 	Code    string
 	Message string
+	Details map[string]any
 }
 
 func (e *AccountError) Error() string { return e.Code + ": " + e.Message }
@@ -99,6 +100,7 @@ type AccountService interface {
 	SetTexture(ctx context.Context, uid, pid int64, kind string, tid int64, meta AccountCallMeta) (PlayerView, error)
 	ListTextures(ctx context.Context, uid int64) ([]TextureView, error)
 	UploadTexture(ctx context.Context, uid int64, typ, model, desc string, png []byte, meta AccountCallMeta) (TextureView, bool, error)
+	ImportPrivateTexture(ctx context.Context, uid int64, typ, model, desc string, png []byte, meta AccountCallMeta) (TextureView, bool, error)
 	ListLibrary(ctx context.Context, uid int64, q LibraryQuery) (LibraryPage, error)
 	GetLibrary(ctx context.Context, uid, tid int64) (LibraryItem, error)
 	ImportLibrary(ctx context.Context, uid, tid int64, meta AccountCallMeta) (TextureView, bool, error)

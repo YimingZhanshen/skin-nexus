@@ -19,11 +19,20 @@ import (
 	"skin-nexus/server/internal/auth"
 	"skin-nexus/server/internal/ygg"
 
-	_ "github.com/go-sql-driver/mysql"
+	mysql "github.com/go-sql-driver/mysql"
 )
 
 // ErrNotFound is the canonical "no such row" signal.
 var ErrNotFound = errors.New("store: not found")
+
+// ErrDuplicatePublic means another public texture already owns this
+// (type, hash) content. Private copies are intentionally not covered.
+var ErrDuplicatePublic = errors.New("store: duplicate public texture")
+
+func isDuplicateKey(err error) bool {
+	var me *mysql.MySQLError
+	return errors.As(err, &me) && me.Number == 1062
+}
 
 // ErrForbidden: the row exists but the caller may not touch it (e.g.
 // editing another user's texture). Kept distinct from ErrNotFound so the

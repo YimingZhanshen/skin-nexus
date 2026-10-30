@@ -201,6 +201,7 @@ func (rt *runtime) installAPI() {
 		"textures": map[string]interface{}{
 			"list":          rt.jsTexturesList,
 			"uploadBase64":  rt.jsTexturesUpload,
+			"importBase64":  rt.jsTexturesImportBase64,
 			"importLibrary": rt.jsTexturesImport,
 		},
 		"library": map[string]interface{}{

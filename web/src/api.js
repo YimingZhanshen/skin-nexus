@@ -13,6 +13,7 @@ async function req(method, path, body) {
     // P1): surface every message variant and carry the status for callers.
     const err = new Error(data.message || data.error || `HTTP ${res.status}`)
     err.status = res.status
+    err.data = data
     throw err
   }
   return data
@@ -93,6 +94,7 @@ export async function uploadTexture(type, file, model, description, pluginData) 
   if (!res.ok) {
     const err = new Error(data.message || data.error || `HTTP ${res.status}`)
     err.status = res.status
+    err.data = data
     throw err
   }
   return data

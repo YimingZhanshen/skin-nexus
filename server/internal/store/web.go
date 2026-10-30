@@ -189,22 +189,27 @@ func (m *Mysql) SetUserPermission(ctx context.Context, uid int64, perm int) erro
 
 // ---- textures ----
 
-// AddTexture inserts a texture record and returns its id.
+// AddTexture inserts a public texture record and returns its id. The
+// public_dedupe unique key rejects concurrent duplicate content.
 func (m *Mysql) AddTexture(ctx context.Context, uid int64, typ, hash, model, desc string) (int64, error) {
 	res, err := m.db.ExecContext(ctx,
-		`INSERT INTO textures (uid, type, hash, model, description) VALUES (?,?,?,?,?)`,
-		uid, typ, hash, nullableStr(model), nullableStr(desc))
+		`INSERT INTO textures (uid, type, hash, model, description, public_dedupe) VALUES (?,?,?,?,?,?)`,
+		uid, typ, hash, nullableStr(model), nullableStr(desc), typ+":"+hash)
 	if err != nil {
+		if isDuplicateKey(err) {
+			return 0, ErrDuplicatePublic
+		}
 		return 0, err
 	}
 	return res.LastInsertId()
 }
 
 // AddTexturePrivate inserts a library import as a private copy (no file copy;
-// the content-addressed blob already exists).
+// the content-addressed blob already exists). public_dedupe stays NULL, so
+// private copies may coexist with a public row.
 func (m *Mysql) AddTexturePrivate(ctx context.Context, uid int64, typ, hash, model, desc string) (int64, error) {
 	res, err := m.db.ExecContext(ctx,
-		`INSERT INTO textures (uid, type, hash, model, description, public) VALUES (?,?,?,?,?,0)`,
+		`INSERT INTO textures (uid, type, hash, model, description, public, public_dedupe) VALUES (?,?,?,?,?,0,NULL)`,
 		uid, typ, hash, nullableStr(model), nullableStr(desc))
 	if err != nil {
 		return 0, err
@@ -220,6 +225,24 @@ func (m *Mysql) TextureByOwnerHash(ctx context.Context, uid int64, typ, hash str
 		`SELECT id, type, hash, COALESCE(model,''), COALESCE(description,''), upload_at
 		   FROM textures WHERE uid = ? AND type = ? AND hash = ? ORDER BY id LIMIT 1`,
 		uid, typ, hash).Scan(&row.ID, &row.Type, &row.Hash, &row.Model, &row.Description, &row.UploadAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return TextureRow{}, false, nil
+	}
+	if err != nil {
+		return TextureRow{}, false, err
+	}
+	return row, true, nil
+}
+
+// PublicTextureByHash returns a public texture with the same content hash
+// and type. Private rows are never returned, so callers cannot probe other
+// users' private libraries.
+func (m *Mysql) PublicTextureByHash(ctx context.Context, typ, hash string) (TextureRow, bool, error) {
+	var row TextureRow
+	err := m.db.QueryRowContext(ctx,
+		`SELECT id, type, hash, COALESCE(model,''), COALESCE(description,''), upload_at
+		   FROM textures WHERE public = 1 AND type = ? AND hash = ? ORDER BY id LIMIT 1`,
+		typ, hash).Scan(&row.ID, &row.Type, &row.Hash, &row.Model, &row.Description, &row.UploadAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return TextureRow{}, false, nil
 	}

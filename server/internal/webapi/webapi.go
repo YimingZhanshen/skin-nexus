@@ -151,6 +151,14 @@ func writePluginFormError(w http.ResponseWriter, err error) {
 // writeAccountErr maps the shared service's stable codes to the legacy web
 // status codes so existing clients see the same behavior.
 func writeAccountErr(w http.ResponseWriter, err *account.Error) {
+	if err.Code == account.CodeDuplicatePub {
+		body := map[string]any{"error": err.Code, "message": err.Message}
+		for k, v := range err.Details {
+			body[k] = v
+		}
+		writeJSON(w, http.StatusConflict, body)
+		return
+	}
 	status := http.StatusInternalServerError
 	switch err.Code {
 	case account.CodeNotFound, account.CodeLibraryNotFnd:
@@ -749,15 +757,20 @@ func (b *Backend) handleUploadTexture(w http.ResponseWriter, r *http.Request) {
 		writePluginFormError(w, perr)
 		return
 	}
-	v, _, aerr := b.Account.UploadTexture(r.Context(), uid, string(typ), r.FormValue("model"), desc, data, account.CallMeta{
+	v, created, aerr := b.Account.UploadTexture(r.Context(), uid, string(typ), r.FormValue("model"), desc, data, account.CallMeta{
 		IP: ygg.ClientIP(r), Filename: hdr.Filename, PluginData: pluginData,
 	})
 	if aerr != nil {
 		writeAccountErr(w, aerr)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"id": v.ID, "type": v.Type, "hash": v.Hash, "url": b.textureURL(r.Context(), v.Hash, v.Type),
+	status := http.StatusCreated
+	if !created {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, map[string]interface{}{
+		"id": v.ID, "type": v.Type, "hash": v.Hash,
+		"url": b.textureURL(r.Context(), v.Hash, v.Type), "created": created,
 	})
 }
 
