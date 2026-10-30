@@ -19,12 +19,44 @@ func (m *Mysql) CreateUser(ctx context.Context, email, nickname, passwordHash st
 	return m.createUser(ctx, email, nickname, passwordHash, playerLimit, 0, ip)
 }
 
-// CreateUserAdmin registers the install-wizard bootstrap account with the
-// legacy blessing admin permission (permission = 1 > 0) in the same INSERT —
-// the wizard is a one-way door, so the account must never land half-promoted
-// (otherwise no account could reach the admin panel by login alone).
+// CreateUserAdmin registers the install-wizard bootstrap account as the
+// SUPER_ADMIN (permission = 2). The admin panel needs >0 and plugin
+// install/market operations require exactly 2; creating only permission=1
+// left a fresh site unable to install its first plugin.
 func (m *Mysql) CreateUserAdmin(ctx context.Context, email, nickname, passwordHash string, playerLimit int) (int64, error) {
-	return m.createUser(ctx, email, nickname, passwordHash, playerLimit, 1, "")
+	return m.createUser(ctx, email, nickname, passwordHash, playerLimit, 2, "")
+}
+
+// EnsureSuperAdmin is a one-time upgrade for sites created before the wizard
+// wrote permission=2: if no super admin exists, promote the oldest legacy
+// admin (permission=1). Idempotent; returns the promoted uid when changed.
+func (m *Mysql) EnsureSuperAdmin(ctx context.Context) (int64, bool, error) {
+	var n int
+	if err := m.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM users WHERE permission >= 2`).Scan(&n); err != nil {
+		return 0, false, err
+	}
+	if n > 0 {
+		return 0, false, nil
+	}
+	var uid int64
+	err := m.db.QueryRowContext(ctx,
+		`SELECT id FROM users WHERE permission = 1 ORDER BY id LIMIT 1`).Scan(&uid)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	res, err := m.db.ExecContext(ctx,
+		`UPDATE users SET permission = 2 WHERE id = ? AND permission = 1`, uid)
+	if err != nil {
+		return 0, false, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return 0, false, nil
+	}
+	return uid, true, nil
 }
 
 func (m *Mysql) createUser(ctx context.Context, email, nickname, passwordHash string, playerLimit, permission int, ip string) (int64, error) {

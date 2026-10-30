@@ -72,8 +72,8 @@ func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "hash failed")
 		return
 	}
-	// blessing parity: the wizard's bootstrap account is an ADMIN account
-	// (permission > 0) so the admin panel is reachable by normal login.
+	// The wizard's bootstrap account is the site SUPER_ADMIN (permission=2):
+	// plugin install/market operations require exactly 2, not merely >0.
 	uid, err := b.Store.CreateUserAdmin(r.Context(), req.Email, req.Nickname, hash, req.PlayerLimit)
 	if err != nil {
 		writeErr(w, http.StatusConflict, "账号创建失败（昵称或邮箱可能已存在）")

@@ -219,6 +219,39 @@ func TestIntegrationJobsLifecycle(t *testing.T) {
 	}
 }
 
+// ---- bootstrap super admin ----
+
+func TestIntegrationBootstrapSuperAdmin(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	uid, err := m.CreateUserAdmin(ctx, "bootstrap@example.com", "bootstrap", "x", 3)
+	if err != nil {
+		t.Fatalf("create bootstrap admin: %v", err)
+	}
+	if perm, err := m.UserPermission(ctx, uid); err != nil || perm != 2 {
+		t.Fatalf("bootstrap permission = %d err=%v, want 2", perm, err)
+	}
+	if _, changed, err := m.EnsureSuperAdmin(ctx); err != nil || changed {
+		t.Fatalf("EnsureSuperAdmin on existing super = changed:%v err=%v", changed, err)
+	}
+}
+
+func TestIntegrationEnsureSuperAdminUpgradesLegacyAdmin(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	uid := seedUser(t, m)
+	if err := m.SetUserPermission(ctx, uid, 1); err != nil {
+		t.Fatal(err)
+	}
+	promoted, changed, err := m.EnsureSuperAdmin(ctx)
+	if err != nil || !changed || promoted != uid {
+		t.Fatalf("promote = uid:%d changed:%v err=%v", promoted, changed, err)
+	}
+	if _, changed, err := m.EnsureSuperAdmin(ctx); err != nil || changed {
+		t.Fatalf("second ensure changed:%v err=%v", changed, err)
+	}
+}
+
 // ---- 0003 OIDC tables ----
 
 func TestIntegrationOidcRoundTrips(t *testing.T) {

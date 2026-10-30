@@ -100,6 +100,11 @@ func main() {
 	} else if n > 0 {
 		log.Printf("dedupe: backfilled %d public texture hashes", n)
 	}
+	if uid, changed, err := st.EnsureSuperAdmin(context.Background()); err != nil {
+		log.Printf("auth: ensure super admin: %v", err)
+	} else if changed {
+		log.Printf("auth: promoted bootstrap admin uid=%d to super admin", uid)
+	}
 
 	// Setup wizard writes site_name/skin_domains to options; they override the
 	// env defaults here (explicit env SKIN_SKIN_DOMAINS/SKIN_SITE_NAME wins).
