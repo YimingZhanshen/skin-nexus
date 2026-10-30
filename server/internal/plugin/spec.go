@@ -60,6 +60,19 @@ type FormSpec struct {
 	Schema json.RawMessage `json:"schema"`
 }
 
+// NetSpec declares the outbound HTTP surface (permission net:http).
+type NetSpec struct {
+	HTTP *HTTPNetSpec `json:"http,omitempty"`
+}
+
+type HTTPNetSpec struct {
+	Hosts          []string `json:"hosts,omitempty"`
+	AllowUserHosts bool     `json:"allowUserHosts,omitempty"`
+	UserHostPaths  []string `json:"userHostPaths,omitempty"`
+	MaxBytes       int      `json:"maxBytes,omitempty"`
+	TimeoutMS      int      `json:"timeoutMS,omitempty"`
+}
+
 // MediaSpec declares the external hosts a plugin may redirect media to.
 // Hosts are matched exactly or as a "*.example.com" suffix.
 type MediaSpec struct {
@@ -100,6 +113,7 @@ var (
 	pageIDRe     = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 	collectionRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 	rateLimitRe  = regexp.MustCompile(`^[1-9][0-9]*/(s|m|h)$`)
+	netHostRe    = regexp.MustCompile(`^[A-Za-z0-9*][A-Za-z0-9.*-]{0,252}$`)
 )
 
 // fixedSlotIDs is the versioned list of UI surfaces plugins may target. It is
@@ -144,6 +158,7 @@ const (
 	CapBearerAuth     = "bearer-auth.v1"
 	CapBinaryBody     = "binary-body.v1"
 	CapAccount        = "account.v1"
+	CapNetHTTP        = "net.http.v1"
 )
 
 var hostCapabilities = []string{
@@ -154,6 +169,7 @@ var hostCapabilities = []string{
 	CapBearerAuth,
 	CapBinaryBody,
 	CapAccount,
+	CapNetHTTP,
 }
 
 var allowedRouteMethods = map[string]bool{
@@ -179,11 +195,54 @@ func validateV2Manifest(m *Manifest, dir string) error {
 	if err := validateMedia(m); err != nil {
 		return err
 	}
+	if err := validateNet(m); err != nil {
+		return err
+	}
 	if err := validateUI(m, dir); err != nil {
 		return err
 	}
 	if err := validateRequires(m); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validateNet(m *Manifest) error {
+	has := m.hasPermission(PermNetHTTP)
+	if m.Net == nil {
+		if has {
+			return errors.New("net:http permission requires a net.http block")
+		}
+		return nil
+	}
+	if !has {
+		return errors.New("net block requires the net:http permission")
+	}
+	h := m.Net.HTTP
+	if h == nil {
+		return errors.New("net.http block is required")
+	}
+	if len(h.Hosts) > 16 || len(h.UserHostPaths) > 16 {
+		return errors.New("too many outbound hosts/paths (max 16 each)")
+	}
+	for _, host := range h.Hosts {
+		if !netHostRe.MatchString(host) || strings.Contains(host, "..") {
+			return fmt.Errorf("invalid outbound host %q", host)
+		}
+	}
+	for _, p := range h.UserHostPaths {
+		if !strings.HasPrefix(p, "/") || len(p) > 128 || strings.Contains(p, "..") {
+			return fmt.Errorf("invalid outbound path %q", p)
+		}
+	}
+	if h.AllowUserHosts && len(h.UserHostPaths) == 0 {
+		return errors.New("allowUserHosts requires userHostPaths")
+	}
+	if h.MaxBytes < 0 || h.MaxBytes > 4<<20 {
+		return errors.New("net.http.maxBytes must be 0..4194304")
+	}
+	if h.TimeoutMS != 0 && (h.TimeoutMS < 100 || h.TimeoutMS > 10000) {
+		return errors.New("net.http.timeoutMS must be 100..10000")
 	}
 	return nil
 }

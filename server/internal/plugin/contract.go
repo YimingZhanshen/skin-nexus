@@ -31,6 +31,7 @@ type Manifest struct {
 	Store     *StoreSpec    `json:"store,omitempty"`
 	Routes    []RouteSpec   `json:"routes,omitempty"`
 	UI        *UISpec       `json:"ui,omitempty"`
+	Net       *NetSpec      `json:"net,omitempty"`
 	Media     *MediaSpec    `json:"media,omitempty"`
 	Requires  *RequiresSpec `json:"requires,omitempty"`
 	Conflicts []string      `json:"conflicts,omitempty"`

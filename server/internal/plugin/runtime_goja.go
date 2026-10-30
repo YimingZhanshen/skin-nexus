@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"github.com/dop251/goja"
+
+	"skin-nexus/server/internal/outbound"
 )
 
 // errTimeout is pushed into the VM when a hook exceeds its budget.
@@ -90,6 +93,7 @@ type runtime struct {
 	logSink   func(string)
 	config    *configState
 	store     *storeService
+	netClient *outbound.Scoped
 	hostInfo  func() HostInfo
 	account   func() AccountService
 	routeUser *SessionIdentity
@@ -109,6 +113,17 @@ func newRuntime(info Info, t timeouts, logSink func(string), cfg *configState, s
 		return nil, fmt.Errorf("read entrypoint: %w", err)
 	}
 	rt := &runtime{info: info, vm: goja.New(), defaults: t, logSink: logSink, config: cfg, store: store, hostInfo: hostInfo, account: account}
+	if info.hasPermission(PermNetHTTP) && info.Net != nil && info.Net.HTTP != nil {
+		h := info.Net.HTTP
+		timeout := time.Duration(h.TimeoutMS) * time.Millisecond
+		if timeout <= 0 {
+			timeout = 5 * time.Second
+		}
+		rt.netClient = outbound.NewScoped(outbound.Policy{
+			Hosts: h.Hosts, AllowUserHosts: h.AllowUserHosts, UserHostPaths: h.UserHostPaths,
+			MaxBytes: int64(h.MaxBytes), Timeout: timeout,
+		})
+	}
 	rt.hooks.events = map[string][]timed[eventFn]{}
 	rt.hooks.guards = map[string][]guardEntry{}
 	rt.vm.SetMaxCallStackSize(1024)
@@ -186,6 +201,9 @@ func (rt *runtime) installAPI() {
 			"info":      rt.jsHostInfo,
 			"hasPlugin": rt.jsHasPlugin,
 		},
+		"net": map[string]interface{}{
+			"get": rt.jsNetGet,
+		},
 		"account": map[string]interface{}{
 			"get":    rt.jsAccountGet,
 			"limits": rt.jsAccountLimits,
@@ -209,6 +227,32 @@ func (rt *runtime) installAPI() {
 			"get":  rt.jsLibraryGet,
 		},
 	})
+}
+
+func (rt *runtime) jsNetGet(call goja.FunctionCall) goja.Value {
+	if !rt.info.hasPermission(PermNetHTTP) {
+		rt.throw(errors.New("missing permission net:http"))
+	}
+	if rt.netClient == nil {
+		rt.throw(errors.New("net.unavailable: outbound surface is not configured"))
+	}
+	ctx := rt.routeCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	res, err := rt.netClient.Fetch(ctx, call.Argument(0).String())
+	if err != nil {
+		var pe *outbound.PolicyError
+		if errors.As(err, &pe) {
+			return rt.vm.ToValue(map[string]any{"ok": false, "error": map[string]any{"code": pe.Code, "message": pe.Message}})
+		}
+		return rt.vm.ToValue(map[string]any{"ok": false, "error": map[string]any{"code": "net.unavailable", "message": err.Error()}})
+	}
+	return rt.vm.ToValue(map[string]any{"ok": true, "data": map[string]any{
+		"status": res.Status, "contentType": res.ContentType,
+		"bytes": len(res.Body), "bodyBase64": base64.StdEncoding.EncodeToString(res.Body),
+		"retryAfter": res.RetryAfter,
+	}})
 }
 
 // jsHostInfo exposes the read-only host snapshot. It requires plugins:read so
