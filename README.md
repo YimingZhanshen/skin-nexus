@@ -19,8 +19,11 @@
 
 ## 10 分钟部署（Docker Compose）
 
+镜像已发布在 GHCR（public，无需 `docker login`），下面的命令直接拉取镜像，无需克隆源码：
+
 ```bash
-git clone https://github.com/YimingZhanshen/skin-nexus.git && cd skin-nexus
+mkdir skin-nexus && cd skin-nexus
+curl -fsSLO https://raw.githubusercontent.com/YimingZhanshen/skin-nexus/main/docker-compose.quickstart.yml
 cat > .env <<EOF
 # 改成你的公开地址（首次启动前定好）
 SKIN_BASE_URL=https://skin.example.com
@@ -32,6 +35,23 @@ docker compose -f docker-compose.quickstart.yml up -d
 ```
 
 打开 `http://<主机>:8080/setup`，完成站点名、管理员与皮肤域配置即可。
+
+<details>
+<summary><b>已有 MySQL？不启内置库，直接拉镜像运行</b></summary>
+
+```bash
+docker pull ghcr.io/yimingzhanshen/skin-nexus:latest
+docker run -d --name skin-nexus --restart unless-stopped -p 8080:8080 \
+  -v skin-data:/data \
+  -e SKIN_DATA_DIR=/data \
+  -e SKIN_BASE_URL=https://skin.example.com \
+  -e SKIN_DATABASE_DSN='skin:PASS@tcp(你的MySQL:3306)/skin_nexus?parseTime=true&charset=utf8mb4' \
+  -e SKIN_ADMIN_TOKEN=$(openssl rand -hex 32) \
+  -e SKIN_AUTO_MIGRATE=true \
+  ghcr.io/yimingzhanshen/skin-nexus:latest
+```
+
+</details>
 
 **从 blessing-skin-server 无损迁移**：按 [`docs/migration.md`](docs/migration.md) 的 `preflight → dry-run → import` 执行，小站通常 10 分钟内跑完，全程可回滚。外部 MySQL、反向代理、升级与备份见 [`docs/deploy.md`](docs/deploy.md)。
 

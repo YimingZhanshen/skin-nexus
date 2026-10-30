@@ -19,7 +19,8 @@
 把所有必填值改为 `.env` 插值，新站无需改文件：
 
 ```bash
-git clone https://github.com/YimingZhanshen/skin-nexus.git && cd skin-nexus
+mkdir skin-nexus && cd skin-nexus
+curl -fsSLO https://raw.githubusercontent.com/YimingZhanshen/skin-nexus/main/docker-compose.quickstart.yml
 cat > .env <<EOF
 SKIN_BASE_URL=https://skin.example.com
 SKIN_DB_PASSWORD=$(openssl rand -hex 16)

@@ -21,8 +21,12 @@ It is a modern rewrite of [blessing-skin-server](https://github.com/bs-community
 
 ## Deploy in 10 minutes (Docker Compose)
 
+The image is public on GHCR (anonymous pull, no `docker login`); the commands
+below pull it directly, no source checkout required:
+
 ```bash
-git clone https://github.com/YimingZhanshen/skin-nexus.git && cd skin-nexus
+mkdir skin-nexus && cd skin-nexus
+curl -fsSLO https://raw.githubusercontent.com/YimingZhanshen/skin-nexus/main/docker-compose.quickstart.yml
 cat > .env <<EOF
 # your public URL, set before first start
 SKIN_BASE_URL=https://skin.example.com
@@ -35,6 +39,23 @@ docker compose -f docker-compose.quickstart.yml up -d
 
 Open `http://<host>:8080/setup` and finish the site name, admin account and
 skin-domain wizard.
+
+<details>
+<summary><b>Already have MySQL? Pull the image and run it directly</b></summary>
+
+```bash
+docker pull ghcr.io/yimingzhanshen/skin-nexus:latest
+docker run -d --name skin-nexus --restart unless-stopped -p 8080:8080 \
+  -v skin-data:/data \
+  -e SKIN_DATA_DIR=/data \
+  -e SKIN_BASE_URL=https://skin.example.com \
+  -e SKIN_DATABASE_DSN='skin:PASS@tcp(your-mysql:3306)/skin_nexus?parseTime=true&charset=utf8mb4' \
+  -e SKIN_ADMIN_TOKEN=$(openssl rand -hex 32) \
+  -e SKIN_AUTO_MIGRATE=true \
+  ghcr.io/yimingzhanshen/skin-nexus:latest
+```
+
+</details>
 
 **Lossless migration from blessing-skin-server**: run `preflight → dry-run →
 import` from [`docs/migration.md`](docs/migration.md); small sites usually
