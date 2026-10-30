@@ -73,6 +73,13 @@ type HTTPNetSpec struct {
 	TimeoutMS      int      `json:"timeoutMS,omitempty"`
 }
 
+// JobSpec declares a durable job handler (permission schedule:jobs).
+type JobSpec struct {
+	Name        string `json:"name"`
+	TimeoutMS   int    `json:"timeoutMS,omitempty"`
+	MaxAttempts int    `json:"maxAttempts,omitempty"`
+}
+
 // MediaSpec declares the external hosts a plugin may redirect media to.
 // Hosts are matched exactly or as a "*.example.com" suffix.
 type MediaSpec struct {
@@ -159,6 +166,7 @@ const (
 	CapBinaryBody     = "binary-body.v1"
 	CapAccount        = "account.v1"
 	CapNetHTTP        = "net.http.v1"
+	CapJobs           = "jobs.v1"
 )
 
 var hostCapabilities = []string{
@@ -170,6 +178,7 @@ var hostCapabilities = []string{
 	CapBinaryBody,
 	CapAccount,
 	CapNetHTTP,
+	CapJobs,
 }
 
 var allowedRouteMethods = map[string]bool{
@@ -196,6 +205,9 @@ func validateV2Manifest(m *Manifest, dir string) error {
 		return err
 	}
 	if err := validateNet(m); err != nil {
+		return err
+	}
+	if err := validateJobs(m); err != nil {
 		return err
 	}
 	if err := validateUI(m, dir); err != nil {
@@ -243,6 +255,35 @@ func validateNet(m *Manifest) error {
 	}
 	if h.TimeoutMS != 0 && (h.TimeoutMS < 100 || h.TimeoutMS > 10000) {
 		return errors.New("net.http.timeoutMS must be 100..10000")
+	}
+	return nil
+}
+
+func validateJobs(m *Manifest) error {
+	if len(m.Jobs) == 0 {
+		if m.hasPermission(PermScheduleJobs) {
+			return errors.New("schedule:jobs permission requires at least one jobs entry")
+		}
+		return nil
+	}
+	if !m.hasPermission(PermScheduleJobs) {
+		return errors.New("jobs entries require the schedule:jobs permission")
+	}
+	if len(m.Jobs) > 8 {
+		return errors.New("too many jobs (max 8)")
+	}
+	seen := map[string]bool{}
+	for _, j := range m.Jobs {
+		if !pageIDRe.MatchString(j.Name) || seen[j.Name] {
+			return fmt.Errorf("invalid or duplicate job name %q", j.Name)
+		}
+		seen[j.Name] = true
+		if j.TimeoutMS != 0 && (j.TimeoutMS < 100 || j.TimeoutMS > 30000) {
+			return fmt.Errorf("job %q timeoutMS must be 100..30000", j.Name)
+		}
+		if j.MaxAttempts < 0 || j.MaxAttempts > 10 {
+			return fmt.Errorf("job %q maxAttempts must be 0..10", j.Name)
+		}
 	}
 	return nil
 }

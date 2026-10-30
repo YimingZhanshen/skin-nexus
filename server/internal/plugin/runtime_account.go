@@ -14,7 +14,11 @@ func (rt *runtime) accountContext(perm string) (AccountService, *SessionIdentity
 	if !rt.info.hasPermission(perm) {
 		rt.throw(fmt.Errorf("missing permission %s", perm))
 	}
-	if rt.routeUser == nil || rt.routeUser.ID == 0 || rt.routeCtx == nil {
+	id := rt.routeUser
+	if id == nil {
+		id = rt.jobUser
+	}
+	if id == nil || id.ID == 0 || rt.routeCtx == nil {
 		rt.throw(errors.New("account.required: authenticated route required"))
 	}
 	var svc AccountService
@@ -24,7 +28,7 @@ func (rt *runtime) accountContext(perm string) (AccountService, *SessionIdentity
 	if svc == nil {
 		rt.throw(errors.New("account.unavailable: account bridge is not configured"))
 	}
-	return svc, rt.routeUser, rt.routeCtx
+	return svc, id, rt.routeCtx
 }
 
 func (rt *runtime) accountMeta(filename string, data map[string]any) AccountCallMeta {

@@ -32,6 +32,7 @@ type Manifest struct {
 	Routes    []RouteSpec   `json:"routes,omitempty"`
 	UI        *UISpec       `json:"ui,omitempty"`
 	Net       *NetSpec      `json:"net,omitempty"`
+	Jobs      []JobSpec     `json:"jobs,omitempty"`
 	Media     *MediaSpec    `json:"media,omitempty"`
 	Requires  *RequiresSpec `json:"requires,omitempty"`
 	Conflicts []string      `json:"conflicts,omitempty"`

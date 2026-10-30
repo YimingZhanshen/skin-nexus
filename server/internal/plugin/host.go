@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"skin-nexus/server/internal/jobs"
 	"skin-nexus/server/internal/signedpkg"
 )
 
@@ -45,6 +46,7 @@ type RuntimeConfig struct {
 	Keyring   signedpkg.Keyring // required for signed bundle install
 	MarketURL string            // signed static registry URL (empty = market off)
 	UploadMax int64             // admin bundle upload cap (default 64 MiB)
+	Jobs      *jobs.Store       // durable plugin job queue (nil = jobs disabled)
 
 	HookTimeout  time.Duration // default 100ms
 	AuthTimeout  time.Duration // default 50ms
@@ -91,6 +93,7 @@ type goRoute struct {
 type instance struct {
 	info         Info
 	rt           *runtime
+	jobRt        *runtime
 	enabled      bool
 	state        string // loaded | disabled | error
 	health       string // ok | degraded | error | disabled
@@ -155,6 +158,10 @@ func NewHost(cfg RuntimeConfig) *Manager {
 		limits:    newRouteLimits(),
 	}
 	go m.eventWorker()
+	if cfg.Jobs != nil {
+		go m.jobWorker("worker-a")
+		go m.jobWorker("worker-b")
+	}
 	return m
 }
 
@@ -331,7 +338,7 @@ func (m *Manager) startInstance(ctx context.Context, inst *instance) error {
 	if st != nil && (inst.info.hasPermission(PermStoreKV) || inst.info.hasPermission(PermStoreDocs)) {
 		storeSvc = newStoreService(st, inst.info.Name, inst.info.Store, inst.info.hasPermission(PermStoreKV), inst.info.hasPermission(PermStoreDocs))
 	}
-	rt, err := newRuntime(inst.info, m.cfg.timeouts(), m.logSink, inst.config, storeSvc, m.HostInfo, m.accountService)
+	rt, err := newRuntime(inst.info, m.cfg.timeouts(), m.logSink, inst.config, storeSvc, m.HostInfo, m.accountService, m.cfg.Jobs)
 	if err != nil {
 		return err
 	}
@@ -362,6 +369,15 @@ func (m *Manager) startInstance(ctx context.Context, inst *instance) error {
 		}
 	}
 	inst.rt = rt
+	var jobRt *runtime
+	if m.cfg.Jobs != nil && inst.info.hasPermission(PermScheduleJobs) && len(inst.info.Jobs) > 0 {
+		jobRt, err = newRuntime(inst.info, m.cfg.timeouts(), m.logSink, inst.config, storeSvc, m.HostInfo, m.accountService, m.cfg.Jobs)
+		if err != nil {
+			rt.close()
+			return err
+		}
+	}
+	inst.jobRt = jobRt
 	inst.enabled = true
 	inst.state = "loaded"
 	inst.health = "ok"
@@ -471,12 +487,20 @@ func (m *Manager) Disable(ctx context.Context, name string) error {
 	}
 	rt := inst.rt
 	inst.rt = nil
+	jobRt := inst.jobRt
+	inst.jobRt = nil
 	inst.enabled = false
 	inst.state = "disabled"
 	inst.health = "disabled"
 	inst.updatedAt = time.Now()
 	m.refreshHostInfoLocked()
 	m.mu.Unlock()
+	if jobRt != nil {
+		jobRt.close()
+	}
+	if m.cfg.Jobs != nil {
+		_ = m.cfg.Jobs.PausePlugin(context.Background(), name)
+	}
 	if rt != nil {
 		rt.close()
 	}
@@ -562,6 +586,9 @@ func (m *Manager) replaceInstance(name string, next *instance) {
 	if old != nil && old.rt != nil && old.rt != next.rt {
 		old.rt.close()
 	}
+	if old != nil && old.jobRt != nil && old.jobRt != next.jobRt {
+		old.jobRt.close()
+	}
 }
 
 // Close stops the event worker and releases every VM.
@@ -577,6 +604,10 @@ func (m *Manager) Close() error {
 			if inst.rt != nil {
 				inst.rt.close()
 				inst.rt = nil
+			}
+			if inst.jobRt != nil {
+				inst.jobRt.close()
+				inst.jobRt = nil
 			}
 		}
 	})

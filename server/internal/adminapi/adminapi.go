@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"strconv"
 
+	"skin-nexus/server/internal/jobs"
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/ygg"
@@ -30,6 +31,8 @@ type Backend struct {
 	sharedClientID string          // guard: shared launcher client cannot be deleted
 	appearance     *AppearanceDeps // nil until MountAppearance
 	plugins        *PluginsDeps    // nil until MountPlugins (no plugin routes)
+	// Jobs is the durable plugin job queue (nil = jobs API disabled).
+	Jobs *jobs.Store
 	// SettingsDefaults carries env-derived fallbacks for the settings panel
 	// (injected by main from config).
 	SettingsDefaults map[string]string
@@ -141,6 +144,12 @@ func (b *Backend) Handler() http.Handler {
 		mux.HandleFunc("POST /api/admin/v1/market/upload", b.auth(b.handleMarketUpload))
 		mux.HandleFunc("PUT /api/admin/v1/plugins/{name}/config", b.auth(b.handlePluginConfigSave))
 		mux.HandleFunc("POST /api/admin/v1/plugins/{name}/{action}", b.auth(b.handlePluginAction))
+	}
+	if b.Jobs != nil {
+		mux.HandleFunc("GET /api/admin/v1/jobs", b.auth(b.handleJobsList))
+		mux.HandleFunc("GET /api/admin/v1/jobs/{id}", b.auth(b.handleJobGet))
+		mux.HandleFunc("POST /api/admin/v1/jobs/{id}/cancel", b.auth(b.handleJobCancel))
+		mux.HandleFunc("POST /api/admin/v1/jobs/{id}/resume", b.auth(b.handleJobResume))
 	}
 	// 1 MiB body cap (review B P2) — admin JSON endpoints included.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

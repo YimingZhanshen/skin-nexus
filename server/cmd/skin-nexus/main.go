@@ -32,6 +32,7 @@ import (
 	"skin-nexus/server/internal/appearance"
 	"skin-nexus/server/internal/auth"
 	"skin-nexus/server/internal/config"
+	"skin-nexus/server/internal/jobs"
 	"skin-nexus/server/internal/migrate"
 	"skin-nexus/server/internal/oidc"
 	"skin-nexus/server/internal/plugin"
@@ -191,6 +192,7 @@ func main() {
 		Keyring:         trustKeys,
 		MarketURL:       cfg.PluginMarketURL,
 		UploadMax:       cfg.PluginUploadMax,
+		Jobs:            jobs.New(st.DB()),
 		HostVersion:     version,
 		State:           st,
 		Store:           pluginStore{st: st},
@@ -456,6 +458,7 @@ func main() {
 	pub := publicapi.New(st, ts)
 	pub.TextureURL = pluginHost.TextureURL
 	admin := adminapi.New(st, yggSvc)
+	admin.Jobs = jobs.New(st.DB())
 	admin.OnUserLifecycle = func(ctx context.Context, e plugin.UserLifecycleEvent) {
 		pluginHost.EmitUserLifecycle(ctx, e)
 		if e.Kind == "deleted" {

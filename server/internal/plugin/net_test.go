@@ -2,6 +2,32 @@ package plugin
 
 import "testing"
 
+func TestValidateJobsManifest(t *testing.T) {
+	m := Manifest{
+		Name: "jobs-test", Version: "1.0.0", HookAPI: 2, Entrypoint: "index.js",
+		Permissions: []string{PermScheduleJobs},
+		Jobs:        []JobSpec{{Name: "batch", TimeoutMS: 15000, MaxAttempts: 3}},
+	}
+	if err := validateV2Manifest(&m, "."); err != nil {
+		t.Fatalf("good jobs manifest: %v", err)
+	}
+	noPerm := m
+	noPerm.Permissions = nil
+	if err := validateV2Manifest(&noPerm, "."); err == nil {
+		t.Fatal("jobs without permission should fail")
+	}
+	noJobs := m
+	noJobs.Jobs = nil
+	if err := validateV2Manifest(&noJobs, "."); err == nil {
+		t.Fatal("schedule permission without jobs should fail")
+	}
+	bad := m
+	bad.Jobs = []JobSpec{{Name: "batch", TimeoutMS: 40000}}
+	if err := validateV2Manifest(&bad, "."); err == nil {
+		t.Fatal("out-of-range job timeout should fail")
+	}
+}
+
 func TestValidateNetManifest(t *testing.T) {
 	base := Manifest{
 		Name: "net-test", Version: "1.0.0", HookAPI: 2, Entrypoint: "index.js",

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"skin-nexus/server/internal/auth"
+	"skin-nexus/server/internal/jobs"
 	"skin-nexus/server/internal/migrate"
 	"skin-nexus/server/internal/oidc"
 	"skin-nexus/server/internal/ygg"
@@ -39,6 +40,7 @@ var testTables = []string{
 	"ygg_join_sessions", "ygg_tokens", "uuid_map", "textures", "players", "users",
 	"invitation_codes", "user_closet", "password_reset_tokens", "access_logs", "schema_migrations",
 	"plugin_meta", "plugin_secrets", "plugin_kv", "plugin_docs", "plugin_migrations", "plugin_install_tx",
+	"host_jobs",
 	"legacy_users", "legacy_players", "legacy_textures", "legacy_uuid",
 	"legacy_options", "legacy_user_closet", "legacy_invitation_codes",
 }
@@ -159,6 +161,60 @@ func TestIntegrationPublicTextureDedupe(t *testing.T) {
 	}
 	if filled != 1 || nulls != 1 {
 		t.Fatalf("backfill filled=%d nulls=%d, want 1/1", filled, nulls)
+	}
+}
+
+// ---- 0016 durable plugin jobs ----
+
+func TestIntegrationJobsLifecycle(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	js := jobs.New(m.DB())
+	uid := seedUser(t, m)
+	now := time.Now()
+	mk := func(id string) {
+		if err := js.Create(ctx, jobs.Job{
+			ID: id, Plugin: "demo", Handler: "batch", OwnerUID: uid,
+			State: "queued", Payload: []byte(`{"from":1}`), MaxAttempts: 3,
+			RunAfter: now, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("create job %s: %v", id, err)
+		}
+	}
+
+	mk("job-a")
+	claimed, err := js.Claim(ctx, "w1", now, time.Minute)
+	if err != nil || claimed == nil || claimed.ID != "job-a" {
+		t.Fatalf("claim = %+v %v", claimed, err)
+	}
+	if ok, err := js.SaveStep(ctx, "job-a", "w1", []byte(`{"page":2}`), 50, "page 2"); err != nil || !ok {
+		t.Fatalf("save step ok=%v err=%v", ok, err)
+	}
+	if err := js.Finish(ctx, "job-a", "w1", []byte(`{"imported":2}`)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := js.Get(ctx, "job-a"); got.State != "done" || got.Progress != 100 {
+		t.Fatalf("finished job = %+v", got)
+	}
+
+	mk("job-b")
+	if _, err := js.Claim(ctx, "w1", now, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if err := js.RequestCancel(ctx, "job-b"); err != nil {
+		t.Fatal(err)
+	}
+	if err := js.MarkCancelled(ctx, "job-b", "w1"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := js.Get(ctx, "job-b"); got.State != "cancelled" {
+		t.Fatalf("cancelled job = %+v", got)
+	}
+	if err := js.Resume(ctx, "job-b"); err != nil {
+		t.Fatal(err)
+	}
+	if claimed, err := js.Claim(ctx, "w2", now, time.Minute); err != nil || claimed == nil || claimed.ID != "job-b" {
+		t.Fatalf("resumed claim = %+v %v", claimed, err)
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/dop251/goja"
 
+	"skin-nexus/server/internal/jobs"
 	"skin-nexus/server/internal/outbound"
 )
 
@@ -89,30 +90,34 @@ type runtime struct {
 	// so RunString can surface them as a load failure.
 	loadErr error
 
-	defaults  timeouts
-	logSink   func(string)
-	config    *configState
-	store     *storeService
-	netClient *outbound.Scoped
-	hostInfo  func() HostInfo
-	account   func() AccountService
-	routeUser *SessionIdentity
-	routeCtx  context.Context
-	routeIP   string
-	installFn goja.Callable
-	upgradeFn goja.Callable
+	defaults    timeouts
+	logSink     func(string)
+	config      *configState
+	store       *storeService
+	netClient   *outbound.Scoped
+	jobStore    *jobs.Store
+	jobHandlers map[string]jobReg
+	jobID       string
+	jobUser     *SessionIdentity
+	hostInfo    func() HostInfo
+	account     func() AccountService
+	routeUser   *SessionIdentity
+	routeCtx    context.Context
+	routeIP     string
+	installFn   goja.Callable
+	upgradeFn   goja.Callable
 }
 
 type timeouts struct {
 	hook, auth, route, load time.Duration
 }
 
-func newRuntime(info Info, t timeouts, logSink func(string), cfg *configState, store *storeService, hostInfo func() HostInfo, account func() AccountService) (*runtime, error) {
+func newRuntime(info Info, t timeouts, logSink func(string), cfg *configState, store *storeService, hostInfo func() HostInfo, account func() AccountService, jobStore *jobs.Store) (*runtime, error) {
 	src, err := os.ReadFile(info.ScriptPath)
 	if err != nil {
 		return nil, fmt.Errorf("read entrypoint: %w", err)
 	}
-	rt := &runtime{info: info, vm: goja.New(), defaults: t, logSink: logSink, config: cfg, store: store, hostInfo: hostInfo, account: account}
+	rt := &runtime{info: info, vm: goja.New(), defaults: t, logSink: logSink, config: cfg, store: store, hostInfo: hostInfo, account: account, jobStore: jobStore, jobHandlers: map[string]jobReg{}}
 	if info.hasPermission(PermNetHTTP) && info.Net != nil && info.Net.HTTP != nil {
 		h := info.Net.HTTP
 		timeout := time.Duration(h.TimeoutMS) * time.Millisecond
@@ -145,6 +150,11 @@ func newRuntime(info Info, t timeouts, logSink func(string), cfg *configState, s
 	for _, spec := range info.Routes {
 		if !rt.hasRoute(spec.Method, spec.Path) {
 			return nil, fmt.Errorf("declared route %s %s was not registered by the entrypoint", spec.Method, spec.Path)
+		}
+	}
+	for _, spec := range info.Jobs {
+		if _, ok := rt.jobHandlers[spec.Name]; !ok {
+			return nil, fmt.Errorf("declared job %s was not registered by the entrypoint", spec.Name)
 		}
 	}
 	return rt, nil
@@ -203,6 +213,10 @@ func (rt *runtime) installAPI() {
 		},
 		"net": map[string]interface{}{
 			"get": rt.jsNetGet,
+		},
+		"jobs": map[string]interface{}{
+			"register": rt.regJob,
+			"submit":   rt.jsJobSubmit,
 		},
 		"account": map[string]interface{}{
 			"get":    rt.jsAccountGet,
