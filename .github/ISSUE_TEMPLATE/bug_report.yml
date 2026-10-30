@@ -24,7 +24,7 @@ body:
     attributes:
       label: 版本
       description: 镜像 tag、release tag 或 commit（`git rev-parse --short HEAD`）
-      placeholder: "sha-xxxxxxxx / v0.4.0"
+      placeholder: "sha-xxxxxxxx / v0.5.0"
     validations:
       required: true
   - type: dropdown

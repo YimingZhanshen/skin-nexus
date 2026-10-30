@@ -14,7 +14,7 @@
 
 它是 [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) 的现代化重写（Go + Vue 3），已在一套真实生产环境完成全量迁移与切流：**67 用户 / 61 纹理零丢行、玩家 UUID 零漂移**。
 
-- **当前版本**：v0.4.0（2026-10-28）· 迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
+- **当前版本**：v0.5.0（开发中，未发布）· 迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
 - **许可**：AGPL-3.0 · **发起人 / 著作权人**：YMZS
 
 ## 10 分钟部署（Docker Compose）

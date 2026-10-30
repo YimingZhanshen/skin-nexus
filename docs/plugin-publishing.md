@@ -55,10 +55,10 @@ plugins/<name>/
   "description": { "zh-CN": "一句话说明", "en": "One-line description" },
   "author": "Your Name",
   "changelog": "1.0.0 — first release",
-  "requires": { "plugins": {}, "server": ">=0.4.0" },
+  "requires": { "plugins": {}, "server": ">=0.5.0" },
   "conflicts": [],
   "capabilities": ["config", "http:routes"],
-  "minServer": ">=0.4.0"
+  "minServer": ">=0.5.0"
 }
 ```
 
@@ -77,7 +77,7 @@ cd server
 go run ./cmd/skin-plugin lint \
   --dir ../plugins/my-plugin \
   --registry ../v1/registry.json \
-  --host-version 0.4.0 --json
+  --host-version 0.5.0 --json
 ```
 
 打包：
@@ -106,7 +106,7 @@ go run ./cmd/skin-plugin pack \
 go run ./cmd/skin-plugin verify \
   --bundle ../dist/my-plugin-1.0.0.zip \
   --keys "market-2026-10:<base64-public-key>" \
-  --host-version 0.4.0
+  --host-version 0.5.0
 ```
 
 ## 4. 构建 registry
