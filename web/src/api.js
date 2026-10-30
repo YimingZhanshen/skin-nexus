@@ -123,4 +123,3 @@ export function uploadTexture(type, file, model, description, pluginData, meta =
     xhr.send(fd)
   })
 }
-
