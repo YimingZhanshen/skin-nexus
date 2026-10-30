@@ -2,7 +2,7 @@
 // Skinlib — public texture library (blessing skinlib.index parity).
 // Like heart = closet add/remove (legacy semantics). Owner sees rename /
 // visibility toggle on their own entries.
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
@@ -10,6 +10,9 @@ import PluginSlot from '../components/plugin/PluginSlot.vue'
 
 const { t } = useI18n()
 const emit = defineEmits(['login'])
+// App.vue already resolved /me during boot; re-fetching here cost every
+// visitor an extra RTT on high-latency links.
+const props = defineProps({ user: { type: Object, default: null } })
 
 const items = ref([])
 const total = ref(0)
@@ -22,12 +25,14 @@ const mine = ref(false)
 const loading = ref(false)
 const err = ref('')
 const ok = ref('')
-const me = ref(null)
+const me = computed(() => props.user)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage)))
 const canEdit = (it) => me.value && (me.value.id === it.uploader || me.value.permission > 0)
 
+let reqSeq = 0
 async function load() {
+  const seq = ++reqSeq
   loading.value = true
   err.value = ''
   try {
@@ -38,12 +43,14 @@ async function load() {
       page: page.value,
       uploader: mine.value && me.value ? me.value.id : '',
     })
+    if (seq !== reqSeq) return // a newer tab/sort/page request won
     items.value = data.items || []
     total.value = data.total || 0
   } catch (e) {
-    err.value = e.message
+    if (seq !== reqSeq) return
+    if (!guard401(e)) err.value = e.message
   } finally {
-    loading.value = false
+    if (seq === reqSeq) loading.value = false
   }
 }
 
@@ -118,10 +125,7 @@ function previewURL(it) {
   return it.type === 'skin' ? (it.previewURL || `/preview/${it.tid}`) : it.textureURL
 }
 
-onMounted(async () => {
-  try { me.value = await api.me() } catch { me.value = null }
-  load()
-})
+onMounted(() => { load() })
 </script>
 
 <template>
@@ -155,8 +159,8 @@ onMounted(async () => {
       <div class="skin-card" v-for="it in items" :key="it.tid">
         <div class="skin-card-prev">
           <a :href="'/skinlib/' + it.tid" :title="it.name || ('#' + it.tid)">
-            <img v-if="it.type === 'skin'" :src="previewURL(it)" :alt="it.name" class="skin-preview-img" loading="lazy" />
-            <img v-else :src="previewURL(it)" :alt="it.name" class="cape-thumb" loading="lazy" />
+            <img v-if="it.type === 'skin'" :src="previewURL(it)" :alt="it.name" class="skin-preview-img" loading="lazy" decoding="async" />
+            <img v-else :src="previewURL(it)" :alt="it.name" class="cape-thumb" loading="lazy" decoding="async" />
           </a>
         </div>
         <div class="skin-card-body">

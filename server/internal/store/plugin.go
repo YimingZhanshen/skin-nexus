@@ -270,7 +270,9 @@ func (m *Mysql) ListPluginKV(ctx context.Context, plugin, ns, prefix string, lim
 
 func (m *Mysql) CountPluginKV(ctx context.Context, plugin string) (int, error) {
 	var n int
-	err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM plugin_kv WHERE plugin=?`, plugin).Scan(&n)
+	err := m.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM plugin_kv WHERE plugin=?
+		  AND (expires_at IS NULL OR expires_at > NOW(3))`, plugin).Scan(&n)
 	return n, err
 }
 

@@ -11,9 +11,28 @@
   <!--skin-seo-->
   <!--skin-theme-->
   <!--skin-custom-head-->
+  <style>
+    /* Paint something before the SPA bundle arrives (slow links / CDN RTT). */
+    #app { min-height: 100vh; }
+    .boot-static {
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 14px;
+      background: #101825; color: #e9edf1;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    .boot-static .spin {
+      width: 22px; height: 22px; border-radius: 50%;
+      border: 2px solid rgba(233,237,241,.18); border-top-color: #20b983;
+      animation: boot-static-spin .8s linear infinite;
+    }
+    @keyframes boot-static-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .boot-static .spin { animation-duration: 2.4s; }
+    }
+  </style>
 </head>
 <body>
-  <div id="app"></div>
+  <div id="app"><div class="boot-static"><span class="spin" aria-hidden="true"></span><p>加载中…</p></div></div>
   <script type="module" src="/src/main.js"></script>
   <!--skin-custom-body-->
 </body>

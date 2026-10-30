@@ -343,3 +343,13 @@ func TestBodyBackFaceUV(t *testing.T) {
 	}
 	t.Fatal("body box not found in modelParts")
 }
+
+// The skin-library grid asks for a half-ratio render; it must shrink both the
+// content and the fixed legacy padding around it.
+func TestRenderPreviewAtSmall(t *testing.T) {
+	full := RenderPreview(makeSkin(), false)
+	small := RenderPreviewAt(makeSkin(), false, 5)
+	if small.Bounds().Dy() >= full.Bounds().Dy()/2+20 {
+		t.Fatalf("small preview = %v, full = %v; expected ~half height", small.Bounds(), full.Bounds())
+	}
+}

@@ -230,7 +230,8 @@ func (s *Store) Fail(ctx context.Context, id, worker string, cause error, attemp
 		backoff := time.Duration(1<<uint(attempts)) * 2 * time.Second
 		_, err := s.db.ExecContext(ctx,
 			`UPDATE host_jobs SET state='queued', attempts=?, last_error=?, run_after=?,
-			 lease_owner='', lease_until=NULL, updated_at=NOW(3) WHERE id=? AND lease_owner=?`,
+			 lease_owner='', lease_until=NULL, updated_at=NOW(3)
+			 WHERE id=? AND state='running' AND lease_owner=?`,
 			attempts, msg, time.Now().Add(backoff), id, worker)
 		return err
 	}
@@ -243,7 +244,7 @@ func (s *Store) Fail(ctx context.Context, id, worker string, cause error, attemp
 
 func (s *Store) RequestCancel(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE host_jobs SET state=CASE WHEN state='queued' THEN 'cancelled' ELSE 'cancelling' END,
+		`UPDATE host_jobs SET state=CASE WHEN state IN ('queued','paused') THEN 'cancelled' ELSE 'cancelling' END,
 		 updated_at=NOW(3) WHERE id=? AND state IN ('queued','running','paused')`, id)
 	return err
 }
@@ -255,7 +256,7 @@ func (s *Store) Resume(ctx context.Context, id string) error {
 	runAfter := time.Now().Truncate(time.Millisecond)
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE host_jobs SET state='queued', run_after=?, attempts=0, lease_owner='', lease_until=NULL,
-		 updated_at=NOW(3) WHERE id=? AND state IN ('cancelled','failed','paused')`, runAfter, id)
+		 updated_at=NOW(3) WHERE id=? AND state IN ('cancelled','failed','paused','cancelling')`, runAfter, id)
 	if err != nil {
 		return err
 	}
@@ -268,6 +269,16 @@ func (s *Store) Resume(ctx context.Context, id string) error {
 func (s *Store) PausePlugin(ctx context.Context, plugin string) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE host_jobs SET state='paused', updated_at=NOW(3) WHERE plugin=? AND state='queued'`, plugin)
+	return err
+}
+
+// ResumePausedByPlugin requeues jobs parked by Disable when the plugin comes
+// back. Without it disabled→enabled left every queued job paused forever.
+func (s *Store) ResumePausedByPlugin(ctx context.Context, plugin string) error {
+	runAfter := time.Now().Truncate(time.Millisecond)
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE host_jobs SET state='queued', run_after=?, updated_at=NOW(3)
+		 WHERE plugin=? AND state='paused'`, runAfter, plugin)
 	return err
 }
 

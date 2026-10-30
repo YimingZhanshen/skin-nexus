@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -25,14 +26,29 @@ func (m *Manager) runOneJob(worker string) {
 		return
 	}
 	ctx := context.Background()
-	j, err := m.cfg.Jobs.Claim(ctx, worker, time.Now(), 30*time.Second)
+	// The lease must outlive the largest step budget (30s) plus DB/PNG work;
+	// a 30s lease let another worker reclaim and double-run a live step.
+	j, err := m.cfg.Jobs.Claim(ctx, worker, time.Now(), 90*time.Second)
 	if err != nil || j == nil {
+		return
+	}
+	if j.Reclaims > 10 {
+		_ = m.cfg.Jobs.Fail(ctx, j.ID, worker, errors.New("job lease repeatedly lost"), j.MaxAttempts, j.MaxAttempts)
 		return
 	}
 	m.mu.RLock()
 	inst := m.instances[j.Plugin]
 	m.mu.RUnlock()
 	if inst == nil || !inst.enabled || inst.jobRt == nil {
+		_ = m.cfg.Jobs.Requeue(ctx, j.ID, worker)
+		return
+	}
+	// Two workers may claim two due jobs of the same plugin; the job VM is
+	// shared, so serialize steps per instance instead of racing rt.jobUser.
+	select {
+	case inst.jobSem <- struct{}{}:
+		defer func() { <-inst.jobSem }()
+	default:
 		_ = m.cfg.Jobs.Requeue(ctx, j.ID, worker)
 		return
 	}

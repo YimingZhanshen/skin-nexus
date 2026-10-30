@@ -408,8 +408,23 @@ func (rt *runtime) withTimeout(d time.Duration, run func() (goja.Value, error)) 
 		return nil, errors.New("plugin: runtime closed")
 	}
 	rt.calls++
-	timer := time.AfterFunc(d, func() { rt.vm.Interrupt(errTimeout) })
-	defer func() { timer.Stop(); rt.vm.ClearInterrupt() }()
+	vm := rt.vm
+	var guard sync.Mutex
+	done := false
+	timer := time.AfterFunc(d, func() {
+		guard.Lock()
+		defer guard.Unlock()
+		if !done {
+			vm.Interrupt(errTimeout)
+		}
+	})
+	defer func() {
+		guard.Lock()
+		done = true
+		guard.Unlock()
+		timer.Stop()
+		vm.ClearInterrupt()
+	}()
 	v, err := run()
 	if err != nil {
 		rt.errors++

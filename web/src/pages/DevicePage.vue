@@ -15,10 +15,12 @@ const error = ref('')
 const selectedPID = ref(0)
 const done = ref('')
 const loading = ref(false)
+const loadingInfo = ref(false)
 
 async function loadInfo() {
   error.value = ''; done.value = ''
   if (!userCode.value) { info.value = null; return }
+  loadingInfo.value = true
   try {
     const d = await oidc.deviceInfo(userCode.value)
     if (d.error) { error.value = d.error; info.value = null; return }
@@ -29,6 +31,7 @@ async function loadInfo() {
     // (the approve button stays disabled on !selectedPID).
     selectedPID.value = d.default_pid || 0
   } catch (e) { error.value = e.message; info.value = null }
+  finally { loadingInfo.value = false }
 }
 
 function useCode() {
@@ -75,6 +78,7 @@ onMounted(loadInfo)
     </template>
 
     <!-- pending info -->
+    <p v-else-if="loadingInfo" class="muted">{{ t('common.loading') }}</p>
     <template v-else-if="info">
       <p>{{ t('device.userCode') }}：<b style="font-size: var(--fs-l); letter-spacing: 2px;">{{ info.user_code }}</b></p>
       <p>{{ t('device.requestClient') }}：<b>{{ info.client_name || info.client_id }}</b></p>

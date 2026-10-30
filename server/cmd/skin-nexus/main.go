@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -772,7 +773,7 @@ func main() {
 	addr := cfg.Listen
 	log.Printf("skin-nexus %s listening on %s (base %s)", version, addr, cfg.BaseURL)
 
-	srv := newHTTPServer(addr, pub.WrapRoot(root))
+	srv := newHTTPServer(addr, pub.WrapRoot(gzipHandler(root)))
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.ListenAndServe() }()
 
@@ -887,6 +888,17 @@ func textureHandler(ts *texture.Store) http.HandlerFunc {
 // raw and skipped SEO/theme/custom injection entirely).
 // The exact root path serves the public server-rendered landing page instead
 // of the SPA shell (2026-10-25 拍板: exposure for first-time visitors/crawlers).
+// hashedAsset reports Vite's content-hashed chunk names (main-DDTQwvLG.js).
+func hashedAsset(name string) bool {
+	ext := path.Ext(name)
+	if ext != ".js" && ext != ".css" {
+		return false
+	}
+	base := strings.TrimSuffix(name, ext)
+	dash := strings.LastIndex(base, "-")
+	return dash > 0 && len(base)-dash-1 >= 6
+}
+
 // isKnownSPAPath whitelists the SPA shell routes; anything else is a true 404.
 func isKnownSPAPath(p string, uiPath func(string) bool) bool {
 	if strings.HasPrefix(p, "ext/") {
@@ -936,8 +948,20 @@ func spaHandler(dir string, seoEng *seo.Engine, appearEng *appearance.Engine, si
 				html = seoEng.RenderHeadWith(r.Context(), html, pageMetaFor(p))
 				html = appearEng.Render(r.Context(), html)
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Header().Set("Cache-Control", "no-cache")
 				_, _ = w.Write([]byte(html))
 				return
+			}
+			// Vite emits content-hashed chunks; those are safe to cache for a
+			// year. Fixed-name files (viewer.js) must revalidate.
+			if strings.HasPrefix(p, "assets/") {
+				if hashedAsset(path.Base(p)) {
+					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				} else {
+					w.Header().Set("Cache-Control", "no-cache")
+				}
+			} else if p == "favicon.svg" || p == "favicon.ico" || p == "manifest.webmanifest" {
+				w.Header().Set("Cache-Control", "public, max-age=86400")
 			}
 			fs.ServeHTTP(w, r)
 		})

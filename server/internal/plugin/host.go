@@ -107,6 +107,7 @@ type instance struct {
 	checksum     string // zip SHA-256
 	configSchema *ConfigSchema
 	config       *configState
+	jobSem       chan struct{} // one job step at a time per plugin
 }
 
 // Manager scans a plugin directory, owns per-plugin runtimes and dispatches
@@ -248,7 +249,7 @@ func (m *Manager) loadOne(ctx context.Context, name string) {
 	dir := filepath.Join(m.cfg.Dir, name)
 	info, err := loadManifest(dir, name)
 	if err != nil {
-		inst := &instance{info: Info{Manifest: Manifest{Name: name}}, state: "error", health: "error", lastErr: err.Error()}
+		inst := &instance{info: Info{Manifest: Manifest{Name: name}}, state: "error", health: "error", lastErr: err.Error(), jobSem: make(chan struct{}, 1)}
 		m.insertInstance(name, inst)
 		m.audit(ctx, "plugin_load_failed", map[string]any{"plugin": name, "error": err.Error()})
 		m.persistMeta(ctx, inst)
@@ -299,7 +300,7 @@ func (m *Manager) insertInstance(name string, inst *instance) {
 // a VM. A config/minServer failure still leaves the schema on the instance so
 // the admin can fix config and retry.
 func (m *Manager) prepareInstance(ctx context.Context, name string, info Info) (*instance, error) {
-	inst := &instance{info: info, state: "disabled", health: "disabled", config: newConfigState(nil)}
+	inst := &instance{info: info, state: "disabled", health: "disabled", config: newConfigState(nil), jobSem: make(chan struct{}, 1)}
 	if m.cfg.HostVersion != "" {
 		if err := info.CheckMinServer(m.cfg.HostVersion); err != nil {
 			inst.state = "error"
@@ -464,6 +465,9 @@ func (m *Manager) Enable(ctx context.Context, name string) error {
 		return err
 	}
 	m.replaceInstance(name, next)
+	if m.cfg.Jobs != nil {
+		_ = m.cfg.Jobs.ResumePausedByPlugin(context.Background(), name)
+	}
 	m.audit(ctx, "plugin_enable", map[string]any{"plugin": name, "version": info.Version, "permissions": info.Permissions})
 	m.persistMeta(ctx, next)
 	return nil

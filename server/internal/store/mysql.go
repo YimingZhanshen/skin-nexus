@@ -53,7 +53,22 @@ func Open(dsn, baseURL string, legacy *auth.LegacyVerifier) (*Mysql, error) {
 	if !strings.Contains(dsn, "parseTime=true") {
 		return nil, fmt.Errorf("store: DSN must carry parseTime=true")
 	}
-	db, err := sql.Open("mysql", dsn)
+	// Normalize the session to UTC: Go writes time.Time values as UTC, while
+	// SQL NOW(3) follows the server session zone. On a +08 MySQL that made
+	// expiry checks (sessions, TTLs, job schedules) off by eight hours.
+	cfg, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("store: parse DSN: %w", err)
+	}
+	cfg.ParseTime = true
+	cfg.Loc = time.UTC
+	if cfg.Params == nil {
+		cfg.Params = map[string]string{}
+	}
+	// Force the session to UTC: the Go layer writes UTC time.Time values, so
+	// a user-supplied +08 session zone would reintroduce the mismatch.
+	cfg.Params["time_zone"] = "'+00:00'"
+	db, err := sql.Open("mysql", cfg.FormatDSN())
 	if err != nil {
 		return nil, err
 	}

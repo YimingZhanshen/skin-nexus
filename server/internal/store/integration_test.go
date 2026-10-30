@@ -259,6 +259,17 @@ func TestIntegrationJobsLifecycle(t *testing.T) {
 	}
 }
 
+func TestIntegrationSessionTimezoneUTC(t *testing.T) {
+	m := openTestStore(t)
+	var tz string
+	if err := m.DB().QueryRowContext(context.Background(), "SELECT @@session.time_zone").Scan(&tz); err != nil {
+		t.Fatal(err)
+	}
+	if tz != "+00:00" {
+		t.Fatalf("session time_zone = %q, want +00:00 (expiry comparisons must match Go)", tz)
+	}
+}
+
 // ---- bootstrap super admin ----
 
 func TestIntegrationBootstrapSuperAdmin(t *testing.T) {

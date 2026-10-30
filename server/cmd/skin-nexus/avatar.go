@@ -190,6 +190,11 @@ func (d *avatarDeps) handlePreviewTID(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	pub, err := d.st.TextureIsPublic(r.Context(), tid)
+	if err != nil || !pub {
+		http.NotFound(w, r)
+		return
+	}
 	hash, typ, slim, err := d.st.TextureByTID(r.Context(), tid)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -204,6 +209,11 @@ func (d *avatarDeps) handlePreviewTID(w http.ResponseWriter, r *http.Request) {
 
 func (d *avatarDeps) handlePreviewHash(w http.ResponseWriter, r *http.Request) {
 	hash := r.PathValue("hash")
+	pub, perr := d.st.TextureIsPublicByHash(r.Context(), hash)
+	if perr != nil || !pub {
+		http.NotFound(w, r)
+		return
+	}
 	typ, slim, err := d.st.TextureMetaByHash(r.Context(), hash)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -234,7 +244,11 @@ func (d *avatarDeps) servePreview(w http.ResponseWriter, r *http.Request, hash, 
 		http.NotFound(w, r)
 		return
 	}
-	writePNG(w, avatargen.RenderPreview(skin, slim), "public, max-age=31536000, immutable")
+	ratio := 10.0
+	if r.URL.Query().Get("small") == "1" {
+		ratio = 5
+	}
+	writePNG(w, avatargen.RenderPreviewAt(skin, slim, ratio), "public, max-age=31536000, immutable")
 }
 
 // handleViewerTexture serves the background-normalized sheet used by the

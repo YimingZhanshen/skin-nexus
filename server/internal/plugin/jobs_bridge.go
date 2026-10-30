@@ -207,9 +207,6 @@ func (rt *runtime) runJobStep(ctx context.Context, j *jobs.Job) (jobStepResult, 
 	if !ok {
 		return jobStepResult{}, errors.New("jobs.unknown: handler is not registered")
 	}
-	rt.jobID = j.ID
-	rt.jobUser = &SessionIdentity{ID: j.OwnerUID, Permission: 1}
-	rt.routeCtx = ctx
 	var payload, cursor any
 	_ = json.Unmarshal(j.Payload, &payload)
 	if len(j.Cursor) > 0 {
@@ -220,6 +217,11 @@ func (rt *runtime) runJobStep(ctx context.Context, j *jobs.Job) (jobStepResult, 
 		timeout = 10 * time.Second
 	}
 	val, err := rt.withTimeout(timeout, func() (goja.Value, error) {
+		// Identity/context are swapped under rt.mu so a second worker cannot
+		// clobber them while this step's VM is executing.
+		rt.jobID = j.ID
+		rt.jobUser = &SessionIdentity{ID: j.OwnerUID, Permission: 1}
+		rt.routeCtx = ctx
 		return reg.fn(goja.Undefined(), rt.vm.ToValue(map[string]any{
 			"jobId": j.ID, "attempt": j.Attempts + 1, "payload": payload,
 			"cursor": cursor, "cancelRequested": false,

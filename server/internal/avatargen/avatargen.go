@@ -481,12 +481,21 @@ func RenderAvatar(skin *image.NRGBA, size int, threeD bool) *image.NRGBA {
 // live site (probe: 100/400/default all return identical 430×437) and
 // the manual documents only `?png` — so no size knob here either.
 func RenderPreview(skin *image.NRGBA, slim bool) *image.NRGBA {
+	return RenderPreviewAt(skin, slim, 10)
+}
+
+// RenderPreviewAt renders the same two views at a caller-chosen pixel ratio;
+// the skin-library grid uses a smaller ratio so 20 cards do not ship ~1.7 MB
+// of PNG on a slow link.
+func RenderPreviewAt(skin *image.NRGBA, slim bool, ratio float64) *image.NRGBA {
+	if ratio <= 0 {
+		ratio = 10
+	}
 	parts := modelParts(slim, HasLayer2(skin))
-	const ratio = 10.0
 	cf := newCam(-45, 10)
 	back := render(skin, parts, newCam(135, 10), ratio, 0)
 	front := render(skin, parts, cf, ratio, 0)
-	hp, vp, ip := 30, 15, 15
+	hp, vp, ip := int(3*ratio), int(1.5*ratio), int(1.5*ratio)
 	canvas := image.NewNRGBA(image.Rect(0, 0,
 		hp*2+back.Bounds().Dx()+front.Bounds().Dx()+ip*2,
 		vp*2+max(back.Bounds().Dy(), front.Bounds().Dy())))

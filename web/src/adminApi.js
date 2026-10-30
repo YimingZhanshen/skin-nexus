@@ -6,6 +6,7 @@
 // fallback, attached only when present. A 401/403 flips needToken so the
 // shell surfaces the token card.
 import { ref } from 'vue'
+import { fetchWithTimeout } from './net.js'
 
 export const token = ref(localStorage.getItem('admin_token') || '')
 export const needToken = ref(true)
@@ -13,7 +14,7 @@ export const needToken = ref(true)
 export async function fetchJSON(path, opts) {
   const headers = { ...(opts && opts.headers) }
   if (token.value) headers['X-Admin-Token'] = token.value
-  const res = await fetch(path, { ...opts, headers })
+  const res = await fetchWithTimeout(path, { ...opts, headers }, 20000)
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) needToken.value = true

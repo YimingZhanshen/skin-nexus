@@ -1,11 +1,13 @@
 // Thin fetch wrapper: same-origin cookies, JSON in/out.
-async function req(method, path, body) {
+import { fetchWithTimeout } from './net.js'
+
+async function req(method, path, body, timeoutMS = 15000) {
   const opts = { method, headers: {} }
   if (body !== undefined) {
     opts.headers['Content-Type'] = 'application/json'
     opts.body = JSON.stringify(body)
   }
-  const res = await fetch(path, opts)
+  const res = await fetchWithTimeout(path, opts, timeoutMS)
   if (res.status === 204) return null
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
@@ -89,7 +91,7 @@ export async function uploadTexture(type, file, model, description, pluginData) 
   if (model) fd.append('model', model)
   if (description) fd.append('description', description)
   if (pluginData && Object.keys(pluginData).length) fd.append('pluginData', JSON.stringify(pluginData))
-  const res = await fetch('/api/v1/me/textures', { method: 'POST', body: fd })
+  const res = await fetchWithTimeout('/api/v1/me/textures', { method: 'POST', body: fd }, 60000)
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     const err = new Error(data.message || data.error || `HTTP ${res.status}`)

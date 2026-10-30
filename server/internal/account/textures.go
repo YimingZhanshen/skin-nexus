@@ -119,7 +119,15 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model, desc
 		return TextureView{}, false, errf(CodeInternal, "保存纹理失败", err)
 	}
 	if existing, ok, err := s.Store.TextureByOwnerHash(ctx, uid, typ, res.Hash); err == nil && ok {
-		return s.textureRowView(ctx, existing), false, nil
+		// Reusing a private import for a public upload would report success
+		// while never publishing anything. Only short-circuit when the
+		// existing row's visibility matches the request.
+		if !public {
+			return s.textureRowView(ctx, existing), false, nil
+		}
+		if isPub, perr := s.Store.TextureIsPublic(ctx, existing.ID); perr == nil && isPub {
+			return s.textureRowView(ctx, existing), false, nil
+		}
 	}
 	if public {
 		if pub, ok, err := s.Store.PublicTextureByHash(ctx, typ, res.Hash); err == nil && ok {

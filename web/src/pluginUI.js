@@ -2,12 +2,14 @@
 // plugin.<name>.* so plugin pages/widgets never edit the static locale files.
 import { reactive } from 'vue'
 import { i18n } from './i18n.js'
+import { fetchWithTimeout } from './net.js'
 
 export const pluginUI = reactive({ plugins: [], capabilities: [], slots: [], hostVersion: '' })
 
 export async function loadPluginUI() {
   try {
-    const r = await fetch('/api/v1/plugins/ui')
+    // Boot awaits this; a stalled edge request must not hold the shell.
+    const r = await fetchWithTimeout('/api/v1/plugins/ui', {}, 8000)
     if (!r.ok) return
     const d = await r.json()
     pluginUI.plugins = d.plugins || []

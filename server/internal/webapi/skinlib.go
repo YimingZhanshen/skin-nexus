@@ -67,7 +67,7 @@ func (b *Backend) handleSkinlibList(w http.ResponseWriter, r *http.Request) {
 		// year, so a rasterizer fix (e.g. HD-sheet sampling, v2) must change
 		// the URL or browsers keep serving the old render.
 		if row.Type == "skin" {
-			item["previewURL"] = "/preview/" + strconv.FormatInt(row.TID, 10) + "?v=" + avatargen.RenderVersion
+			item["previewURL"] = "/preview/" + strconv.FormatInt(row.TID, 10) + "?v=" + avatargen.RenderVersion + "&small=1"
 		}
 		items = append(items, item)
 	}

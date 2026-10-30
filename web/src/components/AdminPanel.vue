@@ -5,7 +5,7 @@
 import { ref, shallowRef, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
-import { token, needToken, fetchJSON, persistToken } from '../adminApi.js'
+import { token, needToken, persistToken } from '../adminApi.js'
 import DashboardView from './admin/DashboardView.vue'
 import UsersView from './admin/UsersView.vue'
 import PlayersView from './admin/PlayersView.vue'
@@ -17,7 +17,7 @@ import AccessLogsView from './admin/AccessLogsView.vue'
 import PluginsView from './admin/PluginsView.vue'
 import MarketView from './admin/MarketView.vue'
 import PluginPage from './plugin/PluginPage.vue'
-import { loadPluginUI, navPages } from '../pluginUI.js'
+import { navPages } from '../pluginUI.js'
 
 const { t } = useI18n()
 
@@ -35,20 +35,35 @@ const nav = [
   { id: 'plugins', labelKey: 'admin.navPlugins', comp: PluginsView },
   { id: 'market', labelKey: 'admin.navMarket', comp: MarketView },
 ]
+// App boot already resolved the session, site capabilities and plugin UI;
+// re-fetching all three here cost three serial RTTs behind a slow edge.
+const props = defineProps({
+  user: { type: Object, default: null },
+  siteConf: { type: Object, default: () => ({}) },
+  confLoaded: { type: Boolean, default: false },
+})
 const current = ref('dashboard')
 const currentComp = shallowRef(DashboardView)
 const currentPlugin = ref('')
 const pluginPages = ref([])
-const myPerm = ref(0)
-// Module switches hide their admin surfaces; defaults stay visible until the
-// public capability endpoint answers (failure should never hide an entry).
-const flags = ref({ invite_required: true, union_enabled: true })
+const myPerm = ref(Number(props.user && props.user.permission) || 0)
+// Keep the initial sidebar stable: use the already-loaded site config, and
+// hide module entries while the state is unknown instead of adding/removing
+// them after the page has painted.
+const flags = ref({
+  invite_required: props.confLoaded ? !!props.siteConf.invite_required : false,
+  union_enabled: props.confLoaded ? !!props.siteConf.union_enabled : false,
+})
 const visibleNav = computed(() => nav.filter((n) =>
   (n.id !== 'invitation' || flags.value.invite_required) &&
   (n.id !== 'union' || flags.value.union_enabled)
 ))
 
 async function loadFlags() {
+  if (props.confLoaded) {
+    flags.value = { ...flags.value, ...props.siteConf }
+    return
+  }
   try { flags.value = { ...flags.value, ...(await api.siteConfig()) } } catch { /* keep defaults */ }
 }
 
@@ -89,12 +104,7 @@ async function submitToken() {
 onMounted(async () => {
   // Session-admin detection: permission > 0 means the session alone reaches
   // admin data — no token ceremony needed.
-  try {
-    const me = await api.me()
-    myPerm.value = Number(me.permission) || 0
-    if (myPerm.value > 0) needToken.value = false
-  } catch { /* no usable session — the token fallback stays visible */ }
-  await loadPluginUI()
+  if (myPerm.value > 0) needToken.value = false
   pluginPages.value = navPages('admin').filter((p) => myPerm.value >= Number(p.perm || 0))
   await loadFlags()
   if (!needToken.value || token.value) {

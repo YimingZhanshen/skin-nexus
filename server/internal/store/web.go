@@ -284,6 +284,25 @@ func (m *Mysql) PublicTextureByHash(ctx context.Context, typ, hash string) (Text
 	return row, true, nil
 }
 
+// TextureIsPublic reports a texture's visibility by id (upload reuse check).
+func (m *Mysql) TextureIsPublic(ctx context.Context, tid int64) (bool, error) {
+	var pub bool
+	err := m.db.QueryRowContext(ctx, `SELECT public FROM textures WHERE id = ?`, tid).Scan(&pub)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, ErrNotFound
+	}
+	return pub, err
+}
+
+// TextureIsPublicByHash reports whether any row with this content hash is
+// public (a private copy must not be enumerable through previews).
+func (m *Mysql) TextureIsPublicByHash(ctx context.Context, hash string) (bool, error) {
+	var pub bool
+	err := m.db.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(public),0) FROM textures WHERE hash = ?`, hash).Scan(&pub)
+	return pub, err
+}
+
 // TextureByID returns texture row (for serving raw bytes later).
 func (m *Mysql) TextureByHash(ctx context.Context, hash string) (id, uid int64, typ string, err error) {
 	err = m.db.QueryRowContext(ctx,

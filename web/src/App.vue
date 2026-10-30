@@ -1,20 +1,26 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, defineAsyncComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from './api.js'
-import AdminPanel from './components/AdminPanel.vue'
-import DevicePage from './pages/DevicePage.vue'
-import AuthorizedAppsPage from './pages/AuthorizedAppsPage.vue'
-import UnionBindPage from './pages/UnionBindPage.vue'
-import SetupPage from './pages/SetupPage.vue'
-import DashboardPage from './pages/DashboardPage.vue'
-import ClosetPage from './pages/ClosetPage.vue'
-import SkinlibPage from './pages/SkinlibPage.vue'
-import PlayersPage from './pages/PlayersPage.vue'
-import ProfilePage from './pages/ProfilePage.vue'
-import PluginPage from './components/plugin/PluginPage.vue'
+import PageLoading from './components/PageLoading.vue'
 import PluginSlot from './components/plugin/PluginSlot.vue'
 import PluginFields from './components/plugin/PluginFields.vue'
+// Route-level chunks: the login card must not download the admin tables,
+// Markdown pipeline or skinview3d-adjacent pages on a 3 Mbps link.
+const asyncPage = (loader) => defineAsyncComponent({
+  loader, loadingComponent: PageLoading, delay: 120,
+})
+const AdminPanel = asyncPage(() => import('./components/AdminPanel.vue'))
+const DevicePage = asyncPage(() => import('./pages/DevicePage.vue'))
+const AuthorizedAppsPage = asyncPage(() => import('./pages/AuthorizedAppsPage.vue'))
+const UnionBindPage = asyncPage(() => import('./pages/UnionBindPage.vue'))
+const SetupPage = asyncPage(() => import('./pages/SetupPage.vue'))
+const DashboardPage = asyncPage(() => import('./pages/DashboardPage.vue'))
+const ClosetPage = asyncPage(() => import('./pages/ClosetPage.vue'))
+const SkinlibPage = asyncPage(() => import('./pages/SkinlibPage.vue'))
+const PlayersPage = asyncPage(() => import('./pages/PlayersPage.vue'))
+const ProfilePage = asyncPage(() => import('./pages/ProfilePage.vue'))
+const PluginPage = asyncPage(() => import('./components/plugin/PluginPage.vue'))
 import { loadPluginUI, navPages, pageByPath } from './pluginUI.js'
 import { setLocale } from './i18n.js'
 import { setUnauthorizedHandler } from './session.js'
@@ -55,12 +61,18 @@ const resetDone = ref(false)
 // (or if it fails) the pre-config UI stays = today's behavior.
 const siteConf = ref({ invite_required: false, mail_configured: false, union_enabled: false })
 const confLoaded = ref(false)
+// Boot gate: hide the auth/shell until session + site capabilities settle.
+// Without it a logged-in refresh renders the login card first (the old boot
+// awaited setup→config→pluginUI→me sequentially, so the flash lasted seconds
+// behind a high-latency CDN).
+const booting = ref(true)
+const bootErr = ref('')
 // Invite field is absent unless the server says it is required. The old
 // "show an optional box while config loads" behavior produced a dead
 // "邀请码（选填）" field on sites that never use invitations.
 const inviteFieldShown = computed(() => confLoaded.value && siteConf.value.invite_required)
 const inviteIsRequired = computed(() => confLoaded.value && siteConf.value.invite_required)
-const mailEnabled = computed(() => !confLoaded.value || siteConf.value.mail_configured)
+const mailEnabled = computed(() => confLoaded.value && siteConf.value.mail_configured)
 const unionEnabled = computed(() => confLoaded.value && siteConf.value.union_enabled)
 
 // Sidebar nav (blessing parity: 用户中心/管理 两组). device/apps/union are
@@ -179,26 +191,20 @@ const legacyRoutes = {
 // card first, then drop straight into the closet).
 const pendingView = ref('')
 
-async function boot() {
-  // Fresh install: the wizard takes over before anything else (empty-DB init).
-  try {
-    const r = await fetch('/api/v1/setup/status')
-    const d = await r.json()
-    if (d.needs_setup) { view.value = 'setup'; return }
-  } catch { /* server down or old backend — fall through */ }
-  // Site capabilities for the auth cards (best-effort: failure keeps the
-  // old always-show UI).
-  try { siteConf.value = await api.siteConfig(); confLoaded.value = true } catch { /* old UI */ }
-  await loadPluginUI()
-  // Launcher verification page: /device?user_code=… is path-probed so the
-  // minimal /device.html fallback and the SPA share one URL contract.
+function withBootTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      const err = new Error('timeout')
+      err.code = 'timeout'
+      reject(err)
+    }, ms)
+    promise.then((v) => { clearTimeout(timer); resolve(v) },
+      (e) => { clearTimeout(timer); reject(e) })
+  })
+}
+
+function applyInitialRoute() {
   const isDevice = location.pathname === '/device'
-  try {
-    user.value = await api.me()
-  } catch {
-    // me() failed = no usable session (review P1-6: NOT a data failure)
-    user.value = null
-  }
   if (location.pathname.startsWith('/ext/')) {
     if (user.value) openExt(location.pathname)
     else { pendingExt.value = location.pathname; view.value = 'login' }
@@ -211,17 +217,51 @@ async function boot() {
     view.value = 'reset'
   }
   else if (location.pathname === '/forgot-password') view.value = 'forgot'
-  else if (!user.value && location.pathname === '/register') view.value = 'register' // landing CTA deep link
+  else if (!user.value && location.pathname === '/register') view.value = 'register'
   else if (legacyRoutes[location.pathname]) {
     // launcher deep link: logged in → straight there; logged out → login card,
-    // resume into the target view after authentication. /skinlib is public:
-    // anonymous visitors browse directly (backend answers public textures
-    // only) — no login wall.
+    // resume into the target view after authentication. /skinlib is public.
     if (user.value) view.value = legacyRoutes[location.pathname]
     else if (location.pathname === '/skinlib') view.value = 'skinlib'
     else pendingView.value = legacyRoutes[location.pathname]
   }
   else view.value = user.value ? 'dashboard' : 'login'
+}
+
+async function boot() {
+  booting.value = true
+  bootErr.value = ''
+  // One parallel round trip instead of four sequential ones: the login card
+  // must not wait for setup→config→pluginUI before `me` even starts.
+  const [setupR, confR, , meR] = await Promise.allSettled([
+    withBootTimeout(fetch('/api/v1/setup/status').then((r) => r.json()), 8000),
+    withBootTimeout(api.siteConfig(), 8000),
+    loadPluginUI(),
+    withBootTimeout(api.me(), 10000),
+  ])
+  if (setupR.status === 'fulfilled' && setupR.value && setupR.value.needs_setup) {
+    view.value = 'setup'
+    booting.value = false
+    return
+  }
+  if (confR.status === 'fulfilled') {
+    siteConf.value = confR.value
+    confLoaded.value = true
+  }
+  if (meR.status === 'fulfilled') {
+    user.value = meR.value || null
+  } else if (meR.reason && meR.reason.status === 401) {
+    // A real "no session" answer — fall through to the login card.
+    user.value = null
+  } else {
+    // Network/5xx/timeout: a transient failure is NOT a logout. Showing the
+    // login card here made flaky high-latency links look like session loss.
+    bootErr.value = (meR.reason && meR.reason.message) || 'network error'
+    booting.value = false
+    return
+  }
+  applyInitialRoute()
+  booting.value = false
 }
 
 function backToDashboard() {
@@ -256,9 +296,11 @@ async function doLogin() {
   authErr.value = ''
   try {
     user.value = await api.login(identifier.value, password.value)
-    // login returns the bare {id, nickname} shape; me() carries `permission`
-    // (admin-entry gating) — refresh so the entry appears without a reload.
-    try { user.value = await api.me() } catch { /* keep login payload */ }
+    // New backends return `permission` on login; fall back to /me only for
+    // older servers (saves one RTT on every login).
+    if (user.value && user.value.permission === undefined) {
+      try { user.value = await api.me() } catch { /* keep login payload */ }
+    }
   } catch (e) { authErr.value = e.message; return }
   finishAuth()
 }
@@ -272,6 +314,7 @@ async function doRegister() {
   }
   try {
     user.value = await api.register(email.value, nickname.value, password.value, invitationCode.value.trim(), pluginFormData.value)
+    if (user.value && user.value.permission === undefined) user.value = { ...user.value, permission: 0 }
   } catch (e) { authErr.value = e.message; return }
   finishAuth()
 }
@@ -308,7 +351,16 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
 </script>
 
 <template>
-  <div class="app-shell">
+  <div v-if="booting" class="boot-screen" role="status" aria-live="polite">
+    <span class="boot-logo" v-html="brandSVG"></span>
+    <span class="boot-spinner" aria-hidden="true"></span>
+    <p class="muted">{{ t('common.loading') }}</p>
+  </div>
+  <div v-else-if="bootErr" class="boot-screen">
+    <p class="error">{{ t('common.dataLoadFailed', { message: bootErr }) }}</p>
+    <button @click="boot">{{ t('common.retry') }}</button>
+  </div>
+  <div v-else class="app-shell">
     <!-- 顶栏：品牌区 + 语言 + 会话操作（sticky 玻璃带） -->
     <header class="topbar">
       <a class="brand" href="/" @click.prevent="goHome" :title="t('site.tagline')">
@@ -478,7 +530,7 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
 
     <!-- public skin library: anonymous visitors browse without a session -->
     <template v-else-if="!user && view === 'skinlib'">
-      <SkinlibPage @login="skinlibLogin" />
+      <SkinlibPage :user="user" @login="skinlibLogin" />
     </template>
 
     <!-- logged-in shell: sidebar + page (blessing 用户中心布局) -->
@@ -503,14 +555,14 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
         </aside>
         <main class="user-main">
           <DashboardPage v-if="view === 'dashboard'" />
-          <SkinlibPage v-else-if="view === 'skinlib'" @login="skinlibLogin" />
+          <SkinlibPage v-else-if="view === 'skinlib'" :user="user" @login="skinlibLogin" />
           <ClosetPage v-else-if="view === 'closet'" />
           <PlayersPage v-else-if="view === 'players'" />
           <ProfilePage v-else-if="view === 'profile'" />
           <AuthorizedAppsPage v-else-if="view === 'apps'" />
           <UnionBindPage v-else-if="view === 'union'" />
           <PluginPage v-else-if="view === 'ext'" :path="extPath" />
-          <AdminPanel v-else-if="view === 'admin'" />
+          <AdminPanel v-else-if="view === 'admin'" :user="user" :site-conf="siteConf" :conf-loaded="confLoaded" />
         </main>
       </div>
     </template>
@@ -522,4 +574,28 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
 <style scoped>
 /* v3: shell 全局样式统一在 style.css（topbar/auth-split/侧栏图标/用户卡），
    scoped 不再重复定义 —— 主题包按全局类覆盖。 */
+.boot-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  background: var(--bg, #101825);
+  color: var(--text, #e9edf1);
+}
+.boot-logo { width: 56px; height: 56px; display: block; }
+.boot-logo :deep(svg) { width: 100%; height: 100%; }
+.boot-spinner {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid var(--border, rgba(169,138,95,.3));
+  border-top-color: var(--accent, #b0453a);
+  animation: boot-spin .8s linear infinite;
+}
+@keyframes boot-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .boot-spinner { animation-duration: 2.4s; }
+}
 </style>

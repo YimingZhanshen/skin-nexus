@@ -514,7 +514,7 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 		UserID: uid, PlayerName: req.Nickname, IP: ygg.ClientIP(r),
 		Data: evData,
 	})
-	writeJSON(w, http.StatusCreated, map[string]interface{}{"id": uid, "nickname": req.Nickname})
+	writeJSON(w, http.StatusCreated, map[string]interface{}{"id": uid, "nickname": req.Nickname, "permission": 0})
 }
 
 func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -606,7 +606,13 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 	b.emitEvent(r.Context(), "user.logged_in", plugin.EventPayload{
 		UserID: u.ID, PlayerName: u.Nickname, IP: ygg.ClientIP(r),
 	})
-	writeJSON(w, http.StatusOK, map[string]interface{}{"id": u.ID, "nickname": u.Nickname})
+	// `permission` is additive: the SPA needs the admin-entry gate right away
+	// and previously had to spend another /me round trip after login.
+	perm := 0
+	if p, err := b.Store.UserPermission(r.Context(), u.ID); err == nil {
+		perm = p
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"id": u.ID, "nickname": u.Nickname, "permission": perm})
 }
 
 // issueSession persists and hands out a session cookie. The store write is
