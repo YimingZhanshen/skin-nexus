@@ -81,8 +81,10 @@ func TestPluginStoreRoundTrip(t *testing.T) {
 	if err != nil || len(list) != 2 {
 		t.Fatalf("kv list=%d err=%v", len(list), err)
 	}
-	if n, _ := m.CountPluginKV(ctx, name); n != 3 {
-		t.Fatalf("kv count = %d", n)
+	// Expired keys are invisible to List/Get, so they must not consume the
+	// quota either.
+	if n, _ := m.CountPluginKV(ctx, name); n != 2 {
+		t.Fatalf("kv count = %d, want 2 (expired excluded)", n)
 	}
 	if n, err := m.SweepPluginKV(ctx, 10); err != nil || n < 1 {
 		t.Fatalf("sweep = %d err=%v", n, err)
