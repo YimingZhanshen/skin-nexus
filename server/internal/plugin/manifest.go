@@ -206,6 +206,8 @@ func validate(raw manifestFile, dir, dirName string) (Info, error) {
 			Store:       raw.Store,
 			Routes:      raw.Routes,
 			UI:          raw.UI,
+			Net:         raw.Net,
+			Jobs:        raw.Jobs,
 			Media:       raw.Media,
 			Requires:    raw.Requires,
 			Conflicts:   raw.Conflicts,

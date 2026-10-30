@@ -178,7 +178,9 @@ func pathAllowed(p string, prefixes []string) bool {
 		p = "/"
 	}
 	for _, prefix := range prefixes {
-		if prefix != "" && strings.HasPrefix(p, prefix) {
+		// Contains (not HasPrefix) keeps reverse-proxied Blessing installs
+		// under /sub/ working while still pinning the origin.
+		if prefix != "" && strings.Contains(p, prefix) {
 			return true
 		}
 	}
