@@ -12,6 +12,7 @@ concurrency:
 jobs:
   server:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: server
@@ -35,6 +36,7 @@ jobs:
   # the 8.0-only suite could not catch (login COLLATE / prepared 1267).
   integration:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       matrix:
         mysql: ['8.0', '5.7']
@@ -64,6 +66,7 @@ jobs:
 
   web:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: web
@@ -84,6 +87,8 @@ jobs:
   # Push on `push` events only — PR builds must never touch :latest.
   docker:
     runs-on: ubuntu-latest
+    # A stalled registry/blob fetch must fail the job, not hang for hours.
+    timeout-minutes: 20
     if: github.event_name == 'push'
     permissions:
       packages: write   # ghcr push
@@ -105,5 +110,15 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:sha-${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # GitHub's US runners reach proxy.golang.org directly; goproxy.cn is
+          # only the local-build default.
+          build-args: |
+            GOPROXY=https://proxy.golang.org,direct
+          # Registry cache lives next to the image in GHCR and is not subject
+          # to the 10 GB Actions-cache eviction that dropped the go mod layer
+          # on 2026-10-31 (a 4.3 kB blob then stalled for 370s). Keep GHA as a
+          # read-only fallback for older caches.
+          cache-from: |
+            type=registry,ref=${{ env.IMAGE }}:buildcache
+            type=gha
+          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max

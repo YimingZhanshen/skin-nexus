@@ -15,7 +15,10 @@ RUN npm run build
 # go.mod requires go >= 1.26; the golang image sets GOTOOLCHAIN=local so the
 # builder tag must match the go directive (no auto toolchain upgrade inside).
 FROM golang:1.26-alpine AS server
-ENV GOPROXY=https://goproxy.cn,direct
+# goproxy.cn is fast from mainland China but slow/unreliable from GitHub's
+# US runners; CI overrides this build arg with proxy.golang.org.
+ARG GOPROXY=https://goproxy.cn,direct
+ENV GOPROXY=${GOPROXY}
 WORKDIR /build/server
 COPY server/go.mod server/go.sum ./
 RUN go mod download
