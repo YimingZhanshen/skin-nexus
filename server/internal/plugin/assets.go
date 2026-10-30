@@ -84,7 +84,10 @@ func (m *Manager) AssetHandler() http.Handler {
 		}
 		w.Header().Set("Content-Type", ctype)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Cache-Control", "public, max-age=3600")
+		// Plugin assets are mutable (a plugin upgrade replaces the directory)
+		// and are not content-hashed; always revalidate instead of a 1h stale
+		// window. Iframe URLs also carry ?v=<plugin version>.
+		w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
 		http.ServeContent(w, r, filepath.Base(full), time.Time{}, f)
 	})
 }

@@ -62,7 +62,10 @@ export function slotsFor(id) {
 
 export function assetURL(plugin, src) {
   const rel = String(src || '').replace(/^\/+/, '')
-  return `/plugin-assets/${encodeURIComponent(plugin)}/${rel.split('/').map(encodeURIComponent).join('/')}`
+  const base = `/plugin-assets/${encodeURIComponent(plugin)}/${rel.split('/').map(encodeURIComponent).join('/')}`
+  const p = pluginUI.plugins.find((x) => x.plugin === plugin)
+  const v = p && p.version ? `?v=${encodeURIComponent(p.version)}` : ''
+  return base + v
 }
 
 export function formsFor(formID) {

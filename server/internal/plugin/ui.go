@@ -9,12 +9,13 @@ import (
 // UI is the enabled-plugin UI metadata consumed by the SPA (nav/pages/slots)
 // and by the SSR skinlib page (iframe slots only). No secrets are included.
 type UI struct {
-	Plugin string                       `json:"plugin"`
-	Title  string                       `json:"title,omitempty"`
-	Pages  []PageSpec                   `json:"pages,omitempty"`
-	Slots  []SlotSpec                   `json:"slots,omitempty"`
-	Forms  map[string]FormSpec          `json:"forms,omitempty"`
-	I18n   map[string]map[string]string `json:"i18n,omitempty"`
+	Plugin  string                       `json:"plugin"`
+	Version string                       `json:"version,omitempty"`
+	Title   string                       `json:"title,omitempty"`
+	Pages   []PageSpec                   `json:"pages,omitempty"`
+	Slots   []SlotSpec                   `json:"slots,omitempty"`
+	Forms   map[string]FormSpec          `json:"forms,omitempty"`
+	I18n    map[string]map[string]string `json:"i18n,omitempty"`
 }
 
 // UI returns UI metadata for every enabled plugin, in name order.
@@ -27,7 +28,7 @@ func (m *Manager) UI() []UI {
 		if !inst.enabled || inst.info.UI == nil {
 			continue
 		}
-		u := UI{Plugin: name, Title: inst.info.Title, I18n: inst.info.UI.I18n, Forms: inst.info.UI.Forms}
+		u := UI{Plugin: name, Version: inst.info.Version, Title: inst.info.Title, I18n: inst.info.UI.I18n, Forms: inst.info.UI.Forms}
 		for _, p := range inst.info.UI.Pages {
 			p.Plugin = name
 			u.Pages = append(u.Pages, p)
@@ -92,6 +93,13 @@ func (m *Manager) SlotHTMLContext(slot string, vars map[string]string) string {
 				continue
 			}
 			src := "/plugin-assets/" + name + "/" + s.Render.Src + query
+			if inst.info.Version != "" {
+				sep := "?"
+				if strings.Contains(src, "?") {
+					sep = "&"
+				}
+				src += sep + "v=" + url.QueryEscape(inst.info.Version)
+			}
 			h := s.Height
 			if h <= 0 {
 				h = 180
