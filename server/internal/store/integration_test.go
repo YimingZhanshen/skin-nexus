@@ -243,9 +243,10 @@ func TestIntegrationJobsLifecycle(t *testing.T) {
 	}
 	defer dbTZ.Close()
 	jsTZ := jobs.New(dbTZ)
+	now = time.Now().Add(-time.Second)
 	mk("job-c")
-	if _, err := jsTZ.Claim(ctx, "w3", time.Now(), time.Minute); err != nil {
-		t.Fatal(err)
+	if claimed, err := jsTZ.Claim(ctx, "w3", time.Now(), time.Minute); err != nil || claimed == nil || claimed.ID != "job-c" {
+		t.Fatalf("claim job-c = %+v %v", claimed, err)
 	}
 	if err := jsTZ.Fail(ctx, "job-c", "w3", errors.New("boom"), 1, 1); err != nil {
 		t.Fatal(err)
