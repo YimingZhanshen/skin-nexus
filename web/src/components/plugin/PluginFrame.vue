@@ -1,6 +1,7 @@
 
 
 <script setup>
+// SkinNexus · Copyright (C) 2026 SkinNexus contributors · AGPL-3.0
 // Sandboxed plugin UI. The frame never receives cookies or the admin token;
 // every API call goes through the host bridge, which applies the plugin route
 // tier, CSRF and rate limits.
@@ -56,8 +57,17 @@ function themePayload() {
     text: cssVar('--text', '#e9edf1'),
     muted: cssVar('--muted', '#a8b4c3'),
     accent: cssVar('--accent', '#b0453a'),
+    link: cssVar('--jade', '#67b7a0'),
+    danger: cssVar('--danger', '#d9564c'),
+    ok: cssVar('--ok', '#6fbf7d'),
     dark: isDarkColor(bg),
   }
+}
+
+// Vue refs expose reactive proxies; structured clone rejects them, so the
+// user snapshot must be converted to a plain object before postMessage.
+function plain(value) {
+  try { return value == null ? value : JSON.parse(JSON.stringify(value)) } catch { return null }
 }
 
 function send(type, payload, id) {
@@ -72,7 +82,7 @@ async function init() {
   send('init', {
     plugin: props.plugin, src: props.src, origin: location.origin,
     path: location.pathname + location.search,
-    locale: document.documentElement.lang || 'zh-CN', user, csrf, theme: themePayload(),
+    locale: document.documentElement.lang || 'zh-CN', user: plain(user), csrf, theme: themePayload(),
   })
 }
 

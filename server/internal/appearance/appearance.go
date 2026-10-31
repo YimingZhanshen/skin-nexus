@@ -1,3 +1,6 @@
+// SkinNexus · Minecraft skin hosting platform.
+// Copyright (C) 2026 SkinNexus contributors. Licensed under AGPL-3.0.
+//
 // Package appearance assembles the HTML injection layer: active theme pack
 // (<!--skin-theme-->) and admin-supplied custom CSS/JS (<!--skin-custom-head-->
 // / <!--skin-custom-body-->), with SEO handled by internal/seo.
@@ -58,20 +61,18 @@ type FooterLink struct {
 type Footer struct {
 	Text     string       `json:"text"`
 	Links    []FooterLink `json:"links"`
-	Credit   bool         `json:"credit"`
 	SiteName string       `json:"siteName"`
 	Year     int          `json:"year"`
 }
 
 // Settings is the admin-editable appearance configuration.
 type Settings struct {
-	ActiveTheme  string       `json:"active_theme"`
-	CustomCSS    string       `json:"custom_css"`
-	CustomJS     string       `json:"custom_js"`
-	CustomHead   string       `json:"custom_head_html"`
-	FooterText   string       `json:"footer_text"`
-	FooterLinks  []FooterLink `json:"footer_links"`
-	FooterCredit bool         `json:"footer_credit"`
+	ActiveTheme string       `json:"active_theme"`
+	CustomCSS   string       `json:"custom_css"`
+	CustomJS    string       `json:"custom_js"`
+	CustomHead  string       `json:"custom_head_html"`
+	FooterText  string       `json:"footer_text"`
+	FooterLinks []FooterLink `json:"footer_links"`
 }
 
 // Engine renders the injection blocks.
@@ -110,12 +111,6 @@ func (e *Engine) Settings(ctx context.Context) Settings {
 	s.CustomJS = get("custom_js")
 	s.CustomHead = get("custom_head_html")
 	s.FooterText = get("footer_text")
-	// Credit defaults to on: existing sites keep today's "Powered by" line
-	// until an admin explicitly turns it off.
-	s.FooterCredit = true
-	if v, ok, err := e.opts.GetOption(ctx, "footer_credit"); err == nil && ok {
-		s.FooterCredit = v != "0"
-	}
 	if raw := get("footer_links"); raw != "" {
 		var links []FooterLink
 		if err := json.Unmarshal([]byte(raw), &links); err == nil {
@@ -170,10 +165,6 @@ func (e *Engine) Save(ctx context.Context, s Settings) error {
 	if err != nil {
 		return err
 	}
-	credit := "0"
-	if s.FooterCredit {
-		credit = "1"
-	}
 	pairs := map[string]string{
 		"active_theme":     s.ActiveTheme,
 		"custom_css":       s.CustomCSS,
@@ -181,7 +172,6 @@ func (e *Engine) Save(ctx context.Context, s Settings) error {
 		"custom_head_html": s.CustomHead,
 		"footer_text":      s.FooterText,
 		"footer_links":     string(linksJSON),
-		"footer_credit":    credit,
 	}
 	for k, v := range pairs {
 		if err := e.opts.SetOption(ctx, k, v); err != nil {
@@ -206,7 +196,6 @@ func (e *Engine) FooterData(ctx context.Context, siteName, siteURL string, year 
 	return Footer{
 		Text:     text,
 		Links:    links,
-		Credit:   s.FooterCredit,
 		SiteName: siteName,
 		Year:     year,
 	}
@@ -236,16 +225,17 @@ func (f Footer) HTML() template.HTML {
 		text = strings.ReplaceAll(text, "\n", "<br>")
 		b.WriteString(`<p class="site-footer-text">` + text + `</p>`)
 	}
-	if f.Credit {
-		b.WriteString(`<p class="site-footer-credit">Powered by <a href="https://github.com/YimingZhanshen/skin-nexus" target="_blank" rel="noopener noreferrer">SkinNexus</a>`)
-		if f.SiteName != "" {
-			b.WriteString(` · © `)
-			b.WriteString(strconv.Itoa(f.Year))
-			b.WriteString(` `)
-			b.WriteString(stdhtml.EscapeString(f.SiteName))
-		}
-		b.WriteString(`</p>`)
+	// Attribution is intentionally not configurable: AGPL §5 requires the
+	// copyright notice to stay visible, and hiding it is not a supported knob.
+	b.WriteString(`<!-- SkinNexus · Copyright (C) 2026 SkinNexus contributors · AGPL-3.0 -->`)
+	b.WriteString(`<p class="site-footer-credit">Powered by <a href="https://github.com/YimingZhanshen/skin-nexus" target="_blank" rel="noopener noreferrer">SkinNexus</a>`)
+	if f.SiteName != "" {
+		b.WriteString(` · © `)
+		b.WriteString(strconv.Itoa(f.Year))
+		b.WriteString(` `)
+		b.WriteString(stdhtml.EscapeString(f.SiteName))
 	}
+	b.WriteString(`</p>`)
 	return template.HTML(b.String())
 }
 

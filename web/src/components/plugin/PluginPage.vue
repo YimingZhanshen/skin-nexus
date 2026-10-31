@@ -23,9 +23,17 @@ const title = computed(() => {
   <div v-if="!page" class="card">
     <h2>{{ t('pluginUi.notFound') }}</h2>
   </div>
+  <div v-else-if="page.render.type === 'iframe'" class="card plugin-page">
+    <PluginFrame :plugin="page.plugin" :src="page.render.src" :title="title" :height="520" />
+  </div>
   <div v-else class="card">
     <h2 style="margin-top: 0;">{{ title }}</h2>
-    <PluginFrame v-if="page.render.type === 'iframe'" :plugin="page.plugin" :src="page.render.src" :title="title" :height="420" />
-    <p v-else class="muted">{{ t('pluginUi.schemaUnsupported') }}</p>
+    <p class="muted">{{ t('pluginUi.schemaUnsupported') }}</p>
   </div>
 </template>
+
+<style scoped>
+/* The iframe owns its own padding/title; a host heading here duplicated it
+   and the card padding made plugin pages look boxed-in on wide screens. */
+.plugin-page { padding: 0; overflow: hidden; }
+</style>

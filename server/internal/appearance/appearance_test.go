@@ -93,9 +93,8 @@ func TestNoThemeNoMarkersLeft(t *testing.T) {
 
 func TestFooterDataAndHTML(t *testing.T) {
 	e := NewEngine(&fakeOpts{kv: map[string]string{
-		"footer_text":   "© {year} {site_name} · 浙ICP备123号\n第二行",
-		"footer_links":  `[{"label":"友链","url":"https://example.com/a?b=1&c=2"},{"label":"备案","url":"https://beian.miit.gov.cn/"}]`,
-		"footer_credit": "1",
+		"footer_text":  "© {year} {site_name} · 浙ICP备123号\n第二行",
+		"footer_links": `[{"label":"友链","url":"https://example.com/a?b=1&c=2"},{"label":"备案","url":"https://beian.miit.gov.cn/"}]`,
 	}}, testRegistry(t))
 	f := e.FooterData(context.Background(), "示例站", "https://skin.example.com/", 2026)
 	if f.Text != "© 2026 示例站 · 浙ICP备123号\n第二行" {
@@ -104,7 +103,7 @@ func TestFooterDataAndHTML(t *testing.T) {
 	if len(f.Links) != 2 || f.Links[0].Label != "友链" {
 		t.Fatalf("footer links = %#v", f.Links)
 	}
-	if !f.Credit || f.Year != 2026 || f.SiteName != "示例站" {
+	if f.Year != 2026 || f.SiteName != "示例站" {
 		t.Fatalf("footer metadata = %#v", f)
 	}
 	html := string(f.HTML())
@@ -121,14 +120,15 @@ func TestFooterDataAndHTML(t *testing.T) {
 	}
 }
 
-func TestFooterDefaultsToCredit(t *testing.T) {
+func TestFooterAlwaysShowsCopyright(t *testing.T) {
 	e := NewEngine(&fakeOpts{}, testRegistry(t))
 	f := e.FooterData(context.Background(), "示例站", "https://skin.example.com", 2026)
-	if !f.Credit || len(f.Links) != 0 {
+	if len(f.Links) != 0 {
 		t.Fatalf("default footer = %#v", f)
 	}
-	if !strings.Contains(string(f.HTML()), "Powered by") {
-		t.Fatalf("default footer must keep credit: %s", f.HTML())
+	html := string(f.HTML())
+	if !strings.Contains(html, "Powered by") || !strings.Contains(html, "Copyright (C) 2026 SkinNexus") {
+		t.Fatalf("footer must keep the copyright line: %s", html)
 	}
 }
 
@@ -136,7 +136,6 @@ func TestFooterEscapesAndDropsUnsafeLinks(t *testing.T) {
 	f := Footer{
 		Text:     `<script>alert(1)</script>`,
 		Links:    []FooterLink{{Label: `<b>x</b>`, URL: "javascript:alert(1)"}, {Label: "ok", URL: "https://example.com"}},
-		Credit:   false,
 		SiteName: `<img src=x>`,
 		Year:     2026,
 	}
@@ -162,14 +161,13 @@ func TestFooterSaveValidation(t *testing.T) {
 		}
 	}
 	if err := e.Save(context.Background(), Settings{
-		FooterText:   "© {year} {site_name}",
-		FooterLinks:  []FooterLink{{Label: "友链", URL: "https://example.com"}},
-		FooterCredit: false,
+		FooterText:  "© {year} {site_name}",
+		FooterLinks: []FooterLink{{Label: "友链", URL: "https://example.com"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	got := e.Settings(context.Background())
-	if got.FooterText != "© {year} {site_name}" || len(got.FooterLinks) != 1 || got.FooterCredit {
+	if got.FooterText != "© {year} {site_name}" || len(got.FooterLinks) != 1 {
 		t.Fatalf("saved footer = %#v", got)
 	}
 }

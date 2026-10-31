@@ -410,7 +410,6 @@ func (b *Backend) handleSiteConfig(w http.ResponseWriter, r *http.Request) {
 	year := time.Now().Year()
 	footer := appearance.Footer{
 		Links:    []appearance.FooterLink{},
-		Credit:   true,
 		SiteName: b.SiteName,
 		Year:     year,
 	}

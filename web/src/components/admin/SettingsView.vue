@@ -126,7 +126,6 @@ async function loadAppearance() {
     const data = await fetchJSON('/api/admin/v1/appearance')
     if (!Array.isArray(data.footer_links)) data.footer_links = []
     if (typeof data.footer_text !== 'string') data.footer_text = ''
-    if (typeof data.footer_credit !== 'boolean') data.footer_credit = true
     appearance.value = data
     const th = await fetchJSON('/api/admin/v1/themes')
     themes.value = th.themes || []
@@ -296,10 +295,7 @@ onMounted(load)
         <button class="secondary" type="button" @click="appearance.footer_links.splice(i, 1)">删除</button>
       </div>
       <button class="secondary" type="button" v-if="appearance.footer_links.length < 8" @click="appearance.footer_links.push({ label: '', url: '' })">添加链接</button>
-      <label style="display: flex; align-items: center; gap: 6px; margin-top: 12px;">
-        <input type="checkbox" v-model="appearance.footer_credit" /> 显示“Powered by SkinNexus”版权行
-      </label>
-      <p class="muted" style="font-size: 12px; margin-top: 6px;">页脚文字和链接会公开展示；链接仅支持 http(s) 绝对地址。</p>
+      <p class="muted" style="font-size: 12px; margin-top: 6px;">页脚文字和链接会公开展示；链接仅支持 http(s) 绝对地址。页脚始终保留 SkinNexus 版权行。</p>
       <label style="margin-top: 12px;">自定义 CSS（约 64KB 上限）</label>
       <textarea v-model="appearance.custom_css" rows="5" placeholder=".card { border-radius: 16px; }"></textarea>
       <label>自定义 JS（约 64KB 上限）</label>

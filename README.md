@@ -112,7 +112,7 @@ docker run -d --name skin-nexus --restart unless-stopped -p 8080:8080 \
 
 **站长侧**
 - 管理面板：概览统计、用户 / 角色 / 材质管理、邀请码、站点设置（分组化）、Union 运维、自助诊断
-- 公告（Markdown 双层消毒）、自定义 CSS/JS、主题包切换、自定义页脚（页脚文字 + 友链/备案号链接，SSR 与 SPA 共用）
+- 公告（Markdown 双层消毒）、自定义 CSS/JS、主题包切换、自定义页脚（页脚文字 + 友链/备案号链接，SSR 与 SPA 共用；版权行固定保留）
 - 封禁三层执行、认证限流与失败锁定、SMTP 找回密码
 - 登录与服务器/联盟通信日志（90 天保留）、操作审计
 
@@ -124,7 +124,7 @@ docker run -d --name skin-nexus --restart unless-stopped -p 8080:8080 \
 - 服务端头像与预览渲染：`/avatar/...`、`/preview/...` 输出 PNG
 
 **外观与内容**
-- 主题包体系（零构建：`theme.json` + CSS + 可选 JS）与 [AI 生成提示词模板](docs/theme-spec.md)；页脚文字/友链/备案链接由后台配置，支持主题覆盖
+- 主题包体系（零构建：`theme.json` + CSS + 可选 JS）与 [AI 生成提示词模板](docs/theme-spec.md)；页脚文字/友链/备案链接由后台配置，支持主题覆盖；默认主题采用宽屏内容区（1200/1440）与自适应高度插件页
 - 插件平台 v2（goja）：统一 hookApi 2 + 配置/密钥、命名空间数据、三档路由、事件/guard、sandbox iframe UI；官方有 UI 的插件已接入 `init.locale` 中英文切换，manifest `ui.i18n` 支持 `nav.<page-id>`；P2 起签名 bundle 安装/升级/回滚、单源签名市场与 `skin-plugin` 发布工具链；v0.5 新增受控出站 `net:http` 与持久任务 `schedule:jobs`；官方插件源码与市场仓库 [skin-nexus-plugins](https://github.com/YimingZhanshen/skin-nexus-plugins) 采用 PR 投稿 + CI 签名；`launcher-api` 提供启动器 Bearer API（[规范](docs/launcher-api.md)），`skin-importer` 提供 Mojang/Blessing 单条与批量导入；规范见 [docs/plugin-spec.md](docs/plugin-spec.md)
 - 中英双语（zh-CN / en），语言包可扩展
 - SEO：SSR 落地页与皮肤详情页、sitemap、robots、可整站 noindex（预发环境）

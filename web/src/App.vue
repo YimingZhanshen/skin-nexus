@@ -1,4 +1,5 @@
 <script setup>
+// SkinNexus · Copyright (C) 2026 SkinNexus contributors · AGPL-3.0
 import { ref, computed, watch, onMounted, defineAsyncComponent, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from './api.js'
@@ -61,7 +62,7 @@ const resetDone = ref(false)
 // email field + forgot flow available-or-hidden. Until the fetch resolves
 // (or if it fails) the pre-config UI stays = today's behavior.
 function defaultFooter() {
-  return { text: '', links: [], credit: true, siteName: 'SkinNexus', year: new Date().getFullYear() }
+  return { text: '', links: [], siteName: 'SkinNexus', year: new Date().getFullYear() }
 }
 function normalizeFooter(raw) {
   const f = raw && typeof raw === 'object' ? raw : {}
@@ -546,7 +547,7 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
     <!-- logged-in shell: sidebar + page (blessing 用户中心布局) -->
     <template v-else-if="user">
       <div class="user-shell">
-        <aside class="card user-side">
+        <aside v-if="view !== 'admin'" class="card user-side">
           <nav v-for="(g, gi) in navGroups" :key="gi" class="nav-group">
             <div class="nav-title" v-if="g.items.length">{{ gi === 0 ? t('nav.userCenter') : t('nav.manageGroup') }}</div>
             <button v-for="n in g.items" :key="n.id" class="nav-item"
@@ -572,18 +573,19 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
           <AuthorizedAppsPage v-else-if="view === 'apps'" />
           <UnionBindPage v-else-if="view === 'union'" />
           <PluginPage v-else-if="view === 'ext'" :path="extPath" />
-          <AdminPanel v-else-if="view === 'admin'" :user="user" :site-conf="siteConf" :conf-loaded="confLoaded" />
+          <AdminPanel v-else-if="view === 'admin'" :user="user" :site-conf="siteConf" :conf-loaded="confLoaded" @exit="view = 'dashboard'" />
         </main>
       </div>
     </template>
     </div><!-- /container -->
     <PluginSlot slot="footer.before" />
-    <footer class="site-footer" v-if="siteFooter.links.length || siteFooter.text || siteFooter.credit">
+    <!-- SkinNexus · Copyright (C) 2026 SkinNexus contributors · AGPL-3.0 -->
+    <footer class="site-footer">
       <nav v-if="siteFooter.links.length" class="site-footer-links" aria-label="footer links">
         <a v-for="(l, i) in siteFooter.links" :key="i" :href="l.url" target="_blank" rel="noopener noreferrer">{{ l.label }}</a>
       </nav>
       <p v-if="siteFooter.text" class="site-footer-text">{{ siteFooter.text }}</p>
-      <p v-if="siteFooter.credit" class="site-footer-credit">
+      <p class="site-footer-credit">
         Powered by <a href="https://github.com/YimingZhanshen/skin-nexus" target="_blank" rel="noopener noreferrer">SkinNexus</a><template v-if="siteFooter.siteName"> · © {{ siteFooter.year }} {{ siteFooter.siteName }}</template>
       </p>
     </footer>

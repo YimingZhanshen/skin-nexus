@@ -1,5 +1,7 @@
 package main
 
+// SkinNexus · Copyright (C) 2026 SkinNexus contributors · AGPL-3.0
+
 // texturepage.go: the public, server-rendered texture detail page at
 // /skinlib/{tid} (2026-10-25 拍板: 皮肤详情取代玩家档案页成为搜索引擎的
 // 内容页).
@@ -98,22 +100,22 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   a { color: var(--jade); text-decoration: none; }
   a:hover { color: var(--jade-hi); text-decoration: underline; }
   :focus-visible { outline: 2px solid var(--jade); outline-offset: 2px; }
-  .wrap { flex: 1 0 auto; max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  .wrap { flex: 1 0 auto; width: 100%; max-width: 940px; margin: 0 auto; padding: 32px 24px 56px; }
   .crumb { font-size: 13px; color: var(--moon-2); margin: 8px 0 18px; }
   .card { background: var(--ink-2); border: 1px solid var(--line);
-          border-radius: 10px; padding: 24px;
+          border-radius: 10px; padding: 32px;
           box-shadow: 0 12px 32px -18px rgba(3, 8, 16, .8); }
-  h1 { margin: 0 0 4px; font-family: var(--font-serif); font-size: 26px; font-weight: 600;
+  h1 { margin: 0 0 6px; font-family: var(--font-serif); font-size: 30px; font-weight: 600;
        letter-spacing: .03em; word-break: break-all; }
-  .sub { color: var(--moon-2); font-size: 14px; margin: 0 0 20px; }
+  .sub { color: var(--moon-2); font-size: 15px; margin: 0 0 24px; }
   .viewer { display: flex; justify-content: center; align-items: center;
-            min-height: 300px; margin: 0 0 20px; position: relative; }
-  .viewer img.static { max-height: 280px; image-rendering: pixelated; }
+            min-height: 340px; margin: 0 0 24px; position: relative; }
+  .viewer img.static { max-height: 320px; image-rendering: pixelated; }
   .viewer canvas { display: none; }
   .viewer.ready img.static { display: none; }
   .viewer.ready canvas { display: block; }
-  .meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-          gap: 8px; margin: 0 0 20px; }
+  .meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+          gap: 12px; margin: 0 0 24px; }
   .meta div { position: relative; background: var(--ink-3); border: 1px solid var(--line);
               border-radius: 6px; padding: 10px 12px; }
   /* 赭石回纹角饰（与落地页统计卡同款小音量） */
@@ -157,7 +159,12 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   .report-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
   .report-error { color: var(--danger, #d9564c); font-size: var(--fs-s); }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
-  @media (max-width: 560px) { h1 { font-size: 21px; } .viewer { min-height: 240px; } }
+  @media (max-width: 560px) {
+    .wrap { padding: 20px 14px 40px; }
+    .card { padding: 20px; }
+    h1 { font-size: 23px; }
+    .viewer { min-height: 240px; }
+  }
 </style>
 <!--skin-theme-->
 <!--skin-custom-head-->

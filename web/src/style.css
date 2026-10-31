@@ -1,4 +1,5 @@
 /* ============================================================
+   SkinNexus · Copyright (C) 2026 SkinNexus contributors · AGPL-3.0
    SkinNexus 全站样式 v3 —「月下仙山」全站统一（2026-10-26 大改拍板）
    架构：旧 7 契约键为唯一真源（默认值即国画色），新语义键全部别名到
    契约键 —— 主题包（后注入）覆盖旧键时新键自动跟随，三主题兼容。
@@ -106,10 +107,10 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
 .topbar-right select { width: auto; padding: 4px 8px; min-height: 32px; font-size: var(--fs-s); }
 .topbar-right button { min-height: 32px; padding: 4px 16px; }
 
-.container { max-width: 960px; margin: 0 auto; padding: 24px; }
-/* admin panel carries 8-9 column management tables — the 960px column
-   squeezed them into vertical header wrap + overflowing action buttons */
-.container.wide { max-width: 1280px; }
+.container { width: 100%; max-width: 1200px; margin: 0 auto; padding: 28px 32px; }
+/* admin panel carries 8-9 column management tables and its own sidebar;
+   give it the full desktop canvas rather than nesting it in the user column */
+.container.wide { max-width: 1440px; }
 /* Shell grows its content area so the footer sits at the viewport bottom
    even when a page is short; taller pages still scroll normally. */
 .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
@@ -170,8 +171,8 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--r-l);
-  padding: 20px;
-  margin-bottom: 16px;
+  padding: 24px;
+  margin-bottom: 18px;
   box-shadow: var(--shadow);
   transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-mid) var(--ease);
 }
@@ -250,10 +251,10 @@ tbody tr:hover, table tr:hover { background: var(--hover-wash); }
 }
 
 /* ── 用户中心外壳 ── */
-.user-shell { display: flex; gap: 20px; align-items: flex-start; }
+.user-shell { display: flex; gap: 24px; align-items: flex-start; }
 .user-side {
   position: sticky; top: calc(var(--topbar-h) + 16px);
-  min-width: 196px; padding: 12px;
+  min-width: 220px; padding: 16px;
   display: flex; flex-direction: column; gap: 4px;
 }
 .nav-group + .nav-group { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
@@ -288,6 +289,10 @@ tbody tr:hover, table tr:hover { background: var(--hover-wash); }
 .user-chip .who { font-size: var(--fs-s); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-chip button { min-height: 28px; padding: 4px 8px; font-size: var(--fs-xs); }
 .user-main { flex: 1; min-width: 0; }
+
+@media (max-width: 900px) {
+  .container { padding: 20px 16px; }
+}
 
 /* ── 尊重减弱动效 ── */
 @media (prefers-reduced-motion: reduce) {

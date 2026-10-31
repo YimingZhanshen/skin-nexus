@@ -1,5 +1,7 @@
 package main
 
+// SkinNexus · Copyright (C) 2026 SkinNexus contributors · AGPL-3.0
+
 // landing.go: the public, server-rendered landing page served at "/".
 //
 // Rationale (2026-10-25 拍板): the SPA login card is fine for returning players
@@ -62,6 +64,7 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
      自有 token 命名空间：主题包/custom CSS 在其后注入，仍可整体覆盖（theme-spec §注入顺序）。
      国画色：黛青底 / 月白字 / 朱砂只给主按钮 / 赭石纹线；无大红大紫大金。
      签名元素 = N 字牌（保留原入场编舞，重着色）；远山云雾为唯一景。 */
+  * { box-sizing: border-box; }
   :root {
     color-scheme: dark;
     --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
@@ -84,13 +87,13 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
   .fog-a { bottom: 56px; animation: fogdrift 70s linear infinite; }
   .fog-b { bottom: 150px; opacity: .7; animation: fogdrift 110s linear infinite reverse; }
   @keyframes fogdrift { from { transform: translateX(-4%); } to { transform: translateX(4%); } }
-  .wrap { position: relative; z-index: 1; flex: 1 0 auto; max-width: 880px; margin: 0 auto; padding: 24px 16px 48px; }
+  .wrap { position: relative; z-index: 1; flex: 1 0 auto; width: 100%; max-width: 1040px; margin: 0 auto; padding: 32px 24px 56px; }
   /* 首屏 */
-  .hero { position: relative; padding: 56px 0 32px; text-align: center; }
+  .hero { position: relative; padding: 72px 0 44px; text-align: center; }
   .hero > * { position: relative; }
-  .hero h1 { margin: 0 0 8px; font-family: var(--font-serif); font-size: 42px; font-weight: 600;
+  .hero h1 { margin: 0 0 10px; font-family: var(--font-serif); font-size: 48px; font-weight: 600;
              letter-spacing: .06em; line-height: 1.25; }
-  .hero .tag { color: var(--moon-2); font-size: 15px; margin: 0 0 24px; }
+  .hero .tag { color: var(--moon-2); font-size: 16px; margin: 0 0 28px; }
   .cta a { display: inline-block; margin: 0 8px; padding: 11px 28px; border-radius: 4px;
            font-size: 15px; text-decoration: none; font-weight: 600; transition: background .12s, border-color .12s; }
   .cta .primary { background: var(--cinnabar); color: var(--on-cinnabar); }
@@ -99,16 +102,16 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
   .cta .alt:hover { background: var(--ink-2); border-color: var(--ochre); }
   .cta a:focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
   /* 统计卡：赭石回纹角饰（小音量），数字用赭石（朱砂只留给主按钮） */
-  .stats { display: flex; gap: 12px; margin: 28px 0; }
-  .stats div { position: relative; flex: 1; text-align: center; padding: 18px 8px; border-radius: 4px;
+  .stats { display: flex; gap: 16px; margin: 32px 0; }
+  .stats div { position: relative; flex: 1; text-align: center; padding: 22px 12px; border-radius: 4px;
                background: var(--ink-2); border: 1px solid var(--line);
                font-variant-numeric: tabular-nums; }
   .stats div::before, .stats div::after { content: ""; position: absolute; width: 10px; height: 10px;
                border: 1.5px solid var(--ochre); opacity: .6; }
   .stats div::before { top: 6px; left: 6px; border-right: none; border-bottom: none; }
   .stats div::after { bottom: 6px; right: 6px; border-left: none; border-top: none; }
-  .stats b { display: block; font-size: 26px; color: var(--ochre); font-weight: 600; }
-  .stats span { font-size: 13px; color: var(--moon-2); }
+  .stats b { display: block; font-size: 30px; color: var(--ochre); font-weight: 600; }
+  .stats span { font-size: 14px; color: var(--moon-2); }
   /* 祥云分隔：一枝纹样 repeat-x */
   .divider { height: 26px; margin: 4px 0 0; opacity: .55; background-repeat: repeat-x;
              background-position: center; background-size: auto 26px;
@@ -121,15 +124,15 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
             transition: background .12s, border-color .12s; }
   .more a:hover { background: var(--ink-3); border-color: var(--ochre);
                   color: var(--moon); text-decoration: none; }
-  .intro { line-height: 1.8; color: var(--moon); margin: 24px 0; max-width: 34em; }
-  .feat h2 { font-family: var(--font-serif); font-size: 21px; margin: 32px 0 16px; font-weight: 600;
+  .intro { line-height: 1.85; color: var(--moon); margin: 28px 0; max-width: 46em; font-size: 16px; }
+  .feat h2 { font-family: var(--font-serif); font-size: 24px; margin: 36px 0 18px; font-weight: 600;
              letter-spacing: .04em; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
-  .grid figure { margin: 0; padding: 10px; border-radius: 4px; text-align: center;
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 16px; }
+  .grid figure { margin: 0; padding: 14px; border-radius: 4px; text-align: center;
                  background: var(--ink-2); border: 1px solid var(--line); transition: border-color .12s; }
   .grid figure:hover { border-color: var(--ochre); }
-  .grid img { max-width: 96px; max-height: 96px; image-rendering: pixelated; }
-  .grid figcaption { font-size: 12px; color: var(--moon-2); margin-top: 6px;
+  .grid img { max-width: 112px; max-height: 112px; image-rendering: pixelated; }
+  .grid figcaption { font-size: 13px; color: var(--moon-2); margin-top: 8px;
                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   footer.site-footer { position: relative; z-index: 1; flex: none; margin-top: 40px; padding: 16px 16px 24px;
            text-align: center; font-size: 12px; color: var(--moon-2); border-top: 1px solid var(--line); }
@@ -202,7 +205,14 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
     }
     .scene-fog { animation: none !important; }
   }
-  @media (max-width: 560px) { .hero h1 { font-size: 30px; } .stats { flex-wrap: wrap; } .brandmark { width: 88px; height: 88px; margin-bottom: 14px; } }
+  @media (max-width: 640px) {
+    .wrap { padding: 20px 14px 40px; }
+    .hero { padding: 48px 0 28px; }
+    .hero h1 { font-size: 32px; }
+    .stats { flex-wrap: wrap; gap: 8px; margin: 24px 0; }
+    .stats div { min-width: calc(50% - 4px); padding: 16px 8px; }
+    .brandmark { width: 88px; height: 88px; margin-bottom: 14px; }
+  }
 </style>
 </head>
 <body>
