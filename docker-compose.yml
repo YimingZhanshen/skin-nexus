@@ -45,6 +45,9 @@ services:
       # values for a fork, or set SKIN_PLUGIN_MARKET_URL='' to disable it.
       SKIN_PLUGIN_MARKET_URL: '${SKIN_PLUGIN_MARKET_URL:-https://yimingzhanshen.github.io/skin-nexus-plugins/v1/registry.json}'
       SKIN_PLUGIN_TRUST_KEYS: '${SKIN_PLUGIN_TRUST_KEYS:-market-2026-10:ID2EWgcfs1E4UbGCCX9WjD0aCgTof3oeuHV03IpdGNY=}'
+      # Theme market: same distribution repo, independent keyring (theme-market-2026-11).
+      SKIN_THEME_MARKET_URL: '${SKIN_THEME_MARKET_URL:-https://yimingzhanshen.github.io/skin-nexus-plugins/themes/v1/registry.json}'
+      SKIN_THEME_TRUST_KEYS: '${SKIN_THEME_TRUST_KEYS:-theme-market-2026-11:EXxNehbsxNG9gdYUztMl/EU/lZ09+fPftPvmjeqPr/I=}'
       # SKIN_PLUGIN_STATE_DIR: '/data/plugins/.state'
       # SKIN_PLUGIN_UPLOAD_MAX: '67108864' 
       # SKIN_UNION_ENABLED: 'false'                 # MUA Union member module (zero surface when off)

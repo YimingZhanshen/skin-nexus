@@ -4,6 +4,7 @@
 
 ## 2026-11-01
 
+- **主题市场上线**：管理面板「外观」新增主题市场（官方注册表浏览/安装/更新/卸载）与本地主题包上传（zip ≤16MiB，两步检查→确认）。与插件市场同仓不同路径（`themes/v1/`）、**独立 Ed25519 密钥**（`theme-market-2026-11`，`SKIN_THEME_TRUST_KEYS`/`SKIN_THEME_MARKET_URL` 配置）；市场包四道校验（注册表签名→size/sha256→包内验签→theme.json 结构），安装/卸载**热生效无需重启**，使用中主题禁止卸载，写操作要求超管网页会话+同源 CSRF。`skin-plugin` 新增 `pack-theme` 与 `registry --kind theme`（确定性 zip、同版本不可变）；官方首批上架 azure-glass/ember-forge/verdigris-atelier，线上注册表已发布验证。详见 `docs/theme-spec.md` §7.1。
 - **文案实体与孤行修复**：`admin.pluginsHint` 在文本插值里写了 `&lt;名称&gt;` 实体（文本模式不解码，页面显示实体原文），改为裸 `<名称>`（中英）；落地页一句话简介的 `max-width: 46em` 把「服务器」劈成 8 字孤行，放宽到 62em 使整句单行排下。
 - **复选框拉伸修复**：全局 `input{width:100%}` 把「设置为私密材质」等复选/单选控件拉成整行蓝块（用户标注）；现为原生控件重置 auto 宽度 + 朱砂 `accent-color`，触屏 44px 命中区改由包裹的 label 承担，并清除各组件里零散的 `width:auto` 内联补丁。
 - **默认主题全面升级（v3.3 六阶段）**：
