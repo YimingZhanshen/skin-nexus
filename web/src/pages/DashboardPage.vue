@@ -215,7 +215,7 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
   <!-- announcement (Markdown, double-sanitized) -->
   <div class="card" v-if="announcement">
     <h2>{{ t('dashboard.announcement') }}</h2>
-    <div class="md" v-html="announcementHtml"></div>
+    <div class="md md-wide" v-html="announcementHtml"></div>
   </div>
 
   <!-- usage + launcher quick config -->
@@ -281,7 +281,7 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
           </div>
           <textarea v-if="detailTab === 'edit'" v-model="uploadDetail" rows="6" maxlength="4000"
                     :placeholder="t('dashboard.detailHint')"></textarea>
-          <div v-else class="md detail-preview">
+          <div v-else class="md md-wide detail-preview">
             <div v-if="detailHtml" v-html="detailHtml"></div>
             <span v-else class="muted">{{ t('dashboard.detailEmpty') }}</span>
           </div>
@@ -342,6 +342,9 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
 /* 公告 markdown 排版 v3「月下仙山」：宋体大标题、8px 节奏、青瓷链接、
    赭石引用线；内容里的 emoji 属公告作者表达，不剥离。 */
 .md { margin-top: 8px; line-height: 1.75; font-size: var(--fs-m); }
+/* Theme packs cap .md paragraphs at 34em for reading measure; the dashboard
+   announcement/description cards should use the full card width. */
+.md.md.md-wide p, .md.md.md-wide li { max-width: none; }
 .md :deep(h1) { font-family: var(--font-serif); font-size: var(--fs-xl); letter-spacing: .03em;
                 margin: 4px 0 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 .md :deep(h2) { font-size: var(--fs-l); margin: 24px 0 8px; }

@@ -142,6 +142,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   footer a { color: var(--gold); }
   .detail-block { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
   .detail-block h2 { font-size: var(--fs-m); margin: 0 0 8px; }
+  .md.md.md-wide p, .md.md.md-wide li { max-width: none; }
   .source-line { margin: 0 0 8px; color: var(--muted); font-size: var(--fs-s); }
   .source-line a { color: var(--jade); }
   .report-dialog { border: 1px solid var(--border); border-radius: var(--r-m); background: var(--panel);
@@ -177,7 +178,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
       <section class="detail-block">
         <h2>材质描述</h2>
         {{if .SourceLabel}}<p class="source-line">来源：{{if .SourceURL}}<a href="{{.SourceURL}}" target="_blank" rel="nofollow noopener">{{.SourceLabel}}</a>{{else}}{{.SourceLabel}}{{end}}</p>{{end}}
-        {{if .DetailHTML}}<div class="md">{{.DetailHTML}}</div>{{end}}
+        {{if .DetailHTML}}<div class="md md-wide">{{.DetailHTML}}</div>{{end}}
       </section>
       {{end}}
       <div class="actions">
