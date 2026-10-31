@@ -22,6 +22,7 @@ services:
     environment:
       SKIN_LISTEN: ':8080'
       SKIN_BASE_URL: '${SKIN_BASE_URL:?set SKIN_BASE_URL in .env}'
+      SKIN_ENV: '${SKIN_ENV:-production}'
       SKIN_DATABASE_DSN: 'skin:${SKIN_DB_PASSWORD:?set SKIN_DB_PASSWORD in .env}@tcp(db:3306)/skin_nexus?parseTime=true&charset=utf8mb4'
       SKIN_DATA_DIR: /data
       SKIN_AUTO_MIGRATE: 'true'

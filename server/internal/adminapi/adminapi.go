@@ -16,6 +16,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"time"
 
 	"skin-nexus/server/internal/jobs"
 	"skin-nexus/server/internal/plugin"
@@ -56,8 +57,19 @@ type Backend struct {
 	// union_api_root / union_member_key take effect without a restart,
 	// 2026-10-24 拍板「热切换」).
 	OnSettingChanged func(key, value string)
-	// Version is the build version injected by main (status page display).
-	Version string
+	// Build/runtime facts injected by main for the status page.
+	Version       string
+	BuildCommit   string
+	BuildTime     string
+	BuildBranch   string
+	Environment   string
+	BaseURL       string
+	Listen        string
+	DataDir       string
+	MigrationsDir string
+	SiteName      string
+	StartedAt     time.Time
+	OIDCEnabled   bool
 	// StorageBytes sums the texture files on disk (main injects a walk of
 	// the textures dir — the textures table has no size column and the
 	// schema is frozen; nil = storage card shows "—").
@@ -262,14 +274,56 @@ func (b *Backend) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		migVer = "?"
 	}
+	hostname, _ := os.Hostname()
+	container := "host"
+	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+		container = "kubernetes"
+	} else if _, err := os.Stat("/.dockerenv"); err == nil {
+		container = "docker"
+	}
+	started := ""
+	uptime := int64(0)
+	if !b.StartedAt.IsZero() {
+		started = b.StartedAt.UTC().Format(time.RFC3339)
+		uptime = int64(time.Since(b.StartedAt).Seconds())
+	}
+	envName := b.Environment
+	if envName == "" {
+		envName = "production"
+	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"version":      b.Version,
 		"goVersion":    runtime.Version(),
 		"mysqlVersion": mysqlVer,
 		"migration":    migVer,
+		"build": map[string]string{
+			"version": b.Version,
+			"commit":  b.BuildCommit,
+			"time":    b.BuildTime,
+			"branch":  b.BuildBranch,
+		},
+		"runtime": map[string]interface{}{
+			"goVersion":     runtime.Version(),
+			"os":            runtime.GOOS,
+			"arch":          runtime.GOARCH,
+			"hostname":      hostname,
+			"container":     container,
+			"pid":           os.Getpid(),
+			"startedAt":     started,
+			"uptimeSeconds": uptime,
+		},
+		"environment": map[string]string{
+			"name":          envName,
+			"siteName":      b.SiteName,
+			"baseURL":       b.BaseURL,
+			"listen":        b.Listen,
+			"dataDir":       b.DataDir,
+			"migrationsDir": b.MigrationsDir,
+		},
 		"modules": map[string]bool{
 			"union":      b.union.Status != nil,
 			"appearance": b.appearance != nil,
+			"oidc":       b.OIDCEnabled,
 		},
 		"signKeyFingerprint": b.Ygg.SignerFingerprint(),
 	})

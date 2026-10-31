@@ -57,7 +57,7 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
 <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="48x48" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <link rel="manifest" href="/manifest.webmanifest" />
-<meta name="theme-color" content="#16202e" />
+<meta name="theme-color" content="#101825" />
 {{.HeadAnchors}}
 <style>
   /* 落地页设计语言「月下仙山」（2026-10-26 用户 brief：中国古风仙侠）。
@@ -68,11 +68,16 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
   :root {
     color-scheme: dark;
     --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
-    --ink: #16202e; --ink-2: #1c2839; --ink-3: #243347;
-    --line: rgba(169, 138, 95, .30);
-    --moon: #e9edf1; --moon-2: #aab6c4;
-    --cinnabar: #b0453a; --cinnabar-hi: #c25446; --on-cinnabar: #fdf3ec;
-    --ochre: #c9a06a;
+    --bg: #101825; --panel: #16202e;
+    --border: rgba(169, 138, 95, .24); --text: #e9edf1; --muted: #a8b4c3;
+    --accent: #b0453a;
+    --ink: var(--bg); --ink-2: var(--panel); --ink-3: #1d2a3d;
+    --line: var(--border); --line-strong: rgba(169, 138, 95, .45);
+    --moon: var(--text); --moon-2: var(--muted);
+    --cinnabar: var(--accent); --cinnabar-hi: #c25446; --on-cinnabar: #fdf3ec;
+    --jade: #67b7a0; --jade-hi: #7fcbb3; --gold: #c9a06a; --ochre: var(--gold);
+    --r-s: 4px; --r-m: 6px; --r-l: 10px;
+    --shadow: 0 12px 32px -18px rgba(3, 8, 16, .8);
   }
   body { margin: 0; min-height: 100vh; display: flex; flex-direction: column;
          font-family: "Segoe UI", "Inter", "PingFang SC", "HarmonyOS Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
@@ -103,8 +108,8 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
   .cta a:focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
   /* 统计卡：赭石回纹角饰（小音量），数字用赭石（朱砂只留给主按钮） */
   .stats { display: flex; gap: 16px; margin: 32px 0; }
-  .stats div { position: relative; flex: 1; text-align: center; padding: 22px 12px; border-radius: 4px;
-               background: var(--ink-2); border: 1px solid var(--line);
+  .stats div { position: relative; flex: 1; text-align: center; padding: 22px 12px; border-radius: var(--r-l);
+               background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
                font-variant-numeric: tabular-nums; }
   .stats div::before, .stats div::after { content: ""; position: absolute; width: 10px; height: 10px;
                border: 1.5px solid var(--ochre); opacity: .6; }
@@ -128,16 +133,17 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
   .feat h2 { font-family: var(--font-serif); font-size: 24px; margin: 36px 0 18px; font-weight: 600;
              letter-spacing: .04em; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 16px; }
-  .grid figure { margin: 0; padding: 14px; border-radius: 4px; text-align: center;
-                 background: var(--ink-2); border: 1px solid var(--line); transition: border-color .12s; }
+  .grid figure { margin: 0; padding: 14px; border-radius: var(--r-l); text-align: center;
+                 background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
+                 transition: border-color .12s, transform .12s; }
   .grid figure:hover { border-color: var(--ochre); }
   .grid img { max-width: 112px; max-height: 112px; image-rendering: pixelated; }
   .grid figcaption { font-size: 13px; color: var(--moon-2); margin-top: 8px;
                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  footer.site-footer { position: relative; z-index: 1; flex: none; margin-top: 40px; padding: 16px 16px 24px;
-           text-align: center; font-size: 12px; color: var(--moon-2); border-top: 1px solid var(--line); }
-  footer.site-footer a { color: var(--ochre); text-decoration: none; }
-  footer.site-footer a:hover { text-decoration: underline; }
+  footer.site-footer { position: relative; z-index: 1; flex: none; margin-top: 32px; padding: 18px 24px 24px;
+           text-align: center; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+  footer.site-footer a { color: var(--jade); text-decoration: none; }
+  footer.site-footer a:hover { color: var(--jade-hi); text-decoration: underline; }
   .site-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 0 0 8px; }
   .site-footer-text { margin: 0 0 6px; white-space: pre-line; }
   .site-footer-credit { margin: 0; }

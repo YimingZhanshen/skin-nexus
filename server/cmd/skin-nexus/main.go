@@ -22,6 +22,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
@@ -50,7 +51,42 @@ import (
 	"skin-nexus/server/internal/ygg"
 )
 
-var version = "0.5.0"
+var (
+	version     = "0.5.0"
+	commit      = ""
+	buildTime   = ""
+	buildBranch = ""
+)
+
+// buildVersionInfo: ldflags values win; local go builds fill the commit from
+// the VCS stamp when present. Branch is only available from CI build args.
+func buildVersionInfo() (string, string, string) {
+	c, t, b := commit, buildTime, buildBranch
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range info.Settings {
+			switch s.Key {
+			case "vcs.revision":
+				if c == "" {
+					c = s.Value
+				}
+			case "vcs.time":
+				if t == "" {
+					t = s.Value
+				}
+			}
+		}
+	}
+	if c == "" {
+		c = "unknown"
+	}
+	if t == "" {
+		t = "unknown"
+	}
+	if b == "" {
+		b = "unknown"
+	}
+	return c, t, b
+}
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "version" {
@@ -69,6 +105,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
+	startedAt := time.Now()
 
 	// Legacy verifier: built from optional legacy .env (SKIN_LEGACY_ENV).
 	var legacy *auth.LegacyVerifier
@@ -473,7 +510,19 @@ func main() {
 			pluginHost.EmitEvent(ctx, "user.deleted", plugin.EventPayload{UserID: e.UserID})
 		}
 	}
+	buildCommit, buildStamp, buildBranchName := buildVersionInfo()
 	admin.Version = version
+	admin.BuildCommit = buildCommit
+	admin.BuildTime = buildStamp
+	admin.BuildBranch = buildBranchName
+	admin.Environment = cfg.Environment
+	admin.BaseURL = cfg.BaseURL
+	admin.Listen = cfg.Listen
+	admin.DataDir = cfg.DataDir
+	admin.MigrationsDir = cfg.MigrationsDir
+	admin.SiteName = cfg.SiteName
+	admin.StartedAt = startedAt
+	admin.OIDCEnabled = cfg.OIDCEnabled
 	// Union hot settings (2026-10-24 拍板「热切换」): the three hot keys apply
 	// on save without a restart; the rest of the union group is marked
 	// restart-only in the settings panel.

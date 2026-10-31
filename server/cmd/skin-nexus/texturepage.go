@@ -54,6 +54,7 @@ type texDetailData struct {
 	Summary       string
 	DetailRaw     string
 	CanEdit       bool
+	LoggedIn      bool
 	Year          int
 	FooterHTML    template.HTML
 
@@ -71,7 +72,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
 <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="48x48" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <link rel="manifest" href="/manifest.webmanifest" />
-<meta name="theme-color" content="#16202e" />
+<meta name="theme-color" content="#101825" />
 {{.HeadAnchors}}
 <style>
   /* 详情页设计语言 v3「月下仙山」（与落地页同 token 命名空间；
@@ -79,17 +80,21 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   :root {
     color-scheme: dark;
     --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
-    --ink: #16202e; --ink-2: #1c2839; --ink-3: #243347;
-    --line: rgba(169, 138, 95, .30);
-    --line-strong: rgba(169, 138, 95, .45);
-    --moon: #e9edf1; --moon-2: #aab6c4;
-    --cinnabar: #b0453a; --cinnabar-hi: #c25446; --on-cinnabar: #fdf3ec;
+    --bg: #101825; --panel: #16202e;
+    --border: rgba(169, 138, 95, .24); --text: #e9edf1; --muted: #a8b4c3;
+    --accent: #b0453a;
+    --ink: var(--bg); --ink-2: var(--panel); --ink-3: #1d2a3d;
+    --line: var(--border); --line-strong: rgba(169, 138, 95, .45);
+    --moon: var(--text); --moon-2: var(--muted);
+    --cinnabar: var(--accent); --cinnabar-hi: #c25446; --on-cinnabar: #fdf3ec;
     --jade: #67b7a0; --jade-hi: #7fcbb3;
     --gold: #c9a06a;
     --danger: #d9564c;
     --sel: rgba(176, 69, 58, .35);
     --ring-cinnabar: rgba(176, 69, 58, .18);
     --glow-cinnabar: rgba(176, 69, 58, .6);
+    --r-s: 4px; --r-m: 6px; --r-l: 10px;
+    --shadow: 0 12px 32px -18px rgba(3, 8, 16, .8);
   }
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; display: flex; flex-direction: column;
@@ -100,11 +105,27 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   a { color: var(--jade); text-decoration: none; }
   a:hover { color: var(--jade-hi); text-decoration: underline; }
   :focus-visible { outline: 2px solid var(--jade); outline-offset: 2px; }
+  .topbar { position: sticky; top: 0; z-index: 50; flex: none; height: var(--topbar-h, 56px);
+            background: color-mix(in srgb, var(--bg) 82%, transparent);
+            -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--line); }
+  .topbar-inner { width: 100%; max-width: 940px; margin: 0 auto; padding: 0 24px; height: 100%;
+                  display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .topbar .brand { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--moon); }
+  .topbar .brand:hover { text-decoration: none; }
+  .topbar .brand img { width: 26px; height: 26px; display: block; flex: none; }
+  .topbar .brand span { font-family: var(--font-serif); font-size: 20px; font-weight: 600; letter-spacing: .06em;
+                        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topnav { display: flex; align-items: center; gap: 4px; flex: none; }
+  .topnav a { padding: 6px 10px; border-radius: var(--r-s); color: var(--jade); font-size: 14px; }
+  .topnav a:hover { background: var(--hover-wash, rgba(233,237,241,.05)); color: var(--jade-hi); text-decoration: none; }
+  .topnav a.primary { background: var(--cinnabar); color: var(--on-cinnabar); font-weight: 600; }
+  .topnav a.primary:hover { background: var(--cinnabar-hi); color: var(--on-cinnabar); }
   .wrap { flex: 1 0 auto; width: 100%; max-width: 940px; margin: 0 auto; padding: 32px 24px 56px; }
-  .crumb { font-size: 13px; color: var(--moon-2); margin: 8px 0 18px; }
-  .card { background: var(--ink-2); border: 1px solid var(--line);
-          border-radius: 10px; padding: 32px;
-          box-shadow: 0 12px 32px -18px rgba(3, 8, 16, .8); }
+  .crumb { font-size: 13px; color: var(--muted); margin: 0 0 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line);
+          border-radius: var(--r-l); padding: 32px;
+          box-shadow: var(--shadow); }
   h1 { margin: 0 0 6px; font-family: var(--font-serif); font-size: 30px; font-weight: 600;
        letter-spacing: .03em; word-break: break-all; }
   .sub { color: var(--moon-2); font-size: 15px; margin: 0 0 24px; }
@@ -117,7 +138,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   .meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
           gap: 12px; margin: 0 0 24px; }
   .meta div { position: relative; background: var(--ink-3); border: 1px solid var(--line);
-              border-radius: 6px; padding: 10px 12px; }
+              border-radius: var(--r-m); padding: 10px 12px; }
   /* 赭石回纹角饰（与落地页统计卡同款小音量） */
   .meta div::before, .meta div::after { content: ""; position: absolute; width: 8px; height: 8px;
               border: 1.5px solid var(--gold); opacity: .55; }
@@ -127,7 +148,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   .meta dd { margin: 0; font-size: 14px; font-weight: 600; word-break: break-all;
              font-variant-numeric: tabular-nums; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .actions a, .actions button { display: inline-block; padding: 9px 20px; border-radius: 4px;
+  .actions a, .actions button { display: inline-block; padding: 9px 20px; border-radius: var(--r-s);
         font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer;
         font-family: inherit; transition: background .14s cubic-bezier(.22,1,.36,1),
         border-color .14s cubic-bezier(.22,1,.36,1), transform .14s cubic-bezier(.22,1,.36,1),
@@ -141,9 +162,10 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   .actions .alt:hover { background: var(--ink-3); border-color: var(--gold);
                   color: var(--moon); text-decoration: none; }
   .like-btn.liked { color: var(--danger); border-color: var(--danger); }
-  footer.site-footer { position: relative; flex: none; margin-top: 32px; padding: 16px 16px 24px;
-           text-align: center; font-size: 12px; color: var(--moon-2); border-top: 1px solid var(--line); }
-  footer.site-footer a { color: var(--gold); }
+  footer.site-footer { position: relative; flex: none; margin-top: 32px; padding: 18px 24px 24px;
+           text-align: center; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+  footer.site-footer a { color: var(--jade); }
+  footer.site-footer a:hover { color: var(--jade-hi); }
   .site-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 0 0 8px; }
   .site-footer-text { margin: 0 0 6px; white-space: pre-line; }
   .site-footer-credit { margin: 0; }
@@ -160,6 +182,9 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   .report-error { color: var(--danger, #d9564c); font-size: var(--fs-s); }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
   @media (max-width: 560px) {
+    .topbar-inner { padding: 0 14px; }
+    .topbar .brand span { font-size: 17px; }
+    .topnav a { padding: 5px 8px; }
     .wrap { padding: 20px 14px 40px; }
     .card { padding: 20px; }
     h1 { font-size: 23px; }
@@ -170,6 +195,18 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
 <!--skin-custom-head-->
 </head>
 <body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <img src="/favicon.svg" alt="" />
+        <span>{{.SiteName}}</span>
+      </a>
+      <nav class="topnav" aria-label="site">
+        <a href="/skinlib">皮肤库</a>
+        {{if .LoggedIn}}<a href="/user/dashboard">用户中心</a>{{else}}<a href="/login">登录</a><a class="primary" href="/register">注册</a>{{end}}
+      </nav>
+    </div>
+  </header>
   <div class="wrap">
     <nav class="crumb"><a href="/">首页</a> › <a href="/skinlib">皮肤库</a> › {{.Name}}</nav>
     <article class="card" itemscope itemtype="https://schema.org/CreativeWork">
@@ -358,6 +395,7 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 			SourceLabel: sourceLabel(row.Source),
 			DetailRaw:   row.DetailMD,
 			CanEdit:     uid != 0 && (uid == row.UID || admin),
+			LoggedIn:    uid != 0,
 		}
 		if d.Name == "" {
 			d.Name = "材质 #" + strconv.FormatInt(row.TID, 10)

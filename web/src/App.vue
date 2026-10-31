@@ -68,8 +68,9 @@ function normalizeFooter(raw) {
   const f = raw && typeof raw === 'object' ? raw : {}
   return { ...defaultFooter(), ...f, links: Array.isArray(f.links) ? f.links : [] }
 }
-const siteConf = ref({ invite_required: false, mail_configured: false, union_enabled: false, footer: defaultFooter() })
+const siteConf = ref({ site_name: '', invite_required: false, mail_configured: false, union_enabled: false, footer: defaultFooter() })
 const siteFooter = computed(() => normalizeFooter(siteConf.value.footer))
+const siteName = computed(() => siteConf.value.site_name || siteFooter.value.siteName || t('site.name'))
 const confLoaded = ref(false)
 // Boot gate: hide the auth/shell until session + site capabilities settle.
 // Without it a logged-in refresh renders the login card first (the old boot
@@ -373,26 +374,28 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
   </div>
   <div v-else class="app-shell">
     <!-- 顶栏：品牌区 + 语言 + 会话操作（sticky 玻璃带） -->
-    <header class="topbar">
-      <a class="brand" href="/" @click.prevent="goHome" :title="t('site.tagline')">
-        <span class="brand-n" v-html="brandSVG"></span>
-        <span class="brand-name">{{ t('site.name') }}</span>
-      </a>
-      <div class="topbar-right">
-        <select :value="locale" class="locale-sel" @change="onLocaleChange">
-          <option value="zh-CN">中文</option>
-          <option value="en">English</option>
-        </select>
-        <template v-if="user">
-          <span class="badge">{{ user.nickname }}</span>
-          <button class="secondary" @click="doLogout">{{ t('common.logout') }}</button>
-        </template>
-        <template v-else>
-          <button class="secondary" @click="view = 'skinlib'">{{ t('nav.skinlib') }}</button>
-          <button class="secondary" @click="view = 'login'">{{ t('common.login') }}</button>
-          <button @click="view = 'register'">{{ t('common.register') }}</button>
-        </template>
-        <PluginSlot slot="app.topbar.after" />
+    <header class="topbar" :class="{ wide: view === 'admin' }">
+      <div class="topbar-inner">
+        <a class="brand" href="/" @click.prevent="goHome" :title="t('site.tagline')">
+          <span class="brand-n" v-html="brandSVG"></span>
+          <span class="brand-name">{{ siteName }}</span>
+        </a>
+        <div class="topbar-right">
+          <select :value="locale" class="locale-sel" @change="onLocaleChange">
+            <option value="zh-CN">中文</option>
+            <option value="en">English</option>
+          </select>
+          <template v-if="user">
+            <span class="badge">{{ user.nickname }}</span>
+            <button class="secondary" @click="doLogout">{{ t('common.logout') }}</button>
+          </template>
+          <template v-else>
+            <button class="secondary" @click="view = 'skinlib'">{{ t('nav.skinlib') }}</button>
+            <button class="secondary" @click="view = 'login'">{{ t('common.login') }}</button>
+            <button @click="view = 'register'">{{ t('common.register') }}</button>
+          </template>
+          <PluginSlot slot="app.topbar.after" />
+        </div>
       </div>
     </header>
 
@@ -411,7 +414,7 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
           <div class="scene-fog fog-a"></div>
           <div class="scene-fog fog-b"></div>
           <div class="scene-copy">
-            <h1>{{ t('site.name') }}</h1>
+            <h1>{{ siteName }}</h1>
             <div class="scene-fact">{{ t('site.tagline') }}</div>
           </div>
         </aside>

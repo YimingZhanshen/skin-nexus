@@ -34,6 +34,7 @@ services:
     environment:
       SKIN_LISTEN: ':8080'
       SKIN_BASE_URL: https://skin.example.com      # <- your public URL (set BEFORE first start: texture URLs + OIDC issuer snapshot it)
+      SKIN_ENV: '${SKIN_ENV:-production}'           # optional label shown on 管理 → 运行状态 (production/demo/...)
       SKIN_DATABASE_DSN: 'skin:CHANGE_ME@tcp(db:3306)/skin_nexus?parseTime=true&charset=utf8mb4'   # <- CHANGE_ME must equal MYSQL_PASSWORD below
       SKIN_DATA_DIR: /data                          # textures/keys/themes root
       SKIN_AUTO_MIGRATE: 'true'                     # empty DB -> apply migrations/

@@ -18,12 +18,22 @@ FROM golang:1.26-alpine AS server
 # goproxy.cn is fast from mainland China but slow/unreliable from GitHub's
 # US runners; CI overrides this build arg with proxy.golang.org.
 ARG GOPROXY=https://goproxy.cn,direct
+ARG BUILD_VERSION=0.5.0
+ARG BUILD_COMMIT=
+ARG BUILD_TIME=
+ARG BUILD_BRANCH=
 ENV GOPROXY=${GOPROXY}
 WORKDIR /build/server
 COPY server/go.mod server/go.sum ./
 RUN go mod download
 COPY server/ ./
-RUN CGO_ENABLED=0 go build -ldflags "-s -w" -o /out/skin-nexus ./cmd/skin-nexus
+RUN CGO_ENABLED=0 go build \
+      -ldflags "-s -w \
+        -X main.version=${BUILD_VERSION} \
+        -X main.commit=${BUILD_COMMIT} \
+        -X main.buildTime=${BUILD_TIME} \
+        -X main.buildBranch=${BUILD_BRANCH}" \
+      -o /out/skin-nexus ./cmd/skin-nexus
 
 # ---- stage 3: runtime ----
 FROM alpine:3.20

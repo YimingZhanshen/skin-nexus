@@ -92,18 +92,22 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
 /* ── 顶栏：sticky 玻璃带（大改新增组件） ── */
 .topbar {
   position: sticky; top: 0; z-index: 50;
-  display: flex; align-items: center; justify-content: space-between;
-  height: var(--topbar-h); padding: 0 20px;
+  height: var(--topbar-h); padding: 0;
   background: color-mix(in srgb, var(--bg) 82%, transparent);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--line);
 }
-.topbar .brand { display: flex; align-items: center; gap: 8px; color: var(--moon); }
+.topbar-inner {
+  width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 32px;
+  height: 100%; display: flex; align-items: center; justify-content: space-between;
+}
+.topbar.wide .topbar-inner { max-width: 1440px; }
+.topbar .brand { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--moon); }
 .topbar .brand:hover { text-decoration: none; }
-.topbar .brand-n { width: 26px; height: 26px; display: block; }
-.topbar .brand-name { font-family: var(--font-serif); font-size: var(--fs-l); font-weight: 600; letter-spacing: .06em; }
-.topbar-right { display: flex; align-items: center; gap: 8px; }
+.topbar .brand-n { width: 26px; height: 26px; display: block; flex: none; }
+.topbar .brand-name { font-family: var(--font-serif); font-size: var(--fs-l); font-weight: 600; letter-spacing: .06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-right { display: flex; align-items: center; gap: 8px; flex: none; }
 .topbar-right select { width: auto; padding: 4px 8px; min-height: 32px; font-size: var(--fs-s); }
 .topbar-right button { min-height: 32px; padding: 4px 16px; }
 
@@ -115,7 +119,7 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
    even when a page is short; taller pages still scroll normally. */
 .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
 .app-shell > .container { flex: 1 0 auto; }
-.crumb { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+.crumb { font-size: 13px; color: var(--muted); margin: 0 0 16px; }
 .crumb a { color: var(--jade); }
 .crumb .sep { margin: 0 6px; color: var(--muted); }
 .site-footer {
@@ -292,6 +296,7 @@ tbody tr:hover, table tr:hover { background: var(--hover-wash); }
 
 @media (max-width: 900px) {
   .container { padding: 20px 16px; }
+  .topbar-inner { padding: 0 16px; }
 }
 
 /* ── 尊重减弱动效 ── */

@@ -52,7 +52,7 @@ npm run dev       # 本地开发（Vite 热更新；API 代理按 vite.config.js
 仓库根的 `Dockerfile` 是多阶段构建（每轮 CI 实证）：
 
 1. `node:22-alpine` —— `npm ci && npm run build` 出 `web/dist`
-2. `golang:1.26-alpine` —— `CGO_ENABLED=0 go build -ldflags "-s -w"` 出单二进制（镜像内 `GOTOOLCHAIN=local`，构建标签须 ≥ go.mod 指令版本）
+2. `golang:1.26-alpine` —— `CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=... -X main.commit=... -X main.buildTime=... -X main.buildBranch=..."` 出单二进制（镜像内 `GOTOOLCHAIN=local`，构建标签须 ≥ go.mod 指令版本）；CI 自动注入版本、commit、构建时间和分支，显示在后台「运行状态」
 3. `alpine:3.20` 运行时 —— 仅 ca-certificates + tzdata，`VOLUME /data`，内置 HEALTHCHECK 探 `/healthz`
 
 ```bash

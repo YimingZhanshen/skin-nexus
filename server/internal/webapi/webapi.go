@@ -417,6 +417,7 @@ func (b *Backend) handleSiteConfig(w http.ResponseWriter, r *http.Request) {
 		footer = b.Appearance.FooterData(r.Context(), b.SiteName, b.BaseURL, year)
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"site_name":       b.SiteName,
 		"invite_required": b.inviteRequired(r.Context()),
 		"mail_configured": b.smtpConfig(r.Context()) != nil,
 		"union_enabled":   b.union != nil && b.union.Enabled(),

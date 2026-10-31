@@ -13,6 +13,7 @@ import (
 type Config struct {
 	Listen      string // e.g. ":8080"
 	BaseURL     string // e.g. https://skin.example.com (used for texture URLs / ALI)
+	Environment string // SKIN_ENV — free-form deployment label (production/demo/...)
 	DatabaseDSN string // user:pass@tcp(host:3306)/skin-nexus?parseTime=true&charset=utf8mb4
 
 	TexturesDir string
@@ -99,6 +100,7 @@ func Load() (*Config, error) {
 	c := &Config{
 		Listen:      getenv("SKIN_LISTEN", ":8080"),
 		BaseURL:     strings.TrimRight(getenv("SKIN_BASE_URL", "http://localhost:8080"), "/"),
+		Environment: getenv("SKIN_ENV", "production"),
 		DatabaseDSN: os.Getenv("SKIN_DATABASE_DSN"),
 		TexturesDir: resolveDataPath("SKIN_TEXTURES_DIR", dataDir, "textures"),
 		ServerName:  getenv("SKIN_SERVER_NAME", "SkinNexus"),

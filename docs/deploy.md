@@ -100,6 +100,7 @@ environment:
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `SKIN_LISTEN` | `:8080` | 容器内监听，**保持 `:8080` 即可**（改端口/绑本机见表下注） |
+| `SKIN_ENV` | `production` | 部署环境标签（production/demo/staging…），仅用于管理面板「运行状态」展示 |
 | `SKIN_SERVER_NAME` / `SKIN_SITE_NAME` | `SkinNexus` | Yggdrasil 元数据显示名 / 站点名（也可在管理面板改） |
 | `SKIN_SKIN_DOMAINS` | 空 | 皮肤域白名单；不接联盟填本站域名，接入 MUA Union 以联盟公布清单为准（改动会破坏联盟互认） |
 | `SKIN_DATA_DIR` | `/data`（镜像内） | 统一数据根：textures/、签名钥、themes/ 都在它下面 |

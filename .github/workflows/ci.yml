@@ -114,6 +114,10 @@ jobs:
           # only the local-build default.
           build-args: |
             GOPROXY=https://proxy.golang.org,direct
+            BUILD_VERSION=0.5.0
+            BUILD_COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ github.run_started_at }}
+            BUILD_BRANCH=${{ github.ref_name }}
           # Registry cache lives next to the image in GHCR and is not subject
           # to the 10 GB Actions-cache eviction that dropped the go mod layer
           # on 2026-10-31 (a 4.3 kB blob then stalled for 370s). Keep GHA as a
