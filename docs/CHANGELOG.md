@@ -4,6 +4,8 @@
 
 ## 2026-11-01
 
+- **市场续签补全（分发仓库）**：主题市场此前**只有推 `themes/**` 才签名**，没有到期自动续签——放置 90 天后注册表过期，市场浏览/安装直接失败（宿主对磁盘 last-good 缓存同样做到期校验）。现补 `resign-themes.yml`（每周一 03:41 UTC 检查、剩余 <60 天自动重签推送），并把插件侧 `resign.yml` 的阈值从 30 天提到 60 天：除了留出失败余量，更因为 GitHub 对 60 天无任何推送的公开仓库会**自动停用 schedule**，~5 周一次的续签提交让仓库始终"活跃"，定时任务不会悄悄停摆。签名确定性已在临时副本实测：三个主题包 zip SHA-256 逐一不变，只有 `registry.json` 的时间戳与签名位移，`verify-registry` 通过。`docs/plugin-publishing.md` §7 与 `docs/deploy.md` 同步口径（过期只伤市场，已装插件/主题与本地上传不受影响）。
+
 - **全量文档清查与环境变量总表**：`docs/deploy.md` §2.3 由「一段话塞 15 个变量」重建为**分组全表**——50 个变量（46 进程 + 4 compose 专用）逐行给默认值，并区分「源码默认 / 镜像内 ENV 覆盖」两层与 `unset ≠ 空串` 语义；SMTP 五键、Union 八键、限流两键拆成独立行；补上此前只散落在别处的 `SKIN_PORT`、`SKIN_IMAGE_TAG`、`SKIN_DB_*`；面板与 env 的**分键优先级**改为可查表。
   - 事实纠正：`AGENTS.md`「config.go 是全部 SKIN_* 的唯一入口」为假（五个变量散在 `main.go`/`adminapi`），已改并注明真源；迁移水位 `0001…0014` → `0001…0017`（deploy.md、migration.md）；`CITATION.cff` 声称 0.5.0 已于 2026-10-28 发布 → 改回 `0.4.0`；`SECURITY.md` 支持版本补 `main`（0.5.0 开发中）行，issue 模板版本占位从 `v0.5.0` 改 `v0.4.0`；`plugin-spec.md` 三处「未实现」其实已实现（`jobs`/`media` manifest 面、`requires`/`conflicts` 安装计划强制、卸载 `purge`），插件装载语义统一为「面板重载即生效」；`theme-spec.md` 删掉无消费点的 `--text-dim` 幽灵令牌、把 `.ghost`/`.danger-outline` 修正为实际的 `button.ghost`/`button.danger-outline`、补齐缺失的 `## 7` 父标题；`CONTRIBUTING.md`「未签名包会被拒绝」与超管风险确认的实际行为矛盾，已改写。
   - 降噪：`compat-matrix.md` §4 由完工流水账改为「缺口与取舍」登记表（邮箱验证流、纹理删除面、正版绑定为真缺口；「换肤必须先入柜」与 429 偏差备案记为取舍）；`competitor-analysis.md` 去掉已完成项的过程叙述、失效的 `refs/` 本地路径与内部技能引用，标注快照口径与「本文不含 blessing 证据」；`CHANGELOG.md` 三个重复的 `## 2026-10-28` 标题合并为一条；`GOVERNANCE.md` 指向 README 不存在的「作者与署名」章节、PR 模板 `AGENTS.md` 相对链接断裂（`.github/AGENTS.md`）均已修；`README.en.md` 补齐落后一整个迭代的英文事实（主题市场与本地上传、材质元数据/举报/私密上传、页脚、`llms.txt`、文档索引与路线图）。

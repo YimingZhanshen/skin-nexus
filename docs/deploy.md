@@ -198,7 +198,8 @@ environment:
 > - 「未设置」与「设为空串」在两个市场 URL/TRUST_KEYS 上是**不同**语义（`os.LookupEnv`）：未设置 → 官方默认；空串 → 关闭。
 >   其余布尔/路径类变量走 `getenv`，空串等同于未设置。
 > - 主题包上传上限固定 16 MiB（`internal/thememkt`），无对应 env。
-> - 市场安装只认签名与摘要，不认 CI 状态；registry 有 90 天到期，见 [plugin-publishing.md](plugin-publishing.md) §7。
+> - 市场安装只认签名与摘要，不认 CI 状态；registry 有 90 天有效期，到期续签由分发仓库 CI 每周自动完成
+>   （剩余 <60 天即重签推送），站长无需动手；细节见 [plugin-publishing.md](plugin-publishing.md) §7。
 
 **compose 文件专用**（不是进程变量，由 `docker-compose*.yml` 展开）
 

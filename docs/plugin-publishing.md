@@ -214,10 +214,15 @@ SKIN_IMAGE_TAG=sha-<release-commit>
 
 ## 7. 过期与轮换
 
-- 到期前 30 天重新运行 `registry`（新的 `generatedAt/expiresAt`），覆盖 `registry.json`；
-- 轮换 key：先把新旧公钥同时写入 `SKIN_PLUGIN_TRUST_KEYS` → 重启 → 用新 key 重签
-  artifacts 与 registry → 旧产物退役后移除旧公钥；
-- 私钥丢失只能换 key 并重签全部产物；已安装插件不受影响，但新安装会验签失败。
+- registry 有效期 90 天；分发仓库的 `resign.yml`（插件）与 `resign-themes.yml`（主题）
+  **每周一自动检查，剩余不足 60 天就重新签名并推送**——不依赖人工，也不需要本地跑 `registry`。
+  阈值取 60 天而非 30 天还有第二层原因：GitHub 对 60 天没有任何推送的公开仓库会**自动停用
+  schedule**，每 ~5 周产生一次续签提交正好让这个仓库一直保持"活跃"，定时任务不会悄悄停摆；
+- 轮换 key：先把新旧公钥同时写入 `SKIN_PLUGIN_TRUST_KEYS`（主题写 `SKIN_THEME_TRUST_KEYS`）→
+  重启 → 用新 key 重签 artifacts 与 registry → 旧产物退役后移除旧公钥；
+- 私钥丢失只能换 key 并重签全部产物；已安装插件不受影响，但新安装会验签失败；
+- registry 过期后宿主**连磁盘 last-good 缓存也一并拒绝**（缓存同样过到期校验），表现为市场
+  浏览/安装 503；此时**已安装的插件与主题照常运行，本地上传也照常可用**——只有 registry 带有效期。
 - v0.4.0 起，官方插件仓库已采用 PR 投稿 + CI 环境密钥自动签名/续签（见该仓库的
   `CONTRIBUTING.md` / `SPEC.md` / `KEY-ROTATION.md`）；本机手工流程仍可用于离线签名与演练。
 
