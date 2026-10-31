@@ -23,6 +23,7 @@
   },
   "nav": {
     "home": "Home",
+    "menu": "Menu",
     "userCenter": "User center",
     "manageGroup": "Manage",
     "dashboard": "Dashboard",

@@ -224,7 +224,7 @@ onMounted(() => { load() })
 
 .skinlib-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
   gap: 16px; margin-top: 16px;
   /* 材质徽章色（scoped 令牌，供子组件样式引用） */
   --steve-bg: rgba(47, 191, 107, .16); --steve-ink: #7ee2a8;

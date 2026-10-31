@@ -40,6 +40,8 @@ provide('sessionUser', user)
 const view = ref('login')
 const extPath = ref('')
 const pendingExt = ref('')
+// mobile topbar drawer (≤640px hamburger)
+const menuOpen = ref(false)
 const authErr = ref('') // login + register cards
 // Host-rendered plugin fields on the register card (ui.forms "auth.register").
 const pluginFormData = ref({})
@@ -162,6 +164,7 @@ const viewURLs = {
 }
 let syncingURL = false
 watch(view, (v) => {
+  menuOpen.value = false
   const u = viewURLs[v]
   if (u && location.pathname !== u && !syncingURL) history.pushState({ view: v }, '', u)
 })
@@ -360,7 +363,11 @@ async function doLogout() {
   view.value = 'login'
 }
 
-onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
+onMounted(() => {
+  boot()
+  window.addEventListener('popstate', onPopState)
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') menuOpen.value = false })
+})
 </script>
 
 <template>
@@ -381,7 +388,7 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
           <span class="brand-n" v-html="brandSVG"></span>
           <span class="brand-name">{{ siteName }}</span>
         </a>
-        <div class="topbar-right">
+        <div class="topbar-right" :class="{ open: menuOpen }">
           <select :value="locale" class="locale-sel" @change="onLocaleChange">
             <option value="zh-CN">中文</option>
             <option value="en">English</option>
@@ -398,6 +405,13 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
           </template>
           <PluginSlot slot="app.topbar.after" />
         </div>
+        <button class="secondary nav-toggle" :aria-expanded="menuOpen ? 'true' : 'false'"
+                :aria-label="menuOpen ? t('common.close') : t('nav.menu')" @click="menuOpen = !menuOpen">
+          <svg v-if="!menuOpen" class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+          <svg v-else class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19" /></svg>
+        </button>
       </div>
     </header>
 
@@ -602,7 +616,7 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
 /* v3: shell 全局样式统一在 style.css（topbar/auth-split/侧栏图标/用户卡），
    scoped 不再重复定义 —— 主题包按全局类覆盖。 */
 .boot-screen {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;

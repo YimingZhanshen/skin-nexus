@@ -126,6 +126,8 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
 .topbar-right { display: flex; align-items: center; gap: 8px; flex: none; }
 .topbar-right select { width: auto; padding: 4px 8px; min-height: 32px; font-size: var(--fs-s); }
 .topbar-right button { min-height: 32px; padding: 4px 16px; }
+/* hamburger: hidden on desktop, the only topbar control there on ≤640 */
+.nav-toggle { display: none; min-height: 32px; padding: 4px 10px; }
 
 .container { width: 100%; max-width: 1200px; margin: 0 auto; padding: 28px 32px; }
 /* admin panel carries 8-9 column management tables and its own sidebar;
@@ -152,7 +154,7 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
 .auth-split {
   display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 4fr);
   gap: 32px; align-items: stretch;
-  min-height: calc(100vh - var(--topbar-h) - 48px);
+  min-height: calc(100dvh - var(--topbar-h) - 48px);
   padding: 24px 0;
 }
 .auth-scene {
@@ -368,6 +370,28 @@ tbody tr:hover, table tr:hover { background: var(--hover-wash); }
 @media (max-width: 900px) {
   .container { padding: 20px 16px; }
   .topbar-inner { padding: 0 16px; }
+}
+
+/* mobile topbar drawer: the actions collapse behind the hamburger ≤640px */
+@media (max-width: 640px) {
+  .topbar { position: sticky; }
+  .nav-toggle { display: inline-flex; align-items: center; }
+  .topbar-right {
+    position: absolute; top: var(--topbar-h); right: 12px; left: 12px;
+    flex-direction: column; align-items: stretch; gap: 8px;
+    background: var(--panel); border: 1px solid var(--line-strong);
+    border-radius: var(--r-l); box-shadow: var(--shadow-lift);
+    padding: 12px; max-height: calc(100dvh - var(--topbar-h) - 16px); overflow: auto;
+  }
+  .topbar-right:not(.open) { display: none; }
+  .topbar-right select, .topbar-right button { width: 100%; }
+  .topbar-right .badge { text-align: center; }
+}
+
+/* coarse pointers (phones/tablets) get 44px targets regardless of size class */
+@media (pointer: coarse) {
+  button, .tab, input[type="checkbox"] { min-height: 44px; }
+  .topbar-right select, .topbar-right button { min-height: 40px; }
 }
 
 /* ── 尊重减弱动效 ── */

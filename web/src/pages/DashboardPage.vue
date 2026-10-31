@@ -395,7 +395,7 @@ h3 { font-size: var(--fs-s); margin: 16px 0 4px; color: var(--muted); font-weigh
 .drop-zone:hover, .drop-zone.over { border-color: var(--gold); background: var(--ink-3); }
 .file-hidden { display: none; }
 .file-name { font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-clear { min-height: 24px; padding: 0 8px; font-size: var(--fs-xs); margin-left: auto; flex: none; }
+.file-clear { min-height: 28px; padding: 0 8px; font-size: var(--fs-xs); margin-left: auto; flex: none; }
 .prev-box {
   display: flex; align-items: center; justify-content: center;
   min-height: 220px; border: 1px solid var(--border); border-radius: var(--r-m);

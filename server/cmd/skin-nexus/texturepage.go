@@ -131,7 +131,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
           border-radius: var(--r-l); padding: 32px;
           box-shadow: var(--shadow); }
   h1 { margin: 0 0 6px; font-family: var(--font-serif); font-size: 30px; font-weight: 600;
-       letter-spacing: .03em; word-break: break-all; }
+       letter-spacing: .03em; overflow-wrap: anywhere; }
   .sub { color: var(--moon-2); font-size: var(--fs-m); margin: 0 0 24px; }
   .viewer { display: flex; justify-content: center; align-items: center;
             min-height: 340px; margin: 0 0 24px; position: relative; }
@@ -149,7 +149,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   .meta div::before { top: 5px; left: 5px; border-right: none; border-bottom: none; }
   .meta div::after { bottom: 5px; right: 5px; border-left: none; border-top: none; }
   .meta dt { font-size: var(--fs-xs); color: var(--moon-2); margin: 0 0 2px; }
-  .meta dd { margin: 0; font-size: var(--fs-s); font-weight: 600; word-break: break-all;
+  .meta dd { margin: 0; font-size: var(--fs-s); font-weight: 600; overflow-wrap: anywhere;
              font-variant-numeric: tabular-nums; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .actions a, .actions button { display: inline-block; padding: 9px 20px; border-radius: var(--r-s);
@@ -187,7 +187,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
   @media (max-width: 560px) {
     .topbar-inner { padding: 0 14px; }
-    .topbar .brand span { font-size: 17px; }
+    .topbar .brand span { display: none; }
     .topnav a { padding: 5px 8px; }
     .wrap { padding: 20px 14px 40px; }
     .card { padding: 20px; }

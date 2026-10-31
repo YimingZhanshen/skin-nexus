@@ -23,6 +23,7 @@
   },
   "nav": {
     "home": "首页",
+    "menu": "菜单",
     "userCenter": "用户中心",
     "manageGroup": "管理",
     "dashboard": "仪表盘",
