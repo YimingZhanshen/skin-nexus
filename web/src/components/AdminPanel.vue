@@ -119,8 +119,8 @@ onMounted(async () => {
 <template>
   <div class="admin-shell">
     <aside class="card admin-side">
+      <h2>{{ t('admin.title') }}</h2>
       <button class="admin-nav-item admin-back" @click="$emit('exit')">← {{ t('nav.backToDashboard') }}</button>
-      <h2 style="margin-top: 12px;">{{ t('admin.title') }}</h2>
       <!-- X-Admin-Token fallback row: only when the session can't reach admin data -->
       <div v-if="needToken" class="admin-token">
         <input v-model="token" type="password" :placeholder="t('admin.tokenPlaceholder')" />
@@ -149,7 +149,13 @@ onMounted(async () => {
 <style scoped>
 .admin-shell { display: flex; gap: 24px; align-items: flex-start; }
 .admin-side { position: sticky; top: calc(56px + 16px); min-width: 210px; }
-.admin-back { margin-bottom: 4px; color: var(--muted); }
+/* Same hierarchy as the user sidebar's .nav-title, so the theme docks align. */
+.admin-side h2 {
+  margin: 0 0 8px; padding-left: 12px;
+  font-size: var(--fs-xs); font-weight: 600; letter-spacing: .08em;
+  color: var(--muted);
+}
+.admin-back { color: var(--muted); }
 .admin-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; }
 .admin-nav-item {
   position: relative;
