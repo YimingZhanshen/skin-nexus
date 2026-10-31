@@ -344,7 +344,7 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
 .md { margin-top: 8px; line-height: 1.75; font-size: var(--fs-m); }
 /* Theme packs cap .md paragraphs at 34em for reading measure; the dashboard
    announcement/description cards should use the full card width. */
-.md.md.md-wide p, .md.md.md-wide li { max-width: none; }
+.md.md.md-wide :deep(p), .md.md.md-wide :deep(li) { max-width: none; }
 .md :deep(h1) { font-family: var(--font-serif); font-size: var(--fs-xl); letter-spacing: .03em;
                 margin: 4px 0 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 .md :deep(h2) { font-size: var(--fs-l); margin: 24px 0 8px; }
