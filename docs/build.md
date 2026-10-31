@@ -131,5 +131,9 @@ go test ./internal/plugin/ ./internal/signedpkg/ ./internal/outbound/
 go test -tags integration ./internal/store/   # 需 SKIN_TEST_DSN
 ```
 
-插件市场/安装相关环境变量见 `docs/deploy.md`（`SKIN_PLUGIN_MARKET_URL`、`SKIN_PLUGIN_TRUST_KEYS`、`SKIN_PLUGIN_STATE_DIR`）。
-签名打包工具：`go run ./cmd/skin-plugin keygen|pack|registry|verify|verify-registry`，完整流程见 `docs/plugin-publishing.md`。
+市场相关环境变量见 [`deploy.md`](deploy.md) §2.3（插件：`SKIN_PLUGIN_MARKET_URL` / `SKIN_PLUGIN_TRUST_KEYS` /
+`SKIN_PLUGIN_STATE_DIR` / `SKIN_PLUGIN_UPLOAD_MAX`；主题：`SKIN_THEME_MARKET_URL` / `SKIN_THEME_TRUST_KEYS`，
+默认值编译内置，显式置空才关闭）。
+
+签名打包工具子命令全集：`go run ./cmd/skin-plugin keygen | pack | pack-theme | lint | verify | registry | verify-registry`
+（`registry --kind theme` 生成主题 registry）。完整发布流程见 [`plugin-publishing.md`](plugin-publishing.md)。

@@ -36,21 +36,20 @@ JWT access token 实测形状：`aud="2"（shared_client_id）、sub=uid、scope
 | 端点 | legacy 实测 | SkinNexus | 状态 |
 |---|---|---|---|
 | `GET /{player}.json`（CustomSkinAPI R1） | 200 | 同形 | ✅ |
-| `GET /usm/{player}.json`、`/skin|cape/{player}.png` | 旧站 404（插件未装） | 已实现（超集） | ✅ |
+| `GET /usm/{player}.json`、`/skin\|cape/{player}.png` | 旧站 404（插件未装） | 已实现（超集） | ✅ |
 
-## 4. 功能缺口优先级（blessing 1:1 复刻主干）
+## 4. 缺口与取舍（blessing 1:1 口径）
 
-- **P1+（首位，2026-10-23 ✅ 基础功能落地）**：邀请码模块 1:1（基准=线上魔改版）：`invitation_codes` 六列表（含 `description` 老站约定备注列——人可读标识，旧库直迁）+ 注册流（`SKIN_INVITE_REQUIRED` 两态：默认开放选填 / `true`=线上必填，核销进注册事务封死双用竞态）+ 管理面三端点（生成/列表/改备注）+ 注册页输入框与管理面板。**插件候选（插件宿主完成后引入）**：① CSV 备注清单一键发码（写 description）② 邀请码查询页（行为规格已取证存档）
-- **P1（2026-10-23 部分落地，2026-10-27 复核）**：
-  - ~~衣柜 closet~~ ✅（`user_closet` 1:1 三列同构 0007，四端点+前端，孤儿行可见可删；**「换肤必须先入柜」规则已拍板：不启用**——老站 UI 流程而非数据结构，强加会破坏已验收的 setSkin 直连；衣柜按收藏集合上线）
-  - ~~改密端点~~ ✅（`POST /api/v1/me/password`，改密即吊销全部 ygg+OIDC 授权）· ~~管理面选项面板~~ ✅（env 迁 UI：site_name/server_name/skin_domains/invite_required/require_verification 白名单，开关类请求时即时生效）· ~~管理面用户改密/删除~~ ✅（令牌/OIDC 撤销联动、事务删凭据、纹理/审计保留、uid1 禁删）
-  - ~~找回密码~~ ✅（A1 2026-10-26 上线：SMTP 全链路，防枚举 / 单次令牌 / 面板热配置）；邮箱验证流延后（独立线，未排期）
-  - ~~ygg_rate_limit~~ ✅（2026-10-23：`internal/ratelimit` 滑动窗口+失败锁定双层，认证四端点接线；429 响应为**新增偏差备案**——legacy 契约从未定义限流，冻结清单/错误体不受影响，仅追加 TooManyRequests；阈值面板可调）
-  - **P1 主干至此全清**（邮箱验证流延后为独立线）
-- **四路代码审查修复 ✅（2026-10-23）**：迁移链（clean 规范化先于去重/自排序/悬空 pid、预检告警、零日期容错、options 幂等改写、closet BINARY、DSN 校验、0005 拆分、0009 形状自愈）+ 凭据/令牌生命周期（verify 错误分流、refresh 归属校验与轮换单次性、end_session 双吊销、device code 单次兑换、改密副作用加固、XFF 末跳、衣柜 IDOR、player_limit 执法、settings 严格校验）。约 30 项发现分级处理，P1/P2 全清。
-- **迁移导入器 ✅（2026-10-23）**：`skin-nexus migrate import` apply 路径——ID 1:1 保留、七表幂等、uuid 五步清洗接线、`legacy:bcrypt` 等算法分类 + PHC 短路（加密兼容：`$2y$` 直迁直验、不依赖盐链挂载）；生产数据 dry-run 对账（2026-10-23 演练口径；10-24 全量实跑口径见 migration.md §三）66/66/59/87/82/393 全一致、uuid 66 行零异常、59 文件零损坏。
-- **P2**：通知/纹理广场 · OAuth 社交登录 · API PAT 面 · 插件宿主 · 正版绑定 · 纹理删除
-- **举报 ✅（2026-10-31）**：公开材质举报（侵权/色情/暴力/仇恨/垃圾/其他）、去重与频率限制、管理端忽略/已处理/下架（下架即转私有并清公共 dedupe）。
-- **P3**：`/api` 根装饰 · 验证码 · 积分商城 · 2FA
+兼容主干——Yggdrasil 全量、OIDC/yggc、CustomSkinAPI、USM、邀请码、衣柜、改密与吊销、
+找回密码、认证限流、迁移导入器、材质举报——已逐项达成，落地时间与实现细节见
+[`CHANGELOG.md`](CHANGELOG.md)。本节只留**未做**与**刻意不做**，不再复述完工历史。
 
-详细版（含逐端点请求/应答、JWT 形状、存疑项）保留在维护者本地分析档；本表是公开事实源。
+| 项 | 状态 | 说明 |
+|---|---|---|
+| 邮箱验证流 | ⚠️ 缺口 | `SKIN_REQUIRE_VERIFICATION` 门与字段已就位，发信验证链路未实现，保持关 |
+| 纹理删除面 | ⚠️ 缺口 | 管理端可列出/下架（转私有并清公共去重键），无彻底删除端点 |
+| 正版账号绑定 | ⚠️ 未做 | Auth Source 第二实现，排期见 README 路线图 |
+| 通知/纹理广场 · OAuth 社交登录 · API PAT 面 · 积分商城 · 2FA · 验证码 · `/api` 根装饰 | ⚠️ 未做 | 均为增强面，不属兼容缺口 |
+| 「换肤必须先入柜」 | ➖ 不复刻 | 拍板：那是老站 UI 流程而非数据约束，强加会破坏已验收的 setSkin 直连；衣柜按收藏集合上线 |
+| 认证限流返回 429 | 🔧 偏差备案 | legacy 契约从未定义限流；只追加 TooManyRequests，冻结的错误体形状不变，阈值面板可调 |
+| `api/profiles/minecraft/{name}` 别名、`minecraftservices/publickeys` | ➖ 不复刻 | 旧站自身 404，平价即可 |

@@ -87,7 +87,13 @@ environment:
 外部库 MySQL 5.7 / 8.0 均可（5.7.44 实测通过）；空库启动时 `SKIN_AUTO_MIGRATE=true`
 自动建表，随后首访站点进 `/setup` 安装向导（建管理员 / 站点名 / 皮肤域）。
 
-### 2.3 必改环境变量
+### 2.3 环境变量
+
+取值优先级三层：**显式 env（compose / systemd / shell）＞ 镜像内 `ENV` 默认（`Dockerfile:49-52`）＞
+源码默认（`server/internal/config/config.go`）**。因此下表「默认」列同时给出两个数：源码默认只对
+源码构建 + systemd 生效，Docker 部署看到的是镜像内值。
+
+**必改三项**
 
 | 变量 | 说明 |
 |---|---|
@@ -95,40 +101,131 @@ environment:
 | `SKIN_DATABASE_DSN` | 外部库模式必改；内置库模式保持默认。**必须带 `parseTime=true`**（缺失直接启动失败） |
 | `SKIN_ADMIN_TOKEN` | `openssl rand -hex 32` 生成；机器/API 调用管理接口的回退凭据（管理面板本身用管理员账号登录即可，无需此 token；留空 = 机器 token 通道关闭） |
 
-其余可选变量（默认值即可跑通）：
+其余变量**默认值即可跑通**，逐项列全（46 个进程变量 + 4 个 compose 变量，与代码逐条对齐）：
 
-| 变量 | 默认 | 说明 |
+**监听与运行标签**
+
+| 变量 | 默认（源码 / 镜像内） | 说明 |
 |---|---|---|
-| `SKIN_LISTEN` | `:8080` | 容器内监听，**保持 `:8080` 即可**（改端口/绑本机见表下注） |
-| `SKIN_ENV` | `production` | 部署环境标签（production/demo/staging…），仅用于管理面板「运行状态」展示 |
-| `SKIN_SERVER_NAME` / `SKIN_SITE_NAME` | `SkinNexus` | Yggdrasil 元数据显示名 / 站点名（也可在管理面板改） |
-| `SKIN_SKIN_DOMAINS` | 空 | 皮肤域白名单；不接联盟填本站域名，接入 MUA Union 以联盟公布清单为准（改动会破坏联盟互认） |
-| `SKIN_DATA_DIR` | `/data`（镜像内） | 统一数据根：textures/、签名钥、themes/ 都在它下面 |
-| `SKIN_AUTO_MIGRATE` | `true`（镜像内） | 追踪式建表/补表：`schema_migrations` 逐文件记标，空库全量、既有库自动补新文件 |
-| `SKIN_INVITE_REQUIRED` | `false` | 注册强制邀请码（等价老站必填语义）；也可在管理面板「站点设置」改 |
-| `SKIN_REQUIRE_VERIFICATION` | `false` | join 邮箱验证门（邮件流落地前保持关） |
-| `SKIN_SMTP_HOST` / `SKIN_SMTP_PORT` / `SKIN_SMTP_USER` / `SKIN_SMTP_PASS` / `SKIN_SMTP_FROM` | 无 / `465` / 无 / 无 / 无 | 找回密码邮件流（A1）：SMTP 五键，也可在管理面板「站点设置」配；未配置时注册/找回不提供邮箱通道 |
-| `SKIN_MOJANG_FALLBACK` | `1`（开） | profile/hasJoined 本地未命中时向 Mojang 官方 sessionserver 发站外查询兜底；不希望站外请求就设 `0`（面板可热切） |
-| `SKIN_RATE_LIMIT_AUTH` / `SKIN_LOGIN_FAIL_LIMIT` | `120` / `5` | 认证限流：每 IP 10 分钟滑动窗口 / 连续失败锁定次数 |
-| `SKIN_OIDC_ENABLED` | `false` | 启动器免密登录（yggc/OIDC）；`SKIN_OIDC_ISSUER` 默认跟 `SKIN_BASE_URL` |
-| `SKIN_UNION_ENABLED` | `false` | MUA Union 联盟模块；未接入保持关 = 零路由零表面 |
-| `SKIN_LEGACY_ENV` | 无 | **从老站迁移且用户密码非 bcrypt/argon2 PHC 格式时必设**：指向挂载进容器的老站 `.env`（盐链来源），否则这些存量用户无法登录（见 [migration.md](migration.md)） |
-
-路径/密钥类变量默认值即可，一般无需改动：`SKIN_TEXTURES_DIR`（`<data>/textures`）、`SKIN_SIGN_KEY`（`<data>/sign-key.pem`）、`SKIN_OIDC_SIGN_KEY`（`<data>/oidc-key.pem`）、`SKIN_THEMES_DIR`（`<data>/themes`）、`SKIN_PLUGINS_DIR`（`<data>/plugins`）、`SKIN_PLUGIN_STATE_DIR`（默认 `<data>/plugins/.state`，安装/回滚缓存，需备份）、`SKIN_PLUGIN_SECRET_KEY`（插件密钥主密钥；缺省生成 `<data>/plugin-secrets.key`，**需一并备份**）、`SKIN_PLUGIN_MARKET_URL`（签名 registry，默认官方市场；显式设为空=关闭市场；下游可改为自己的 registry）、`SKIN_PLUGIN_TRUST_KEYS`（`keyId:base64pub,...`，**编译内置官方公钥，零配置即开箱可用**；显式置空=拒绝一切市场/签名安装；下游 fork 换成自己的公钥）、`SKIN_PLUGIN_UPLOAD_MAX`（默认 64 MiB）、`SKIN_THEME_MARKET_URL`（主题签名 registry，默认官方 `…/themes/v1/registry.json`；显式置空=关闭市场浏览）、`SKIN_THEME_TRUST_KEYS`（主题市场独立验签公钥 `keyId:base64pub,...`，同样编译内置官方公钥；官方公钥见分发仓库 `v1/keys.json` 的 `theme-market-2026-11` 条目；显式置空=市场安装关闭、后台本地上传仍可用）、`SKIN_MIGRATIONS_DIR`（镜像内 `/app/migrations`）、`SKIN_OIDC_SHARED_CLIENT_ID`（`2`）。
+| `SKIN_LISTEN` | `:8080` / `:8080` | 进程监听地址，**保持 `:8080` 即可**，改值见表下注 |
+| `SKIN_ENV` | `production` / `production` | 部署环境标签（production/demo/staging…），仅用于管理面板「运行状态」展示，不改变行为 |
 
 > `SKIN_LISTEN` 改值注意：bridge 网络下不要改成 `127.0.0.1:8080`（进程只绑容器环回 → 端口映射
 > connection refused，而 healthcheck 仍报 healthy，极难排查）；反代场景想只对本机开放就改 ports
 > 绑定为 `127.0.0.1:8080:8080`；仅 `network_mode: host` 时才建议 `127.0.0.1:8080`。镜像 HEALTHCHECK
 > 固定探 `127.0.0.1:8080`，改端口需同步改 healthcheck。
-Union 七键（`SKIN_UNION_API_ROOT` / `SKIN_UNION_MEMBER_KEY` / `SKIN_UNION_HOST_PUBKEY` / `SKIN_UNION_ALLOW_UPDATEBACKENDKEY` / `SKIN_UNION_QUERYEMAIL_MODE` / `SKIN_UNION_OAUTH2_SIG_KEY` / `SKIN_UNION_HUB_ORIGIN`）走管理面板配置，env 仅作初始值/回退。完整变量清单以 `server/internal/config/config.go` 加上散在 `main.go` / `adminapi` 里的 `os.Getenv` 为准（`SKIN_ADMIN_TOKEN`、`SKIN_SMTP_*`、`SKIN_MOJANG_FALLBACK`、`SKIN_LEGACY_ENV` 都不在 config.go）。
 
-> **站点类设置大多已迁管理 UI**（「管理 → 站点设置」：站点名/皮肤域/邀请码/验证门/mail 五键/ygg 六键/Union 八键——
-> env「Union 七键」与面板「Union 八键」是两个集合：面板多 `union_enabled` 开关），
-> 但**优先级分键**，别想当然：`site_url` option 优先于 env（不过**纹理 URL 只认启动时的
-> `SKIN_BASE_URL` 快照**，面板改 site_url 不会改纹理 URL）；`site_name`/`server_name`/
-> `skin_domains` 则是**显式 env 优先**——想在面板改这三项，就不要在 compose 里设对应 env
-> （compose 默认已不设）。`union_enabled`/`union_api_root`/`union_member_key` 热切换立即生效，
-> 其余重启生效。凭据类（DSN、admin token）只走环境变量。
+**站点标识与注册门**（大多可在「管理 → 站点设置」改，优先级见 §2.3 末）
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `SKIN_SITE_NAME` | `SkinNexus` | 站点名（面板可改） |
+| `SKIN_SERVER_NAME` | `SkinNexus` | Yggdrasil 元数据里的服务器显示名（面板可改） |
+| `SKIN_SKIN_DOMAINS` | 空 | 皮肤域白名单，逗号分隔；不接联盟填本站域名，接入 MUA Union 以联盟公布清单为准（改动会破坏联盟互认） |
+| `SKIN_INVITE_REQUIRED` | `false` | 注册强制邀请码（等价老站必填语义）；面板「站点设置」可改 |
+| `SKIN_REQUIRE_VERIFICATION` | `false` | join 邮箱验证门；邮箱验证流尚未实现，保持关 |
+
+**认证、限流与正版兜底**
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `SKIN_RATE_LIMIT_AUTH` | `120` | 认证接口限流：每 IP 10 分钟滑动窗口内的请求数 |
+| `SKIN_LOGIN_FAIL_LIMIT` | `5` | 连续登录失败锁定次数 |
+| `SKIN_MOJANG_FALLBACK` | `1`（开） | profile/hasJoined 本地未命中时向 Mojang 官方 sessionserver 发站外查询兜底；不希望站外请求就设 `0`（面板可热切） |
+
+**SMTP 找回密码邮件流**（未配置时注册/找回不提供邮箱通道；面板「站点设置」同样可配）
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `SKIN_SMTP_HOST` | 无 | SMTP 服务器地址 |
+| `SKIN_SMTP_PORT` | `465` | SMTP 端口（465 = TLS） |
+| `SKIN_SMTP_USER` | 无 | SMTP 账号 |
+| `SKIN_SMTP_PASS` | 无 | SMTP 口令（凭据，只走 env） |
+| `SKIN_SMTP_FROM` | 无 | 发件地址 |
+
+**启动器免密登录（yggc / OIDC）**
+
+| 变量 | 默认（源码 / 镜像内） | 说明 |
+|---|---|---|
+| `SKIN_OIDC_ENABLED` | `false` | 打开 OIDC 端点与发现文档 |
+| `SKIN_OIDC_ISSUER` | 跟 `SKIN_BASE_URL` | issuer；只对显式值生效 |
+| `SKIN_OIDC_SIGN_KEY` | `<data>/oidc-key.pem` / `/data/oidc-key.pem` | OIDC JWT 签名私钥，**需备份** |
+| `SKIN_OIDC_SHARED_CLIENT_ID` | `2` | 站内共享 OAuth client id，一般不动 |
+
+**MUA Union 联盟模块**（真源在「管理 → 站点设置」；env 仅作首次初始值 / 面板为空时回退）
+
+| 变量 | 默认（源码 / 镜像内） | 说明 |
+|---|---|---|
+| `SKIN_UNION_ENABLED` | `false` | 联盟总开关；关 = 零路由零表面。面板另有 `union_enabled` 开关（这就是「env 七键 / 面板八键」的差） |
+| `SKIN_UNION_API_ROOT` | `https://skin.mualliance.ltd/api/union` | 联盟 hub API 根 |
+| `SKIN_UNION_HUB_ORIGIN` | `https://skin.mualliance.ltd` | hub 站点源（跨域/回调用） |
+| `SKIN_UNION_MEMBER_KEY` | 无 | 成员站凭据（联盟发放，凭据只走 env/面板） |
+| `SKIN_UNION_HOST_PUBKEY` | `<data>/union-host-pubkey.pem` | 联盟验签用的 hub 公钥文件 |
+| `SKIN_UNION_OAUTH2_SIG_KEY` | `<data>/union-oauth2-sig.pem` | OAuth2 grant 签名私钥，**需备份** |
+| `SKIN_UNION_ALLOW_UPDATEBACKENDKEY` | `false` | 是否允许 hub 下发更新成员 key |
+| `SKIN_UNION_QUERYEMAIL_MODE` | `full` | 联盟邮箱查询应答：`full` = 返回邮箱、`off` = 403 拒绝；其他值按 `off` 处理（fail-closed） |
+
+**数据路径与密钥**（`<data>` = `SKIN_DATA_DIR`；镜像内 `/data`，源码默认 `./data`）
+
+| 变量 | 默认（源码 / 镜像内） | 说明 |
+|---|---|---|
+| `SKIN_DATA_DIR` | `./data` / `/data` | 统一数据根，textures/、themes/、各类密钥都在它下面 |
+| `SKIN_TEXTURES_DIR` | `<data>/textures` | 材质存储目录 |
+| `SKIN_THEMES_DIR` | `<data>/themes` | 主题包目录（市场安装与本地上传都落这里） |
+| `SKIN_PLUGINS_DIR` | `<data>/plugins` | 插件包目录 |
+| `SKIN_SIGN_KEY` | `<data>/sign-key.pem` | Yggdrasil 纹理签名私钥，**丢失 = 全网皮肤失效，务必纳入定期备份** |
+| `SKIN_PLUGIN_STATE_DIR` | `<data>/plugins/.state` | 安装/回滚缓存，**需备份** |
+| `SKIN_PLUGIN_SECRET_KEY` | 无 → 自动生成 `<data>/plugin-secrets.key` | 插件配置密钥的主密钥（AES-256-GCM），**需一并备份** |
+| `SKIN_LEGACY_ENV` | 无 | **从老站迁移且用户密码非 bcrypt/argon2 PHC 格式时必设**：指向挂载进容器的老站 `.env`（盐链来源），否则这些存量用户无法登录（见 [migration.md](migration.md)） |
+
+**建表与迁移**
+
+| 变量 | 默认（源码 / 镜像内） | 说明 |
+|---|---|---|
+| `SKIN_AUTO_MIGRATE` | `false` / `true` | 追踪式建表/补表：`schema_migrations` 逐文件记标，空库全量、既有库自动补新文件（当前 0001–0017） |
+| `SKIN_MIGRATIONS_DIR` | `./migrations` / `/app/migrations` | DDL 目录 |
+
+**插件市场与主题市场**（语义一致：默认值编译内置，零配置即可用）
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `SKIN_PLUGIN_MARKET_URL` | 官方 `…/skin-nexus-plugins/v1/registry.json` | 签名 registry；**显式置空 = 关闭插件市场**；下游 fork 改成自己的 registry |
+| `SKIN_PLUGIN_TRUST_KEYS` | 官方公钥（编译内置，`market-2026-10:<pub>`） | `keyId:base64pub,...`；**显式置空 = 拒绝一切市场/签名安装**；换源时填自己的公钥 |
+| `SKIN_PLUGIN_UPLOAD_MAX` | `67108864`（64 MiB） | 插件包上传上限（也是 multipart 的 body 预算） |
+| `SKIN_THEME_MARKET_URL` | 官方 `…/skin-nexus-plugins/themes/v1/registry.json` | 主题签名 registry；**显式置空 = 关闭主题市场浏览** |
+| `SKIN_THEME_TRUST_KEYS` | 官方公钥（编译内置，`theme-market-2026-11:<pub>`） | 与插件市场**独立密钥**；**显式置空 = 市场安装关闭**，后台本地上传仍可用。官方公钥另见分发仓库 `v1/keys.json` |
+
+> - 「未设置」与「设为空串」在两个市场 URL/TRUST_KEYS 上是**不同**语义（`os.LookupEnv`）：未设置 → 官方默认；空串 → 关闭。
+>   其余布尔/路径类变量走 `getenv`，空串等同于未设置。
+> - 主题包上传上限固定 16 MiB（`internal/thememkt`），无对应 env。
+> - 市场安装只认签名与摘要，不认 CI 状态；registry 有 90 天到期，见 [plugin-publishing.md](plugin-publishing.md) §7。
+
+**compose 文件专用**（不是进程变量，由 `docker-compose*.yml` 展开）
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `SKIN_IMAGE_TAG` | `latest` | 镜像标签；固定版本用 `sha-<commit>`，回滚 = 改回旧 sha 再 `up -d` |
+| `SKIN_PORT` | `8080` | 宿主机发布端口（quickstart 文件用） |
+| `SKIN_DB_PASSWORD` | 必填（`:?` 守卫） | 内置库业务账号口令 |
+| `SKIN_DB_ROOT_PASSWORD` | 必填（`:?` 守卫） | 内置库 root 口令 |
+
+集成测试专用的 `SKIN_TEST_DSN` 见 [build.md](build.md)，不属部署面。
+
+**env 与管理面板的优先级（分键，别想当然）**
+
+站点类设置大多已迁「管理 → 站点设置」（站点名 / 皮肤域 / 邀请码 / 验证门 / mail 五键 / ygg 六键 /
+Union 八键），但生效优先级按键区分：
+
+| 项 | 谁赢 | 备注 |
+|---|---|---|
+| `site_url` | 面板 option | 但**纹理 URL 只认启动时的 `SKIN_BASE_URL` 快照**，面板改 `site_url` 不会改纹理 URL |
+| `site_name` / `server_name` / `skin_domains` | **显式 env** | 想在面板改这三项就别在 compose 里设对应 env（compose 默认已不设） |
+| `union_enabled` / `union_api_root` / `union_member_key` | 面板，且热切换立即生效 | 其余站点设置重启生效 |
+| DSN、`SKIN_ADMIN_TOKEN`、SMTP 口令等凭据 | 只走 env | 面板不落库 |
+
+散点变量说明：`SKIN_ADMIN_TOKEN`、`SKIN_SMTP_*`、`SKIN_MOJANG_FALLBACK`、`SKIN_LEGACY_ENV`、
+`SKIN_PLUGIN_SECRET_KEY` **不在 `config.go`**（分别在 `adminapi`、`main.go` 里直接 `os.Getenv`）——
+`config.go` 是主入口但不是唯一清单，完整真源以本节表为准（与代码逐条对齐，共 50 个变量）。
 
 ### 2.4 启动与验收
 
@@ -293,7 +390,7 @@ WantedBy=multi-user.target
 ```
 
 要点：工作目录须能读到 `web/dist` 与 `migrations/`（或用 `SKIN_MIGRATIONS_DIR` 指定）；
-手动建表按序执行 `migrations/0001…0014`（以目录实际文件为准），或设 `SKIN_AUTO_MIGRATE=true` 让启动时自动应用。
+手动建表按序执行 `migrations/0001…0017`（以目录实际文件为准），或设 `SKIN_AUTO_MIGRATE=true` 让启动时自动应用。
 Nginx 反代与 §三完全相同。日志 `journalctl -u skin-nexus -f`。
 
 ## 六、运维周期检查

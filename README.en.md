@@ -81,7 +81,7 @@ upgrades and backups: [`docs/deploy.md`](docs/deploy.md).
 - **Migration keeps your data** — primary keys preserved, UUIDs never drift, all password algorithms still verify (12 legacy schemes + argon2id lazy rehash). `preflight → dry-run → import`, fully rollback-able.
 - **Modern login path** — built-in OIDC passwordless login (device code + refresh-token rotation), no Janus sidecar. The passwordless flow for community launchers such as SJMCL is implemented; real-device acceptance is in progress.
 - **Observable operations** — login and federation traffic logs (90 days), audit trail, auth rate limiting, three-layer bans (login / authenticate / `hasJoined`), in-panel self-diagnostics.
-- **Content that gets indexed** — server-rendered landing and skin detail pages, `sitemap.xml`, `robots.txt`, per-page meta/OG/JSON-LD. None of the three mainstream competitors ships the full set.
+- **Content that gets indexed** — server-rendered landing and skin detail pages, `sitemap.xml`, `robots.txt`, `llms.txt`, per-page meta/OG/Twitter Card plus WebSite/Organization/CreativeWork JSON-LD — none of the three mainstream competitors goes this far (see the table below).
 - **Simple deployment and upgrades** — single Go binary or Docker Compose; CI publishes an image to GHCR on every push to `main`, deploy hosts only pull.
 
 Measured on a 2-core / 3.5 GB production VPS: ~600 RPS landing, 5182 RPS texture delivery, 2365 RPS Yggdrasil metadata, zero errors (see CHANGELOG).
@@ -89,7 +89,7 @@ Measured on a 2-core / 3.5 GB production VPS: ~600 RPS landing, 5182 RPS texture
 <details>
 <summary><b>Capability comparison with blessing-skin-server / element-skin / vSkin (source-verified)</b></summary>
 
-> Every cell was checked against the opponents' source code (route tables / grep, 2026-10-25–26); method and per-item evidence in [`docs/competitor-analysis.md`](docs/competitor-analysis.md) (Chinese). We credit rivals where they lead and never guess a ❌ — errata are corrected in place and logged in the CHANGELOG.
+> element-skin and vSkin cells were checked against those repositories (route tables / grep, snapshot 2026-10-25–26); method and per-item evidence in [`docs/competitor-analysis.md`](docs/competitor-analysis.md). The blessing column comes from the legacy source and live measurements (see [`docs/compat-matrix.md`](docs/compat-matrix.md) and [`docs/migration.md`](docs/migration.md)). We credit rivals where they lead and never guess a ❌ — errata are corrected in place and logged in the CHANGELOG.
 
 | Capability | SkinNexus | blessing | element-skin | vSkin |
 |---|---|---|---|---|
@@ -112,14 +112,14 @@ Measured on a 2-core / 3.5 GB production VPS: ~600 RPS landing, 5182 RPS texture
 
 **For players**
 - Sign up / sign in (optional invite-code gate), profile and password management
-- Upload skins and capes (drag & drop, live 3D preview, HD skins keep native resolution)
+- Upload skins and capes (drag & drop, live 3D preview, HD skins keep native resolution, optional private textures)
 - Closet and character management, set avatar
-- Skin library with three visibility levels, filters, sorting and likes; shareable detail pages
+- Skin library with three visibility levels, filters, sorting and likes; shareable server-rendered detail pages with Markdown descriptions, source links and a report button
 - Authorized apps, device management, Union binding, account deletion
 
 **For operators**
-- Admin panel: stats, users / characters / textures, invite codes, grouped site settings, Union operations, self-diagnostics
-- Announcements (Markdown with dual sanitization), custom CSS/JS, theme packs
+- Admin panel: stats, users / characters / textures / reports, invite codes, grouped site settings, Union operations, runtime status (build/environment/dependencies), self-diagnostics
+- Announcements (Markdown with dual sanitization), custom CSS/JS, theme packs, **signed theme market** (browse/install/update/uninstall from the official registry, hot-applied without a restart) and local theme-pack upload, configurable footer (text + friend links / ICP line, shared by SSR and SPA; the copyright line is fixed)
 - Three-layer ban enforcement, auth rate limiting and lockout, SMTP password reset
 - Login and server/federation traffic logs (90 days), audit trail
 
@@ -131,7 +131,7 @@ Measured on a 2-core / 3.5 GB production VPS: ~600 RPS landing, 5182 RPS texture
 - Server-side avatar and preview rendering: `/avatar/...`, `/preview/...` output PNG
 
 **Appearance & content**
-- Theme packs (zero build: `theme.json` + CSS + optional JS) with an [AI prompt template](docs/theme-spec.md)
+- Theme packs (zero build: `theme.json` + CSS + optional JS), distributable through the signed official theme market or uploaded locally; see the [theme spec and AI prompt template](docs/theme-spec.md)
 - Plugin platform v2 (goja): single hookApi 2 with config/secrets, namespaced data, tiered routes, events/guards, sandboxed iframe UI; P2 adds signed bundle install/upgrade/rollback, a single-source signed market and the `skin-plugin` publishing CLI; v0.5 adds scoped outbound `net:http` and durable `schedule:jobs`; official plugin sources and market live in [skin-nexus-plugins](https://github.com/YimingZhanshen/skin-nexus-plugins) with PR contributions signed by CI; `launcher-api` exposes a Bearer character API for desktop launchers ([spec](docs/launcher-api.md)), and `skin-importer` imports Mojang/Blessing skins singly or in admin batches; see [docs/plugin-spec.md](docs/plugin-spec.md)
 - zh-CN / en built in, language packs extensible
 - SEO: SSR landing and skin detail pages, sitemap, robots, optional site-wide noindex for staging
@@ -182,6 +182,7 @@ Full env-var tables, reverse-proxy examples, backup/restore and troubleshooting:
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributing: translations / themes / code and docs |
 | [`AGENTS.md`](AGENTS.md) | Repository map, iron rules, collaboration discipline |
 | [`GOVERNANCE.md`](GOVERNANCE.md) · [`CITATION.cff`](CITATION.cff) | Governance (BDFL) and citation |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) · [`SECURITY.md`](SECURITY.md) · [`ACCESSIBILITY.md`](ACCESSIBILITY.md) | Community conduct, vulnerability reporting, accessibility statement |
 
 Most detailed docs are currently in Chinese.
 
@@ -190,7 +191,7 @@ Most detailed docs are currently in Chinese.
 | Status | Item |
 |---|---|
 | ✅ Done | Phases 1–3: full Yggdrasil, OIDC passwordless, Union module, i18n / SEO / theme packs, migration toolchain, admin panel; production migration and cutover; v0.2.0 (password reset / Mojang fallback / ops logs / SEO); v0.3.0 (signed plugin install/market/rollback + publishing CLI); v0.4.0 (all slots wired, plugin form fields, avatar CDN, profile/rename guards, capability introspection, local bundle trust levels) |
-| 🔶 In progress | v0.5.0: public texture hash dedupe, scoped outbound HTTP, durable jobs and `skin-importer`; real-device launcher acceptance (SJMCL and community launchers: OAuth → character select → join) |
+| 🔶 In progress | v0.5.0: public texture hash dedupe, scoped outbound HTTP, durable jobs and `skin-importer`, **theme market** (signed registry + local upload + hot install); real-device launcher acceptance (SJMCL and community launchers: OAuth → character select → join) |
 | ⬜ Planned | Official-account binding (second Auth Source), email verification, plugin marketplace operations / sidecar isolation / first-party native plugins |
 
 ## Frozen compatibility contracts

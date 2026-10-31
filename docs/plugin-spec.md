@@ -2,7 +2,7 @@
 
 > 面向想为 SkinNexus 写插件的人（包括让 AI 代劳）。**零构建原则**：插件 = `plugin.json` +
 > 一个入口 JS（可选静态 UI 目录），不需要 Node/打包/编译；放入 `<data>/plugins/<name>/`
-> 后由管理面板启用即生效。
+> 后在管理面板「插件」页重载即被发现并生效（无需重启进程）。
 >
 > 宿主实现：`server/internal/plugin/`（校验规则以代码为准，本规范与代码逐项对齐）。
 > 当前只有**单一插件 API 版本**（`hookApi: 2`）。项目尚无存量第三方生态，不维护旧版兼容层。
@@ -31,7 +31,7 @@
   ui/               # 可选：声明为 ui.assets 的静态资源
 ```
 
-- 放入目录后**重载或重启**才会被发现（宿主进程内一次加载）。
+- 放入目录后需在面板**重载**才会被发现（也可重启进程，二者等价）。
 - 管理面板「插件」页可启用/停用/重载、编辑配置、查看健康/路由/最近日志。
 - 修改入口 JS 或 UI 资源后必须**重载**（或重启）才生效。
 - 推荐安装方式：上传/市场安装**签名 bundle zip**（含 `plugin.json`、`index.js`、`market.json`、`bundle.json`）。
@@ -74,9 +74,9 @@ player-notes_1.2.0.zip
 | `routes` | ⬜ | v2 路由声明（见 §7） |
 | `ui` | ⬜ | v2 页面/插槽/表单/资源/i18n（见 §8） |
 | `net` | ⬜ | 受控出站 HTTP（见 §10.4） |
-| `jobs` | ⬜ | 持久任务处理器（见 §10.5） |
-| `media` | ⬜ | 外部媒体重定向白名单，如 `{"avatarHosts":["cdn.example.com"]}`（见 §10.1） |
-| `requires` / `conflicts` | ⬜ | P2 依赖解析预留；当前解析但不执行 |
+| `jobs` | ✅ | 持久任务处理器声明（`schedule:jobs`，见 §10.5）；名称唯一、≤8 条，超时与重试上限由宿主校验 |
+| `media` | ✅ | 外部媒体重定向白名单，如 `{"avatarHosts":["cdn.example.com"]}`（`media:avatar`，见 §10.1） |
+| `requires` / `conflicts` | ✅ | 安装/启用计划强制执行：宿主版本不满足、缺依赖或撞冲突 → `canInstall=false` 并列出原因 |
 
 上限：脚本 ≤1 MiB、manifest ≤64 KiB、单插件路由 ≤32、全局路由 ≤64、插件总数 ≤64、UI 页面/插槽各 ≤32。
 
@@ -106,7 +106,7 @@ player-notes_1.2.0.zip
 | `events:subscribe` | `skin.events.on` |
 | `auth:guards` | `skin.guards.on` |
 | `net:http` | `skin.net.get`；manifest 必须声明 `net.http` |
-| `mail:send` / `cli:commands` | 预留（当前无运行时实现） |
+| `mail:send` / `cli:commands` | 合法权限名，但宿主当前不提供对应运行时面；声明它们不会多出任何能力 |
 | `schedule:jobs` | `skin.jobs.register/submit/list/status/cancel/resume`；manifest 必须声明 `jobs` |
 | `plugins:read` | `skin.host.info()` / `skin.host.hasPlugin()` 只读内省 |
 
@@ -158,7 +158,8 @@ skin.store.collection("notes").list({ prefix: "", limit: 100 });
 - 宿主托管迁移：`schemaVersion` 递增时，在启用/重载时调用
   `skin.store.onInstall(fn)`（0→N）或 `skin.store.onUpgrade(fn)`（旧→新，`fn` 收到 `{from,to}`）；
   迁移失败会关闭 VM 并把插件标为 error。迁移只能调用 `skin.config` / `skin.store`。
-- 禁用不删数据；删除目录即卸载，数据默认保留（P2 提供清理入口）。
+- 禁用不删数据；卸载默认保留命名空间数据。彻底清理走 API
+  `DELETE /api/admin/v1/plugins/{name}?purge=1`（面板暂未提供该入口），审计 `plugin_uninstall` 记录 `purge` 值。
 
 ## 7. 路由（`skin.route` + manifest `routes`）
 
@@ -447,20 +448,16 @@ name-policy / launcher-api / skin-importer）的源码与签名市场在独立�
 
 投稿流程：插件仓库提 PR → CI `skin-plugin lint`（无密钥）→ 维护者评审合并 →
 CI 环境密钥签名并更新 registry/Pages → 主站市场 10 分钟内可见。
-下载/复制插件目录到 `<data>/plugins/` 仍可在无市场环境手工启用。
+下载/复制插件目录到 `<data>/plugins/` 仍可在无市场环境手工装载（需在面板重载才会被扫到）。
 
-## 12. 非目标与后续路线
+## 12. 非目标与边界
 
-- **v0.4.0**：slot 全接线、`ui.forms` 注册/上传字段、`media:avatar` 头像重定向、资料/角色改名 guard、
-  宿主能力内省、本地包信任分级与来源标识；官方插件仓库 `skin-nexus-plugins` 统一源码，
-  PR 投稿 + `skin-plugin lint` + CI 签名/续签/Pages 发布；主站默认官方 registry，下游可用
-  `SKIN_PLUGIN_MARKET_URL` 覆盖；新增 Bearer 路由档、账号/角色/纹理桥与二进制上传，
-  官方 `launcher-api` 提供启动器 API v1。
-- **v0.5.0（开发中）**：公共纹理 `(type,hash)` 去重与普通上传重复拒绝；受控出站 `net:http`
-  与持久任务 `schedule:jobs`；官方 `skin-importer` 提供 Mojang/Blessing 单条导入和管理员批量收录。
-- **后续按需**：多 registry、mail/CLI、主题 v2、sidecar/native、评分/评论。
+逐版本的能力增量记在 [CHANGELOG.md](CHANGELOG.md)，本篇只描述当前契约，不维护历史。
+
 - **不做**：插件直接访问数据库/宿主表/任意文件系统/任意网络；不允许第三方 Vue/Twig/HTML 注入主 SPA。
 - **兼容策略**：项目尚无存量第三方生态，只维护 `hookApi: 2`；不提供旧版/blessing 插件兼容层。
+- **单市场源**：宿主只验一个钉死的 keyring，不做多 registry 聚合与信任链发现。
+- **主题与插件分面**：主题包（CSS/JS 外观）见 [theme-spec.md](theme-spec.md)，不走插件 manifest 与能力体系。
 
 ## 13. 给 AI 的提示词模板
 

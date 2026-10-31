@@ -4,6 +4,11 @@
 
 ## 2026-11-01
 
+- **全量文档清查与环境变量总表**：`docs/deploy.md` §2.3 由「一段话塞 15 个变量」重建为**分组全表**——50 个变量（46 进程 + 4 compose 专用）逐行给默认值，并区分「源码默认 / 镜像内 ENV 覆盖」两层与 `unset ≠ 空串` 语义；SMTP 五键、Union 八键、限流两键拆成独立行；补上此前只散落在别处的 `SKIN_PORT`、`SKIN_IMAGE_TAG`、`SKIN_DB_*`；面板与 env 的**分键优先级**改为可查表。
+  - 事实纠正：`AGENTS.md`「config.go 是全部 SKIN_* 的唯一入口」为假（五个变量散在 `main.go`/`adminapi`），已改并注明真源；迁移水位 `0001…0014` → `0001…0017`（deploy.md、migration.md）；`CITATION.cff` 声称 0.5.0 已于 2026-10-28 发布 → 改回 `0.4.0`；`SECURITY.md` 支持版本补 `main`（0.5.0 开发中）行，issue 模板版本占位从 `v0.5.0` 改 `v0.4.0`；`plugin-spec.md` 三处「未实现」其实已实现（`jobs`/`media` manifest 面、`requires`/`conflicts` 安装计划强制、卸载 `purge`），插件装载语义统一为「面板重载即生效」；`theme-spec.md` 删掉无消费点的 `--text-dim` 幽灵令牌、把 `.ghost`/`.danger-outline` 修正为实际的 `button.ghost`/`button.danger-outline`、补齐缺失的 `## 7` 父标题；`CONTRIBUTING.md`「未签名包会被拒绝」与超管风险确认的实际行为矛盾，已改写。
+  - 降噪：`compat-matrix.md` §4 由完工流水账改为「缺口与取舍」登记表（邮箱验证流、纹理删除面、正版绑定为真缺口；「换肤必须先入柜」与 429 偏差备案记为取舍）；`competitor-analysis.md` 去掉已完成项的过程叙述、失效的 `refs/` 本地路径与内部技能引用，标注快照口径与「本文不含 blessing 证据」；`CHANGELOG.md` 三个重复的 `## 2026-10-28` 标题合并为一条；`GOVERNANCE.md` 指向 README 不存在的「作者与署名」章节、PR 模板 `AGENTS.md` 相对链接断裂（`.github/AGENTS.md`）均已修；`README.en.md` 补齐落后一整个迭代的英文事实（主题市场与本地上传、材质元数据/举报/私密上传、页脚、`llms.txt`、文档索引与路线图）。
+  - 顺带补一处可观测性：启动日志新增 `theme market: market=… trustKeys=N themesDir=…`，与插件市场那行对称，便于确认两个 keyring 各自生效。验证：`go build`/`go vet`/`go test ./...`（27 包）全绿，文档检查脚本确认 0 断链、50 个变量在 deploy.md 全部命中、CHANGELOG 无重复日期标题。
+
 - **市场零配置**：官方注册表地址与官方验签公钥（插件 `market-2026-10`、主题 `theme-market-2026-11`）一并**编译内置**到二进制，`docker run` 裸跑或 `go run` 不设任何 env 即可浏览/安装两个市场（此前主题市场提示「未配置」）。env 语义保持「unset = 官方默认、显式空串 = 关闭」，compose 里的两行只是把下游覆盖点亮出来；`docs/deploy.md`、`docs/plugin-publishing.md`、`docs/theme-spec.md` 同步口径。
 - **主题市场上线**：管理面板「外观」新增主题市场（官方注册表浏览/安装/更新/卸载）与本地主题包上传（zip ≤16MiB，两步检查→确认）。与插件市场同仓不同路径（`themes/v1/`）、**独立 Ed25519 密钥**（`theme-market-2026-11`，`SKIN_THEME_TRUST_KEYS`/`SKIN_THEME_MARKET_URL` 配置）；市场包四道校验（注册表签名→size/sha256→包内验签→theme.json 结构），安装/卸载**热生效无需重启**，使用中主题禁止卸载，写操作要求超管网页会话+同源 CSRF。`skin-plugin` 新增 `pack-theme` 与 `registry --kind theme`（确定性 zip、同版本不可变）；官方首批上架 azure-glass/ember-forge/verdigris-atelier，线上注册表已发布验证。详见 `docs/theme-spec.md` §7.1。
 - **文案实体与孤行修复**：`admin.pluginsHint` 在文本插值里写了 `&lt;名称&gt;` 实体（文本模式不解码，页面显示实体原文），改为裸 `<名称>`（中英）；落地页一句话简介的 `max-width: 46em` 把「服务器」劈成 8 字孤行，放宽到 62em 使整句单行排下。
@@ -65,15 +70,9 @@
 - **插件市场仓库化**：官方插件源码迁入 `skin-nexus-plugins`（11 个插件，含 launcher-api），PR 投稿 + 无密钥 `skin-plugin lint` + CI 环境密钥签名/续签/Pages 发布；`pack` 统一 LF 换行以保证跨平台可复现；主仓库只保留 `hello-world` / `hello-ui` 两个最小夹具。
 - **v0.3.0 发布 / 签名市场首发**：`skin-plugin` CLI（keygen/pack/registry/verify/verify-registry）、`marketfmt` 单一 registry 编码器、签名 bundle/registry、GitHub Pages 分发、首批 3 个示例（config-greeter / nav-links / player-notes）；修复 `SKIN_PLUGIN_STATE_DIR` 未读取、上传上限未生效；生产配置公钥/registry URL 后可在后台安装/升级/回滚。
 - **插件工具链文档**：`docs/plugin-publishing.md`（私钥离线保管、打包/签名、Pages 布局、过期与轮换、故障排查）。
-
-## 2026-10-28
-
 - **插件市场 P2 Core**：单源签名 registry（Ed25519）+ SHA-256 + 签名 bundle、staging 解压/zip-slip/压缩比防护、原子替换、升级回滚、卸载保留/purge、依赖/冲突与能力 consent、后台市场页与本地上传；新增 0013 安装事务表；修复 `DeletePluginData` 列名与 `.state` 扫描问题。
 - **API 收敛**：项目尚无存量生态，插件只支持 `hookApi: 2`；删除 v1 兼容分支、未使用的 `profiles:write`/`admin:menu` 与死字段，示例/文档同步迁移。
-
-## 2026-10-28
-
-- **插件平台 v2（P0+P1）**：manifest v2（config/store/routes/ui/events/guards）、JSON Schema 配置 + AES-GCM 密钥、`0012` 插件平台迁移（meta/secrets/kv/docs/migrations）、public/session/admin/superadmin 三档路由（身份注入/CSRF/限流/body 上限/访问日志）、命名空间 KV/集合与宿主托管迁移、通用事件目录与 fail-closed guard（含超管破窗）、sandbox iframe UI 页面/固定 slot/`/plugin-assets`/`/ext` 深链、插件健康/路由/日志指标；当时保留 v1 `hookApi: 1` 兼容（已于 2026-10-28 P2 Core 收敛时移除）；新增 4 个 v2 离线示例与规范重写。
+- **插件平台 v2（P0+P1）**：manifest v2（config/store/routes/ui/events/guards）、JSON Schema 配置 + AES-GCM 密钥、`0012` 插件平台迁移（meta/secrets/kv/docs/migrations）、public/session/admin/superadmin 三档路由（身份注入/CSRF/限流/body 上限/访问日志）、命名空间 KV/集合与宿主托管迁移、通用事件目录与 fail-closed guard（含超管破窗）、sandbox iframe UI 页面/固定 slot/`/plugin-assets`/`/ext` 深链、插件健康/路由/日志指标；当时保留 v1 `hookApi: 1` 兼容（已于同日 P2 Core 收敛时移除）；新增 4 个 v2 离线示例与规范重写。
 - **加载硬化**：入口脚本加载超时、调用栈上限、慢插件不阻塞 List/Handler、审计 actor 统一（移除重复审计）。
 
 ## 2026-10-27

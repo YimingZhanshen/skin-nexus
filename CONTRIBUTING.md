@@ -41,9 +41,9 @@
 - **契约三件套**：`theme.json`（清单）+ `style.css`（覆盖 CSS 变量与稳定选择器）+ 可选 JS；
   CSS 变量契约（`--bg/--panel/--border/--text/--muted/--accent/--danger`）与稳定
   选择器安全区是主题的覆盖面保证——**优先改变量，少碰选择器**；
-- **AI 生成**：把 theme-spec.md §9 的提示词模板整段粘给任意 LLM，产物放入
-  站点数据卷 `data/themes/<id>/`，admin「外观」选择即生效；
-- **主题包不进主仓**（社区独立分发，建议开源并附仓库链接）；对**主题规范本身**
+- **AI 生成**：把 theme-spec.md §9 的提示词模板整段粘给任意 LLM，产物打成 zip 走
+  admin「外观」→ 本地主题包上传（热生效、免重启）；手工放 `<data>/themes/<id>/` 则需重启才被扫到；
+- **主题包不进主仓**（社区独立分发，建议开源并附仓库链接；官方三包源码在分发仓库 `themes/<id>/`）；对**主题规范本身**
   的改进——新增稳定选择器/设计令牌、修 schema、补 AI 模板——欢迎直接 PR
   `docs/theme-spec.md`（会同步核对 `web/src` 实际消费点，规范必须与代码一致）；
 - 想深度定制（改布局/交互）用 admin「外观」的自定义 CSS/JS（blessing 同款），
@@ -54,7 +54,9 @@
 插件在服务进程内的 goja VM 中运行，规范见 [`docs/plugin-spec.md`](docs/plugin-spec.md)（v2：配置/密钥、命名空间数据、三档路由、事件/guard、sandbox iframe UI）：
 
 - **单一 API 版本**：插件只支持 `hookApi: 2`（项目尚无存量生态，不维护旧版/blessing 兼容层）；契约以 `server/internal/plugin/contract.go` 为准；
-- **签名安装**：市场/本地上传只接受 Ed25519 签名的 bundle；未签名包会被拒绝，详见 `docs/plugin-spec.md`；
+- **签名与信任分级**：市场安装只接受官方 keyring 验签通过的 bundle；本地上传允许未签名/未知密钥包，
+  但必须由超级管理员网页会话显式确认风险，且插件列表会永久标注来源与信任等级
+  （`verified` / `unknown-key` / `unsigned` / `invalid`），详见 `docs/plugin-spec.md` §1；
 - 示例插件在 `examples/plugins/`（`hello-world` / `hello-ui`，离线无依赖）；官方插件源码在独立仓库 `skin-nexus-plugins`。改动示例须保持 `go test ./internal/plugin/` 全绿；
 - 插件**不进主仓分发**（与主题包同口径）；对**规范本身**的改进欢迎 PR `docs/plugin-spec.md`。
 
@@ -83,7 +85,7 @@ CI 会跑全量门禁（后端 build/vet/test、**MySQL 5.7 与 8.0 双矩阵**�
 - 涉及数据库的改动必须带迁移脚本（`server/migrations/`，追踪式逐文件记标）；
 - 一个 PR 一件事；越界问题只记 issue，不顺手改。
 
-### 4.3 兼容红线（改前必读 AGENTS.md 七条铁律）
+### 4.3 兼容红线（摘要，完整定义与理由见 [`AGENTS.md`](AGENTS.md) 铁律）
 
 以下为冻结面，破坏性改动会被直接拒：
 

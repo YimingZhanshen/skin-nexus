@@ -63,8 +63,8 @@ SkinNexus 的应用样式定义了如下 CSS 自定义属性；**主题覆盖它
 }
 ```
 
-另有两个应用侧局部变量（可一并覆盖）：`--fg`（局部文字色，消费点自带 fallback）、
-`--text-dim`（弱化文字色，皮肤库页裸引用——覆盖它可直接生效）。
+另有一个应用侧局部变量可覆盖：`--fg`（局部文字色，消费点自带 `inherit` 回退，只在少数组件里引用）。
+其余 `--text-dim` 之类的名字**没有宿主消费点**，覆盖了没有任何效果——只认 §3 列出的契约键与派生键。
 
 **注入顺序保证（2026-10-25 起）**：主题 CSS → 自定义 CSS，且两者都注入在应用编译产物
 CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --bg: ... }` 就能生效。
@@ -79,8 +79,9 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 ✅ **允许**：基于语义类名与 data 属性样式化：
 
 - 全局元素/类：`body`、`h1/h2/h3`、`label`、`input`、`textarea`、`select`、`table`、`th`、`td`、`a`、
-  `button`（含 `button.secondary`、`button.danger`）、`.card`、`.badge`、`.muted`、`.error`、`.success`、
-  `.ghost`、`.danger-outline`、`.container`、`.container.wide`、`.row`、`.crumb`、
+  `button`（含 `button.secondary`、`button.danger`、`button.ghost`、`button.danger-outline`）、
+  `.card`、`.badge`、`.muted`、`.error`、`.success`、
+  `.container`、`.container.wide`、`.row`、`.crumb`、
   `.site-footer`、`.site-footer-links`、`.site-footer-text`、`.site-footer-credit`
 - 组件类（注意下方特异性说明）：`.nav-item`、`.nav-title`、`.nav-group`、`.user-shell`、`.user-side`、
   `.user-main`、`.admin-nav-item`、`.tab`、`.md`（公告 Markdown，内含 `:deep(a)` / `:deep(code)` 风格）、
@@ -92,7 +93,7 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 `.site-footer` 结构；主题只能样式化，不替代配置数据。
 
 **特异性说明**：带 `data-v-…` 的组件内类（scoped 样式）特异性是 (0,2,0)，主题同名类选择器 (0,1,0)
-打不过——覆盖 `.nav-item`、`.tab`、`.ghost` 等组件类时需提高特异性（如 `.card .tab`、`html .tab`）
+打不过——覆盖 `.nav-item`、`.tab`、`button.ghost` 等组件类时需提高特异性（如 `.card .tab`、`html .tab`）
 或在属性冲突时用 `!important`；变量覆盖（§3）不受此限。
 
 ## 5. 插槽协议（预留）
@@ -103,7 +104,7 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 "slots": { "home_hero": "<h1>欢迎来到我的皮肤站</h1>" }
 ```
 
-当前版本字段已解析但**不渲染**；待渲染端落地后另行公告。`extends`（父主题继承）同为预留。
+宿主解析这两个字段但**当前不渲染**：写了不报错，也不会改变页面。要改布局或交互请用 admin「外观」的自定义 CSS/JS（§6），要做站内功能区块请用插件 slot（见 plugin-spec.md）。`extends`（父主题继承）同为预留。
 
 ## 6. 安全边界与 JS 时机
 
@@ -119,7 +120,9 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
   });
   ```
 
-## 7.1 主题市场与本地上传（2026-11-01 上线）
+## 7. 安装、市场与生效
+
+### 7.1 主题市场与本地上传
 
 官方主题注册表：`https://yimingzhanshen.github.io/skin-nexus-plugins/themes/v1/registry.json`
 （源仓库 `themes/<id>/`，与插件市场同仓不同路径 + **独立 Ed25519 密钥**
@@ -144,7 +147,7 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 - 打包规范：`theme.json` 在压缩包根（或单层顶层目录内）；资源文件平铺包根、
   文件名全小写（同 §1 约束）。
 
-## 7.2 安装 / 切换 / 卸载 / 调试
+### 7.2 手工安装 / 切换 / 卸载 / 调试
 
 - **安装**：首选 admin「外观」→ 主题市场安装或本地主题包上传（**热生效，无需重启**）；
   或把包目录手工放入 `data/themes/<id>/` → **重启服务**（手工落盘不触发重扫）→
@@ -203,19 +206,19 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 
 生成后：按上方「安装」步骤部署，admin 面板「外观」选择该主题保存即生效。
 
-## 落地页 token 命名空间（2026-10-26）
+## 10. 落地页 token 命名空间
 
 访客落地页（`/`，服务端渲染）采用自有设计语言「月下仙山」（中国古风：黛青底 / 月白字 /
 朱砂主按钮 / 赭石纹线），token 键为：`--ink` `--ink-2` `--ink-3` `--line` `--moon`
 `--moon-2` `--cinnabar` `--cinnabar-hi` `--on-cinnabar` `--ochre` `--font-serif`。
 
 注入顺序不变：主题包与 admin 自定义 CSS 仍在落地页内联样式**之后**注入，可按上述新键
-整体覆盖落地页配色；旧键 `--bg/--panel/--text/--accent` **不再影响落地页**。主题若需
-适配落地页，写新键的覆盖即可（详见 CHANGELOG 当轮记录）。
+整体覆盖落地页配色；旧键 `--bg/--panel/--text/--accent` **不影响落地页**。主题若要适配落地页，
+覆盖这些新键即可。
 
-## v3 全站设计体系（2026-10-26「月下仙山」大改）
+## 11. v3 全站设计体系（派生令牌速查）
 
-全站默认皮肤升级为国画色系（黛青底 / 月白字 / 朱砂主操作 / 青瓷链接 / 赭金警示）。
+默认皮肤为国画色系（黛青底 / 月白字 / 朱砂主操作 / 青瓷链接 / 赭金警示）。
 **token 架构（主题作者必读）**：旧 7 契约键（`--bg/--panel/--border/--text/--muted/--accent/--danger`）
 仍是唯一真源——默认值换成国画色而已；**新增语义键全部别名到契约键**
 （`--ink/--ink-2/--line/--moon/--moon-2/--cinnabar` 等）。主题覆盖旧键时新键自动跟随，
@@ -226,13 +229,13 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 `--danger-hi` · `--ok` · `--hover-wash`（表格行悬停薄雾）· `--r-s/--r-m/--r-l`（圆角三档）·
 `--shadow/--shadow-lift`（阴影两层）· `--ease/--t-fast/--t-mid`（动效）。
 
-**v3.3 补充键（2026-11-01 前端一致性升级）**：派生别名 `--panel-2`（嵌套面板面，默认
+**v3.3 补充键**：派生别名 `--panel-2`（嵌套面板面，默认
 `--ink-3`；皮肤卡预览/进度槽）与 `--accent-ink`（主色底文字，默认 `--on-cinnabar`）；
 间距刻度 `--sp-1…--sp-8`（4/8/12/16/24/32/48/64px）与层级刻度 `--z-topbar/--z-menu/--z-toast/--z-modal`
 （50/60/70/80）——布局类建议按刻度取值但主题可不覆盖。徽章改走变体类
 `.badge.danger/.ok/.jade/.gold/.dim`，不再用内联 style 改色（主题覆盖 `.badge` 即联动）。
 SSR 落地页/详情页与 SPA 共用同一组字号与动效令牌（`--fs-*`、`--t-*`），值漂移视为 bug。
-自 v3.3 起 `:root` 令牌块本体在 **`server/cmd/skin-nexus/theme-base.css`**（唯一真源）：
+`:root` 令牌块本体在 **`server/cmd/skin-nexus/theme-base.css`**（唯一真源）：
 SPA 经 `web/src/style.css` `@import` 引入，SSR 两页 `//go:embed` 注入 `<style>` 首段；
 主题包覆盖契约键的机制不受影响（注入点仍在 `<!--skin-theme-->` 之前）。
 
@@ -240,13 +243,14 @@ SPA 经 `web/src/style.css` `@import` 引入，SSR 两页 `//go:embed` 注入 `<
 `.auth-split/.auth-scene/.auth-pane`（登录/注册/找回/重置的分栏场景布局，≤860px 塌缩）、
 `.user-chip`（侧栏底部用户卡）、`.nav-item .nav-ico`（图标导航，活动态朱砂左条）、
 `.page-head`（页面标题行）。已适配主题：azure-glass / ember-forge / verdigris-atelier
-（各追加 §「v3 语义键适配」小节）。
+（源码在分发仓库 themes/<id>/）。
 
 **红线不变**：logo（N 字牌）为品牌资产，任何主题不得改其配色；变色须全品牌资产统一并由站主终审。
 
-## 主题包能力边界（2026-10-26 终版规范，第三拍板）
+## 12. 主题包能力边界
 
-**主题拥有布局与排版的完全改造权**——主题包的存在意义就是把站点改成完全另一个样子（样板：azure-glass v3「换脸」——默认亮色、超大渐变标题、居中宽幅（1180→1480 随屏宽）、玻璃卡、顶部 dock、全出血 hero，不看文字认不出同站）。当日口径演进如实记录：早前 v3.1 曾以「布局骨架归全站」为名把 dock 缴械（违背 v2 立项初心），当晚即返工并立此终版边界。
+**主题拥有布局与排版的完全改造权**——主题包的存在意义就是把站点改成完全另一个样子（样板：官方
+azure-glass，默认亮色、超大渐变标题、居中宽幅、玻璃卡、顶部 dock、全出血 hero）。
 
 **可以改（全放开）**：布局方向与栅格（行/列/sticky/宽度/不对称偏移）、排版（字体栈/字阶/字距/渐变字）、色板（契约键 + v3 派生键全量覆盖）、组件形态（圆角/胶囊/玻璃/阴影/边框/斑马纹/发丝线）、背景与装饰、动效时长与曲线、明暗模式策略（如 html.azg-dark 双态）。
 
@@ -256,4 +260,4 @@ SPA 经 `web/src/style.css` `@import` 引入，SSR 两页 `//go:embed` 注入 `<
 3. **注入锚点**：`<!--skin-seo-->` / `<!--skin-theme-->` / `<!--skin-custom-head-->` / `<!--skin-custom-body-->` 结构不动；
 4. **可访问性底线**：`:focus-visible` 可见、正文对比度 ≥4.5:1、`prefers-reduced-motion` 被尊重、不引入仅装饰性 emoji 图标。
 
-**共存契约（改结构时的三条工程纪律）**：① sticky 元素为 v3 顶栏让位——`top: calc(var(--topbar-h, 56px) + 间距)`，z 层级低于顶栏（50）；② v3 新结构类（`.user-chip/.nav-ico/.auth-split/.drop-zone` 等）在主题布局里要有合理位置，不得遗留半吊状态；③ 与全站样式对撞时**修共存、不砍结构**（逐点修高度/z/间距/换行），不撤销对方的设计意图。案例存档：dock 事件（v3.1 缴械 → v3.2 返工）。
+**共存契约（改结构时的三条工程纪律）**：① sticky 元素为 v3 顶栏让位——`top: calc(var(--topbar-h, 56px) + 间距)`，z 层级低于顶栏（50）；② v3 新结构类（`.user-chip/.nav-ico/.auth-split/.drop-zone` 等）在主题布局里要有合理位置，不得遗留半吊状态；③ 与全站样式对撞时**修共存、不砍结构**（逐点修高度/z/间距/换行），不撤销对方的设计意图。

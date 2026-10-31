@@ -14,7 +14,7 @@
 ## 〇、开始前 checklist
 
 - [ ] SkinNexus 已能启动并连上**空的目标库**。建表推荐直接 `SKIN_AUTO_MIGRATE=true`
-      启动一次（自动应用 `migrations/` 全部文件（0001…0014，以目录为准）并写 `schema_migrations` 记标）。
+      启动一次（自动应用 `migrations/` 全部文件（0001…0017）并写 `schema_migrations` 记标）。
       ⚠️ 手动执行 DDL 有两处必炸：① `0009` 的 ALTER 与 `0001`/`0005` 部分列重叠，
       直接 `mysql < 0009.sql` 会 ER1060 中止，需 `mysql --force` 逐文件执行；
       ② 手动执行不写 `schema_migrations` 标记，而 **import 实跑强查
@@ -50,7 +50,7 @@
 
 | 老站表 | 目标表 | 说明 |
 |---|---|---|
-| `users` | `users` | 密码哈希原样携带；`password_algo` 自动分类（bcrypt→`legacy:bcrypt`、argon2 PHC→`legacy:argon2`、其余→`legacy` 按 .env 盐链逐个试（支持 12 种公式），**需 SKIN_LEGACY_ENV**），网页登录时惰性重哈希为 argon2id；`permission` 原样搬运（老站管理员迁移后即管理员） |
+| `users` | `users` | 密码哈希原样携带；`password_algo` 自动分类（bcrypt→`legacy:bcrypt`、argon2 PHC→`legacy:argon2`、其余→`legacy` 按 .env 盐链逐个试；12 种算式与 `SKIN_LEGACY_ENV` 要求见 §〇 清单），网页登录时惰性重哈希为 argon2id；`permission` 原样搬运（老站管理员迁移后即管理员） |
 | `players` | `players` | 名称/皮肤披风引用原样 |
 | `textures` | `textures` | `type` 做 steve/alex→`skin`+`model` 映射；`name`→`description` |
 | `uuid` | `uuid_map` | 过五步清洗（同名去重 / 同 UUID 去重 / pid 回填 / 孤儿剔除），**UUID 零漂移** |

@@ -8,7 +8,7 @@
 ```
 server/         Go 后端（模块 skin-nexus/server）
   cmd/skin-nexus/     入口：路由组装（yggdrasil / oidc / union / api/v1 / admin / public / textures / avatar / preview / SPA）
-  internal/config     运行时配置（全部 SKIN_* 环境变量的唯一入口）
+  internal/config     运行时配置（绝大多数 SKIN_* 变量的入口；ADMIN_TOKEN / SMTP_* / MOJANG_FALLBACK / LEGACY_ENV / PLUGIN_SECRET_KEY 五个散在 main.go 与 adminapi，完整表见 docs/deploy.md §2.3）
   internal/ygg        Yggdrasil 协议核心（models/service/http/signer）—— 兼容面冻结区
   internal/oidc       yggc/OIDC 免密登录内置（zitadel/oidc 内核 + 自持 discovery/userinfo/device 页 + JWT token 双态）
   internal/union      MUA Union 成员站模块（可开关：三头验签 / 入站出站 / OAuth2 grant / UnionSigner）—— wire 契约冻结区
@@ -33,8 +33,8 @@ server/         Go 后端（模块 skin-nexus/server）
   cmd/skin-plugin     离线打包/签名/registry/校验 CLI（私钥不入仓）
   migrations/         DDL（InnoDB utf8mb4；0001 基础 … 0017 材质元数据/举报，追踪式逐文件记标）
 web/            Vue 3 + Vite（npm ci && npm run build → web/dist）
-docs/           构建 / 部署 / 迁移 / 兼容矩阵 / 竞品证据 / 主题规范 / CHANGELOG（公开）；
-                开发过程文档在上级 docs/（本地，永不入库）
+docs/           仓库内公开文档（构建 / 部署 / 迁移 / 兼容矩阵 / 竞品证据 / 插件规范与发布 /
+                主题规范 / 启动器 API 入口 / CHANGELOG）
 ```
 
 ## 铁律（拍板记录不随仓库分发）
@@ -78,14 +78,20 @@ SKIN_TEST_DSN='user:pass@tcp(127.0.0.1:3306)/skin_nexus_test?parseTime=true' \
 
 新代码通过既有端口（`ygg.Store`、`texture.Store`、`plugin.Host`）扩展，不直接散落 SQL——需要新查询时加方法到 `internal/store`。admin/web/public 各自独立 package，路由在 `cmd/skin-nexus/main.go` 统一组装。
 
-## 面向部署者的文档入口
+## 文档入口（完整清单）
 
 | 想做什么 | 读哪篇 |
 |---|---|
-| 从源码/Docker 构建 | `docs/build.md` |
-| 新站部署、环境变量、反代、运维 | `docs/deploy.md` |
+| 从源码/Docker 构建、CI、自检 | `docs/build.md` |
+| 新站部署、**环境变量全表**、反代、CDN、备份排错 | `docs/deploy.md` |
 | 从 blessing-skin-server 迁数据、切流 | `docs/migration.md` |
 | 检查与老站的协议兼容缺口 | `docs/compat-matrix.md` |
-| 写/分发主题包 | `docs/theme-spec.md` |
-| 参与贡献（翻译/主题/代码） | `CONTRIBUTING.md` |
+| 写插件（manifest / 能力 / 路由 / UI / guard） | `docs/plugin-spec.md` |
+| 发布插件或主题、签名、密钥轮换 | `docs/plugin-publishing.md` |
+| 写/分发主题包、主题市场 | `docs/theme-spec.md` |
+| 启动器对接（API 入口与登录流） | `docs/launcher-api.md` |
+| 竞品对照的源码证据与方法 | `docs/competitor-analysis.md` |
 | 了解每轮开发改了什么 | `docs/CHANGELOG.md` |
+| 参与贡献（翻译/主题/插件/代码） | `CONTRIBUTING.md` |
+| 报告漏洞与支持版本 | `SECURITY.md` |
+| 社区行为准则 / 可访问性 / 治理 | `CODE_OF_CONDUCT.md` / `ACCESSIBILITY.md` / `GOVERNANCE.md` |

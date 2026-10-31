@@ -230,6 +230,7 @@ func main() {
 			return appearEng.Settings(context.Background()).ActiveTheme == id
 		},
 	}, themeReg)
+	log.Printf("theme market: market=%q trustKeys=%d themesDir=%s", cfg.ThemeMarketURL, len(themeTrustKeys), cfg.ThemesDir)
 
 	accessLog := accesslog.New(st.InsertAccessLog)
 

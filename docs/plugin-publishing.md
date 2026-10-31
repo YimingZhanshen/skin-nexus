@@ -1,21 +1,26 @@
-# 插件发布与签名市场
+# 扩展发布与签名市场（插件 + 主题）
 
-本文面向插件作者/站长：如何生成签名 bundle、构建签名 registry、发布到 GitHub Pages，
-以及生产站如何信任它。安装/运行时语义见 [`plugin-spec.md`](plugin-spec.md)。
+本文面向作者/站长：如何生成签名 bundle、构建签名 registry、发布到 GitHub Pages，
+以及生产站如何信任它。安装/运行时语义见 [`plugin-spec.md`](plugin-spec.md)，
+主题包的产品语义见 [`theme-spec.md`](theme-spec.md) §7.1。
 
 > 私钥只留在发布者离线环境。仓库、CI、生产服务器、registry 站点都只出现公钥。
+
+**两个市场同一条链路，两套密钥**：插件走 `v1/` + `market-2026-10`，主题走 `themes/v1/` +
+`theme-market-2026-11`，同一个分发仓库、同一套 CLI 与 CI 环境；一把钥匙泄露不会同时沦陷两个面。
 
 ## 0. 官方市场投稿（推荐）
 
 官方插件源码统一在 <https://github.com/YimingZhanshen/skin-nexus-plugins>：
 
-1. 在 `plugins/<name>/` 添加源码与 `market.json`；
+1. 在 `plugins/<name>/`（插件）或 `themes/<id>/`（主题）添加源码与 `market.json`；
 2. 向该仓库提 PR —— CI 只运行 `skin-plugin lint`（无密钥），校验 manifest、
    market 元数据、权限、归档安全与版本单调性；
 3. 维护者按下文 [`REVIEW.md`](https://github.com/YimingZhanshen/skin-nexus-plugins/blob/main/REVIEW.md)
    评审并合并；
 4. 合并后 CI 在 `market-signing` 环境用密钥打包/签名、重建 `v1/registry.json`
-   并更新 Pages；主站市场最迟 10 分钟可见；
+   并更新 Pages；主站市场最迟 10 分钟可见。主题由独立的
+   `sign-themes.yml` + `scripts/sign-themes.sh` 走同一步骤，产物落 `themes/v1/`；
 5. 版本一经发布不可覆盖，升级请递增 `version`。
 
 下文 1–8 节是本机离线签名/续签/轮换的手工流程，CI 不可用或需要演练时使用。
@@ -32,7 +37,9 @@ go run ./cmd/skin-plugin keygen \
 
 - 输出：`market-2026-10:<base64(raw 32-byte public key)>`；
 - 私钥是 PKCS#8 PEM，权限 0600；请离线加密备份两份；
-- 公钥串写入生产 `SKIN_PLUGIN_TRUST_KEYS`（仅自建市场/轮换时需要，官方公钥已编译内置）；私钥**不要**提交、上传服务器或放 CI secret。
+- 公钥串写入生产 `SKIN_PLUGIN_TRUST_KEYS`（官方市场公钥已编译内置，只有自建市场/轮换才需要设）；私钥**不要**提交、上传服务器或放 CI secret。
+- 主题市场**另建一把**：`--out ~/keys/theme-market-2026-11.pem`、keyId `theme-market-2026-11`，
+  写入 `SKIN_THEME_TRUST_KEYS`；两把钥匙不得互用，也不得复用同一个 keyId。
 
 ## 2. 插件目录与 market.json
 
@@ -55,10 +62,10 @@ plugins/<name>/
   "description": { "zh-CN": "一句话说明", "en": "One-line description" },
   "author": "Your Name",
   "changelog": "1.0.0 — first release",
-  "requires": { "plugins": {}, "server": ">=0.5.0" },
+  "requires": { "plugins": {}, "server": ">=0.4.0" },
   "conflicts": [],
   "capabilities": ["config", "http:routes"],
-  "minServer": ">=0.5.0"
+  "minServer": ">=0.4.0"
 }
 ```
 
@@ -77,7 +84,7 @@ cd server
 go run ./cmd/skin-plugin lint \
   --dir ../plugins/my-plugin \
   --registry ../v1/registry.json \
-  --host-version 0.5.0 --json
+  --host-version 0.4.0 --json
 ```
 
 打包：
@@ -106,8 +113,26 @@ go run ./cmd/skin-plugin pack \
 go run ./cmd/skin-plugin verify \
   --bundle ../dist/my-plugin-1.0.0.zip \
   --keys "market-2026-10:<base64-public-key>" \
-  --host-version 0.5.0
+  --host-version 0.4.0
 ```
+
+### 3.1 主题包（`pack-theme`）
+
+主题包用**主题密钥**（`theme-market-2026-11`）签，产物根目录是 `theme.json` + CSS/JS/字体资源：
+
+```bash
+go run ./cmd/skin-plugin pack-theme \
+  --dir ../themes/my-theme \
+  --out ../themes-dist/my-theme-1.0.0.zip \
+  --key ~/keys/theme-market-2026-11.pem \
+  --key-id theme-market-2026-11 \
+  --json
+```
+
+`pack-theme` 用同一套归档安全与确定性打包（同版本重签字节级一致），`--host-version`
+参数不适用——主题的版本门是 `theme.json` 的 `requires.skin_nexus`。registry 用
+`registry --kind theme`（§4 同一条命令加一个 flag），落到 `themes/v1/`。
+主题产品侧规则见 [`theme-spec.md`](theme-spec.md) §7.1。
 
 ## 4. 构建 registry
 
@@ -154,7 +179,7 @@ v1/keys.json                    # 公钥透明清单
 wget -qO- https://yimingzhanshen.github.io/skin-nexus-plugins/v1/registry.json | head
 ```
 
-要求：HTTPS、200、无 301/302；registry ≤1 MiB，artifact ≤32 MiB。
+要求：HTTPS、200、无 301/302；下载侧上限 registry ≤1 MiB、单个制品 ≤32 MiB（`pack` 侧的 64 MiB 是解包后总量上限，两者不是同一个数）。
 GitHub Pages 可能有分钟级缓存，发布后不要立刻判定失败。
 
 ## 6. 生产配置
@@ -182,9 +207,9 @@ SKIN_IMAGE_TAG=sha-<release-commit>
 
 验证：
 
-1. 启动日志出现 `plugins: market="https://..." trustKeys=1 stateDir=...`；
+1. 启动日志两行各报自己那套 keyring：`plugins: market=… trustKeys=N stateDir=… uploadMax=…` 与 `theme market: market=… trustKeys=N themesDir=…`；
 2. 超管进入「插件市场」，catalog 显示已发布插件；
-3. 安装 → 默认 disabled → 启用 → 升级 → 回滚 → 卸载；
+3. 安装 → 默认 disabled → 启用 → 升级 → 回滚 → 卸载；主题市场同理（安装/卸载热生效，无需重启容器）；
 4. 错误 key/过期 registry/篡改 zip/301 重定向均被拒绝。
 
 ## 7. 过期与轮换
