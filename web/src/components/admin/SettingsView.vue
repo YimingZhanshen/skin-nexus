@@ -5,6 +5,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
+import ThemeMarketSection from './ThemeMarketSection.vue'
 
 const { t } = useI18n()
 const emit = defineEmits(['settings-changed'])
@@ -284,7 +285,7 @@ onMounted(load)
         <option v-for="th in themes" :key="th.id" :value="th.id">{{ th.name }}（{{ th.version }}）</option>
       </select>
       <div class="muted" v-if="!themes.length" style="font-size: var(--fs-xs);">
-        将主题包放入 data/themes/&lt;id&gt;/（含 theme.json），重启服务后在此识别（新增/删除主题包需重启）。规范见 docs/theme-spec.md。
+        将主题包放入 data/themes/&lt;id&gt;/（含 theme.json）后用下方「主题市场 → 本地上传」安装，或重启服务扫描目录。规范见 docs/theme-spec.md。
       </div>
       <label style="margin-top: 12px;" for="ap-footer-text">页脚文字（支持 {year} / {site_name} / {site_url} 占位符）</label>
       <textarea id="ap-footer-text" v-model="appearance.footer_text" rows="3" maxlength="1000" placeholder="© {year} {site_name} · 浙ICP备12345678号"></textarea>
@@ -308,6 +309,7 @@ onMounted(load)
         <button @click="appearSave">保存外观</button>
       </div>
       <div class="error" v-if="appearError">{{ appearError }}</div>
+      <ThemeMarketSection @changed="loadAppearance" />
     </div>
 
     <!-- OIDC clients -->
