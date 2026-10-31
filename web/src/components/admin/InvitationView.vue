@@ -57,7 +57,8 @@ onMounted(load)
     </div>
     <div class="error" v-if="invError">{{ invError }}</div>
     <h3>可用列表</h3>
-    <table v-if="invFree.length">
+    <div class="table-scroll" v-if="invFree.length">
+    <table>
       <tr><th>ID</th><th>邀请码</th><th>备注</th><th>生成时间</th><th></th></tr>
       <tr v-for="ic in invFree" :key="ic.id">
         <td>{{ ic.id }}</td>
@@ -67,9 +68,11 @@ onMounted(load)
         <td><button class="secondary" @click="invEdit(ic)">改备注</button></td>
       </tr>
     </table>
+    </div>
     <p class="muted" v-else>暂无可用邀请码</p>
     <h3>已用列表</h3>
-    <table v-if="invUsed.length">
+    <div class="table-scroll" v-if="invUsed.length">
+    <table>
       <tr><th>ID</th><th>邀请码</th><th>备注</th><th>使用者 UID</th><th>使用时间</th></tr>
       <tr v-for="ic in invUsed" :key="ic.id">
         <td>{{ ic.id }}</td>
@@ -79,6 +82,7 @@ onMounted(load)
         <td class="muted">{{ (ic.used_at || '').slice(0, 19).replace('T', ' ') }}</td>
       </tr>
     </table>
+    </div>
     <p class="muted" v-else>暂无已用邀请码</p>
   </div>
 </template>

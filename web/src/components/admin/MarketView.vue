@@ -6,6 +6,8 @@ import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { api } from '../../api.js'
 import { loadPluginUI } from '../../pluginUI.js'
+import Pager from '../Pager.vue'
+import EmptyState from '../EmptyState.vue'
 
 const { t } = useI18n()
 const packages = ref([])
@@ -216,8 +218,9 @@ onMounted(async () => {
     </div>
 
     <p v-if="loading" class="muted">{{ t('common.loading') }}</p>
-    <p v-else-if="!filtered.length" class="muted">{{ t('admin.marketEmpty') }}</p>
-    <table v-else>
+    <EmptyState v-else-if="!filtered.length" :text="t('admin.marketEmpty')" />
+    <div class="table-scroll" v-else>
+    <table>
       <thead>
         <tr>
           <th>{{ t('admin.colPluginName') }}</th>
@@ -257,11 +260,8 @@ onMounted(async () => {
         </tr>
       </tbody>
     </table>
-    <div class="row" v-if="totalPages > 1" style="justify-content: flex-end; margin-top: 12px;">
-      <button class="secondary" :disabled="page <= 1" @click="page--">‹</button>
-      <span class="muted">{{ page }} / {{ totalPages }}</span>
-      <button class="secondary" :disabled="page >= totalPages" @click="page++">›</button>
     </div>
+    <Pager :page="page" :pages="totalPages" align="end" @update:page="page = $event" />
 
     <div v-if="selected" class="card" style="margin-top: 16px;">
       <h3>{{ t('admin.marketInstallTitle', { name: label(selected.title, selected.name) }) }}</h3>

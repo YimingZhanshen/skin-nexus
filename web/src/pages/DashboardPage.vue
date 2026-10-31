@@ -10,6 +10,7 @@ import PluginSlot from '../components/plugin/PluginSlot.vue'
 import PluginFields from '../components/plugin/PluginFields.vue'
 import DOMPurify from 'dompurify'
 import SkinPreview from '../components/SkinPreview.vue'
+import EmptyState from '../components/EmptyState.vue'
 import { api, uploadTexture } from '../api.js'
 import { guard401 } from '../session.js'
 
@@ -275,8 +276,8 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
         </div>
         <div class="detail-editor">
           <div class="tabs detail-tabs">
-            <button type="button" :class="{ active: detailTab === 'edit' }" @click="detailTab = 'edit'">{{ t('dashboard.detailEdit') }}</button>
-            <button type="button" :class="{ active: detailTab === 'preview' }" @click="detailTab = 'preview'">{{ t('dashboard.detailPreview') }}</button>
+            <button type="button" class="tab" :class="{ active: detailTab === 'edit' }" @click="detailTab = 'edit'">{{ t('dashboard.detailEdit') }}</button>
+            <button type="button" class="tab" :class="{ active: detailTab === 'preview' }" @click="detailTab = 'preview'">{{ t('dashboard.detailPreview') }}</button>
             <span class="muted char-count">{{ [...uploadDetail].length }} / 4000</span>
           </div>
           <textarea v-if="detailTab === 'edit'" v-model="uploadDetail" rows="6" maxlength="4000"
@@ -320,7 +321,8 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
   <!-- textures -->
   <div class="card">
     <h2>{{ t('dashboard.texturesTitle', { count: textures.length }) }}</h2>
-    <table v-if="textures.length">
+    <div class="table-scroll" v-if="textures.length">
+    <table>
       <tr><th>{{ t('dashboard.colType') }}</th><th>{{ t('dashboard.colModel') }}</th><th>{{ t('dashboard.colPreview') }}</th><th>{{ t('dashboard.colHash') }}</th><th></th></tr>
       <tr v-for="tx in textures" :key="tx.id">
         <td>{{ tx.type }}</td>
@@ -333,7 +335,8 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
         </td>
       </tr>
     </table>
-    <div v-else class="muted">{{ t('dashboard.texturesEmpty') }}</div>
+    </div>
+    <EmptyState v-else :text="t('dashboard.texturesEmpty')" />
   </div>
   <PluginSlot slot="dashboard.cards" />
 </template>
@@ -375,12 +378,7 @@ h3 { font-size: var(--fs-s); margin: 16px 0 4px; color: var(--muted); font-weigh
 .radio-row { display: flex; flex-wrap: wrap; gap: 14px; }
 .radio-row label, .check-line { display: flex; gap: 6px; align-items: center; font-size: var(--fs-s); }
 .source-hint { display: block; margin-top: 4px; font-size: var(--fs-xs); }
-.detail-tabs { display: flex; align-items: center; gap: 6px; }
-.detail-tabs button {
-  padding: 6px 12px; border: 1px solid var(--border); background: transparent;
-  color: var(--muted); border-radius: var(--r-s); cursor: pointer;
-}
-.detail-tabs button.active { border-color: var(--accent); color: var(--accent); }
+.detail-tabs { width: 100%; }
 .detail-tabs .char-count { margin-left: auto; font-size: var(--fs-xs); }
 .detail-editor textarea { width: 100%; resize: vertical; }
 .detail-preview { min-height: 120px; border: 1px solid var(--border); border-radius: var(--r-m);

@@ -327,7 +327,8 @@ onMounted(load)
         {{ t('admin.oidcSecretOnce') }}<code>{{ lastSecret }}</code>
       </div>
       <div class="error" v-if="oidcError">{{ oidcError }}</div>
-      <table v-if="oidcClients.length" style="margin-top: 12px;">
+      <div class="table-scroll" v-if="oidcClients.length" style="margin-top: 12px;">
+      <table>
         <tr><th>{{ t('admin.oidcClientId') }}</th><th>{{ t('admin.oidcClientName') }}</th><th>{{ t('admin.oidcClientType') }}</th><th>{{ t('admin.oidcClientGrants') }}</th><th>{{ t('admin.oidcClientRedirects') }}</th><th></th></tr>
         <tr v-for="c in oidcClients" :key="c.client_id">
           <td><code>{{ c.client_id }}</code></td>
@@ -338,6 +339,7 @@ onMounted(load)
           <td><button class="secondary" @click="deleteClient(c.client_id)">{{ t('admin.oidcDelete') }}</button></td>
         </tr>
       </table>
+      </div>
     </div>
   </div>
 </template>

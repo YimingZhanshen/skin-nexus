@@ -6,6 +6,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
+import Pager from '../Pager.vue'
+import EmptyState from '../EmptyState.vue'
 
 const { t } = useI18n()
 const unionStatus = ref(null)
@@ -21,6 +23,11 @@ const blPage = ref(1)
 // hub 是 Laravel 分页（per_page 由 hub 定，不固定）——用上游权威的
 // last_page，缺失时退化为 total/per_page 推算。
 const blTotalPages = ref(1)
+function blGoPage(p) {
+  if (p < 1 || p > blTotalPages.value || p === blPage.value) return
+  blPage.value = p
+  loadBlacklist()
+}
 const blQ = ref('')
 const blEmail = ref('')
 const blReason = ref('')
@@ -251,7 +258,8 @@ onMounted(async () => {
         <input v-model="blQ" :placeholder="t('admin.unionBlSearch')" style="max-width: 220px;" @keyup.enter="blPage = 1; loadBlacklist()" />
         <button class="secondary" @click="blPage = 1; loadBlacklist()">{{ t('admin.unionBlSearchBtn') }}</button>
       </div>
-      <table v-if="blRows.length" class="bl-table" style="margin-top: 12px;">
+      <div class="table-scroll" v-if="blRows.length" style="margin-top: 12px;">
+      <table class="bl-table">
         <tr>
           <th>ID</th><th>{{ t('admin.unionBlEmail') }}</th><th>{{ t('admin.unionBlSource') }}</th>
           <th>{{ t('admin.unionBlReason') }}</th><th>{{ t('admin.unionBlCreated') }}</th>
@@ -266,19 +274,16 @@ onMounted(async () => {
           <td class="muted">{{ row.valid_until || '—' }}</td>
           <td>
             <button class="secondary" @click="blRelease(row)">{{ t('admin.unionBlRelease') }}</button>
-            <button class="secondary" @click="blDelete(row)" style="margin-left: 8px; border-color: var(--danger); color: var(--danger);">
+            <button class="secondary danger-outline" style="margin-left: 8px;" @click="blDelete(row)">
               {{ t('admin.unionBlDelete') }}
             </button>
           </td>
         </tr>
       </table>
-      <div v-else class="muted">{{ t('admin.unionBlEmpty') }}</div>
-      <!-- 上游 MUA API 为 Laravel 分页（默认 20 条/页），对齐老站翻页能力 -->
-      <div class="row pager" v-if="blTotalPages > 1" style="margin-top: 12px; justify-content: flex-end;">
-        <button class="secondary" :disabled="blPage <= 1" @click="blPage--; loadBlacklist()">{{ t('admin.prevPage') }}</button>
-        <span class="muted" style="font-size: var(--fs-xs);">{{ blPage }} / {{ blTotalPages }}</span>
-        <button class="secondary" :disabled="blPage >= blTotalPages" @click="blPage++; loadBlacklist()">{{ t('admin.nextPage') }}</button>
       </div>
+      <EmptyState v-else :text="t('admin.unionBlEmpty')" />
+      <!-- 上游 MUA API 为 Laravel 分页（默认 20 条/页），对齐老站翻页能力 -->
+      <Pager :page="blPage" :pages="blTotalPages" align="end" @update:page="blGoPage" />
       <div class="row" style="margin-top: 12px;">
         <input v-model="blEmail" :placeholder="t('admin.unionBlEmail')" style="max-width: 220px;" />
         <input v-model="blReason" :placeholder="t('admin.unionBlReason')" style="max-width: 260px;" />
@@ -291,14 +296,14 @@ onMounted(async () => {
       <div class="diag-modal">
         <div class="diag-head">
           <h3>{{ t('admin.unionOpDiagnose') }}</h3>
-          <button class="diag-close" @click="closeDiagnose" aria-label="close">×</button>
+          <button class="ghost diag-close" @click="closeDiagnose" :aria-label="t('common.close')">×</button>
         </div>
         <div class="diag-body">
           <div class="diag-idle" v-if="!diag && !diagLoading">
-            <button class="diag-start" @click="triggerDiagnose">{{ t('admin.diagStart') }}</button>
+            <button @click="triggerDiagnose">{{ t('admin.diagStart') }}</button>
           </div>
           <div class="diag-loading" v-if="diagLoading">
-            <span class="diag-spinner"></span>
+            <span class="spinner" aria-hidden="true"></span>
             <span>{{ t('admin.diagRunning') }}</span>
           </div>
           <div class="diag-result" v-if="diag && !diagLoading">
@@ -306,7 +311,7 @@ onMounted(async () => {
               <span class="diag-badge" :class="diag.status === 'ok' ? 'ok' : 'fail'">
                 {{ diag.status === 'ok' ? t('admin.diagAllOk') : t('admin.diagHasFail') }}
               </span>
-              <button class="diag-export" @click="exportDiagnose">⤓ {{ t('admin.diagExport') }}</button>
+              <button class="secondary" @click="exportDiagnose">⤓ {{ t('admin.diagExport') }}</button>
             </div>
             <table class="diag-table">
               <tr v-for="(r, i) in diagRows" :key="i">
@@ -357,7 +362,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 80;
+  z-index: var(--z-modal, 80);
 }
 .diag-modal {
   width: min(860px, 92vw);
@@ -375,25 +380,8 @@ onMounted(async () => {
   border-bottom: 1px solid var(--border);
 }
 .diag-head h3 { margin: 0; font-size: var(--fs-m); }
-.diag-close {
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-size: var(--fs-l);
-  cursor: pointer;
-  line-height: 1.5;
-}
 .diag-body { padding: 20px; }
 .diag-idle { text-align: center; padding: 24px 0; }
-.diag-start {
-  padding: 8px 24px;
-  border-radius: var(--r-s);
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--on-cinnabar);
-  font-size: var(--fs-s);
-  cursor: pointer;
-}
 .diag-loading {
   display: flex;
   gap: 12px;
@@ -401,15 +389,6 @@ onMounted(async () => {
   justify-content: center;
   padding: 32px 0;
 }
-.diag-spinner {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 3px solid var(--border);
-  border-top-color: var(--accent);
-  animation: diag-spin 0.9s linear infinite;
-}
-@keyframes diag-spin { to { transform: rotate(360deg); } }
 .diag-result-bar {
   display: flex;
   align-items: center;
@@ -427,14 +406,6 @@ onMounted(async () => {
 }
 .diag-badge.ok { background: var(--ok-wash); color: var(--ok); border: 1px solid var(--ok); }
 .diag-badge.fail { background: var(--bad-wash); color: var(--danger); border: 1px solid var(--danger); }
-.diag-export {
-  padding: 8px 12px;
-  border-radius: var(--r-s);
-  border: 1px solid var(--border);
-  background: none;
-  color: var(--text);
-  cursor: pointer;
-}
 .diag-table { width: 100%; border-collapse: collapse; }
 .diag-table th {
   width: 20%;

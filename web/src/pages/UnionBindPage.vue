@@ -225,6 +225,7 @@ onMounted(load)
 
     <div class="card" v-if="servers.length">
       <h2>{{ t('union.serversTitle', { count: servers.length }) }}</h2>
+      <div class="table-scroll">
       <table>
         <tr><th>{{ t('union.colCode') }}</th><th>{{ t('union.colName') }}</th></tr>
         <tr v-for="s in servers" :key="s.code">
@@ -232,6 +233,7 @@ onMounted(load)
           <td>{{ serverDisplayName(s) }}</td>
         </tr>
       </table>
+      </div>
     </div>
   </div>
 </template>

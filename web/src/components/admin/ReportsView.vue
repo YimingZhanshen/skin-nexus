@@ -2,14 +2,23 @@
 // Texture report moderation: list open reports, dismiss/resolve, or hide the
 // texture. Hiding calls the same visibility path as the owner toggle, so the
 // public dedupe key is cleared and the detail page becomes owner-only.
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
+import Pager from '../Pager.vue'
+import EmptyState from '../EmptyState.vue'
 
 const { t } = useI18n()
 const reports = ref([])
 const total = ref(0)
 const page = ref(1)
+const pageSize = 20
+const pages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
+function turnTo(p) {
+  if (p < 1 || p > pages.value || p === page.value) return
+  page.value = p
+  load()
+}
 const status = ref('open')
 const loading = ref(false)
 const busy = ref(0)
@@ -83,8 +92,9 @@ onMounted(load)
     <div class="error" v-if="error">{{ error }}</div>
     <div class="success" v-if="ok">{{ ok }}</div>
     <p class="muted" v-if="loading">{{ t('common.loading') }}</p>
-    <p class="muted" v-else-if="!reports.length">{{ t('admin.reportsEmpty') }}</p>
-    <table v-else>
+    <EmptyState v-else-if="!reports.length" :text="t('admin.reportsEmpty')" />
+    <div class="table-scroll" v-else>
+    <table>
       <thead>
         <tr>
           <th>{{ t('admin.reportsTexture') }}</th>
@@ -127,11 +137,8 @@ onMounted(load)
         </tr>
       </tbody>
     </table>
-    <div class="row pager" v-if="total > 20">
-      <button class="secondary" :disabled="page <= 1" @click="page--; load()">‹</button>
-      <span class="muted">{{ page }}</span>
-      <button class="secondary" :disabled="page * 20 >= total" @click="page++; load()">›</button>
     </div>
+    <Pager :page="page" :pages="pages" :total="total" @update:page="turnTo" />
   </div>
 </template>
 

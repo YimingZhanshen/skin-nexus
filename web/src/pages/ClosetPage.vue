@@ -5,6 +5,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
+import EmptyState from '../components/EmptyState.vue'
 
 const { t } = useI18n()
 
@@ -71,12 +72,12 @@ onMounted(load)
         <button class="tab" :class="{ active: tab === 'all' }" @click="tab = 'all'">{{ t('closet.tabAll') }}</button>
         <button class="tab" :class="{ active: tab === 'skin' }" @click="tab = 'skin'">{{ t('dashboard.typeSkin') }}</button>
         <button class="tab" :class="{ active: tab === 'cape' }" @click="tab = 'cape'">{{ t('dashboard.typeCape') }}</button>
-      </div>
-      <input v-model="query" :placeholder="t('closet.searchPlaceholder')" style="max-width: 240px;" />
+      </div>      <input v-model="query" :placeholder="t('closet.searchPlaceholder')" style="max-width: 240px;" />
     </div>
     <div class="error" v-if="err">{{ err }}</div>
     <div class="success" v-if="ok">{{ ok }}</div>
-    <table v-if="filtered.length" style="margin-top: 10px;">
+    <div class="table-scroll" v-if="filtered.length">
+    <table style="margin-top: 10px;">
       <tr>
         <th>{{ t('dashboard.colPreview') }}</th>
         <th>{{ t('dashboard.colType') }}</th>
@@ -96,20 +97,13 @@ onMounted(load)
         </td>
       </tr>
     </table>
-    <p class="muted" v-else>{{ query || tab !== 'all' ? t('closet.emptyFiltered') : t('closet.empty') }}</p>
+    </div>
+    <EmptyState v-else :text="query || tab !== 'all' ? t('closet.emptyFiltered') : t('closet.empty')" />
   </div>
 </template>
 
 <style scoped>
-.tabs { display: flex; gap: 6px; }
-.tab {
-  background: transparent; border: 1px solid var(--border); color: var(--muted);
-  padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: 13px;
-}
-.tab.active { border-color: var(--accent); color: var(--text); font-weight: 600; }
 .thumb { height: 48px; image-rendering: pixelated; vertical-align: middle; border-radius: 4px; }
 .hash { font-size: 11px; }
 .nowrap { white-space: nowrap; }
-.danger-outline { border-color: var(--danger); color: var(--danger); }
-.danger-outline:hover { background: var(--danger); color: var(--on-danger); }
 </style>

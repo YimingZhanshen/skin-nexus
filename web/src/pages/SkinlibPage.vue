@@ -7,6 +7,8 @@ import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
 import PluginSlot from '../components/plugin/PluginSlot.vue'
+import Pager from '../components/Pager.vue'
+import EmptyState from '../components/EmptyState.vue'
 
 const { t } = useI18n()
 const emit = defineEmits(['login'])
@@ -143,10 +145,10 @@ onMounted(() => { load() })
 
     <div class="row" style="flex-wrap: wrap; gap: 8px; align-items: center;">
       <div class="tabs">
-        <button :class="{ active: filter === 'skin' }" @click="setFilter('skin')">{{ t('skinlib.tabSkin') }}</button>
-        <button :class="{ active: filter === 'cape' }" @click="setFilter('cape')">{{ t('skinlib.tabCape') }}</button>
-        <button :class="{ active: filter === 'steve' }" @click="setFilter('steve')">{{ t('skinlib.tabSteve') }}</button>
-        <button :class="{ active: filter === 'alex' }" @click="setFilter('alex')">{{ t('skinlib.tabAlex') }}</button>
+        <button class="tab" :class="{ active: filter === 'skin' }" @click="setFilter('skin')">{{ t('skinlib.tabSkin') }}</button>
+        <button class="tab" :class="{ active: filter === 'cape' }" @click="setFilter('cape')">{{ t('skinlib.tabCape') }}</button>
+        <button class="tab" :class="{ active: filter === 'steve' }" @click="setFilter('steve')">{{ t('skinlib.tabSteve') }}</button>
+        <button class="tab" :class="{ active: filter === 'alex' }" @click="setFilter('alex')">{{ t('skinlib.tabAlex') }}</button>
       </div>
       <input v-model="keyword" :placeholder="t('skinlib.searchPlaceholder')" style="max-width: 220px;" @input="onSearch" />
       <select :value="sort" style="max-width: 140px;" @change="setSort($event.target.value)">
@@ -160,8 +162,16 @@ onMounted(() => { load() })
     <div class="error" v-if="err">{{ err }}</div>
     <div class="success" v-if="ok">{{ ok }}</div>
 
-    <p class="muted" v-if="loading">{{ t('common.loading') }}</p>
-    <p class="muted" v-else-if="!items.length">{{ t('skinlib.empty') }}</p>
+    <div class="skinlib-grid" v-if="loading" aria-hidden="true">
+      <div class="skin-card" v-for="n in 8" :key="n">
+        <div class="skin-card-prev skeleton"></div>
+        <div class="skin-card-body">
+          <div class="skeleton skel-line"></div>
+          <div class="skeleton skel-line short"></div>
+        </div>
+      </div>
+    </div>
+    <EmptyState v-else-if="!items.length" :text="t('skinlib.empty')" />
 
     <div class="skinlib-grid" v-else>
       <div class="skin-card" v-for="it in items" :key="it.tid">
@@ -201,21 +211,11 @@ onMounted(() => { load() })
       </div>
     </div>
 
-    <div class="row pager" v-if="totalPages > 1">
-      <button class="secondary" :disabled="page <= 1" @click="goPage(page - 1)">‹</button>
-      <span class="muted">{{ page }} / {{ totalPages }} · {{ t('skinlib.total', { n: total }) }}</span>
-      <button class="secondary" :disabled="page >= totalPages" @click="goPage(page + 1)">›</button>
-    </div>
+    <Pager :page="page" :pages="totalPages" :total="total" @update:page="goPage" />
   </div>
 </template>
 
 <style scoped>
-.tabs { display: flex; gap: 8px; }
-.tabs button {
-  padding: 8px 12px; border-radius: var(--r-s, 4px); border: 1px solid var(--border);
-  background: transparent; color: var(--muted); cursor: pointer; font-size: var(--fs-s);
-}
-.tabs button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .mine-on { border-color: var(--accent) !important; color: var(--accent) !important; }
 .source-badge { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
 .source-original { color: var(--jade, #7dd3a0); border-color: currentColor; }
@@ -254,23 +254,17 @@ onMounted(() => { load() })
   border: 1px solid var(--gold); border-radius: var(--r-s);
   font-size: var(--fs-xs); font-weight: 600; color: var(--gold); line-height: 1.5;
 }
-.skin-card-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-.badge {
-  padding: 2px 8px; border-radius: var(--r-s, 4px); font-size: var(--fs-xs, 12px); font-weight: 600;
-}
-.badge.steve { background: var(--steve-bg); color: var(--steve-ink); }
-.badge.alex { background: var(--alex-bg); color: var(--alex-ink); }
+.skin-card-meta { display: flex; align-items: center; gap: 8px; font-size: var(--fs-xs); }
+.badge.steve { background: var(--steve-bg); color: var(--steve-ink); border-color: transparent; }
+.badge.alex { background: var(--alex-bg); color: var(--alex-ink); border-color: transparent; }
 .uploader { color: var(--muted); }
 .skin-card-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .like-btn {
   border: 1px solid var(--border); background: transparent; color: var(--muted);
-  border-radius: var(--r-s, 4px); padding: 4px 8px; cursor: pointer; font-size: var(--fs-xs, 12px);
+  border-radius: var(--r-s, 4px); padding: 4px 8px; min-height: 32px; cursor: pointer; font-size: var(--fs-xs, 12px); font-weight: 500;
 }
+.like-btn:hover { color: var(--danger); border-color: var(--danger); background: transparent; box-shadow: none; transform: none; }
 .like-btn.liked { color: var(--danger); border-color: var(--danger); }
-.ghost {
-  border: none; background: transparent; color: var(--muted);
-  cursor: pointer; font-size: 12px; padding: 4px;
-}
-.ghost:hover { color: var(--accent); }
-.pager { justify-content: center; margin-top: 16px; gap: 12px; }
+.skel-line { height: 14px; border-radius: var(--r-s); }
+.skel-line.short { width: 60%; }
 </style>

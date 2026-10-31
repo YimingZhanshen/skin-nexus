@@ -4,6 +4,7 @@ import { ref, computed, watch, onMounted, defineAsyncComponent, provide } from '
 import { useI18n } from 'vue-i18n'
 import { api } from './api.js'
 import PageLoading from './components/PageLoading.vue'
+import ToastHub from './components/ToastHub.vue'
 import PluginSlot from './components/plugin/PluginSlot.vue'
 import PluginFields from './components/plugin/PluginFields.vue'
 // Route-level chunks: the login card must not download the admin tables,
@@ -365,7 +366,7 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
 <template>
   <div v-if="booting" class="boot-screen" role="status" aria-live="polite">
     <span class="boot-logo" v-html="brandSVG"></span>
-    <span class="boot-spinner" aria-hidden="true"></span>
+    <span class="spinner boot-spinner" aria-hidden="true"></span>
     <p class="muted">{{ t('common.loading') }}</p>
   </div>
   <div v-else-if="bootErr" class="boot-screen">
@@ -594,6 +595,7 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
       </p>
     </footer>
   </div><!-- /app-shell -->
+  <ToastHub />
 </template>
 
 <style scoped>
@@ -613,14 +615,5 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
 }
 .boot-logo { width: 56px; height: 56px; display: block; }
 .boot-logo :deep(svg) { width: 100%; height: 100%; }
-.boot-spinner {
-  width: 22px; height: 22px; border-radius: 50%;
-  border: 2px solid var(--border, rgba(169,138,95,.3));
-  border-top-color: var(--accent, #b0453a);
-  animation: boot-spin .8s linear infinite;
-}
-@keyframes boot-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) {
-  .boot-spinner { animation-duration: 2.4s; }
-}
+.boot-spinner { width: 22px; height: 22px; }
 </style>

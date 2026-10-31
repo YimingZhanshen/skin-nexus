@@ -139,8 +139,7 @@ onMounted(load)
 </template>
 
 <style scoped>
-/* narrow viewports scroll the table instead of crushing columns */
-.table-scroll { overflow-x: auto; }
+/* narrow viewports scroll via the global .table-scroll wrapper */
 .p-table { min-width: 860px; }
 .p-table th:nth-child(1), .p-table td:nth-child(1) { width: 48px; }
 .p-table th:nth-child(2), .p-table td:nth-child(2) { width: 72px; text-align: center; }
@@ -154,6 +153,4 @@ onMounted(load)
 .uuid { font-size: 11px; }
 .cell-sel { width: 100%; padding: 4px 6px; font-size: 13px; }
 .nowrap { white-space: nowrap; }
-.danger-outline { border-color: var(--danger); color: var(--danger); }
-.danger-outline:hover { background: var(--danger); color: var(--on-danger); }
 </style>

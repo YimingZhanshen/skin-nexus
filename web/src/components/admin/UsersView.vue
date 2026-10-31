@@ -9,6 +9,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
+import Pager from '../Pager.vue'
 
 const { t } = useI18n()
 
@@ -36,10 +37,9 @@ function search() {
   load()
 }
 
-function turnPage(delta) {
-  const next = page.value + delta
-  if (next < 1 || (next - 1) * pageSize >= total.value) return
-  page.value = next
+function goPage(p) {
+  if (p < 1 || (p - 1) * pageSize >= total.value || p === page.value) return
+  page.value = p
   load()
 }
 
@@ -173,8 +173,7 @@ onMounted(load)
           <!-- SUPER_ADMIN (permission=2) has no select option on purpose
                (never grantable/demotable from the UI); render its label as a
                badge — an optionless select displayed as a blank dropdown. -->
-          <span v-if="Number(u.permission) === 2" class="badge"
-                style="border-color: var(--accent); color: var(--accent);">{{ t('admin.perm2') }}</span>
+          <span v-if="Number(u.permission) === 2" class="badge accent">{{ t('admin.perm2') }}</span>
           <select v-else class="cell-input cell-perm" :value="String(u.permission)" @change="changePermission(u, $event)"
                   :disabled="u.id === 1">
             <option value="-1">{{ t('admin.perm-1') }}</option>
@@ -196,17 +195,12 @@ onMounted(load)
       </tr>
     </table>
     </div>
-    <div class="row" style="margin-top: 12px;" v-if="total > pageSize">
-      <button class="secondary" :disabled="page <= 1" @click="turnPage(-1)">‹ {{ t('admin.prevPage') }}</button>
-      <span class="muted">{{ page }} / {{ pageMax() }}</span>
-      <button class="secondary" :disabled="page >= pageMax()" @click="turnPage(1)">{{ t('admin.nextPage') }} ›</button>
-    </div>
+    <Pager :page="page" :pages="pageMax()" :total="total" @update:page="goPage" />
   </div>
 </template>
 
 <style scoped>
-/* narrow viewports scroll the table instead of crushing columns */
-.table-scroll { overflow-x: auto; }
+/* narrow viewports scroll via the global .table-scroll wrapper */
 .users-table { min-width: 860px; }
 .users-table th:nth-child(1), .users-table td:nth-child(1) { width: 56px; }
 .users-table th:nth-child(2), .users-table td:nth-child(2) { width: 170px; }
@@ -231,6 +225,4 @@ onMounted(load)
   background: transparent; border: 1px solid var(--border); color: var(--muted);
 }
 .veri-btn.on { color: var(--ok); border-color: var(--ok)66; }
-.danger-outline { border-color: var(--danger); color: var(--danger); }
-.danger-outline:hover { background: var(--danger); color: var(--on-danger); }
 </style>

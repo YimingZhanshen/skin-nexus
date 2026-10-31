@@ -107,7 +107,7 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
 
 /* ── 顶栏：sticky 玻璃带（大改新增组件） ── */
 .topbar {
-  position: sticky; top: 0; z-index: 50;
+  position: sticky; top: 0; z-index: var(--z-topbar);
   height: var(--topbar-h); padding: 0;
   background: color-mix(in srgb, var(--bg) 82%, transparent);
   -webkit-backdrop-filter: blur(12px);
@@ -210,7 +210,7 @@ button {
   border: none;
   border-radius: var(--r-s);
   padding: 8px 16px;
-  min-height: 36px;
+  min-height: 40px;
   cursor: pointer;
   font-size: var(--fs-s);
   font-weight: 600;
@@ -223,6 +223,8 @@ button.secondary { background: transparent; border: 1px solid var(--line-strong)
 button.secondary:hover { background: var(--ink-3); border-color: var(--gold); color: var(--moon); box-shadow: none; }
 button.danger { background: var(--danger); color: var(--on-danger); }
 button.danger:hover { background: var(--danger-hi); box-shadow: 0 6px 16px -8px var(--glow-danger); }
+button.danger-outline { border: 1px solid var(--danger); background: transparent; color: var(--danger); }
+button.danger-outline:hover { background: var(--danger); color: var(--on-danger); }
 button:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
 button:disabled:hover { background: var(--cinnabar); }
 button.secondary:disabled:hover { background: transparent; }
@@ -254,6 +256,53 @@ label.required { color: var(--cinnabar); }
 .page-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 4px 0 16px; }
 .page-head h1, .page-head h2 { margin: 0; }
 
+/* ── 全站统一组件层（v3.3）：spinner / tabs / ghost·small 按钮 / 表格容器 / 分页 / 空态 / 骨架 ── */
+.spinner {
+  width: 20px; height: 20px; flex: none; border-radius: 50%;
+  border: 2px solid var(--line); border-top-color: var(--cinnabar);
+  animation: skn-spin .8s linear infinite;
+}
+@keyframes skn-spin { to { transform: rotate(360deg); } }
+
+/* Tab 全站唯一形态：描边胶囊（覆盖全局 button 主色底） */
+.tabs { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.tab {
+  background: transparent; border: 1px solid var(--line); color: var(--muted);
+  padding: 6px 14px; min-height: 36px; border-radius: 999px;
+  cursor: pointer; font-size: var(--fs-s); font-weight: 500;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.tab:hover { background: transparent; border-color: var(--line-strong); color: var(--moon); transform: none; box-shadow: none; }
+.tab.active { background: var(--accent-wash); border-color: var(--cinnabar); color: var(--moon); font-weight: 600; }
+
+button.ghost { background: transparent; border: none; color: var(--muted); font-weight: 500; padding: 4px 8px; min-height: 32px; }
+button.ghost:hover { background: transparent; color: var(--cinnabar); box-shadow: none; transform: none; }
+button.small { min-height: 28px; padding: 4px 10px; font-size: var(--fs-xs); }
+
+/* 管理表格窄屏横滚不压列（各页统一使用，不再 scoped 复制） */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* 分页（Pager.vue 消费） */
+.pager { display: flex; align-items: center; justify-content: center; gap: var(--sp-3); margin-top: var(--sp-4); }
+.pager.end { justify-content: flex-end; }
+
+/* 空状态（EmptyState.vue 消费） */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: var(--sp-6) var(--sp-4); text-align: center; color: var(--muted);
+}
+.empty-state p { margin: 0; font-size: var(--fs-s); }
+.empty-state .empty-icon { width: 40px; height: 40px; opacity: .45; }
+
+/* 骨架屏（加载占位，遵守 reduced-motion） */
+.skeleton { position: relative; overflow: hidden; background: var(--panel-2); }
+.skeleton::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, var(--hover-wash), transparent);
+  animation: skn-shimmer 1.4s infinite;
+}
+@keyframes skn-shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
 /* ── 表格 ── */
 table { width: 100%; border-collapse: collapse; font-size: var(--fs-s); font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); }
@@ -266,10 +315,11 @@ tbody tr:hover, table tr:hover { background: var(--hover-wash); }
 /* 徽章：方块母题（状态走变体类，不用内联 :style 改色） */
 .badge {
   display: inline-block; padding: 2px 8px; border-radius: var(--r-s);
-  font-size: var(--fs-xs); border: 1px solid var(--line-strong); color: var(--moon-2);
+  font-size: var(--fs-xs); font-weight: 600; border: 1px solid var(--line-strong); color: var(--moon-2);
   font-variant-numeric: tabular-nums;
 }
 .badge.danger { color: var(--danger); border-color: var(--danger); }
+.badge.accent { color: var(--cinnabar); border-color: var(--cinnabar); }
 .badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
 .badge.jade { color: var(--jade); border-color: color-mix(in srgb, var(--jade) 55%, transparent); }
 .badge.gold { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 55%, transparent); }

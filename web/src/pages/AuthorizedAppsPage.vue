@@ -6,6 +6,7 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { oidc } from '../api.js'
 import { guard401 } from '../session.js'
+import EmptyState from '../components/EmptyState.vue'
 
 const { t } = useI18n()
 
@@ -59,7 +60,8 @@ onMounted(load)
     </div>
     <div class="error" v-if="error">{{ error }}</div>
     <div class="success" v-if="success">{{ success }}</div>
-    <table v-if="tokens.length">
+    <div class="table-scroll" v-if="tokens.length">
+    <table>
       <tr><th>{{ t('apps.colApp') }}</th><th>{{ t('apps.colScopes') }}</th><th>{{ t('apps.colProfile') }}</th><th>{{ t('apps.colCreated') }}</th><th>{{ t('apps.colExpires') }}</th><th></th></tr>
       <tr v-for="tk in tokens" :key="tk.jti">
         <td><code style="font-size: 12px;">{{ tk.client_id }}</code></td>
@@ -70,6 +72,7 @@ onMounted(load)
         <td><button class="secondary" :disabled="loading" @click="revoke(tk.jti)">{{ t('apps.revoke') }}</button></td>
       </tr>
     </table>
-    <div v-else class="muted">{{ t('apps.empty') }}</div>
+    </div>
+    <EmptyState v-else :text="t('apps.empty')" />
   </div>
 </template>

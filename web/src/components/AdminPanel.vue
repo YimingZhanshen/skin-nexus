@@ -141,13 +141,13 @@ onMounted(async () => {
         <button @click="submitToken">{{ t('admin.load') }}</button>
       </div>
       <nav class="admin-nav">
-        <button v-for="n in visibleNav" :key="n.id" class="admin-nav-item"
+        <button v-for="n in visibleNav" :key="n.id" class="nav-item"
                 :class="{ active: current === n.id }" @click="go(n.id)">
           <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" v-html="n.icon"></svg>
           <span>{{ t(n.labelKey) }}</span>
         </button>
-        <button v-for="p in pluginPages" :key="p.path" class="admin-nav-item"
+        <button v-for="p in pluginPages" :key="p.path" class="nav-item"
                 :class="{ active: currentPlugin === p.path }" @click="openPlugin(p.path)">
           <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" v-html="p.icon"></svg>
@@ -174,23 +174,7 @@ onMounted(async () => {
   color: var(--muted);
 }
 .admin-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; }
-.admin-nav-item {
-  position: relative;
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  text-align: left; background: none; border: 1px solid transparent;
-  padding: 8px 12px; border-radius: var(--r-s); cursor: pointer; font-size: var(--fs-s);
-  color: var(--muted);
-  transition: background .14s var(--ease), color .14s var(--ease);
-}
-.admin-nav-item:hover { background: var(--hover-wash); color: var(--text); }
-.admin-nav-item.active {
-  background: var(--accent-wash); color: var(--text); font-weight: 600;
-}
-.admin-nav-item.active .nav-ico { opacity: 1; }
-.admin-nav-item.active::before {
-  content: ""; position: absolute; left: 0; top: 8px; bottom: 8px;
-  width: 3px; border-radius: 2px; background: var(--accent);
-}
+/* nav items themselves come from the global .nav-item (user sidebar parity) */
 .admin-token { display: flex; gap: 8px; }
 .admin-token input { min-width: 0; flex: 1; }
 .admin-main { flex: 1; min-width: 0; }
@@ -198,6 +182,5 @@ onMounted(async () => {
   .admin-shell { flex-direction: column; }
   .admin-side { position: static; width: 100%; }
   .admin-nav { flex-direction: row; flex-wrap: wrap; }
-  .admin-nav-item.active::before { display: none; }
 }
 </style>

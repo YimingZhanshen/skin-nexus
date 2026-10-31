@@ -212,12 +212,5 @@ onBeforeUnmount(() => {
   align-items: center; justify-content: center; gap: 10px;
   background: var(--bg, #101825); color: var(--text, #e9edf1);
 }
-.plugin-loading .spinner {
-  width: 18px; height: 18px; border-radius: 50%;
-  border: 2px solid var(--border, rgba(169,138,95,.3));
-  border-top-color: var(--accent, #b0453a);
-  animation: plugin-spin .8s linear infinite;
-}
-@keyframes plugin-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .plugin-loading .spinner { animation-duration: 2.4s; } }
+.plugin-loading .spinner { width: 18px; height: 18px; }
 </style>

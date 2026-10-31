@@ -6,6 +6,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
+import Pager from '../Pager.vue'
 
 const { t } = useI18n()
 
@@ -30,10 +31,9 @@ async function load() {
 
 function search() { page.value = 1; load() }
 
-function turnPage(delta) {
-  const next = page.value + delta
-  if (next < 1 || (next - 1) * pageSize >= total.value) return
-  page.value = next
+function goPage(p) {
+  if (p < 1 || (p - 1) * pageSize >= total.value || p === page.value) return
+  page.value = p
   load()
 }
 const pageMax = () => Math.max(1, Math.ceil(total.value / pageSize))
@@ -147,17 +147,12 @@ onMounted(load)
     </table>
     </div>
     <p class="muted" v-else>{{ t('admin.playerEmpty') }}</p>
-    <div class="row" style="margin-top: 12px;" v-if="total > pageSize">
-      <button class="secondary" :disabled="page <= 1" @click="turnPage(-1)">‹ {{ t('admin.prevPage') }}</button>
-      <span class="muted">{{ page }} / {{ pageMax() }}</span>
-      <button class="secondary" :disabled="page >= pageMax()" @click="turnPage(1)">{{ t('admin.nextPage') }} ›</button>
-    </div>
+    <Pager :page="page" :pages="pageMax()" :total="total" @update:page="goPage" />
   </div>
 </template>
 
 <style scoped>
-/* narrow viewports scroll the table instead of crushing columns */
-.table-scroll { overflow-x: auto; }
+/* narrow viewports scroll via the global .table-scroll wrapper */
 .players-table { min-width: 920px; }
 .players-table th:nth-child(1), .players-table td:nth-child(1) { width: 56px; }
 .players-table th:nth-child(2), .players-table td:nth-child(2) { width: 64px; text-align: center; }
@@ -172,6 +167,4 @@ onMounted(load)
 .thumb-sm { width: 18px; height: auto; image-rendering: pixelated; vertical-align: middle; }
 .cell-btn { padding: 3px 8px; min-width: 48px; display: inline-flex; align-items: center; justify-content: center; }
 .uuid { font-size: 11px; letter-spacing: .2px; }
-.danger-outline { border-color: var(--danger); color: var(--danger); }
-.danger-outline:hover { background: var(--danger); color: var(--on-danger); }
 </style>
