@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -177,5 +178,93 @@ func TestKeygenPackRegistryRoundTrip(t *testing.T) {
 	errOut.Reset()
 	if code := runVerifyRegistry([]string{"--registry", regPath, "--keys", keys, "--json"}, &out, &errOut); code != 0 {
 		t.Fatalf("verify-registry=%d %s", code, errOut.String())
+	}
+}
+
+func TestThemePackRegistryRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "theme-market.pem")
+	var out, errOut bytes.Buffer
+	if code := runKeygen([]string{"--id", "theme-test", "--out", keyPath}, &out, &errOut); code != 0 {
+		t.Fatalf("keygen=%d %s", code, errOut.String())
+	}
+	keys := strings.TrimSpace(out.String())
+
+	themeDir := filepath.Join(dir, "demo-theme")
+	if err := os.MkdirAll(themeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"id":"demo-theme","name":"演示主题","version":"1.0.0","author":"tester",` +
+		`"description":"x","inject":{"css":["style.css"]},"requires":{"skin_nexus":">=0.1"}}`
+	if err := os.WriteFile(filepath.Join(themeDir, "theme.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(themeDir, "style.css"), []byte(":root{--bg:#fff}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// pack twice: deterministic bytes (same digest)
+	a := filepath.Join(dir, "a.zip")
+	b := filepath.Join(dir, "b.zip")
+	for _, target := range []string{a, b} {
+		out.Reset()
+		errOut.Reset()
+		if code := runPackTheme([]string{"--dir", themeDir, "--out", target, "--key", keyPath, "--key-id", "theme-test", "--json"}, &out, &errOut); code != 0 {
+			t.Fatalf("pack-theme=%d %s", code, errOut.String())
+		}
+	}
+	ab, _ := os.ReadFile(a)
+	bb, _ := os.ReadFile(b)
+	if !bytes.Equal(ab, bb) {
+		t.Fatal("pack-theme output is not byte-identical across runs")
+	}
+
+	dist := filepath.Join(dir, "artifacts")
+	if err := os.MkdirAll(dist, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dist, "demo-theme-1.0.0.zip"), ab, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	regPath := filepath.Join(dir, "themes-registry.json")
+	out.Reset()
+	errOut.Reset()
+	if code := runRegistry([]string{"--kind", "theme", "--dist", dist, "--url-base", "https://example.com/themes/v1/artifacts",
+		"--key", keyPath, "--key-id", "theme-test", "--out", regPath, "--json"}, &out, &errOut); code != 0 {
+		t.Fatalf("registry theme=%d %s", code, errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := runVerifyRegistry([]string{"--registry", regPath, "--keys", keys, "--json"}, &out, &errOut); code != 0 {
+		t.Fatalf("verify-registry=%d %s", code, errOut.String())
+	}
+	raw, err := os.ReadFile(regPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reg struct {
+		Packages []struct {
+			Name      string               `json:"name"`
+			MinServer string               `json:"minServer"`
+			Title     map[string]string    `json:"title"`
+			Dist      struct{ URL string } `json:"dist"`
+		} `json:"packages"`
+	}
+	if err := json.Unmarshal(raw, &reg); err != nil {
+		t.Fatal(err)
+	}
+	if len(reg.Packages) != 1 {
+		t.Fatalf("packages = %d", len(reg.Packages))
+	}
+	p := reg.Packages[0]
+	if p.Name != "demo-theme" || p.MinServer != ">=0.1" || p.Title["zh-CN"] != "演示主题" ||
+		!strings.HasSuffix(p.Dist.URL, "/themes/v1/artifacts/demo-theme-1.0.0.zip") {
+		t.Fatalf("entry = %+v", p)
+	}
+	// a plugin-kind registry run over the same dist must refuse the theme pack
+	out.Reset()
+	errOut.Reset()
+	if code := runRegistry([]string{"--dist", dist, "--url-base", "https://example.com/artifacts",
+		"--key", keyPath, "--key-id", "theme-test", "--out", filepath.Join(dir, "bad.json")}, &out, &errOut); code == 0 {
+		t.Fatal("plugin-kind registry accepted a theme bundle")
 	}
 }

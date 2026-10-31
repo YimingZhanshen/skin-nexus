@@ -46,6 +46,7 @@ import (
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/texture"
 	"skin-nexus/server/internal/theme"
+	"skin-nexus/server/internal/thememkt"
 	"skin-nexus/server/internal/union"
 	"skin-nexus/server/internal/webapi"
 	"skin-nexus/server/internal/ygg"
@@ -210,6 +211,25 @@ func main() {
 		log.Printf("themes: %d packs loaded from %s", n, cfg.ThemesDir)
 	}
 	appearEng := appearance.NewEngine(st, themeReg)
+	// Theme market: independent keyring (SKIN_THEME_TRUST_KEYS) — uploads run
+	// on the admin trust surface even with the market disabled (2026-11-01).
+	var themeTrustKeys signedpkg.Keyring
+	if cfg.ThemeTrustKeys != "" {
+		if keys, err := signedpkg.ParseKeys(cfg.ThemeTrustKeys); err != nil {
+			log.Printf("theme market: bad SKIN_THEME_TRUST_KEYS (%v) — market installs disabled", err)
+		} else {
+			themeTrustKeys = keys
+		}
+	}
+	themeMarketSvc := thememkt.New(thememkt.Config{
+		ThemesDir:   cfg.ThemesDir,
+		MarketURL:   cfg.ThemeMarketURL,
+		TrustKeys:   themeTrustKeys,
+		HostVersion: version,
+		IsActive: func(id string) bool {
+			return appearEng.Settings(context.Background()).ActiveTheme == id
+		},
+	}, themeReg)
 
 	accessLog := accesslog.New(st.InsertAccessLog)
 
@@ -651,7 +671,7 @@ func main() {
 			}
 		}()
 	}
-	admin.MountAppearance(adminapi.AppearanceDeps{SEO: seoEng, Appear: appearEng, Themes: themeReg})
+	admin.MountAppearance(adminapi.AppearanceDeps{SEO: seoEng, Appear: appearEng, Themes: themeReg, ThemeMarket: themeMarketSvc})
 	admin.MountPlugins(adminapi.PluginsDeps{Host: pluginHost})
 	if unionSigner != nil {
 		admin.MountUnion(adminapi.UnionDeps{

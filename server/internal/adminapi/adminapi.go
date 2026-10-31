@@ -144,6 +144,9 @@ func (b *Backend) Handler() http.Handler {
 		mux.HandleFunc("GET /api/admin/v1/appearance", b.auth(b.handleAppearanceGet))
 		mux.HandleFunc("POST /api/admin/v1/appearance", b.auth(b.handleAppearanceSave))
 		mux.HandleFunc("GET /api/admin/v1/themes", b.auth(b.handleThemesList))
+		if b.appearance.ThemeMarket != nil {
+			b.mountThemeMarket(mux)
+		}
 	}
 	// Plugin host (v0.3.0): list for any admin, mutations super-admin only.
 	if b.plugins != nil {

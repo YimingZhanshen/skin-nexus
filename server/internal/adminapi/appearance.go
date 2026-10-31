@@ -11,6 +11,7 @@ import (
 	"skin-nexus/server/internal/appearance"
 	"skin-nexus/server/internal/seo"
 	"skin-nexus/server/internal/theme"
+	"skin-nexus/server/internal/thememkt"
 )
 
 // AppearanceDeps wires the SEO + appearance engines and the theme registry.
@@ -18,6 +19,8 @@ type AppearanceDeps struct {
 	SEO    *seo.Engine
 	Appear *appearance.Engine
 	Themes *theme.Registry
+	// ThemeMarket (nil = no market routes) backs catalog/install/upload.
+	ThemeMarket *thememkt.Service
 }
 
 // MountAppearance registers the SEO/appearance/theme admin routes.
@@ -75,6 +78,15 @@ func (b *Backend) handleAppearanceSave(w http.ResponseWriter, r *http.Request) {
 
 func (b *Backend) handleThemesList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"themes": b.appearance.Themes.List()})
+}
+
+// mountThemeMarket registers the theme market routes (called from the
+// appearance block in Handler once a ThemeMarket service is wired).
+func (b *Backend) mountThemeMarket(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/admin/v1/themes/market", b.auth(b.handleThemeMarketCatalog))
+	mux.HandleFunc("POST /api/admin/v1/themes/market/install", b.handleThemeMarketInstall)
+	mux.HandleFunc("DELETE /api/admin/v1/themes/market/{id}", b.handleThemeUninstall)
+	mux.HandleFunc("POST /api/admin/v1/themes/upload", b.handleThemeUpload)
 }
 
 var _ = context.Background

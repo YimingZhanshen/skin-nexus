@@ -67,6 +67,10 @@ type Config struct {
 	PluginMarketURL string // SKIN_PLUGIN_MARKET_URL — signed registry (empty = market off)
 	PluginTrustKeys string // SKIN_PLUGIN_TRUST_KEYS — id:base64pub,...
 	PluginUploadMax int64  // SKIN_PLUGIN_UPLOAD_MAX — bytes (default 64 MiB)
+	// Theme market shares the distribution repo but an INDEPENDENT keyring —
+	// one leaked key must never compromise both surfaces (2026-11-01 拍板).
+	ThemeMarketURL string // SKIN_THEME_MARKET_URL — signed theme registry (empty = off)
+	ThemeTrustKeys string // SKIN_THEME_TRUST_KEYS — id:base64pub,... (empty = market installs off, uploads stay available)
 	AutoMigrate     bool   // SKIN_AUTO_MIGRATE — apply migrations/ on empty DB at boot
 	MigrationsDir   string // SKIN_MIGRATIONS_DIR — where *.sql live (default ./migrations)
 }
@@ -93,6 +97,18 @@ func pluginMarketURL() string {
 		return v
 	}
 	return OfficialPluginMarketURL
+}
+
+// OfficialThemeMarketURL is the theme registry published beside the plugin
+// one (same distribution repo, themes/v1 path). SKIN_THEME_MARKET_URL
+// overrides, including setting it empty to disable market browsing.
+const OfficialThemeMarketURL = "https://yimingzhanshen.github.io/skin-nexus-plugins/themes/v1/registry.json"
+
+func themeMarketURL() string {
+	if v, ok := os.LookupEnv("SKIN_THEME_MARKET_URL"); ok {
+		return v
+	}
+	return OfficialThemeMarketURL
 }
 
 func Load() (*Config, error) {
@@ -133,6 +149,8 @@ func Load() (*Config, error) {
 		PluginMarketURL: pluginMarketURL(),
 		PluginTrustKeys: getenv("SKIN_PLUGIN_TRUST_KEYS", ""),
 		PluginUploadMax: int64(atoiDefault(getenv("SKIN_PLUGIN_UPLOAD_MAX", "67108864"), 67108864)),
+		ThemeMarketURL:  themeMarketURL(),
+		ThemeTrustKeys:  getenv("SKIN_THEME_TRUST_KEYS", ""),
 		AutoMigrate:     getenv("SKIN_AUTO_MIGRATE", "false") == "true",
 		MigrationsDir:   getenv("SKIN_MIGRATIONS_DIR", "./migrations"),
 	}

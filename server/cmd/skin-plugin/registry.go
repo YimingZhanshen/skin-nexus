@@ -26,6 +26,7 @@ func runRegistry(args []string, stdout, stderr io.Writer) int {
 	keyID := fs.String("key-id", "", "key id")
 	keys := fs.String("keys", "", "additional trust keys")
 	expiresDays := fs.Int("expires-days", 90, "registry validity in days")
+	kind := fs.String("kind", "plugin", "package kind: plugin | theme")
 	out := fs.String("out", "registry.json", "output registry path")
 	asJSON := fs.Bool("json", false, "machine-readable output")
 	if err := fs.Parse(args); err != nil {
@@ -50,6 +51,14 @@ func runRegistry(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	if *kind != "plugin" && *kind != "theme" {
+		fmt.Fprintln(stderr, "registry: --kind must be plugin or theme")
+		return 2
+	}
+	manifestName := "plugin.json"
+	if *kind == "theme" {
+		manifestName = "theme.json"
+	}
 	files, err := os.ReadDir(*dist)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -66,18 +75,9 @@ func runRegistry(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "%s: %v\n", f.Name(), err)
 			return 1
 		}
-		rawManifest, err := signedpkg.ReadEntry(path, "plugin.json", 1<<20)
+		rawManifest, err := signedpkg.ReadEntry(path, manifestName, 1<<20)
 		if err != nil {
-			fmt.Fprintf(stderr, "%s: plugin.json: %v\n", f.Name(), err)
-			return 1
-		}
-		var m manifestView
-		if err := json.Unmarshal(rawManifest, &m); err != nil {
-			fmt.Fprintf(stderr, "%s: plugin.json: %v\n", f.Name(), err)
-			return 1
-		}
-		if m.Name != meta.Name || m.Version != meta.Version {
-			fmt.Fprintf(stderr, "%s: manifest/bundle name/version mismatch\n", f.Name())
+			fmt.Fprintf(stderr, "%s: %s: %v\n", f.Name(), manifestName, err)
 			return 1
 		}
 		var mm *marketMeta
@@ -88,6 +88,30 @@ func runRegistry(args []string, stdout, stderr io.Writer) int {
 				return 1
 			}
 			mm = &parsed
+		}
+		if *kind == "theme" {
+			pkg, err := themePackage(path, f.Name(), rawManifest, mm, *urlBase)
+			if err != nil {
+				fmt.Fprintf(stderr, "%s: %v\n", f.Name(), err)
+				return 1
+			}
+			if old, ok := byName[pkg.Name]; ok {
+				cmp, err := marketfmt.CompareVersions(pkg.Version, old.Version)
+				if err != nil || cmp <= 0 {
+					continue
+				}
+			}
+			byName[pkg.Name] = pkg
+			continue
+		}
+		var m manifestView
+		if err := json.Unmarshal(rawManifest, &m); err != nil {
+			fmt.Fprintf(stderr, "%s: plugin.json: %v\n", f.Name(), err)
+			return 1
+		}
+		if m.Name != meta.Name || m.Version != meta.Version {
+			fmt.Fprintf(stderr, "%s: manifest/bundle name/version mismatch\n", f.Name())
+			return 1
 		}
 		info := plugin.Info{
 			Manifest: plugin.Manifest{

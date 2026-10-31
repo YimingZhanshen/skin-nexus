@@ -23,6 +23,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runKeygen(args[1:], stdout, stderr)
 	case "pack":
 		return runPack(args[1:], stdout, stderr)
+	case "pack-theme":
+		return runPackTheme(args[1:], stdout, stderr)
 	case "lint":
 		return runLint(args[1:], stdout, stderr)
 	case "verify":
@@ -47,8 +49,9 @@ func usage(w io.Writer) {
   keygen          --id ID --out KEY.pem
   lint            --dir PLUGIN_DIR [--registry FILE] [--host-version V] [--json]
   pack            --dir PLUGIN_DIR --out FILE.zip --key KEY.pem --key-id ID [--meta FILE] [--force] [--json]
+  pack-theme      --dir THEME_DIR --out FILE.zip --key KEY.pem --key-id ID [--force] [--json]
   verify          --bundle FILE.zip [--keys KEYS|SKIN_PLUGIN_TRUST_KEYS] [--host-version V] [--json]
-  registry        --dist DIR --url-base URL --key KEY.pem --key-id ID [--expires-days 90] [--out FILE] [--json]
+  registry        --dist DIR --url-base URL --key KEY.pem --key-id ID [--kind plugin|theme] [--expires-days 90] [--out FILE] [--json]
   verify-registry --registry FILE [--keys KEYS|SKIN_PLUGIN_TRUST_KEYS] [--now RFC3339] [--json]
 `)
 }
