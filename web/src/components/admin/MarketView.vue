@@ -205,7 +205,7 @@ onMounted(async () => {
         <p>{{ t('admin.marketRiskBody') }}</p>
         <p v-if="inspection.reason" class="muted">{{ inspection.reason }}</p>
         <label class="row" style="align-items: center; gap: 8px;">
-          <input v-model="riskAck" type="checkbox" style="width: auto;" />
+          <input v-model="riskAck" type="checkbox" />
           <span>{{ t('admin.marketRiskAck') }}</span>
         </label>
       </div>
@@ -277,7 +277,7 @@ onMounted(async () => {
         <li v-for="c in planOf(selected).conflicts" :key="c">{{ c }}</li>
       </ul>
       <label v-if="planOf(selected).addedPermissions && planOf(selected).addedPermissions.length" class="row" style="align-items:center;gap:8px;">
-        <input v-model="consent" type="checkbox" style="width:auto;" />
+        <input v-model="consent" type="checkbox" />
         <span>{{ t('admin.marketConsent') }}</span>
       </label>
       <div class="row" style="margin-top: 12px;">

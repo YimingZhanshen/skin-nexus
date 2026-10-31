@@ -178,6 +178,11 @@ input, select, textarea {
   transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
 }
 textarea { min-height: 88px; resize: vertical; font-family: inherit; line-height: 1.6; }
+/* 原生勾选/单选控件不吃文本框样式（否则 width:100% 把复选框拉成整行蓝块） */
+input[type="checkbox"], input[type="radio"] {
+  width: auto; height: 16px; padding: 0; border: none; background: transparent;
+  accent-color: var(--cinnabar); cursor: pointer; flex: none;
+}
 textarea:focus, input:focus, select:focus {
   outline: none;
   border-color: var(--cinnabar);
@@ -323,9 +328,11 @@ tbody tr:hover, table tr:hover { background: var(--hover-wash); }
   .topbar-right .badge { text-align: center; }
 }
 
-/* coarse pointers (phones/tablets) get 44px targets regardless of size class */
+/* coarse pointers (phones/tablets) get 44px targets regardless of size class;
+   checkbox/radio hit area grows via their wrapping label, not the control */
 @media (pointer: coarse) {
-  button, .tab, input[type="checkbox"] { min-height: 44px; }
+  button, .tab { min-height: 44px; }
+  label:has(input[type="checkbox"]), label:has(input[type="radio"]) { min-height: 44px; display: flex; align-items: center; }
   .topbar-right select, .topbar-right button { min-height: 40px; }
 }
 

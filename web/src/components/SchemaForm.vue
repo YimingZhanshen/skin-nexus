@@ -74,7 +74,7 @@ function setList(f, raw) {
           </label>
           <input v-if="uiOf(c) === 'checkbox'" :id="sfId(f.name, c.name)" type="checkbox" :disabled="disabled"
                  :checked="!!(values[f.name] || {})[c.name]"
-                 @change="setNested(f.name, c.name, $event.target.checked)" style="width:auto;" />
+                 @change="setNested(f.name, c.name, $event.target.checked)" />
           <input v-else-if="uiOf(c) === 'number'" :id="sfId(f.name, c.name)" type="number" :disabled="disabled"
                  :value="(values[f.name] || {})[c.name]"
                  @input="setNested(f.name, c.name, Number($event.target.value))" style="max-width:180px;" />
@@ -99,7 +99,7 @@ function setList(f, raw) {
           <span v-if="f.description" class="muted" style="display:block;font-weight:400;">{{ f.description }}</span>
         </label>
         <input v-if="uiOf(f) === 'checkbox'" :id="sfId(null, f.name)" type="checkbox" :disabled="disabled"
-               :checked="!!values[f.name]" @change="setField(f.name, $event.target.checked)" style="width:auto;" />
+               :checked="!!values[f.name]" @change="setField(f.name, $event.target.checked)" />
         <input v-else-if="uiOf(f) === 'number'" :id="sfId(null, f.name)" type="number" :disabled="disabled"
                :value="values[f.name]" @input="setField(f.name, Number($event.target.value))" style="max-width:180px;" />
         <select v-else-if="uiOf(f) === 'select'" :id="sfId(null, f.name)" :disabled="disabled"

@@ -211,7 +211,7 @@ onMounted(load)
             <span class="muted" style="display: block; font-weight: 400; font-size: var(--fs-xs);">{{ s.key }}</span>
           </label>
           <input v-if="boolKeys.has(s.key)"
-                 type="checkbox" v-model="s.value" true-value="1" false-value="0" style="width: auto;" />
+                 type="checkbox" v-model="s.value" true-value="1" false-value="0" />
           <textarea v-else-if="textKeys.has(s.key)"
                     v-model="s.value" :style="s.key.startsWith('union_oauth2_sig_') ? 'max-width: 360px; min-height: 72px; font-family: monospace; font-size: var(--fs-xs);' : 'max-width: 360px; min-height: 38px;'"></textarea>
           <select v-else-if="s.key === 'player_name_rule'" v-model="s.value" style="max-width: 160px;">

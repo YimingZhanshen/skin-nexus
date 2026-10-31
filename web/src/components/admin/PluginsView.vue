@@ -165,7 +165,7 @@ onMounted(async () => {
     <p class="muted">{{ t('admin.pluginsHint') }}</p>
     <p class="muted" v-if="readOnly">{{ t('admin.pluginsReadOnly') }}</p>
     <label v-if="isSuper" class="row" style="align-items:center;gap:8px;margin:8px 0;">
-      <input type="checkbox" :checked="guardsBypassed" @change="toggleBypass" style="width:auto;" />
+      <input type="checkbox" :checked="guardsBypassed" @change="toggleBypass" />
       <span class="muted">{{ t('admin.pluginsGuardBypass') }}</span>
     </label>
     <div class="error" v-if="loadError">{{ loadError }}</div>
