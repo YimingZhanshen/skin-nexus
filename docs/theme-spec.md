@@ -204,6 +204,9 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 （50/60/70/80）——布局类建议按刻度取值但主题可不覆盖。徽章改走变体类
 `.badge.danger/.ok/.jade/.gold/.dim`，不再用内联 style 改色（主题覆盖 `.badge` 即联动）。
 SSR 落地页/详情页与 SPA 共用同一组字号与动效令牌（`--fs-*`、`--t-*`），值漂移视为 bug。
+自 v3.3 起 `:root` 令牌块本体在 **`server/cmd/skin-nexus/theme-base.css`**（唯一真源）：
+SPA 经 `web/src/style.css` `@import` 引入，SSR 两页 `//go:embed` 注入 `<style>` 首段；
+主题包覆盖契约键的机制不受影响（注入点仍在 `<!--skin-theme-->` 之前）。
 
 **新结构类（布局契约，主题可覆盖）**：`.topbar`（sticky 玻璃顶栏，高 `--topbar-h`）、
 `.auth-split/.auth-scene/.auth-pane`（登录/注册/找回/重置的分栏场景布局，≤860px 塌缩）、

@@ -8,6 +8,9 @@ FROM node:22-alpine AS web
 WORKDIR /build/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
+# style.css @imports the design-token source of truth from the server tree
+# (../../server/cmd/skin-nexus/theme-base.css) — mirror the repo layout.
+COPY server/cmd/skin-nexus/theme-base.css /build/server/cmd/skin-nexus/theme-base.css
 COPY web/ ./
 RUN npm run build
 

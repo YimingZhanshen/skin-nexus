@@ -4,6 +4,13 @@
 
 ## 2026-11-01
 
+- **默认主题全面升级（v3.3 六阶段）**：
+  - 令牌层：补齐 `--panel-2/--accent-ink`（此前为死引用）、新增间距刻度 `--sp-1…8` 与层级刻度 `--z-topbar/menu/toast/modal`；徽章改 `.badge.danger/ok/jade/gold/accent/dim` 变体类，清除 6 个管理视图的内联改色；SSR 与 SPA 字号/动效令牌对齐。
+  - 组件层：新增 `Pager/EmptyState/ToastHub` 共享组件与全站统一 `.tabs/.tab`（描边胶囊）、`.spinner`、`.table-scroll`、`.ghost/.small/.danger-outline` 按钮与骨架屏；管理侧栏并入 `.nav-item`；`skin-toast` 事件自此有全局消费者（`aria-live`、自动消失）。
+  - 响应式：≤640px 顶栏操作收纳为汉堡抽屉（`aria-expanded`、Esc/换页自动关闭）；`pointer:coarse` 44px 触摸目标；网格 `min()` 防溢出、`100dvh`、`overflow-wrap:anywhere` 替代 `break-all`。
+  - 可访问性：登录/注册/找回/重置、安装向导、后台 SEO/外观、`SchemaForm` 全部补 `label for/id`；SPA 与 SSR 详情页加 skip-link；面包屑 `aria-current`；补齐缺 `alt` 的预览图；`#8884` 等不达标记号入令牌。
+  - 打磨：动效一律走 `--t-*/--ease`；皮肤卡 hover 抬升 + 预览微放大；`font-size:12px` 等杂值收敛到字阶；邀请码页/举报原因/插件加载文案入 i18n。
+  - 单一真源：`server/cmd/skin-nexus/theme-base.css` 承载 `:root` 令牌块，SPA `@import`、SSR 两页 `//go:embed` 注入（模板测试断言令牌随行），SSR/SPA 值漂移自此结构性消灭。
 - **私有预览授权修复**：`/preview/{tid}` 不再对私有纹理一律返回 404；所有者与管理员（`permission > 0`）可查看自己的/待管理的私有预览，匿名和其他用户仍 404。私有响应改为 `Cache-Control: private, no-store`、`Vary: Cookie`、`X-Robots-Tag: noindex`，避免共享缓存或搜索引擎留存。
 - **官方插件 UI 统一**：`skin-importer` 1.1.0、`nav-links` 1.0.3、`player-notes` 1.0.3、`texture-provenance` 1.0.2 使用同一套宿主主题令牌（新增 `link/danger/ok`）、字号/间距/`panel` 背景与内容高度自适应；页面型 iframe 自带标题，宿主不再重复渲染。
 - **管理侧栏一致性修正**：管理面板标题去掉内联上边距并置于首位，默认主题下与用户侧栏「用户中心」同级，横向 dock 下也保持居中；「返回个人页」移入顶栏，管理子项补上与用户中心一致的线性图标。
