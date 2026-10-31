@@ -133,7 +133,8 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
             transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); }
   .more a:hover { background: var(--ink-3); border-color: var(--ochre);
                   color: var(--moon); text-decoration: none; }
-  .intro { line-height: 1.85; color: var(--moon); margin: 28px 0; max-width: 46em; font-size: var(--fs-m); }
+  /* 固定一句话简介：行宽放宽到容器内单行放得下，避免 46em 把「服务器」劈成孤行 */
+  .intro { line-height: 1.85; color: var(--moon); margin: 28px 0; max-width: 62em; font-size: var(--fs-m); }
   .feat h2 { font-family: var(--font-serif); font-size: 24px; margin: 36px 0 18px; font-weight: 600;
              letter-spacing: .04em; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 16px; }

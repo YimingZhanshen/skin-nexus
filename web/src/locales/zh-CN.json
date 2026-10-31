@@ -525,7 +525,7 @@
     "pluginsRollbackConfirm": "回滚 {name} 到上一个版本？",
     "pluginsUninstall": "卸载",
     "pluginsUninstallConfirm": "卸载 {name}？插件数据默认保留。",
-    "pluginsHint": "插件目录：<data>/plugins/&lt;名称&gt;/。放入后需重载或重启才会被发现；启用即在服务进程内执行第三方代码（非沙箱）。",
+    "pluginsHint": "插件目录：<data>/plugins/<名称>/。放入后需重载或重启才会被发现；启用即在服务进程内执行第三方代码（非沙箱）。",
     "pluginsReadOnly": "当前会话为只读：插件启停/重载需要超级管理员网页会话。",
     "pluginsEmpty": "未发现插件。把插件目录放入 <data>/plugins/ 后重载。",
     "pluginsEnable": "启用",

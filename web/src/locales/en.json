@@ -522,7 +522,7 @@
     "pluginsRollbackConfirm": "Roll back {name} to the previous version?",
     "pluginsUninstall": "Uninstall",
     "pluginsUninstallConfirm": "Uninstall {name}? Plugin data is kept by default.",
-    "pluginsHint": "Plugin dir: <data>/plugins/&lt;name&gt;/. Drop a folder then reload or restart to discover it. Enabling runs third-party code inside the server process (not sandboxed).",
+    "pluginsHint": "Plugin dir: <data>/plugins/<name>/. Drop a folder then reload or restart to discover it. Enabling runs third-party code inside the server process (not sandboxed).",
     "pluginsReadOnly": "Read-only session: enabling/disabling/reloading plugins requires a SUPER_ADMIN web session.",
     "pluginsEmpty": "No plugins found. Drop a plugin folder into <data>/plugins/ and reload.",
     "pluginsEnable": "Enable",
