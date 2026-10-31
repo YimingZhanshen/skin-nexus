@@ -139,7 +139,7 @@ onMounted(load)
       <button @click="saveProfile">{{ t('common.save') }}</button>
       <span class="muted" v-if="me">{{ t('profile.verifiedState', { state: me.emailVerified ? t('profile.verified') : t('profile.unverified') }) }}</span>
     </div>
-    <div class="muted" style="margin-top: 6px; font-size: 12px;">{{ t('profile.emailResetHint') }}</div>
+    <div class="muted" style="margin-top: 6px; font-size: var(--fs-xs);">{{ t('profile.emailResetHint') }}</div>
 
     <!-- password -->
     <h3>{{ t('auth.pwTitle') }}</h3>
@@ -148,7 +148,7 @@ onMounted(load)
       <input v-model="newPw" type="password" :placeholder="t('auth.pwNew')" style="max-width: 220px;" @keyup.enter="changePassword" />
       <button :disabled="pwBusy" @click="changePassword">{{ t('auth.pwSubmit') }}</button>
     </div>
-    <div class="muted" style="margin-top: 6px; font-size: 12px;">{{ t('auth.pwHint') }}</div>
+    <div class="muted" style="margin-top: 6px; font-size: var(--fs-xs);">{{ t('auth.pwHint') }}</div>
 
     <!-- delete account (admins blocked server-side) -->
     <h3 class="danger-text">{{ t('profile.dangerZone') }}</h3>
@@ -156,7 +156,7 @@ onMounted(load)
       <input v-model="delPw" type="password" :placeholder="t('profile.deletePwPlaceholder')" style="max-width: 260px;" />
       <button class="danger" :disabled="delBusy" @click="deleteAccount">{{ t('profile.deleteBtn') }}</button>
     </div>
-    <div class="muted" style="margin-top: 6px; font-size: 12px;">{{ t('profile.deleteHint') }}</div>
+    <div class="muted" style="margin-top: 6px; font-size: var(--fs-xs);">{{ t('profile.deleteHint') }}</div>
     <PluginSlot slot="profile.card.footer" />
   </div>
 </template>
@@ -177,7 +177,7 @@ h3 { font-size: 14px; margin: 18px 0 8px; color: var(--muted); font-weight: 600;
   image-rendering: pixelated;
   border-radius: 2px;
 }
-.avatar-empty { color: var(--muted); font-size: 12px; }
+.avatar-empty { color: var(--muted); font-size: var(--fs-xs); }
 .avatar-pick { max-width: 260px; }
 .fld { flex: 1; min-width: 220px; }
 .fld input { margin-top: 4px; }

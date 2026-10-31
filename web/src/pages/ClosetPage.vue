@@ -104,6 +104,6 @@ onMounted(load)
 
 <style scoped>
 .thumb { height: 48px; image-rendering: pixelated; vertical-align: middle; border-radius: 4px; }
-.hash { font-size: 11px; }
+.hash { font-size: var(--fs-xs); }
 .nowrap { white-space: nowrap; }
 </style>

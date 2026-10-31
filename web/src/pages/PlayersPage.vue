@@ -150,7 +150,7 @@ onMounted(load)
    it stretches the table far past the card (screenshot bug) */
 .prev-cell :deep(canvas) { width: 48px !important; height: 72px !important; }
 .pname { font-weight: 600; }
-.uuid { font-size: 11px; }
-.cell-sel { width: 100%; padding: 4px 6px; font-size: 13px; }
+.uuid { font-size: var(--fs-xs); }
+.cell-sel { width: 100%; padding: 4px 6px; font-size: var(--fs-xs); }
 .nowrap { white-space: nowrap; }
 </style>

@@ -571,10 +571,33 @@
     "reportsResolve": "已处理",
     "reportsHide": "下架",
     "reportsHandled": "操作成功",
-    "reportsHideConfirm": "确认下架「{name}」？下架后仅上传者可见。"
+    "reportsHideConfirm": "确认下架「{name}」？下架后仅上传者可见。",
+    "invitationTitle": "邀请码（未用 {free} / 已用 {used}）",
+    "invitationAmountPh": "数量",
+    "invitationDescPh": "备注（description，人可读标识，选填）",
+    "invitationGenerate": "生成",
+    "invitationAvailable": "可用列表",
+    "invitationUsedList": "已用列表",
+    "invitationColCode": "邀请码",
+    "invitationColDesc": "备注",
+    "invitationColGenerated": "生成时间",
+    "invitationColUsedBy": "使用者 UID",
+    "invitationColUsedAt": "使用时间",
+    "invitationEditDesc": "改备注",
+    "invitationDescPrompt": "修改备注（description）：",
+    "invitationFreeEmpty": "暂无可用邀请码",
+    "invitationUsedEmpty": "暂无已用邀请码",
+    "reasonCopyright": "侵权 / 无授权转载",
+    "reasonSexual": "色情或擦边内容",
+    "reasonViolence": "暴力或血腥",
+    "reasonHate": "仇恨或歧视",
+    "reasonSpam": "垃圾或误导信息",
+    "reasonOther": "其他"
   },
   "pluginUi": {
     "notFound": "插件页面不存在或已停用",
-    "schemaUnsupported": "该插件页面使用宿主表单渲染，当前版本暂未开放。"
+    "schemaUnsupported": "该插件页面使用宿主表单渲染，当前版本暂未开放。",
+    "loading": "加载插件界面…",
+    "loadFailed": "插件界面加载失败"
   }
 }

@@ -142,7 +142,7 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
                  transition: border-color .12s, transform .12s; }
   .grid figure:hover { border-color: var(--ochre); }
   .grid img { max-width: 112px; max-height: 112px; image-rendering: pixelated; }
-  .grid figcaption { font-size: 13px; color: var(--moon-2); margin-top: 8px;
+  .grid figcaption { font-size: var(--fs-s); color: var(--moon-2); margin-top: 8px;
                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   footer.site-footer { position: relative; z-index: 1; flex: none; margin-top: 32px; padding: 18px 24px 24px;
            text-align: center; font-size: var(--fs-xs); color: var(--muted); border-top: 1px solid var(--line); }

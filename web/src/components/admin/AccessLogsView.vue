@@ -118,17 +118,17 @@ onMounted(load)
 .logs-table th:nth-child(5), .logs-table td:nth-child(5) { width: 112px; }
 .logs-table th:nth-child(6), .logs-table td:nth-child(6) { width: 210px; }
 /* col7 (detail) takes the remainder of the fixed layout */
-.logs-table td.detail { font-family: var(--mono, monospace); font-size: 12px; }
+.logs-table td.detail { font-family: var(--mono, monospace); font-size: var(--fs-xs); }
 .nowrap { white-space: nowrap; }
 .who { font-weight: 600; }
-.ip { font-size: 12px; }
+.ip { font-size: var(--fs-xs); }
 .ua, .logs-table td.detail {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.ua { font-size: 12px; }
-.oc { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid transparent; }
+.ua { font-size: var(--fs-xs); }
+.oc { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: var(--fs-xs); border: 1px solid transparent; }
 .oc-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
 .oc-miss { color: var(--muted); border-color: var(--line); }
 .oc-warn { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 40%, transparent); }

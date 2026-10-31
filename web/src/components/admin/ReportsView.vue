@@ -27,12 +27,12 @@ const ok = ref('')
 let seq = 0
 
 const reasons = {
-  copyright: '侵权 / 无授权转载',
-  sexual: '色情或擦边内容',
-  violence: '暴力或血腥',
-  hate: '仇恨或歧视',
-  spam: '垃圾或误导信息',
-  other: '其他',
+  copyright: 'admin.reasonCopyright',
+  sexual: 'admin.reasonSexual',
+  violence: 'admin.reasonViolence',
+  hate: 'admin.reasonHate',
+  spam: 'admin.reasonSpam',
+  other: 'admin.reasonOther',
 }
 
 async function load() {
@@ -76,7 +76,7 @@ async function act(r, action) {
   }
 }
 
-function reasonText(r) { return reasons[r] || r }
+function reasonText(r) { const k = reasons[r]; return k ? t(k) : r }
 
 onMounted(load)
 </script>

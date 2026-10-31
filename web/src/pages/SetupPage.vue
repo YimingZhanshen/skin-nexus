@@ -104,7 +104,7 @@ function goHome() {
     <template v-else-if="step === 3">
       <label for="s-domains">皮肤域清单（每行一个，用于 Yggdrasil 元数据）</label>
       <textarea id="s-domains" v-model="skinDomains" rows="6" placeholder="skin.example.com"></textarea>
-      <div class="muted" style="font-size: 12px; margin-top: 6px;">
+      <div class="muted" style="font-size: var(--fs-xs); margin-top: 6px;">
         可留空，之后在环境变量 SKIN_SKIN_DOMAINS 或数据库里补充。
       </div>
     </template>

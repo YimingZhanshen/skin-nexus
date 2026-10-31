@@ -231,7 +231,7 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
       <!-- draggable label: payload authlib-injector:yggdrasil-server:{url} (launcher spec DnD) -->
       <a class="drag-btn" :href="aliUrl" draggable="true" @dragstart="onDragLauncher">{{ t('dashboard.dragBtn') }}</a>
     </div>
-    <p class="muted" style="margin-top: 8px; font-size: 12px;">{{ t('dashboard.launcherTutor') }}</p>
+    <p class="muted" style="margin-top: 8px; font-size: var(--fs-xs);">{{ t('dashboard.launcherTutor') }}</p>
   </div>
 
   <!-- upload: 左控件列 + 右即时预览（选中文件即渲染 3D / 平面图） -->
@@ -331,7 +331,7 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
         <td class="muted">{{ tx.hash.slice(0, 12) }}…</td>
         <td>
           <button class="secondary" v-if="!closetIds.has(tx.id)" @click="addToCloset(tx)">{{ t('dashboard.closetAdd') }}</button>
-          <span class="muted" v-else style="font-size: 12px;">{{ t('dashboard.closetIn') }}</span>
+          <span class="muted" v-else style="font-size: var(--fs-xs);">{{ t('dashboard.closetIn') }}</span>
         </td>
       </tr>
     </table>
@@ -385,12 +385,12 @@ h3 { font-size: var(--fs-s); margin: 16px 0 4px; color: var(--muted); font-weigh
   padding: 10px 12px; background: var(--bg); }
 .upload-progress { display: flex; align-items: center; gap: 10px; }
 .upload-progress .bar { flex: 1; height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
-.upload-progress .bar i { display: block; height: 100%; background: var(--accent); transition: width .15s linear; }
+.upload-progress .bar i { display: block; height: 100%; background: var(--accent); transition: width var(--t-fast) var(--ease); }
 .drop-zone {
   display: flex; align-items: center; gap: 8px;
   border: 1px dashed var(--line-strong); border-radius: var(--r-m);
   background: var(--bg); padding: 12px; cursor: pointer; min-height: 48px;
-  transition: border-color .14s var(--ease), background .14s var(--ease);
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
 }
 .drop-zone:hover, .drop-zone.over { border-color: var(--gold); background: var(--ink-3); }
 .file-hidden { display: none; }

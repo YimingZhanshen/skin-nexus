@@ -233,13 +233,16 @@ onMounted(() => { load() })
 .skin-card {
   border: 1px solid var(--border); border-radius: var(--r-m); overflow: hidden;
   background: var(--bg); display: flex; flex-direction: column;
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-mid) var(--ease);
 }
+.skin-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-lift); }
 .skin-card-prev {
   height: 180px; display: flex; align-items: center; justify-content: center;
   background: var(--panel-2);
 }
-.skin-preview-img { height: 150px; image-rendering: pixelated; object-fit: contain; }
-.cape-thumb { max-width: 90%; max-height: 150px; image-rendering: pixelated; }
+.skin-preview-img { height: 150px; image-rendering: pixelated; object-fit: contain; transition: transform var(--t-mid) var(--ease); }
+.cape-thumb { max-width: 90%; max-height: 150px; image-rendering: pixelated; transition: transform var(--t-mid) var(--ease); }
+.skin-card:hover .skin-preview-img, .skin-card:hover .cape-thumb { transform: scale(1.04); }
 .skin-card-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .skin-card-name {
   font-weight: 600; font-size: var(--fs-s); white-space: nowrap;

@@ -166,5 +166,5 @@ onMounted(load)
 .thumb { width: 28px; height: auto; image-rendering: pixelated; vertical-align: middle; border-radius: 4px; }
 .thumb-sm { width: 18px; height: auto; image-rendering: pixelated; vertical-align: middle; }
 .cell-btn { padding: 3px 8px; min-width: 48px; display: inline-flex; align-items: center; justify-content: center; }
-.uuid { font-size: 11px; letter-spacing: .2px; }
+.uuid { font-size: var(--fs-xs); letter-spacing: .2px; }
 </style>

@@ -131,7 +131,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   .topnav a.primary { background: var(--cinnabar); color: var(--on-cinnabar); font-weight: 600; }
   .topnav a.primary:hover { background: var(--cinnabar-hi); color: var(--on-cinnabar); }
   .wrap { flex: 1 0 auto; width: 100%; max-width: 940px; margin: 0 auto; padding: 32px 24px 56px; }
-  .crumb { font-size: 13px; color: var(--muted); margin: 0 0 16px; }
+  .crumb { font-size: var(--fs-s); color: var(--muted); margin: 0 0 16px; }
   .crumb .sep { color: var(--muted); }
   .card { background: var(--panel); border: 1px solid var(--line);
           border-radius: var(--r-l); padding: 32px;

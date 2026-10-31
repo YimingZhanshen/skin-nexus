@@ -33,5 +33,5 @@ function set(plugin, value) {
 
 <style scoped>
 .plugin-fields { margin-top: 10px; }
-.plugin-fields h4 { font-size: 13px; margin: 0 0 6px; color: var(--muted); }
+.plugin-fields h4 { font-size: var(--fs-s); margin: 0 0 6px; color: var(--muted); }
 </style>

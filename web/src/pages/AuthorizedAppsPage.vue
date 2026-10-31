@@ -64,8 +64,8 @@ onMounted(load)
     <table>
       <tr><th>{{ t('apps.colApp') }}</th><th>{{ t('apps.colScopes') }}</th><th>{{ t('apps.colProfile') }}</th><th>{{ t('apps.colCreated') }}</th><th>{{ t('apps.colExpires') }}</th><th></th></tr>
       <tr v-for="tk in tokens" :key="tk.jti">
-        <td><code style="font-size: 12px;">{{ tk.client_id }}</code></td>
-        <td class="muted" style="font-size: 12px;">{{ (tk.scopes || []).join(', ') }}</td>
+        <td><code style="font-size: var(--fs-xs);">{{ tk.client_id }}</code></td>
+        <td class="muted" style="font-size: var(--fs-xs);">{{ (tk.scopes || []).join(', ') }}</td>
         <td>{{ tk.selected_pid ? '#' + tk.selected_pid : '—' }}</td>
         <td>{{ fmt(tk.created_at) }}</td>
         <td>{{ fmt(tk.expires_at) }}</td>

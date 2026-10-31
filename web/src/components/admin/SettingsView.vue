@@ -283,7 +283,7 @@ onMounted(load)
         <option value="">无（默认样式）</option>
         <option v-for="th in themes" :key="th.id" :value="th.id">{{ th.name }}（{{ th.version }}）</option>
       </select>
-      <div class="muted" v-if="!themes.length" style="font-size: 12px;">
+      <div class="muted" v-if="!themes.length" style="font-size: var(--fs-xs);">
         将主题包放入 data/themes/&lt;id&gt;/（含 theme.json），重启服务后在此识别（新增/删除主题包需重启）。规范见 docs/theme-spec.md。
       </div>
       <label style="margin-top: 12px;" for="ap-footer-text">页脚文字（支持 {year} / {site_name} / {site_url} 占位符）</label>
@@ -295,12 +295,12 @@ onMounted(load)
         <button class="secondary" type="button" @click="appearance.footer_links.splice(i, 1)">删除</button>
       </div>
       <button class="secondary" type="button" v-if="appearance.footer_links.length < 8" @click="appearance.footer_links.push({ label: '', url: '' })">添加链接</button>
-      <p class="muted" style="font-size: 12px; margin-top: 6px;">页脚文字和链接会公开展示；链接仅支持 http(s) 绝对地址。页脚始终保留 SkinNexus 版权行。</p>
+      <p class="muted" style="font-size: var(--fs-xs); margin-top: 6px;">页脚文字和链接会公开展示；链接仅支持 http(s) 绝对地址。页脚始终保留 SkinNexus 版权行。</p>
       <label style="margin-top: 12px;" for="ap-css">自定义 CSS（约 64KB 上限）</label>
       <textarea id="ap-css" v-model="appearance.custom_css" rows="5" placeholder=".card { border-radius: 16px; }"></textarea>
       <label for="ap-js">自定义 JS（约 64KB 上限）</label>
       <textarea id="ap-js" v-model="appearance.custom_js" rows="4" placeholder="document.addEventListener('DOMContentLoaded', () => { /* ... */ })"></textarea>
-      <div class="muted" style="font-size: 12px; margin-top: 8px;">
+      <div class="muted" style="font-size: var(--fs-xs); margin-top: 8px;">
         自定义 JS 与主题 JS 以管理员信任面原样注入（与 blessing 行为一致）——请只粘贴自己信任的代码。
         JS 在 Vue 挂载前执行，操作界面 DOM 请包在 DOMContentLoaded 回调里。
       </div>
@@ -334,8 +334,8 @@ onMounted(load)
           <td><code>{{ c.client_id }}</code></td>
           <td>{{ c.name }}</td>
           <td><span class="badge">{{ c.public ? t('admin.oidcPublic') : t('admin.oidcConfidential') }}</span></td>
-          <td class="muted" style="font-size: 12px;">{{ (c.grant_types || []).join(', ') }}</td>
-          <td class="muted" style="font-size: 12px;">{{ (c.redirect_uris || []).join(', ') || '—' }}</td>
+          <td class="muted" style="font-size: var(--fs-xs);">{{ (c.grant_types || []).join(', ') }}</td>
+          <td class="muted" style="font-size: var(--fs-xs);">{{ (c.redirect_uris || []).join(', ') || '—' }}</td>
           <td><button class="secondary" @click="deleteClient(c.client_id)">{{ t('admin.oidcDelete') }}</button></td>
         </tr>
       </table>

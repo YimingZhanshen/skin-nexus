@@ -75,5 +75,5 @@ onMounted(async () => {
 }
 .stat-card:hover { border-color: var(--accent); }
 .stat-num { font-size: 24px; font-weight: 700; }
-.stat-label { font-size: 12px; color: var(--muted); }
+.stat-label { font-size: var(--fs-xs); color: var(--muted); }
 </style>

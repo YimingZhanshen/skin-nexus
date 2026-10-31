@@ -145,7 +145,7 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
    even when a page is short; taller pages still scroll normally. */
 .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
 .app-shell > .container { flex: 1 0 auto; }
-.crumb { font-size: 13px; color: var(--muted); margin: 0 0 16px; }
+.crumb { font-size: var(--fs-s); color: var(--muted); margin: 0 0 16px; }
 .crumb a { color: var(--jade); }
 .crumb .sep { margin: 0 6px; color: var(--muted); }
 .site-footer {

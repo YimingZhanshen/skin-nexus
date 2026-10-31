@@ -568,10 +568,33 @@
     "reportsResolve": "Resolve",
     "reportsHide": "Hide",
     "reportsHandled": "Done",
-    "reportsHideConfirm": "Hide “{name}”? Only the uploader will see it."
+    "reportsHideConfirm": "Hide “{name}”? Only the uploader will see it.",
+    "invitationTitle": "Invitation codes ({free} unused / {used} used)",
+    "invitationAmountPh": "Amount",
+    "invitationDescPh": "Description (human-readable label, optional)",
+    "invitationGenerate": "Generate",
+    "invitationAvailable": "Available",
+    "invitationUsedList": "Used",
+    "invitationColCode": "Code",
+    "invitationColDesc": "Description",
+    "invitationColGenerated": "Created",
+    "invitationColUsedBy": "Used by UID",
+    "invitationColUsedAt": "Used at",
+    "invitationEditDesc": "Edit note",
+    "invitationDescPrompt": "Edit description:",
+    "invitationFreeEmpty": "No unused codes",
+    "invitationUsedEmpty": "No used codes",
+    "reasonCopyright": "Infringement / unauthorized repost",
+    "reasonSexual": "Sexual content",
+    "reasonViolence": "Violence or gore",
+    "reasonHate": "Hate or discrimination",
+    "reasonSpam": "Spam or misleading",
+    "reasonOther": "Other"
   },
   "pluginUi": {
     "notFound": "Plugin page not found or disabled",
-    "schemaUnsupported": "This plugin page uses host-rendered schema pages, not available in this release."
+    "schemaUnsupported": "This plugin page uses host-rendered schema pages, not available in this release.",
+    "loading": "Loading plugin UI…",
+    "loadFailed": "Failed to load the plugin UI"
   }
 }

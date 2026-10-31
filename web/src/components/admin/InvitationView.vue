@@ -2,8 +2,10 @@
 // InvitationView: generate form on top, then free codes, then used codes
 // (blessing 管理面板 邀请码 layout parity — B1).
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 
+const { t } = useI18n()
 const invFree = ref([])
 const invUsed = ref([])
 const invError = ref('')
@@ -31,7 +33,7 @@ async function invGenerate() {
 }
 
 async function invEdit(ic) {
-  const next = prompt('修改备注（description）：', ic.description || '')
+  const next = prompt(t('admin.invitationDescPrompt'), ic.description || '')
   if (next === null) return
   invError.value = ''
   try {
@@ -48,32 +50,32 @@ onMounted(load)
 
 <template>
   <div class="card">
-    <h2 style="margin-top: 0;">邀请码（未用 {{ invFree.length }} / 已用 {{ invUsed.length }}）</h2>
+    <h2 style="margin-top: 0;">{{ t('admin.invitationTitle', { free: invFree.length, used: invUsed.length }) }}</h2>
     <!-- generate form on top (blessing layout) -->
     <div class="row">
-      <input v-model.number="invNew.amount" type="number" min="1" max="1000" placeholder="数量" style="max-width: 100px;" />
-      <input v-model="invNew.description" placeholder="备注（description，人可读标识，选填）" style="max-width: 320px;" />
-      <button @click="invGenerate">生成</button>
+      <input v-model.number="invNew.amount" type="number" min="1" max="1000" :placeholder="t('admin.invitationAmountPh')" style="max-width: 100px;" />
+      <input v-model="invNew.description" :placeholder="t('admin.invitationDescPh')" style="max-width: 320px;" />
+      <button @click="invGenerate">{{ t('admin.invitationGenerate') }}</button>
     </div>
     <div class="error" v-if="invError">{{ invError }}</div>
-    <h3>可用列表</h3>
+    <h3>{{ t('admin.invitationAvailable') }}</h3>
     <div class="table-scroll" v-if="invFree.length">
     <table>
-      <tr><th>ID</th><th>邀请码</th><th>备注</th><th>生成时间</th><th></th></tr>
+      <tr><th>ID</th><th>{{ t('admin.invitationColCode') }}</th><th>{{ t('admin.invitationColDesc') }}</th><th>{{ t('admin.invitationColGenerated') }}</th><th></th></tr>
       <tr v-for="ic in invFree" :key="ic.id">
         <td>{{ ic.id }}</td>
         <td><code>{{ ic.code }}</code></td>
         <td class="muted">{{ ic.description || '—' }}</td>
         <td class="muted">{{ (ic.generated_at || '').slice(0, 19).replace('T', ' ') }}</td>
-        <td><button class="secondary" @click="invEdit(ic)">改备注</button></td>
+        <td><button class="secondary" @click="invEdit(ic)">{{ t('admin.invitationEditDesc') }}</button></td>
       </tr>
     </table>
     </div>
-    <p class="muted" v-else>暂无可用邀请码</p>
-    <h3>已用列表</h3>
+    <p class="muted" v-else>{{ t('admin.invitationFreeEmpty') }}</p>
+    <h3>{{ t('admin.invitationUsedList') }}</h3>
     <div class="table-scroll" v-if="invUsed.length">
     <table>
-      <tr><th>ID</th><th>邀请码</th><th>备注</th><th>使用者 UID</th><th>使用时间</th></tr>
+      <tr><th>ID</th><th>{{ t('admin.invitationColCode') }}</th><th>{{ t('admin.invitationColDesc') }}</th><th>{{ t('admin.invitationColUsedBy') }}</th><th>{{ t('admin.invitationColUsedAt') }}</th></tr>
       <tr v-for="ic in invUsed" :key="ic.id">
         <td>{{ ic.id }}</td>
         <td><code>{{ ic.code }}</code></td>
@@ -83,6 +85,6 @@ onMounted(load)
       </tr>
     </table>
     </div>
-    <p class="muted" v-else>暂无已用邀请码</p>
+    <p class="muted" v-else>{{ t('admin.invitationUsedEmpty') }}</p>
   </div>
 </template>

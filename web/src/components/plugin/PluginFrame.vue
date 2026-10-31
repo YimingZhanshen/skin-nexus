@@ -6,6 +6,7 @@
 // every API call goes through the host bridge, which applies the plugin route
 // tier, CSRF and rate limits.
 import { inject, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { assetURL } from '../../pluginUI.js'
 
 const props = defineProps({
@@ -14,6 +15,7 @@ const props = defineProps({
   title: { type: String, default: '' },
   height: { type: Number, default: 180 },
 })
+const { t } = useI18n()
 const frame = ref(null)
 const height = ref(props.height)
 const frameKey = ref(0)
@@ -192,11 +194,11 @@ onBeforeUnmount(() => {
   <div class="plugin-frame" data-skin-plugin-frame :data-plugin="plugin">
     <div v-if="state === 'loading'" class="plugin-loading" role="status" aria-live="polite">
       <span class="spinner" aria-hidden="true"></span>
-      <span class="muted">加载插件界面…</span>
+      <span class="muted">{{ t('pluginUi.loading') }}</span>
     </div>
     <div v-else-if="state === 'error'" class="plugin-loading">
-      <span class="muted">插件界面加载失败</span>
-      <button class="secondary" @click="retry">重试</button>
+      <span class="muted">{{ t('pluginUi.loadFailed') }}</span>
+      <button class="secondary" @click="retry">{{ t('common.retry') }}</button>
     </div>
     <iframe :key="frameKey" ref="frame" :src="assetURL(plugin, src)" :title="title || plugin"
             sandbox="allow-scripts allow-forms"

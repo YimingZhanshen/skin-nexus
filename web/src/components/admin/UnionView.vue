@@ -237,7 +237,7 @@ onMounted(async () => {
       </div>
       <div class="success" v-if="opResult">{{ opResult }}</div>
 
-      <div class="muted" style="margin-top: 12px; font-size: 12px;">
+      <div class="muted" style="margin-top: 12px; font-size: var(--fs-xs);">
         {{ t('admin.unionTrustNotice') }}
       </div>
       <div class="error" v-if="error">{{ error }}</div>
