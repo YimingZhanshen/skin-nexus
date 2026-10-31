@@ -23,6 +23,7 @@ import (
 	"skin-nexus/server/internal/accesslog"
 	"skin-nexus/server/internal/account"
 	"skin-nexus/server/internal/announce"
+	"skin-nexus/server/internal/appearance"
 	"skin-nexus/server/internal/auth"
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/ratelimit"
@@ -62,6 +63,8 @@ type Backend struct {
 	SMTPDefaults map[string]string
 	BaseURL      string
 	SiteName     string
+	// Appearance supplies the public footer config (nil = default credit).
+	Appearance *appearance.Engine
 
 	// Access is the observability sidecar (nil = off): web login/register
 	// and inbound Union traffic lines for the admin panel. Best-effort —
@@ -404,10 +407,21 @@ func (b *Backend) handlePluginUI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b *Backend) handleSiteConfig(w http.ResponseWriter, r *http.Request) {
+	year := time.Now().Year()
+	footer := appearance.Footer{
+		Links:    []appearance.FooterLink{},
+		Credit:   true,
+		SiteName: b.SiteName,
+		Year:     year,
+	}
+	if b.Appearance != nil {
+		footer = b.Appearance.FooterData(r.Context(), b.SiteName, b.BaseURL, year)
+	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"invite_required": b.inviteRequired(r.Context()),
 		"mail_configured": b.smtpConfig(r.Context()) != nil,
 		"union_enabled":   b.union != nil && b.union.Enabled(),
+		"footer":          footer,
 	})
 }
 

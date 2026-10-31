@@ -123,7 +123,11 @@ const themes = ref([])
 async function loadAppearance() {
   appearError.value = ''
   try {
-    appearance.value = await fetchJSON('/api/admin/v1/appearance')
+    const data = await fetchJSON('/api/admin/v1/appearance')
+    if (!Array.isArray(data.footer_links)) data.footer_links = []
+    if (typeof data.footer_text !== 'string') data.footer_text = ''
+    if (typeof data.footer_credit !== 'boolean') data.footer_credit = true
+    appearance.value = data
     const th = await fetchJSON('/api/admin/v1/themes')
     themes.value = th.themes || []
   } catch (e) { appearError.value = e.message }
@@ -269,12 +273,12 @@ onMounted(load)
 
     <!-- Appearance: themes + custom CSS/JS（失败卡外可见 + 重试） -->
     <div class="card" v-if="!appearance && appearError">
-      <h2>外观（主题 / 自定义 CSS / JS）</h2>
+      <h2>外观（主题 / 页脚 / 自定义 CSS / JS）</h2>
       <div class="error">{{ appearError }}</div>
       <button class="secondary" style="margin-top: 12px;" @click="loadAppearance">{{ t('common.retry') }}</button>
     </div>
     <div class="card" v-if="appearance">
-      <h2>外观（主题 / 自定义 CSS / JS）</h2>
+      <h2>外观（主题 / 页脚 / 自定义 CSS / JS）</h2>
       <label>启用主题包</label>
       <select v-model="appearance.active_theme" style="max-width: 320px;">
         <option value="">无（默认样式）</option>
@@ -283,6 +287,19 @@ onMounted(load)
       <div class="muted" v-if="!themes.length" style="font-size: 12px;">
         将主题包放入 data/themes/&lt;id&gt;/（含 theme.json），重启服务后在此识别（新增/删除主题包需重启）。规范见 docs/theme-spec.md。
       </div>
+      <label style="margin-top: 12px;">页脚文字（支持 {year} / {site_name} / {site_url} 占位符）</label>
+      <textarea v-model="appearance.footer_text" rows="3" maxlength="1000" placeholder="© {year} {site_name} · 浙ICP备12345678号"></textarea>
+      <label style="margin-top: 12px;">页脚链接（友链 / 备案号，最多 8 条）</label>
+      <div v-for="(link, i) in appearance.footer_links" :key="i" class="row" style="gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">
+        <input v-model="link.label" maxlength="40" placeholder="名称" style="max-width: 180px;" />
+        <input v-model="link.url" maxlength="2048" placeholder="https://" style="max-width: 420px;" />
+        <button class="secondary" type="button" @click="appearance.footer_links.splice(i, 1)">删除</button>
+      </div>
+      <button class="secondary" type="button" v-if="appearance.footer_links.length < 8" @click="appearance.footer_links.push({ label: '', url: '' })">添加链接</button>
+      <label style="display: flex; align-items: center; gap: 6px; margin-top: 12px;">
+        <input type="checkbox" v-model="appearance.footer_credit" /> 显示“Powered by SkinNexus”版权行
+      </label>
+      <p class="muted" style="font-size: 12px; margin-top: 6px;">页脚文字和链接会公开展示；链接仅支持 http(s) 绝对地址。</p>
       <label style="margin-top: 12px;">自定义 CSS（约 64KB 上限）</label>
       <textarea v-model="appearance.custom_css" rows="5" placeholder=".card { border-radius: 16px; }"></textarea>
       <label>自定义 JS（约 64KB 上限）</label>

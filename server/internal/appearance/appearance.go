@@ -10,11 +10,25 @@ package appearance
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	stdhtml "html"
+	"html/template"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"skin-nexus/server/internal/theme"
+)
+
+const (
+	maxFooterLinks     = 8
+	maxFooterTextRune  = 1000
+	maxFooterLabelRune = 40
+	maxFooterURLBytes  = 2048
 )
 
 // OptionStore is the persistence port (satisfied by *store.Mysql).
@@ -23,17 +37,46 @@ type OptionStore interface {
 	SetOption(ctx context.Context, k, v string) error
 }
 
+// ValidationError marks admin input that should map to HTTP 400 rather than
+// an internal error.
+type ValidationError struct{ Message string }
+
+func (e *ValidationError) Error() string { return e.Message }
+
+func invalidf(format string, args ...any) error {
+	return &ValidationError{Message: fmt.Sprintf(format, args...)}
+}
+
+// FooterLink is one admin-configured footer link (friend site, filing
+// record, etc.). URLs are restricted to absolute http(s).
+type FooterLink struct {
+	Label string `json:"label"`
+	URL   string `json:"url"`
+}
+
+// Footer is the public footer data rendered by SSR pages and /site-config.
+type Footer struct {
+	Text     string       `json:"text"`
+	Links    []FooterLink `json:"links"`
+	Credit   bool         `json:"credit"`
+	SiteName string       `json:"siteName"`
+	Year     int          `json:"year"`
+}
+
 // Settings is the admin-editable appearance configuration.
 type Settings struct {
-	ActiveTheme string `json:"active_theme"`
-	CustomCSS   string `json:"custom_css"`
-	CustomJS    string `json:"custom_js"`
-	CustomHead  string `json:"custom_head_html"`
+	ActiveTheme  string       `json:"active_theme"`
+	CustomCSS    string       `json:"custom_css"`
+	CustomJS     string       `json:"custom_js"`
+	CustomHead   string       `json:"custom_head_html"`
+	FooterText   string       `json:"footer_text"`
+	FooterLinks  []FooterLink `json:"footer_links"`
+	FooterCredit bool         `json:"footer_credit"`
 }
 
 // Engine renders the injection blocks.
 type Engine struct {
-	opts  OptionStore
+	opts   OptionStore
 	themes *theme.Registry
 
 	mu       sync.Mutex
@@ -66,6 +109,22 @@ func (e *Engine) Settings(ctx context.Context) Settings {
 	s.CustomCSS = get("custom_css")
 	s.CustomJS = get("custom_js")
 	s.CustomHead = get("custom_head_html")
+	s.FooterText = get("footer_text")
+	// Credit defaults to on: existing sites keep today's "Powered by" line
+	// until an admin explicitly turns it off.
+	s.FooterCredit = true
+	if v, ok, err := e.opts.GetOption(ctx, "footer_credit"); err == nil && ok {
+		s.FooterCredit = v != "0"
+	}
+	if raw := get("footer_links"); raw != "" {
+		var links []FooterLink
+		if err := json.Unmarshal([]byte(raw), &links); err == nil {
+			s.FooterLinks = sanitizeFooterLinks(links)
+		}
+	}
+	if s.FooterLinks == nil {
+		s.FooterLinks = []FooterLink{}
+	}
 
 	e.mu.Lock()
 	e.cached, e.cachedAt = s, time.Now()
@@ -82,11 +141,47 @@ func (e *Engine) Save(ctx context.Context, s Settings) error {
 			s.ActiveTheme = ""
 		}
 	}
+	s.FooterText = strings.TrimSpace(s.FooterText)
+	if utf8.RuneCountInString(s.FooterText) > maxFooterTextRune {
+		return invalidf("页脚文字最多 %d 字", maxFooterTextRune)
+	}
+	if len(s.FooterLinks) > maxFooterLinks {
+		return invalidf("页脚链接最多 %d 条", maxFooterLinks)
+	}
+	links := make([]FooterLink, 0, len(s.FooterLinks))
+	for i, l := range s.FooterLinks {
+		l.Label = strings.TrimSpace(l.Label)
+		l.URL = strings.TrimSpace(l.URL)
+		if l.Label == "" && l.URL == "" {
+			continue // an untouched "add link" row must not block saving
+		}
+		if l.Label == "" || l.URL == "" {
+			return invalidf("页脚链接 %d：名称和地址都不能为空", i+1)
+		}
+		if utf8.RuneCountInString(l.Label) > maxFooterLabelRune {
+			return invalidf("页脚链接 %d：名称最多 %d 字", i+1, maxFooterLabelRune)
+		}
+		if !validFooterURL(l.URL) {
+			return invalidf("页脚链接 %d：地址必须是 http(s) 绝对地址", i+1)
+		}
+		links = append(links, l)
+	}
+	linksJSON, err := json.Marshal(links)
+	if err != nil {
+		return err
+	}
+	credit := "0"
+	if s.FooterCredit {
+		credit = "1"
+	}
 	pairs := map[string]string{
-		"active_theme":      s.ActiveTheme,
-		"custom_css":        s.CustomCSS,
-		"custom_js":         s.CustomJS,
-		"custom_head_html":  s.CustomHead,
+		"active_theme":     s.ActiveTheme,
+		"custom_css":       s.CustomCSS,
+		"custom_js":        s.CustomJS,
+		"custom_head_html": s.CustomHead,
+		"footer_text":      s.FooterText,
+		"footer_links":     string(linksJSON),
+		"footer_credit":    credit,
 	}
 	for k, v := range pairs {
 		if err := e.opts.SetOption(ctx, k, v); err != nil {
@@ -97,6 +192,91 @@ func (e *Engine) Save(ctx context.Context, s Settings) error {
 	e.cachedAt = time.Time{}
 	e.mu.Unlock()
 	return nil
+}
+
+// FooterData returns the public footer with the site placeholders resolved.
+func (e *Engine) FooterData(ctx context.Context, siteName, siteURL string, year int) Footer {
+	s := e.Settings(ctx)
+	text := strings.NewReplacer(
+		"{year}", strconv.Itoa(year),
+		"{site_name}", siteName,
+		"{site_url}", strings.TrimRight(siteURL, "/"),
+	).Replace(s.FooterText)
+	links := append([]FooterLink{}, s.FooterLinks...)
+	return Footer{
+		Text:     text,
+		Links:    links,
+		Credit:   s.FooterCredit,
+		SiteName: siteName,
+		Year:     year,
+	}
+}
+
+// HTML renders the shared footer body. Custom text is escaped and keeps
+// line breaks; links were validated on save/load, but are escaped again here
+// because option rows can be edited directly in the database.
+func (f Footer) HTML() template.HTML {
+	var b strings.Builder
+	if len(f.Links) > 0 {
+		b.WriteString(`<nav class="site-footer-links" aria-label="footer links">`)
+		for _, l := range f.Links {
+			if !validFooterURL(l.URL) {
+				continue
+			}
+			b.WriteString(`<a href="`)
+			b.WriteString(stdhtml.EscapeString(l.URL))
+			b.WriteString(`" target="_blank" rel="noopener noreferrer">`)
+			b.WriteString(stdhtml.EscapeString(l.Label))
+			b.WriteString(`</a>`)
+		}
+		b.WriteString(`</nav>`)
+	}
+	if f.Text != "" {
+		text := stdhtml.EscapeString(strings.ReplaceAll(f.Text, "\r\n", "\n"))
+		text = strings.ReplaceAll(text, "\n", "<br>")
+		b.WriteString(`<p class="site-footer-text">` + text + `</p>`)
+	}
+	if f.Credit {
+		b.WriteString(`<p class="site-footer-credit">Powered by <a href="https://github.com/YimingZhanshen/skin-nexus" target="_blank" rel="noopener noreferrer">SkinNexus</a>`)
+		if f.SiteName != "" {
+			b.WriteString(` · © `)
+			b.WriteString(strconv.Itoa(f.Year))
+			b.WriteString(` `)
+			b.WriteString(stdhtml.EscapeString(f.SiteName))
+		}
+		b.WriteString(`</p>`)
+	}
+	return template.HTML(b.String())
+}
+
+func validFooterURL(raw string) bool {
+	if raw == "" || len(raw) > maxFooterURLBytes {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.User != nil || u.Host == "" {
+		return false
+	}
+	return u.Scheme == "http" || u.Scheme == "https"
+}
+
+func sanitizeFooterLinks(in []FooterLink) []FooterLink {
+	out := make([]FooterLink, 0, len(in))
+	for _, l := range in {
+		l.Label = strings.TrimSpace(l.Label)
+		l.URL = strings.TrimSpace(l.URL)
+		if l.Label == "" || !validFooterURL(l.URL) {
+			continue
+		}
+		if utf8.RuneCountInString(l.Label) > maxFooterLabelRune {
+			l.Label = string([]rune(l.Label)[:maxFooterLabelRune])
+		}
+		out = append(out, l)
+		if len(out) == maxFooterLinks {
+			break
+		}
+	}
+	return out
 }
 
 // Render fills the injection markers in the SPA index.html.

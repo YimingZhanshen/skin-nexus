@@ -110,6 +110,22 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
 /* admin panel carries 8-9 column management tables — the 960px column
    squeezed them into vertical header wrap + overflowing action buttons */
 .container.wide { max-width: 1280px; }
+/* Shell grows its content area so the footer sits at the viewport bottom
+   even when a page is short; taller pages still scroll normally. */
+.app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+.app-shell > .container { flex: 1 0 auto; }
+.crumb { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+.crumb a { color: var(--jade); }
+.crumb .sep { margin: 0 6px; color: var(--muted); }
+.site-footer {
+  flex: none; margin-top: 32px; padding: 18px 24px 24px;
+  border-top: 1px solid var(--line); text-align: center;
+  font-size: var(--fs-xs); color: var(--muted);
+}
+.site-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 0 0 8px; }
+.site-footer-text { margin: 0 0 6px; white-space: pre-line; }
+.site-footer-credit { margin: 0; }
+.site-footer a { color: var(--jade); }
 
 /* ── 认证分栏：左场景板 + 右表单（大改核心布局） ── */
 .auth-split {

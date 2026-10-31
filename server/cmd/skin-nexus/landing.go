@@ -31,13 +31,15 @@ type landingTexture struct {
 
 // landingData feeds the landing template.
 type landingData struct {
-	SiteName string
-	Intro    string
-	Users    int
-	Players  int
-	Textures int
-	Featured []landingTexture
-	Year     int
+	SiteName   string
+	SiteURL    string
+	Intro      string
+	Users      int
+	Players    int
+	Textures   int
+	Featured   []landingTexture
+	Year       int
+	FooterHTML template.HTML
 	// LoggedIn: 已登录访客不再展示登录/注册 CTA（2026-10-27 逻辑修复）
 	LoggedIn bool
 }
@@ -69,7 +71,7 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
     --cinnabar: #b0453a; --cinnabar-hi: #c25446; --on-cinnabar: #fdf3ec;
     --ochre: #c9a06a;
   }
-  body { margin: 0;
+  body { margin: 0; min-height: 100vh; display: flex; flex-direction: column;
          font-family: "Segoe UI", "Inter", "PingFang SC", "HarmonyOS Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
          font-size: 15px; line-height: 1.7; -webkit-font-smoothing: antialiased; line-break: strict;
          background: var(--ink); color: var(--moon); }
@@ -82,7 +84,7 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
   .fog-a { bottom: 56px; animation: fogdrift 70s linear infinite; }
   .fog-b { bottom: 150px; opacity: .7; animation: fogdrift 110s linear infinite reverse; }
   @keyframes fogdrift { from { transform: translateX(-4%); } to { transform: translateX(4%); } }
-  .wrap { position: relative; z-index: 1; max-width: 880px; margin: 0 auto; padding: 24px 16px 48px; }
+  .wrap { position: relative; z-index: 1; flex: 1 0 auto; max-width: 880px; margin: 0 auto; padding: 24px 16px 48px; }
   /* 首屏 */
   .hero { position: relative; padding: 56px 0 32px; text-align: center; }
   .hero > * { position: relative; }
@@ -129,10 +131,13 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
   .grid img { max-width: 96px; max-height: 96px; image-rendering: pixelated; }
   .grid figcaption { font-size: 12px; color: var(--moon-2); margin-top: 6px;
                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  footer { position: relative; z-index: 1; margin-top: 40px; padding-top: 16px; text-align: center;
-           font-size: 12px; color: var(--moon-2); border-top: 1px solid var(--line); }
-  footer a { color: var(--ochre); text-decoration: none; }
-  footer a:hover { text-decoration: underline; }
+  footer.site-footer { position: relative; z-index: 1; flex: none; margin-top: 40px; padding: 16px 16px 24px;
+           text-align: center; font-size: 12px; color: var(--moon-2); border-top: 1px solid var(--line); }
+  footer.site-footer a { color: var(--ochre); text-decoration: none; }
+  footer.site-footer a:hover { text-decoration: underline; }
+  .site-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 0 0 8px; }
+  .site-footer-text { margin: 0 0 6px; white-space: pre-line; }
+  .site-footer-credit { margin: 0; }
   /* 品牌标识入场编舞：1600ms 共此时钟，offset 为关键帧内百分比；
      keyframe 缓动一律字面值（var() 在 @keyframes 内会被 Chromium 静默丢弃）。 */
   .brandmark { width: 112px; height: 112px; margin: 0 auto 18px; }
@@ -286,10 +291,7 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
     </section>
     {{end}}
   </div>
-  <footer>
-    Powered by <a href="https://github.com/YimingZhanshen/skin-nexus">SkinNexus</a>
-    · © {{.Year}} {{.SiteName}}
-  </footer>
+  {{if .FooterHTML}}<footer class="site-footer">{{.FooterHTML}}</footer>{{end}}
   {{.BodyAnchor}}
 </body>
 </html>
@@ -321,6 +323,7 @@ type landingView struct {
 // injection layers as the SPA shell.
 func renderLanding(ctx context.Context, seoEng *seo.Engine, appearEng *appearance.Engine, d landingData) string {
 	d.Year = time.Now().Year()
+	d.FooterHTML = appearEng.FooterData(ctx, d.SiteName, d.SiteURL, d.Year).HTML()
 	d.Intro = landingIntro
 	var sb strings.Builder
 	v := landingView{

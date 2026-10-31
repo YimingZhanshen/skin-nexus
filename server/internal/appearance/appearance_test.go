@@ -90,3 +90,86 @@ func TestNoThemeNoMarkersLeft(t *testing.T) {
 		t.Fatalf("markers left: %q", html)
 	}
 }
+
+func TestFooterDataAndHTML(t *testing.T) {
+	e := NewEngine(&fakeOpts{kv: map[string]string{
+		"footer_text":   "© {year} {site_name} · 浙ICP备123号\n第二行",
+		"footer_links":  `[{"label":"友链","url":"https://example.com/a?b=1&c=2"},{"label":"备案","url":"https://beian.miit.gov.cn/"}]`,
+		"footer_credit": "1",
+	}}, testRegistry(t))
+	f := e.FooterData(context.Background(), "示例站", "https://skin.example.com/", 2026)
+	if f.Text != "© 2026 示例站 · 浙ICP备123号\n第二行" {
+		t.Fatalf("footer text = %q", f.Text)
+	}
+	if len(f.Links) != 2 || f.Links[0].Label != "友链" {
+		t.Fatalf("footer links = %#v", f.Links)
+	}
+	if !f.Credit || f.Year != 2026 || f.SiteName != "示例站" {
+		t.Fatalf("footer metadata = %#v", f)
+	}
+	html := string(f.HTML())
+	for _, want := range []string{
+		`href="https://example.com/a?b=1&amp;c=2"`,
+		`rel="noopener noreferrer"`,
+		`浙ICP备123号<br>第二行`,
+		`Powered by`,
+		`© 2026 示例站`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("footer html missing %q: %s", want, html)
+		}
+	}
+}
+
+func TestFooterDefaultsToCredit(t *testing.T) {
+	e := NewEngine(&fakeOpts{}, testRegistry(t))
+	f := e.FooterData(context.Background(), "示例站", "https://skin.example.com", 2026)
+	if !f.Credit || len(f.Links) != 0 {
+		t.Fatalf("default footer = %#v", f)
+	}
+	if !strings.Contains(string(f.HTML()), "Powered by") {
+		t.Fatalf("default footer must keep credit: %s", f.HTML())
+	}
+}
+
+func TestFooterEscapesAndDropsUnsafeLinks(t *testing.T) {
+	f := Footer{
+		Text:     `<script>alert(1)</script>`,
+		Links:    []FooterLink{{Label: `<b>x</b>`, URL: "javascript:alert(1)"}, {Label: "ok", URL: "https://example.com"}},
+		Credit:   false,
+		SiteName: `<img src=x>`,
+		Year:     2026,
+	}
+	html := string(f.HTML())
+	if strings.Contains(html, "<script>") || strings.Contains(html, "javascript:") {
+		t.Fatalf("unsafe footer html: %s", html)
+	}
+	if !strings.Contains(html, "&lt;script&gt;") || !strings.Contains(html, `href="https://example.com"`) {
+		t.Fatalf("escaped footer html missing content: %s", html)
+	}
+}
+
+func TestFooterSaveValidation(t *testing.T) {
+	e := NewEngine(&fakeOpts{}, testRegistry(t))
+	cases := []Settings{
+		{FooterText: strings.Repeat("字", maxFooterTextRune+1)},
+		{FooterLinks: []FooterLink{{Label: "x", URL: "javascript:alert(1)"}}},
+		{FooterLinks: []FooterLink{{Label: "", URL: "https://example.com"}}},
+	}
+	for i, s := range cases {
+		if err := e.Save(context.Background(), s); err == nil {
+			t.Fatalf("case %d: expected validation error", i)
+		}
+	}
+	if err := e.Save(context.Background(), Settings{
+		FooterText:   "© {year} {site_name}",
+		FooterLinks:  []FooterLink{{Label: "友链", URL: "https://example.com"}},
+		FooterCredit: false,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got := e.Settings(context.Background())
+	if got.FooterText != "© {year} {site_name}" || len(got.FooterLinks) != 1 || got.FooterCredit {
+		t.Fatalf("saved footer = %#v", got)
+	}
+}

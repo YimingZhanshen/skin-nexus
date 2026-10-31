@@ -60,7 +60,15 @@ const resetDone = ref(false)
 // the deployment's real configuration — invite field required-or-absent,
 // email field + forgot flow available-or-hidden. Until the fetch resolves
 // (or if it fails) the pre-config UI stays = today's behavior.
-const siteConf = ref({ invite_required: false, mail_configured: false, union_enabled: false })
+function defaultFooter() {
+  return { text: '', links: [], credit: true, siteName: 'SkinNexus', year: new Date().getFullYear() }
+}
+function normalizeFooter(raw) {
+  const f = raw && typeof raw === 'object' ? raw : {}
+  return { ...defaultFooter(), ...f, links: Array.isArray(f.links) ? f.links : [] }
+}
+const siteConf = ref({ invite_required: false, mail_configured: false, union_enabled: false, footer: defaultFooter() })
+const siteFooter = computed(() => normalizeFooter(siteConf.value.footer))
 const confLoaded = ref(false)
 // Boot gate: hide the auth/shell until session + site capabilities settle.
 // Without it a logged-in refresh renders the login card first (the old boot
@@ -246,7 +254,8 @@ async function boot() {
     return
   }
   if (confR.status === 'fulfilled') {
-    siteConf.value = confR.value
+    const conf = confR.value || {}
+    siteConf.value = { ...siteConf.value, ...conf, footer: normalizeFooter(conf.footer) }
     confLoaded.value = true
   }
   if (meR.status === 'fulfilled') {
@@ -569,6 +578,15 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
     </template>
     </div><!-- /container -->
     <PluginSlot slot="footer.before" />
+    <footer class="site-footer" v-if="siteFooter.links.length || siteFooter.text || siteFooter.credit">
+      <nav v-if="siteFooter.links.length" class="site-footer-links" aria-label="footer links">
+        <a v-for="(l, i) in siteFooter.links" :key="i" :href="l.url" target="_blank" rel="noopener noreferrer">{{ l.label }}</a>
+      </nav>
+      <p v-if="siteFooter.text" class="site-footer-text">{{ siteFooter.text }}</p>
+      <p v-if="siteFooter.credit" class="site-footer-credit">
+        Powered by <a href="https://github.com/YimingZhanshen/skin-nexus" target="_blank" rel="noopener noreferrer">SkinNexus</a><template v-if="siteFooter.siteName"> · © {{ siteFooter.year }} {{ siteFooter.siteName }}</template>
+      </p>
+    </footer>
   </div><!-- /app-shell -->
 </template>
 

@@ -354,6 +354,7 @@ func main() {
 		}
 	}()
 	backend := webapi.New(st, ts, yggSvc)
+	backend.Appearance = appearEng
 	backend.TextureURL = pluginHost.TextureURL
 	backend.ProfileFilter = pluginHost.ProfileFilter
 	backend.OnTextureUploaded = pluginHost.EmitTextureUploaded
@@ -729,7 +730,7 @@ func main() {
 	// Public landing page data (counts + featured library cards + login state).
 	landingFn := func(r *http.Request) landingData {
 		ctx := r.Context()
-		d := landingData{SiteName: cfg.SiteName}
+		d := landingData{SiteName: cfg.SiteName, SiteURL: cfg.BaseURL}
 		// 已登录访客的 hero CTA 换成进站动作（2026-10-27 逻辑修复）
 		if c, err := r.Cookie("skin_session"); err == nil {
 			if _, err := st.SessionUser(ctx, c.Value); err == nil {

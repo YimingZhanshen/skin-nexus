@@ -156,7 +156,11 @@ func TestSpaHandlerServesLandingAtRoot(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html><head><!--skin-seo--></head><body><div id=\"app\"></div></body></html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	opts := &fakeOpts{kv: map[string]string{"custom_css": ".card{border-radius:20px}"}}
+	opts := &fakeOpts{kv: map[string]string{
+		"custom_css":   ".card{border-radius:20px}",
+		"footer_text":  "© {year} {site_name}",
+		"footer_links": `[{"label":"友链","url":"https://example.com"}]`,
+	}}
 	reg, err := theme.NewRegistry(t.TempDir(), "0.1.0")
 	if err != nil {
 		t.Fatal(err)
@@ -185,6 +189,7 @@ func TestSpaHandlerServesLandingAtRoot(t *testing.T) {
 		"<title>", "canonical", // SEO head block must survive html/template
 		"/favicon.svg", "manifest.webmanifest", // site logo / PWA links on the landing head too
 		"brandmark", "p2m-stage", "p2m-wipe", // hero logo reveal choreography is wired
+		"site-footer", "友链", "https://example.com", // configured footer
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("landing missing %q: %s", want, body)

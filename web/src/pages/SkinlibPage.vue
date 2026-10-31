@@ -134,6 +134,9 @@ onMounted(() => { load() })
 </script>
 
 <template>
+  <nav class="crumb" aria-label="breadcrumb">
+    <a href="/">{{ t('nav.home') }}</a><span class="sep" aria-hidden="true">›</span><span aria-current="page">{{ t('nav.skinlib') }}</span>
+  </nav>
   <div class="card">
     <h2 style="margin-top: 0;">{{ t('skinlib.title') }}</h2>
     <p class="muted">{{ t('skinlib.subtitle') }}</p>

@@ -80,12 +80,16 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 
 - 全局元素/类：`body`、`h1/h2/h3`、`label`、`input`、`textarea`、`select`、`table`、`th`、`td`、`a`、
   `button`（含 `button.secondary`、`button.danger`）、`.card`、`.badge`、`.muted`、`.error`、`.success`、
-  `.ghost`、`.danger-outline`、`.container`、`.container.wide`、`.row`
+  `.ghost`、`.danger-outline`、`.container`、`.container.wide`、`.row`、`.crumb`、
+  `.site-footer`、`.site-footer-links`、`.site-footer-text`、`.site-footer-credit`
 - 组件类（注意下方特异性说明）：`.nav-item`、`.nav-title`、`.nav-group`、`.user-shell`、`.user-side`、
   `.user-main`、`.admin-nav-item`、`.tab`、`.md`（公告 Markdown，内含 `:deep(a)` / `:deep(code)` 风格）、
   `.ali`、`.avatar-box`、`.avatar-empty`、`.danger-text`、`.cell-input`、`.uploader`、`.stat-card`、`.stat-label`、`.like-btn`
 
 ❌ **禁止**：依赖 Vite 构建生成的 hash class（如 `index-BlotKZVo`）——它们随构建变化，主题会碎。
+
+页脚内容由后台「外观 → 页脚」统一配置（文字 + 友链/备案链接），SSR 与 SPA 使用同一
+`.site-footer` 结构；主题只能样式化，不替代配置数据。
 
 **特异性说明**：带 `data-v-…` 的组件内类（scoped 样式）特异性是 (0,2,0)，主题同名类选择器 (0,1,0)
 打不过——覆盖 `.nav-item`、`.tab`、`.ghost` 等组件类时需提高特异性（如 `.card .tab`、`html .tab`）

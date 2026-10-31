@@ -19,6 +19,7 @@
     "dataLoadFailed": "数据加载失败：{message}"
   },
   "nav": {
+    "home": "首页",
     "userCenter": "用户中心",
     "manageGroup": "管理",
     "dashboard": "仪表盘",

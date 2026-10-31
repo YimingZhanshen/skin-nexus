@@ -19,6 +19,7 @@
     "dataLoadFailed": "Failed to load data: {message}"
   },
   "nav": {
+    "home": "Home",
     "userCenter": "User center",
     "manageGroup": "Manage",
     "dashboard": "Dashboard",

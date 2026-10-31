@@ -64,6 +64,21 @@ func TestTexDetailTemplateRenders(t *testing.T) {
 	// as template.HTML trusted values, assert that stays true here)
 }
 
+func TestTexDetailConfiguredFooter(t *testing.T) {
+	d := detailFixture()
+	d.FooterHTML = template.HTML(`<nav class="site-footer-links"><a href="https://example.com">友链</a></nav><p class="site-footer-credit">Powered by SkinNexus</p>`)
+	var sb strings.Builder
+	if err := texDetailTmpl.Execute(&sb, d); err != nil {
+		t.Fatal(err)
+	}
+	body := sb.String()
+	for _, want := range []string{`class="site-footer"`, "site-footer-links", "友链", "Powered by SkinNexus"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("detail footer missing %q:\n%s", want, body)
+		}
+	}
+}
+
 // Capes have no body render: flat texture preview, no 3D canvas.
 func TestTexDetailCapeTemplate(t *testing.T) {
 	d := detailFixture()

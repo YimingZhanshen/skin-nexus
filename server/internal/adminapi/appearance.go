@@ -5,6 +5,7 @@ package adminapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"skin-nexus/server/internal/appearance"
@@ -58,7 +59,12 @@ func (b *Backend) handleAppearanceSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := b.appearance.Appear.Save(r.Context(), s); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		status := http.StatusInternalServerError
+		var ve *appearance.ValidationError
+		if errors.As(err, &ve) {
+			status = http.StatusBadRequest
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "appearance_save", map[string]any{

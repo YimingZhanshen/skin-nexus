@@ -53,6 +53,7 @@ type texDetailData struct {
 	DetailRaw     string
 	CanEdit       bool
 	Year          int
+	FooterHTML    template.HTML
 
 	HeadAnchors template.HTML
 	BodyAnchor  template.HTML
@@ -89,14 +90,15 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
     --glow-cinnabar: rgba(176, 69, 58, .6);
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: "Segoe UI", "Inter", "PingFang SC", "HarmonyOS Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  body { margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+         font-family: "Segoe UI", "Inter", "PingFang SC", "HarmonyOS Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
          font-size: 15px; line-height: 1.7; -webkit-font-smoothing: antialiased; line-break: strict;
          background: var(--ink); color: var(--moon); }
   ::selection { background: var(--sel); }
   a { color: var(--jade); text-decoration: none; }
   a:hover { color: var(--jade-hi); text-decoration: underline; }
   :focus-visible { outline: 2px solid var(--jade); outline-offset: 2px; }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  .wrap { flex: 1 0 auto; max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
   .crumb { font-size: 13px; color: var(--moon-2); margin: 8px 0 18px; }
   .card { background: var(--ink-2); border: 1px solid var(--line);
           border-radius: 10px; padding: 24px;
@@ -137,9 +139,12 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   .actions .alt:hover { background: var(--ink-3); border-color: var(--gold);
                   color: var(--moon); text-decoration: none; }
   .like-btn.liked { color: var(--danger); border-color: var(--danger); }
-  footer { position: relative; margin-top: 32px; padding-top: 16px; text-align: center;
-           font-size: 12px; color: var(--moon-2); border-top: 1px solid var(--line); }
-  footer a { color: var(--gold); }
+  footer.site-footer { position: relative; flex: none; margin-top: 32px; padding: 16px 16px 24px;
+           text-align: center; font-size: 12px; color: var(--moon-2); border-top: 1px solid var(--line); }
+  footer.site-footer a { color: var(--gold); }
+  .site-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 0 0 8px; }
+  .site-footer-text { margin: 0 0 6px; white-space: pre-line; }
+  .site-footer-credit { margin: 0; }
   .detail-block { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
   .detail-block h2 { font-size: var(--fs-m); margin: 0 0 8px; }
   .md.md.md-wide p, .md.md.md-wide li { max-width: none; }
@@ -191,10 +196,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
     </article>
     {{.PluginSlot}}
   </div>
-  <footer>
-    Powered by <a href="https://github.com/YimingZhanshen/skin-nexus">SkinNexus</a>
-    · © {{.Year}} {{.SiteName}}
-  </footer>
+  {{if .FooterHTML}}<footer class="site-footer">{{.FooterHTML}}</footer>{{end}}
   {{if .CanEdit}}
   <dialog id="edit-dialog" class="report-dialog">
     <form id="edit-form" method="dialog">
@@ -390,6 +392,7 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 
 		var sb strings.Builder
 		d.Year = time.Now().Year()
+		d.FooterHTML = appearEng.FooterData(r.Context(), siteName, baseURL, d.Year).HTML()
 		d.HeadAnchors = template.HTML(landingHeadAnchors)
 		d.BodyAnchor = template.HTML(landingBodyAnchor)
 		if err := texDetailTmpl.Execute(&sb, d); err != nil {
