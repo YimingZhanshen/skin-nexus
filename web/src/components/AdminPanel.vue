@@ -23,19 +23,32 @@ import { navPages, pluginLabel } from '../pluginUI.js'
 const { t } = useI18n()
 
 // Sidebar navigation (blessing 管理面板 order). PlayersView is the full
-// management table (B3 landed).
+// management table (B3 landed). Icons mirror the user-sidebar line set.
+const adminIcons = {
+  dashboard: '<path d="M3 3h7v7H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 14h7v7H3z"/>',
+  users: '<path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2 21c0-3.5 3.1-5.5 7-5.5s7 2 7 5.5"/><path d="M17 4.5a3 3 0 0 1 0 5.7M18 15c2.4.6 4 2.3 4 4.5"/>',
+  players: '<path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 3.6-6 8-6s8 2 8 6"/>',
+  invitation: '<path d="M3 6h18v4a2 2 0 0 0 0 4v4H3v-4a2 2 0 0 0 0-4z"/><path d="M13 8v2M13 14v2"/>',
+  settings: '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/>',
+  status: '<path d="M3 12h4l2-7 4 14 2-7h6"/>',
+  access: '<path d="M6 3h9l4 4v14H6zM15 3v5h5"/><path d="M9 12h7M9 16h7"/>',
+  reports: '<path d="M5 21V4l14 3-3 5 3 5-14 3"/>',
+  union: '<path d="M12 3a9 9 0 1 0 9 9M12 3a9 9 0 0 1 9 9M12 8a4 4 0 1 0 4 4"/>',
+  plugins: '<path d="M4 8h4a2 2 0 1 0 4 0h4v4a2 2 0 1 0 0 4v4h-4a2 2 0 1 1-4 0H4v-4a2 2 0 1 1 0-4z"/>',
+  market: '<path d="M3 9l2-5h14l2 5M4 9h16v11H4zM9 13h6"/>',
+}
 const nav = [
-  { id: 'dashboard', labelKey: 'admin.navDashboard', comp: DashboardView },
-  { id: 'users', labelKey: 'admin.navUsers', comp: UsersView },
-  { id: 'players', labelKey: 'admin.navPlayers', comp: PlayersView },
-  { id: 'invitation', labelKey: 'admin.navInvitation', comp: InvitationView },
-  { id: 'settings', labelKey: 'admin.navSettings', comp: SettingsView },
-  { id: 'status', labelKey: 'admin.navStatus', comp: StatusView },
-  { id: 'access', labelKey: 'admin.navAccess', comp: AccessLogsView },
-  { id: 'reports', labelKey: 'admin.navReports', comp: ReportsView },
-  { id: 'union', labelKey: 'admin.navUnion', comp: UnionView },
-  { id: 'plugins', labelKey: 'admin.navPlugins', comp: PluginsView },
-  { id: 'market', labelKey: 'admin.navMarket', comp: MarketView },
+  { id: 'dashboard', labelKey: 'admin.navDashboard', comp: DashboardView, icon: adminIcons.dashboard },
+  { id: 'users', labelKey: 'admin.navUsers', comp: UsersView, icon: adminIcons.users },
+  { id: 'players', labelKey: 'admin.navPlayers', comp: PlayersView, icon: adminIcons.players },
+  { id: 'invitation', labelKey: 'admin.navInvitation', comp: InvitationView, icon: adminIcons.invitation },
+  { id: 'settings', labelKey: 'admin.navSettings', comp: SettingsView, icon: adminIcons.settings },
+  { id: 'status', labelKey: 'admin.navStatus', comp: StatusView, icon: adminIcons.status },
+  { id: 'access', labelKey: 'admin.navAccess', comp: AccessLogsView, icon: adminIcons.access },
+  { id: 'reports', labelKey: 'admin.navReports', comp: ReportsView, icon: adminIcons.reports },
+  { id: 'union', labelKey: 'admin.navUnion', comp: UnionView, icon: adminIcons.union },
+  { id: 'plugins', labelKey: 'admin.navPlugins', comp: PluginsView, icon: adminIcons.plugins },
+  { id: 'market', labelKey: 'admin.navMarket', comp: MarketView, icon: adminIcons.market },
 ]
 // App boot already resolved the session, site capabilities and plugin UI;
 // re-fetching all three here cost three serial RTTs behind a slow edge.
@@ -107,7 +120,9 @@ onMounted(async () => {
   // Session-admin detection: permission > 0 means the session alone reaches
   // admin data — no token ceremony needed.
   if (myPerm.value > 0) needToken.value = false
-  pluginPages.value = navPages('admin').filter((p) => myPerm.value >= Number(p.perm || 0))
+  pluginPages.value = navPages('admin')
+    .filter((p) => myPerm.value >= Number(p.perm || 0))
+    .map((p) => ({ ...p, icon: adminIcons.plugins }))
   await loadFlags()
   if (!needToken.value || token.value) {
     ready.value = true
@@ -120,7 +135,6 @@ onMounted(async () => {
   <div class="admin-shell">
     <aside class="card admin-side">
       <h2>{{ t('admin.title') }}</h2>
-      <button class="admin-nav-item admin-back" @click="$emit('exit')">← {{ t('nav.backToDashboard') }}</button>
       <!-- X-Admin-Token fallback row: only when the session can't reach admin data -->
       <div v-if="needToken" class="admin-token">
         <input v-model="token" type="password" :placeholder="t('admin.tokenPlaceholder')" />
@@ -129,11 +143,15 @@ onMounted(async () => {
       <nav class="admin-nav">
         <button v-for="n in visibleNav" :key="n.id" class="admin-nav-item"
                 :class="{ active: current === n.id }" @click="go(n.id)">
-          {{ t(n.labelKey) }}
+          <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" v-html="n.icon"></svg>
+          <span>{{ t(n.labelKey) }}</span>
         </button>
         <button v-for="p in pluginPages" :key="p.path" class="admin-nav-item"
                 :class="{ active: currentPlugin === p.path }" @click="openPlugin(p.path)">
-          {{ pluginLabel(p.plugin, 'nav.' + p.id, p.nav.label) }}
+          <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" v-html="p.icon"></svg>
+          <span>{{ pluginLabel(p.plugin, 'nav.' + p.id, p.nav.label) }}</span>
         </button>
       </nav>
     </aside>
@@ -155,10 +173,10 @@ onMounted(async () => {
   font-size: var(--fs-xs); font-weight: 600; letter-spacing: .08em;
   color: var(--muted);
 }
-.admin-back { color: var(--muted); }
 .admin-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; }
 .admin-nav-item {
   position: relative;
+  display: flex; align-items: center; gap: 8px; width: 100%;
   text-align: left; background: none; border: 1px solid transparent;
   padding: 8px 12px; border-radius: var(--r-s); cursor: pointer; font-size: var(--fs-s);
   color: var(--muted);
@@ -168,6 +186,7 @@ onMounted(async () => {
 .admin-nav-item.active {
   background: var(--accent-wash); color: var(--text); font-weight: 600;
 }
+.admin-nav-item.active .nav-ico { opacity: 1; }
 .admin-nav-item.active::before {
   content: ""; position: absolute; left: 0; top: 8px; bottom: 8px;
   width: 3px; border-radius: 2px; background: var(--accent);

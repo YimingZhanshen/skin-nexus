@@ -385,6 +385,7 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
             <option value="zh-CN">中文</option>
             <option value="en">English</option>
           </select>
+          <button v-if="view === 'admin'" class="secondary" @click="view = 'dashboard'">← {{ t('nav.backToDashboard') }}</button>
           <template v-if="user">
             <span class="badge">{{ user.nickname }}</span>
             <button class="secondary" @click="doLogout">{{ t('common.logout') }}</button>
@@ -576,7 +577,7 @@ onMounted(() => { boot(); window.addEventListener('popstate', onPopState) })
           <AuthorizedAppsPage v-else-if="view === 'apps'" />
           <UnionBindPage v-else-if="view === 'union'" />
           <PluginPage v-else-if="view === 'ext'" :path="extPath" />
-          <AdminPanel v-else-if="view === 'admin'" :user="user" :site-conf="siteConf" :conf-loaded="confLoaded" @exit="view = 'dashboard'" />
+          <AdminPanel v-else-if="view === 'admin'" :user="user" :site-conf="siteConf" :conf-loaded="confLoaded" />
         </main>
       </div>
     </template>
