@@ -3,83 +3,10 @@
    SkinNexus 全站样式 v3 —「月下仙山」全站统一（2026-10-26 大改拍板）
    架构：旧 7 契约键为唯一真源（默认值即国画色），新语义键全部别名到
    契约键 —— 主题包（后注入）覆盖旧键时新键自动跟随，三主题兼容。
+   令牌定义在 server/cmd/skin-nexus/theme-base.css（SSR 同用，单一真源）。
    语义：朱砂=主操作/可点击 · 青瓷=链接/选中/健康 · 赭金=警示 · 红石=错误。
    ============================================================ */
-:root {
-  color-scheme: dark;
-  /* ── 契约键（真源，默认月下仙山暗色） ── */
-  --bg: #101825;        /* 黛青：页底 */
-  --panel: #16202e;     /* 石面：卡片 */
-  --border: rgba(169, 138, 95, .24); /* 赭石发丝线 */
-  --text: #e9edf1;      /* 月白 */
-  --muted: #a8b4c3;     /* 月白次级 */
-  --accent: #b0453a;    /* 朱砂：主按钮/主操作 */
-  --danger: #d9564c;    /* 红石 */
-  /* ── 语义别名层（主题覆盖旧键即联动） ── */
-  --ink: var(--bg);
-  --ink-2: var(--panel);
-  --ink-3: #1d2a3d;     /* 嵌套面/悬停（默认值；主题可选覆盖） */
-  --panel-2: var(--ink-3);      /* 嵌套面板面（卡片预览/进度槽） */
-  --accent-ink: var(--on-cinnabar); /* 主色底上的文字 */
-  --line: var(--border);
-  --line-strong: rgba(169, 138, 95, .45);
-  --moon: var(--text);
-  --moon-2: var(--muted);
-  --cinnabar: var(--accent);
-  --cinnabar-hi: #c25446;
-  --on-cinnabar: #fdf3ec;
-  --jade: #67b7a0;      /* 青瓷：链接/选中/健康 */
-  --jade-hi: #7fcbb3;
-  --gold: #c9a06a;      /* 赭金：警示/强调数字 */
-  --danger-hi: #e5655c;
-  --on-danger: #fff;
-  --ok: #6fbf7d;
-  --hover-wash: rgba(233, 237, 241, .05);
-  --accent-wash: rgba(176, 69, 58, .14); /* 导航活动态底雾（主题可覆盖） */
-  --sel: rgba(176, 69, 58, .35);          /* 选区 */
-  --fog: rgba(233, 237, 241, .05);        /* 场景雾 */
-  --glow-cinnabar: rgba(176, 69, 58, .6); /* 主按钮 hover 光晕 */
-  --glow-danger: rgba(217, 86, 76, .6);
-  --ring-cinnabar: rgba(176, 69, 58, .18);/* 输入焦点环 */
-  /* 远山场景三层色（auth 场景板装饰） */
-  --mtn-far: #2c3d54; --mtn-mid: #243347; --mtn-near: #1c2839;
-  /* ── 形与层 ── */
-  --r-s: 4px;
-  --r-m: 6px;
-  --r-l: 10px;
-  --shadow: 0 12px 32px -18px rgba(3, 8, 16, .8);
-  --shadow-lift: 0 18px 40px -20px rgba(3, 8, 16, .9);
-  --topbar-h: 56px;
-  /* ── 间距刻度（4px 基） ── */
-  --sp-1: 4px;
-  --sp-2: 8px;
-  --sp-3: 12px;
-  --sp-4: 16px;
-  --sp-5: 24px;
-  --sp-6: 32px;
-  --sp-7: 48px;
-  --sp-8: 64px;
-  /* ── 层级刻度 ── */
-  --z-topbar: 50;
-  --z-menu: 60;
-  --z-toast: 70;
-  --z-modal: 80;
-  /* ── 动效 ── */
-  --ease: cubic-bezier(.22, 1, .36, 1);
-  --t-fast: .14s;
-  --t-mid: .26s;
-  /* ── 字号阶（4px 网格） ── */
-  --fs-xs: 12px;
-  --fs-s: 14px;
-  --fs-m: 16px;
-  --fs-l: 20px;
-  --fs-xl: 24px;
-  --fs-2xl: 32px;
-  /* ── 字体 ── */
-  --font-sans: "Segoe UI", "Inter", "PingFang SC", "HarmonyOS Sans SC",
-               "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
-  --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
-}
+@import "../../server/cmd/skin-nexus/theme-base.css";
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {

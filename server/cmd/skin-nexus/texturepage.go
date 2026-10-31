@@ -57,6 +57,7 @@ type texDetailData struct {
 	LoggedIn      bool
 	Year          int
 	FooterHTML    template.HTML
+	ThemeBase     template.CSS
 
 	HeadAnchors template.HTML
 	BodyAnchor  template.HTML
@@ -75,34 +76,12 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
 <meta name="theme-color" content="#101825" />
 {{.HeadAnchors}}
 <style>
-  /* 详情页设计语言 v3「月下仙山」（与落地页同 token 命名空间；
-     主题/custom CSS 在其后注入仍可整体覆盖，见 theme-spec v3 节） */
-  :root {
-    color-scheme: dark;
-    --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
-    --bg: #101825; --panel: #16202e;
-    --border: rgba(169, 138, 95, .24); --text: #e9edf1; --muted: #a8b4c3;
-    --accent: #b0453a;
-    --ink: var(--bg); --ink-2: var(--panel); --ink-3: #1d2a3d;
-    --line: var(--border); --line-strong: rgba(169, 138, 95, .45);
-    --moon: var(--text); --moon-2: var(--muted);
-    --cinnabar: var(--accent); --cinnabar-hi: #c25446; --on-cinnabar: #fdf3ec;
-    --jade: #67b7a0; --jade-hi: #7fcbb3;
-    --gold: #c9a06a;
-    --danger: #d9564c;
-    --sel: rgba(176, 69, 58, .35);
-    --ring-cinnabar: rgba(176, 69, 58, .18);
-    --glow-cinnabar: rgba(176, 69, 58, .6);
-    --r-s: 4px; --r-m: 6px; --r-l: 10px;
-    --shadow: 0 12px 32px -18px rgba(3, 8, 16, .8);
-    --topbar-h: 56px;
-    --hover-wash: rgba(233, 237, 241, .05);
-    --fs-xs: 12px; --fs-s: 14px; --fs-m: 16px; --fs-l: 20px; --fs-xl: 24px; --fs-2xl: 32px;
-    --ease: cubic-bezier(.22, 1, .36, 1); --t-fast: .14s; --t-mid: .26s;
-  }
+  /* 详情页设计语言 v3「月下仙山」（与落地页同 token 命名空间；令牌单一真源
+     theme-base.css 注入，主题/custom CSS 在其后注入仍可整体覆盖，见 theme-spec） */
+  {{.ThemeBase}}
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; display: flex; flex-direction: column;
-         font-family: "Segoe UI", "Inter", "PingFang SC", "HarmonyOS Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+         font-family: var(--font-sans);
          font-size: var(--fs-m); line-height: 1.7; -webkit-font-smoothing: antialiased; line-break: strict;
          background: var(--ink); color: var(--moon); }
   ::selection { background: var(--sel); }
@@ -449,6 +428,9 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 		var sb strings.Builder
 		d.Year = time.Now().Year()
 		d.FooterHTML = appearEng.FooterData(r.Context(), siteName, baseURL, d.Year).HTML()
+		if d.ThemeBase == "" {
+			d.ThemeBase = themeBaseCSS
+		}
 		d.HeadAnchors = template.HTML(landingHeadAnchors)
 		d.BodyAnchor = template.HTML(landingBodyAnchor)
 		if err := texDetailTmpl.Execute(&sb, d); err != nil {

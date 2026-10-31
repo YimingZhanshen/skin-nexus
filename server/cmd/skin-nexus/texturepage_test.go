@@ -26,6 +26,7 @@ func detailFixture() texDetailData {
 		PreviewURL:    "/preview/42",
 		PreviewAbsURL: "https://skin.example.com/preview/42",
 		Year:          2026,
+		ThemeBase:     themeBaseCSS,
 		HeadAnchors:   template.HTML(landingHeadAnchors),
 		BodyAnchor:    template.HTML(landingBodyAnchor),
 	}
@@ -41,6 +42,7 @@ func TestTexDetailTemplateRenders(t *testing.T) {
 	}
 	body := sb.String()
 	for _, want := range []string{
+		"--bg: #101825", // theme-base tokens injected (single source of truth)
 		"测试皮肤",              // name in h1
 		"Alice",             // uploader
 		"Alex 瘦臂",           // slim model label

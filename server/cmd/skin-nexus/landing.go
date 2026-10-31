@@ -13,6 +13,7 @@ package main
 
 import (
 	"context"
+	"embed"
 	"html/template"
 	"strings"
 	"time"
@@ -20,6 +21,20 @@ import (
 	"skin-nexus/server/internal/appearance"
 	"skin-nexus/server/internal/seo"
 )
+
+//go:embed theme-base.css
+var themeBaseFS embed.FS
+
+// themeBaseCSS carries the single source of truth for design tokens
+// (same file web/src/style.css @imports). SSR pages inject it before
+// <!--skin-theme--> so theme packs keep overriding the contract keys.
+var themeBaseCSS = template.CSS(func() string {
+	b, err := themeBaseFS.ReadFile("theme-base.css")
+	if err != nil {
+		panic("theme-base.css missing from build: " + err.Error())
+	}
+	return string(b)
+}())
 
 // landingTexture is one featured library card. URL follows the skinlib UI
 // rule (SkinlibPage.vue): skins get the server-rendered body preview, capes
@@ -42,6 +57,7 @@ type landingData struct {
 	Featured   []landingTexture
 	Year       int
 	FooterHTML template.HTML
+	ThemeBase  template.CSS
 	// LoggedIn: 已登录访客不再展示登录/注册 CTA（2026-10-27 逻辑修复）
 	LoggedIn bool
 }
@@ -65,25 +81,9 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
      国画色：黛青底 / 月白字 / 朱砂只给主按钮 / 赭石纹线；无大红大紫大金。
      签名元素 = N 字牌（保留原入场编舞，重着色）；远山云雾为唯一景。 */
   * { box-sizing: border-box; }
-  :root {
-    color-scheme: dark;
-    --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
-    --bg: #101825; --panel: #16202e;
-    --border: rgba(169, 138, 95, .24); --text: #e9edf1; --muted: #a8b4c3;
-    --accent: #b0453a;
-    --ink: var(--bg); --ink-2: var(--panel); --ink-3: #1d2a3d;
-    --line: var(--border); --line-strong: rgba(169, 138, 95, .45);
-    --moon: var(--text); --moon-2: var(--muted);
-    --cinnabar: var(--accent); --cinnabar-hi: #c25446; --on-cinnabar: #fdf3ec;
-    --jade: #67b7a0; --jade-hi: #7fcbb3; --gold: #c9a06a; --ochre: var(--gold);
-    --r-s: 4px; --r-m: 6px; --r-l: 10px;
-    --shadow: 0 12px 32px -18px rgba(3, 8, 16, .8);
-    --danger: #d9564c; --ok: #6fbf7d;
-    --fs-xs: 12px; --fs-s: 14px; --fs-m: 16px; --fs-l: 20px; --fs-xl: 24px; --fs-2xl: 32px;
-    --ease: cubic-bezier(.22, 1, .36, 1); --t-fast: .14s; --t-mid: .26s;
-  }
+  {{.ThemeBase}}
   body { margin: 0; min-height: 100vh; display: flex; flex-direction: column;
-         font-family: "Segoe UI", "Inter", "PingFang SC", "HarmonyOS Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+         font-family: var(--font-sans);
          font-size: var(--fs-m); line-height: 1.7; -webkit-font-smoothing: antialiased; line-break: strict;
          background: var(--ink); color: var(--moon); }
   /* 远山云雾：全页唯一景（fixed 垫在内容层后，静谧不抢内容） */
@@ -345,6 +345,9 @@ func renderLanding(ctx context.Context, seoEng *seo.Engine, appearEng *appearanc
 	d.Year = time.Now().Year()
 	d.FooterHTML = appearEng.FooterData(ctx, d.SiteName, d.SiteURL, d.Year).HTML()
 	d.Intro = landingIntro
+	if d.ThemeBase == "" {
+		d.ThemeBase = themeBaseCSS
+	}
 	var sb strings.Builder
 	v := landingView{
 		landingData: d,
