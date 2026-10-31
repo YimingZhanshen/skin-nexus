@@ -21,7 +21,7 @@ const SkinlibPage = asyncPage(() => import('./pages/SkinlibPage.vue'))
 const PlayersPage = asyncPage(() => import('./pages/PlayersPage.vue'))
 const ProfilePage = asyncPage(() => import('./pages/ProfilePage.vue'))
 const PluginPage = asyncPage(() => import('./components/plugin/PluginPage.vue'))
-import { loadPluginUI, navPages, pageByPath } from './pluginUI.js'
+import { loadPluginUI, navPages, pageByPath, pluginLabel } from './pluginUI.js'
 import { setLocale } from './i18n.js'
 import { setUnauthorizedHandler } from './session.js'
 
@@ -95,7 +95,7 @@ const navGroups = computed(() => {
   const perm = Number(user.value.permission || 0)
   const pluginItems = navPages('user')
     .filter((p) => perm >= Number(p.perm || 0))
-    .map((p) => ({ id: 'ext:' + p.path, label: p.nav.label, path: p.path, icon: navIcons.apps }))
+    .map((p) => ({ id: 'ext:' + p.path, label: pluginLabel(p.plugin, 'nav.' + p.id, p.nav.label), path: p.path, icon: navIcons.apps }))
   const groups = [{
     items: [
       { id: 'dashboard', labelKey: 'nav.dashboard', icon: navIcons.dashboard },

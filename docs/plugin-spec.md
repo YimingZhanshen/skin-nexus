@@ -221,9 +221,16 @@ v2 的 UI 采用**固定插槽 + iframe/schema 页面**，不允许第三方直�
     "render": { "type": "iframe", "src": "slot.html" },
     "height": 180
   }],
-  "i18n": { "zh-CN": { "title": "笔记" }, "en": { "title": "Notes" } }
+  "i18n": {
+    "zh-CN": { "title": "笔记", "nav.notes": "角色笔记" },
+    "en": { "title": "Notes", "nav.notes": "Player notes" }
+  }
 }
 ```
+
+- `nav.<page-id>` 用于宿主侧栏/页面标题的本地化；缺省回退 `pages[].nav.label`。
+- iframe 通过 `init.locale` 收到当前语言，插件 UI 负责切换自己的文案，
+  并设置 `document.documentElement.lang`；不要假设宿主会翻译 iframe 内容。
 
 固定 slot ID（全部已接线）：`app.topbar.after`、`auth.login.after`、`auth.register.after`、
 `dashboard.cards`、`texture.upload.after`、`skinlib.list.toolbar`、`skinlib.detail.sidebar`、

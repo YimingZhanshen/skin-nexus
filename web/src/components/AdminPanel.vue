@@ -18,7 +18,7 @@ import ReportsView from './admin/ReportsView.vue'
 import PluginsView from './admin/PluginsView.vue'
 import MarketView from './admin/MarketView.vue'
 import PluginPage from './plugin/PluginPage.vue'
-import { navPages } from '../pluginUI.js'
+import { navPages, pluginLabel } from '../pluginUI.js'
 
 const { t } = useI18n()
 
@@ -132,7 +132,7 @@ onMounted(async () => {
         </button>
         <button v-for="p in pluginPages" :key="p.path" class="admin-nav-item"
                 :class="{ active: currentPlugin === p.path }" @click="openPlugin(p.path)">
-          {{ p.nav.label }}
+          {{ pluginLabel(p.plugin, 'nav.' + p.id, p.nav.label) }}
         </button>
       </nav>
     </aside>

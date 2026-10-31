@@ -5,7 +5,7 @@
 // silently rendering nothing.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { pageByPath } from '../../pluginUI.js'
+import { pageByPath, pluginLabel } from '../../pluginUI.js'
 import PluginFrame from './PluginFrame.vue'
 
 const props = defineProps({ path: { type: String, required: true } })
@@ -14,7 +14,7 @@ const page = computed(() => pageByPath(props.path))
 const title = computed(() => {
   const p = page.value
   if (!p) return ''
-  if (p.nav && p.nav.label) return p.nav.label
+  if (p.nav && p.nav.label) return pluginLabel(p.plugin, 'nav.' + p.id, p.nav.label)
   return p.plugin
 })
 </script>

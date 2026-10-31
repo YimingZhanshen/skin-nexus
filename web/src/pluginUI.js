@@ -62,6 +62,16 @@ export function slotsFor(id) {
   return out
 }
 
+// Resolve a manifest i18n key (e.g. "nav.import") for the active locale,
+// falling back to zh-CN and then the manifest's literal label.
+export function pluginLabel(plugin, key, fallback = '') {
+  const p = pluginUI.plugins.find((x) => x.plugin === plugin)
+  if (!p || !p.i18n) return fallback
+  const loc = i18n.global.locale.value
+  return (p.i18n[loc] && p.i18n[loc][key]) ||
+    (p.i18n['zh-CN'] && p.i18n['zh-CN'][key]) || fallback
+}
+
 export function assetURL(plugin, src) {
   const rel = String(src || '').replace(/^\/+/, '')
   const base = `/plugin-assets/${encodeURIComponent(plugin)}/${rel.split('/').map(encodeURIComponent).join('/')}`
