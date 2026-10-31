@@ -15,6 +15,12 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // Themes are loaded as a stylesheet AFTER the app bundle. CSS code
+    // splitting injects lazy-page styles later, which then beat theme
+    // overrides with equal specificity (azure-glass admin dock regressed to
+    // a giant column). One eager CSS file keeps the documented order:
+    // app base → theme pack → custom CSS.
+    cssCodeSplit: false,
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
