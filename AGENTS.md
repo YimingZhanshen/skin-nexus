@@ -22,6 +22,7 @@ server/         Go 后端（模块 skin-nexus/server）
   internal/publicapi  公开只读 API + legacy/usm/CustomSkinAPI 兼容路由
   internal/appearance 站点外观（自定义 CSS/JS、公告消毒）
   internal/announce   公告 Markdown 双层消毒（goldmark + bluemonday）
+  internal/texturemd  材质描述 Markdown（更严格的 UGC 策略：禁图片/iframe）
   internal/seo        SEO 注入 / sitemap / robots
   internal/accesslog  访问/通信日志旁路记录器（C1）
   internal/mailer     SMTP 发信（A1 找回密码）
@@ -30,7 +31,7 @@ server/         Go 后端（模块 skin-nexus/server）
   internal/ratelimit  认证限流（滑动窗口 + 失败锁定）
   internal/plugin     goja 宿主 v2（manifest/config/secrets/KV/docs/事件/guard/UI/三档路由/签名安装）+ signedpkg/marketfmt/outbound
   cmd/skin-plugin     离线打包/签名/registry/校验 CLI（私钥不入仓）
-  migrations/         DDL（InnoDB utf8mb4；0001 基础 … 0012 plugin platform，追踪式逐文件记标）
+  migrations/         DDL（InnoDB utf8mb4；0001 基础 … 0017 材质元数据/举报，追踪式逐文件记标）
 web/            Vue 3 + Vite（npm ci && npm run build → web/dist）
 docs/           构建 / 部署 / 迁移 / 兼容矩阵 / 竞品证据 / 主题规范 / CHANGELOG（公开）；
                 开发过程文档在上级 docs/（本地，永不入库）

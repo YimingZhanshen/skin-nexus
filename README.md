@@ -104,9 +104,10 @@ docker run -d --name skin-nexus --restart unless-stopped -p 8080:8080 \
 
 **玩家侧**
 - 注册 / 登录（可开启邀请码准入）、账号资料与密码管理
-- 上传皮肤与披风（拖放上传，3D 实时预览，高清皮保留原生分辨率）
+- 上传皮肤与披风（拖放上传、上传进度、3D 实时预览，高清皮保留原生分辨率）
+- 材质名称、来源（原创/二创/转载，二创/转载必须填原始发布地址）与 Markdown 描述；支持私密上传
 - 衣柜与角色管理、设为头像
-- 皮肤库：可见性三档、筛选与排序、点赞即入柜；单品页可分享
+- 皮肤库：来源徽章、可见性三档、筛选与排序、点赞即入柜；单品页可分享、编辑资料与举报
 - 授权应用与设备管理、Union 成员站绑定、账号注销
 
 **站长侧**
@@ -124,7 +125,7 @@ docker run -d --name skin-nexus --restart unless-stopped -p 8080:8080 \
 
 **外观与内容**
 - 主题包体系（零构建：`theme.json` + CSS + 可选 JS）与 [AI 生成提示词模板](docs/theme-spec.md)
-- 插件平台 v2（goja）：统一 hookApi 2 + 配置/密钥、命名空间数据、三档路由、事件/guard、sandbox iframe UI；P2 起签名 bundle 安装/升级/回滚、单源签名市场与 `skin-plugin` 发布工具链；v0.5 新增受控出站 `net:http` 与持久任务 `schedule:jobs`；官方插件源码与市场仓库 [skin-nexus-plugins](https://github.com/YimingZhanshen/skin-nexus-plugins) 采用 PR 投稿 + CI 签名；`launcher-api` 提供启动器 Bearer API（[规范](docs/launcher-api.md)），`skin-importer` 提供 Mojang/Blessing 单条与批量导入；规范见 [docs/plugin-spec.md](docs/plugin-spec.md)
+- 插件平台 v2（goja）：统一 hookApi 2 + 配置/密钥、命名空间数据、三档路由、事件/guard、sandbox iframe UI；官方有 UI 的插件已接入 `init.locale` 中英文切换，manifest `ui.i18n` 支持 `nav.<page-id>`；P2 起签名 bundle 安装/升级/回滚、单源签名市场与 `skin-plugin` 发布工具链；v0.5 新增受控出站 `net:http` 与持久任务 `schedule:jobs`；官方插件源码与市场仓库 [skin-nexus-plugins](https://github.com/YimingZhanshen/skin-nexus-plugins) 采用 PR 投稿 + CI 签名；`launcher-api` 提供启动器 Bearer API（[规范](docs/launcher-api.md)），`skin-importer` 提供 Mojang/Blessing 单条与批量导入；规范见 [docs/plugin-spec.md](docs/plugin-spec.md)
 - 中英双语（zh-CN / en），语言包可扩展
 - SEO：SSR 落地页与皮肤详情页、sitemap、robots、可整站 noindex（预发环境）
 
