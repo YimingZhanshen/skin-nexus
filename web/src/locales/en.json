@@ -600,7 +600,7 @@
     "themeUpdate": "Update",
     "themeUninstall": "Uninstall",
     "themeUninstallConfirm": "Uninstall theme “{name}”?",
-    "themeMarketOff": "Theme market is not configured (SKIN_THEME_MARKET_URL / SKIN_THEME_TRUST_KEYS); local upload stays available.",
+    "themeMarketOff": "Theme market is switched off on purpose (SKIN_THEME_MARKET_URL or SKIN_THEME_TRUST_KEYS set to empty); local upload stays available.",
     "themeMarketEmpty": "Catalog is empty (no themes published to the registry yet).",
     "themeNeedSuper": "Install / uninstall / upload require a SUPER_ADMIN web session.",
     "themeUploadTitle": "Local theme pack upload",

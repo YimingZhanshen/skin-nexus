@@ -64,15 +64,15 @@ type Config struct {
 	ThemesDir       string // SKIN_THEMES_DIR — theme packs (default <DataDir>/themes)
 	PluginsDir      string // SKIN_PLUGINS_DIR — plugin packs (default <DataDir>/plugins)
 	PluginStateDir  string // SKIN_PLUGIN_STATE_DIR — default <PluginsDir>/.state
-	PluginMarketURL string // SKIN_PLUGIN_MARKET_URL — signed registry (empty = market off)
-	PluginTrustKeys string // SKIN_PLUGIN_TRUST_KEYS — id:base64pub,...
+	PluginMarketURL string // SKIN_PLUGIN_MARKET_URL — default official registry (explicit empty = market off)
+	PluginTrustKeys string // SKIN_PLUGIN_TRUST_KEYS — id:base64pub,... (default the official keyring)
 	PluginUploadMax int64  // SKIN_PLUGIN_UPLOAD_MAX — bytes (default 64 MiB)
 	// Theme market shares the distribution repo but an INDEPENDENT keyring —
 	// one leaked key must never compromise both surfaces (2026-11-01 拍板).
-	ThemeMarketURL string // SKIN_THEME_MARKET_URL — signed theme registry (empty = off)
-	ThemeTrustKeys string // SKIN_THEME_TRUST_KEYS — id:base64pub,... (empty = market installs off, uploads stay available)
-	AutoMigrate     bool   // SKIN_AUTO_MIGRATE — apply migrations/ on empty DB at boot
-	MigrationsDir   string // SKIN_MIGRATIONS_DIR — where *.sql live (default ./migrations)
+	ThemeMarketURL string // SKIN_THEME_MARKET_URL — default official theme registry (explicit empty = off)
+	ThemeTrustKeys string // SKIN_THEME_TRUST_KEYS — id:base64pub,... (default official; empty = market installs off, uploads stay available)
+	AutoMigrate    bool   // SKIN_AUTO_MIGRATE — apply migrations/ on empty DB at boot
+	MigrationsDir  string // SKIN_MIGRATIONS_DIR — where *.sql live (default ./migrations)
 }
 
 // resolveDataPath picks an explicit env value when set, else joins the data
@@ -111,6 +111,30 @@ func themeMarketURL() string {
 	return OfficialThemeMarketURL
 }
 
+// Official keyrings, compiled in beside the registry URLs so both markets work
+// out of the box (a bare `docker run` or `go run` needs no extra env). Trusting
+// these keys only means "artifacts signed by upstream are installable"; an
+// explicitly empty SKIN_*_TRUST_KEYS still switches the surface off, and forks
+// point both vars at their own registry and key.
+const (
+	OfficialPluginTrustKeys = "market-2026-10:ID2EWgcfs1E4UbGCCX9WjD0aCgTof3oeuHV03IpdGNY="
+	OfficialThemeTrustKeys  = "theme-market-2026-11:EXxNehbsxNG9gdYUztMl/EU/lZ09+fPftPvmjeqPr/I="
+)
+
+func pluginTrustKeys() string {
+	if v, ok := os.LookupEnv("SKIN_PLUGIN_TRUST_KEYS"); ok {
+		return v
+	}
+	return OfficialPluginTrustKeys
+}
+
+func themeTrustKeys() string {
+	if v, ok := os.LookupEnv("SKIN_THEME_TRUST_KEYS"); ok {
+		return v
+	}
+	return OfficialThemeTrustKeys
+}
+
 func Load() (*Config, error) {
 	dataDir := getenv("SKIN_DATA_DIR", "./data")
 	c := &Config{
@@ -147,10 +171,10 @@ func Load() (*Config, error) {
 		PluginsDir:      resolveDataPath("SKIN_PLUGINS_DIR", dataDir, "plugins"),
 		PluginStateDir:  getenv("SKIN_PLUGIN_STATE_DIR", ""),
 		PluginMarketURL: pluginMarketURL(),
-		PluginTrustKeys: getenv("SKIN_PLUGIN_TRUST_KEYS", ""),
+		PluginTrustKeys: pluginTrustKeys(),
 		PluginUploadMax: int64(atoiDefault(getenv("SKIN_PLUGIN_UPLOAD_MAX", "67108864"), 67108864)),
 		ThemeMarketURL:  themeMarketURL(),
-		ThemeTrustKeys:  getenv("SKIN_THEME_TRUST_KEYS", ""),
+		ThemeTrustKeys:  themeTrustKeys(),
 		AutoMigrate:     getenv("SKIN_AUTO_MIGRATE", "false") == "true",
 		MigrationsDir:   getenv("SKIN_MIGRATIONS_DIR", "./migrations"),
 	}

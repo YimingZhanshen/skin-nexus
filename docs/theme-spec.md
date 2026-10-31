@@ -123,12 +123,13 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 
 官方主题注册表：`https://yimingzhanshen.github.io/skin-nexus-plugins/themes/v1/registry.json`
 （源仓库 `themes/<id>/`，与插件市场同仓不同路径 + **独立 Ed25519 密钥**
-`theme-market-2026-11`——一把钥匙泄露不会同时沦陷两个市场）。宿主侧配置：
+`theme-market-2026-11`——一把钥匙泄露不会同时沦陷两个市场）。地址与公钥都**编译内置**，
+零配置即开箱可用；要换源或关闭才需要设环境变量：
 
 | 环境变量 | 作用 |
 |---|---|
 | `SKIN_THEME_MARKET_URL` | 注册表地址；显式置空 = 关闭市场浏览（上传仍可用） |
-| `SKIN_THEME_TRUST_KEYS` | `id:base64pub,...` 钉死的验签公钥；未配置 = 市场安装关闭 |
+| `SKIN_THEME_TRUST_KEYS` | `id:base64pub,...` 钉死的验签公钥；显式置空 = 市场安装关闭 |
 
 管理面板「外观」内置 **主题市场**（目录 / 安装 / 更新 / 卸载）与 **本地主题包上传**
 （zip ≤16 MiB，两步：检查 → 确认安装）。要点：

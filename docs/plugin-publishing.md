@@ -32,7 +32,7 @@ go run ./cmd/skin-plugin keygen \
 
 - 输出：`market-2026-10:<base64(raw 32-byte public key)>`；
 - 私钥是 PKCS#8 PEM，权限 0600；请离线加密备份两份；
-- 公钥串写入生产 `SKIN_PLUGIN_TRUST_KEYS`；私钥**不要**提交、上传服务器或放 CI secret。
+- 公钥串写入生产 `SKIN_PLUGIN_TRUST_KEYS`（仅自建市场/轮换时需要，官方公钥已编译内置）；私钥**不要**提交、上传服务器或放 CI secret。
 
 ## 2. 插件目录与 market.json
 
@@ -159,10 +159,11 @@ GitHub Pages 可能有分钟级缓存，发布后不要立刻判定失败。
 
 ## 6. 生产配置
 
-主站默认指向官方市场（`https://yimingzhanshen.github.io/skin-nexus-plugins/v1/registry.json`），
-`docker-compose.yml` 内置当前官方公钥；下游二改可用 env 覆盖或关闭。
+主站默认指向官方市场（`https://yimingzhanshen.github.io/skin-nexus-plugins/v1/registry.json`）；
+注册表地址与官方公钥都**编译内置在镜像里**，compose 里的两行只是把覆盖点写明白，
+`docker run` 裸跑同样开箱可用。下游二改可用 env 覆盖或关闭。
 
-在 `/opt/skin-nexus` 的 `.env`（0600，不入库）或 compose `environment` 中设置：
+自建市场（或轮换密钥）时在 `/opt/skin-nexus` 的 `.env`（0600，不入库）或 compose `environment` 中设置：
 
 ```env
 SKIN_PLUGIN_MARKET_URL=https://<user>.github.io/skin-nexus-plugins/v1/registry.json

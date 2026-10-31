@@ -603,7 +603,7 @@
     "themeUpdate": "更新",
     "themeUninstall": "卸载",
     "themeUninstallConfirm": "确认卸载主题「{name}」？",
-    "themeMarketOff": "主题市场未配置（SKIN_THEME_MARKET_URL / SKIN_THEME_TRUST_KEYS）；本地上传仍可用。",
+    "themeMarketOff": "主题市场已被显式关闭（SKIN_THEME_MARKET_URL 或 SKIN_THEME_TRUST_KEYS 设为空）；本地上传仍可用。",
     "themeMarketEmpty": "目录为空（注册表尚未发布主题包）。",
     "themeNeedSuper": "安装/卸载/上传需要超级管理员网页会话。",
     "themeUploadTitle": "本地主题包上传",

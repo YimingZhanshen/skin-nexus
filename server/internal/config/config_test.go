@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"skin-nexus/server/internal/signedpkg"
 )
 
 func TestPluginStateDirAndUploadMax(t *testing.T) {
@@ -34,26 +36,47 @@ func TestPluginStateDirAndUploadMax(t *testing.T) {
 	}
 }
 
-func TestPluginMarketURLDefaultAndDisable(t *testing.T) {
+func TestMarketDefaultsAndDisable(t *testing.T) {
 	t.Setenv("SKIN_DATABASE_DSN", "u:p@tcp(localhost:3306)/x")
 	t.Setenv("SKIN_DATA_DIR", t.TempDir())
 
-	t.Setenv("SKIN_PLUGIN_MARKET_URL", "placeholder")
-	_ = os.Unsetenv("SKIN_PLUGIN_MARKET_URL")
+	unset := func(keys ...string) {
+		for _, k := range keys {
+			t.Setenv(k, "placeholder")
+			_ = os.Unsetenv(k)
+		}
+	}
+
+	unset("SKIN_PLUGIN_MARKET_URL", "SKIN_PLUGIN_TRUST_KEYS", "SKIN_THEME_MARKET_URL", "SKIN_THEME_TRUST_KEYS")
 	c, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.PluginMarketURL != OfficialPluginMarketURL {
-		t.Fatalf("default market = %q", c.PluginMarketURL)
+	if c.PluginMarketURL != OfficialPluginMarketURL || c.PluginTrustKeys != OfficialPluginTrustKeys {
+		t.Fatalf("plugin defaults = %q/%q", c.PluginMarketURL, c.PluginTrustKeys)
+	}
+	if c.ThemeMarketURL != OfficialThemeMarketURL || c.ThemeTrustKeys != OfficialThemeTrustKeys {
+		t.Fatalf("theme defaults = %q/%q", c.ThemeMarketURL, c.ThemeTrustKeys)
+	}
+	// The compiled-in keyrings must actually parse and stay independent.
+	for _, keys := range []string{c.PluginTrustKeys, c.ThemeTrustKeys} {
+		if _, err := signedpkg.ParseKeys(keys); err != nil {
+			t.Fatalf("official keyring %q: %v", keys, err)
+		}
+	}
+	if c.PluginTrustKeys == c.ThemeTrustKeys {
+		t.Fatal("plugin and theme markets must not share a keyring")
 	}
 
 	t.Setenv("SKIN_PLUGIN_MARKET_URL", "")
+	t.Setenv("SKIN_PLUGIN_TRUST_KEYS", "")
+	t.Setenv("SKIN_THEME_MARKET_URL", "")
+	t.Setenv("SKIN_THEME_TRUST_KEYS", "")
 	c, err = Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.PluginMarketURL != "" {
-		t.Fatalf("explicit empty should disable, got %q", c.PluginMarketURL)
+	if c.PluginMarketURL != "" || c.PluginTrustKeys != "" || c.ThemeMarketURL != "" || c.ThemeTrustKeys != "" {
+		t.Fatalf("explicit empty should disable, got %+v", []string{c.PluginMarketURL, c.PluginTrustKeys, c.ThemeMarketURL, c.ThemeTrustKeys})
 	}
 }
