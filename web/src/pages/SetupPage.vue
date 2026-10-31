@@ -82,28 +82,28 @@ function goHome() {
 
     <!-- step 1: site identity -->
     <template v-if="step === 1">
-      <label>站点名称</label>
-      <input v-model="siteName" placeholder="例如：示例皮肤站" />
-      <label>站点地址（Base URL）</label>
-      <input v-model="baseURL" placeholder="https://skin.example.com" />
+      <label for="s-site-name">站点名称</label>
+      <input id="s-site-name" v-model="siteName" placeholder="例如：示例皮肤站" />
+      <label for="s-base-url">站点地址（Base URL）</label>
+      <input id="s-base-url" v-model="baseURL" placeholder="https://skin.example.com" />
     </template>
 
     <!-- step 2: admin account -->
     <template v-else-if="step === 2">
-      <label>管理员昵称</label>
-      <input v-model="nickname" />
-      <label>管理员邮箱（可留空）</label>
-      <input v-model="email" type="email" />
-      <label>管理员密码（≥8 位）</label>
-      <input v-model="password" type="password" />
-      <label>确认密码</label>
-      <input v-model="password2" type="password" />
+      <label for="s-nickname">管理员昵称</label>
+      <input id="s-nickname" v-model="nickname" />
+      <label for="s-email">管理员邮箱（可留空）</label>
+      <input id="s-email" v-model="email" type="email" />
+      <label for="s-password">管理员密码（≥8 位）</label>
+      <input id="s-password" v-model="password" type="password" />
+      <label for="s-password2">确认密码</label>
+      <input id="s-password2" v-model="password2" type="password" />
     </template>
 
     <!-- step 3: skin domains -->
     <template v-else-if="step === 3">
-      <label>皮肤域清单（每行一个，用于 Yggdrasil 元数据）</label>
-      <textarea v-model="skinDomains" rows="6" placeholder="skin.example.com"></textarea>
+      <label for="s-domains">皮肤域清单（每行一个，用于 Yggdrasil 元数据）</label>
+      <textarea id="s-domains" v-model="skinDomains" rows="6" placeholder="skin.example.com"></textarea>
       <div class="muted" style="font-size: 12px; margin-top: 6px;">
         可留空，之后在环境变量 SKIN_SKIN_DOMAINS 或数据库里补充。
       </div>

@@ -243,20 +243,20 @@ onMounted(load)
         <button class="secondary" @click="seoOneClick">一键优化（填充默认值）</button>
         <button @click="seoSave">保存 SEO</button>
       </div>
-      <label>站点标题</label>
-      <input v-model="seo.title" />
+      <label for="seo-title">站点标题</label>
+      <input id="seo-title" v-model="seo.title" />
       <p class="muted">
         当前 {{ (seo.title || '').length }} 字符；建议 15–30 个字符。
         搜索引擎会把过短的标题判定为信息不足（Bing 阈值 15 字符）。
       </p>
-      <label>meta description</label>
-      <textarea v-model="seo.description" rows="2"></textarea>
-      <label>meta keywords（逗号分隔）</label>
-      <input v-model="seo.keywords" />
-      <label>OG 分享图 URL</label>
-      <input v-model="seo.og_image" />
-      <label>canonical 基址</label>
-      <input v-model="seo.canonical" />
+      <label for="seo-desc">meta description</label>
+      <textarea id="seo-desc" v-model="seo.description" rows="2"></textarea>
+      <label for="seo-keywords">meta keywords（逗号分隔）</label>
+      <input id="seo-keywords" v-model="seo.keywords" />
+      <label for="seo-og">OG 分享图 URL</label>
+      <input id="seo-og" v-model="seo.og_image" />
+      <label for="seo-canonical">canonical 基址</label>
+      <input id="seo-canonical" v-model="seo.canonical" />
       <div class="row" style="margin-top: 8px;">
         <label style="display: flex; align-items: center; gap: 4px;">
           <input type="checkbox" v-model="seo.sitemap" /> 启用 sitemap.xml
@@ -265,8 +265,8 @@ onMounted(load)
           <input type="checkbox" v-model="seo.noindex" /> 整站 noindex（预发）
         </label>
       </div>
-      <label style="margin-top: 8px;">robots.txt 内容</label>
-      <textarea v-model="seo.robots" rows="3"></textarea>
+      <label style="margin-top: 8px;" for="seo-robots">robots.txt 内容</label>
+      <textarea id="seo-robots" v-model="seo.robots" rows="3"></textarea>
       <div class="error" v-if="seoError">{{ seoError }}</div>
     </div>
 
@@ -278,16 +278,16 @@ onMounted(load)
     </div>
     <div class="card" v-if="appearance">
       <h2>外观（主题 / 页脚 / 自定义 CSS / JS）</h2>
-      <label>启用主题包</label>
-      <select v-model="appearance.active_theme" style="max-width: 320px;">
+      <label for="ap-theme">启用主题包</label>
+      <select id="ap-theme" v-model="appearance.active_theme" style="max-width: 320px;">
         <option value="">无（默认样式）</option>
         <option v-for="th in themes" :key="th.id" :value="th.id">{{ th.name }}（{{ th.version }}）</option>
       </select>
       <div class="muted" v-if="!themes.length" style="font-size: 12px;">
         将主题包放入 data/themes/&lt;id&gt;/（含 theme.json），重启服务后在此识别（新增/删除主题包需重启）。规范见 docs/theme-spec.md。
       </div>
-      <label style="margin-top: 12px;">页脚文字（支持 {year} / {site_name} / {site_url} 占位符）</label>
-      <textarea v-model="appearance.footer_text" rows="3" maxlength="1000" placeholder="© {year} {site_name} · 浙ICP备12345678号"></textarea>
+      <label style="margin-top: 12px;" for="ap-footer-text">页脚文字（支持 {year} / {site_name} / {site_url} 占位符）</label>
+      <textarea id="ap-footer-text" v-model="appearance.footer_text" rows="3" maxlength="1000" placeholder="© {year} {site_name} · 浙ICP备12345678号"></textarea>
       <label style="margin-top: 12px;">页脚链接（友链 / 备案号，最多 8 条）</label>
       <div v-for="(link, i) in appearance.footer_links" :key="i" class="row" style="gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">
         <input v-model="link.label" maxlength="40" placeholder="名称" style="max-width: 180px;" />
@@ -296,10 +296,10 @@ onMounted(load)
       </div>
       <button class="secondary" type="button" v-if="appearance.footer_links.length < 8" @click="appearance.footer_links.push({ label: '', url: '' })">添加链接</button>
       <p class="muted" style="font-size: 12px; margin-top: 6px;">页脚文字和链接会公开展示；链接仅支持 http(s) 绝对地址。页脚始终保留 SkinNexus 版权行。</p>
-      <label style="margin-top: 12px;">自定义 CSS（约 64KB 上限）</label>
-      <textarea v-model="appearance.custom_css" rows="5" placeholder=".card { border-radius: 16px; }"></textarea>
-      <label>自定义 JS（约 64KB 上限）</label>
-      <textarea v-model="appearance.custom_js" rows="4" placeholder="document.addEventListener('DOMContentLoaded', () => { /* ... */ })"></textarea>
+      <label style="margin-top: 12px;" for="ap-css">自定义 CSS（约 64KB 上限）</label>
+      <textarea id="ap-css" v-model="appearance.custom_css" rows="5" placeholder=".card { border-radius: 16px; }"></textarea>
+      <label for="ap-js">自定义 JS（约 64KB 上限）</label>
+      <textarea id="ap-js" v-model="appearance.custom_js" rows="4" placeholder="document.addEventListener('DOMContentLoaded', () => { /* ... */ })"></textarea>
       <div class="muted" style="font-size: 12px; margin-top: 8px;">
         自定义 JS 与主题 JS 以管理员信任面原样注入（与 blessing 行为一致）——请只粘贴自己信任的代码。
         JS 在 Vue 挂载前执行，操作界面 DOM 请包在 DOMContentLoaded 回调里。

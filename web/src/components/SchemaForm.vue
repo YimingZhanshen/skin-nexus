@@ -45,6 +45,11 @@ function uiOf(f) {
   return 'text'
 }
 
+// label↔control association (click-to-focus + AT naming)
+function sfId(parent, name) {
+  return 'sf-' + (parent ? parent + '-' : '') + name
+}
+
 function listValue(f) {
   const v = values.value[f.name]
   return Array.isArray(v) ? v.join('\n') : ''
@@ -63,51 +68,51 @@ function setList(f, raw) {
         <p v-if="f.description" class="muted">{{ f.description }}</p>
         <div class="row" v-for="c in Object.entries(f.properties || {}).map(([n, d]) => ({ name: n, ...d }))" :key="c.name"
              style="margin-top: 10px; align-items: center;">
-          <label style="width: 220px; font-weight: 600; font-size: var(--fs-xs);">
+          <label :for="sfId(f.name, c.name)" style="width: 220px; font-weight: 600; font-size: var(--fs-xs);">
             {{ c.title || c.name }}<span v-if="(f.required || []).includes(c.name)"> *</span>
             <span v-if="c.description" class="muted" style="display:block;font-weight:400;">{{ c.description }}</span>
           </label>
-          <input v-if="uiOf(c) === 'checkbox'" type="checkbox" :disabled="disabled"
+          <input v-if="uiOf(c) === 'checkbox'" :id="sfId(f.name, c.name)" type="checkbox" :disabled="disabled"
                  :checked="!!(values[f.name] || {})[c.name]"
                  @change="setNested(f.name, c.name, $event.target.checked)" style="width:auto;" />
-          <input v-else-if="uiOf(c) === 'number'" type="number" :disabled="disabled"
+          <input v-else-if="uiOf(c) === 'number'" :id="sfId(f.name, c.name)" type="number" :disabled="disabled"
                  :value="(values[f.name] || {})[c.name]"
                  @input="setNested(f.name, c.name, Number($event.target.value))" style="max-width:180px;" />
-          <select v-else-if="uiOf(c) === 'select'" :disabled="disabled"
+          <select v-else-if="uiOf(c) === 'select'" :id="sfId(f.name, c.name)" :disabled="disabled"
                   :value="(values[f.name] || {})[c.name]"
                   @change="setNested(f.name, c.name, $event.target.value)" style="max-width:220px;">
             <option v-for="o in (c.enum || [])" :key="o" :value="o">{{ o }}</option>
           </select>
-          <textarea v-else-if="uiOf(c) === 'textarea'" :disabled="disabled"
+          <textarea v-else-if="uiOf(c) === 'textarea'" :id="sfId(f.name, c.name)" :disabled="disabled"
                     :value="(values[f.name] || {})[c.name]"
                     @input="setNested(f.name, c.name, $event.target.value)"
                     style="max-width:420px;min-height:64px;"></textarea>
-          <input v-else :type="uiOf(c) === 'password' ? 'password' : 'text'" :disabled="disabled"
+          <input v-else :id="sfId(f.name, c.name)" :type="uiOf(c) === 'password' ? 'password' : 'text'" :disabled="disabled"
                  :value="(values[f.name] || {})[c.name]"
                  @input="setNested(f.name, c.name, $event.target.value)" style="max-width:320px;" />
         </div>
       </div>
 
       <div v-else class="row" style="margin-top: 12px; align-items: center;">
-        <label style="width: 220px; font-weight: 600; font-size: var(--fs-xs);">
+        <label :for="sfId(null, f.name)" style="width: 220px; font-weight: 600; font-size: var(--fs-xs);">
           {{ f.title || f.name }}<span v-if="f.required"> *</span>
           <span v-if="f.description" class="muted" style="display:block;font-weight:400;">{{ f.description }}</span>
         </label>
-        <input v-if="uiOf(f) === 'checkbox'" type="checkbox" :disabled="disabled"
+        <input v-if="uiOf(f) === 'checkbox'" :id="sfId(null, f.name)" type="checkbox" :disabled="disabled"
                :checked="!!values[f.name]" @change="setField(f.name, $event.target.checked)" style="width:auto;" />
-        <input v-else-if="uiOf(f) === 'number'" type="number" :disabled="disabled"
+        <input v-else-if="uiOf(f) === 'number'" :id="sfId(null, f.name)" type="number" :disabled="disabled"
                :value="values[f.name]" @input="setField(f.name, Number($event.target.value))" style="max-width:180px;" />
-        <select v-else-if="uiOf(f) === 'select'" :disabled="disabled"
+        <select v-else-if="uiOf(f) === 'select'" :id="sfId(null, f.name)" :disabled="disabled"
                 :value="values[f.name]" @change="setField(f.name, $event.target.value)" style="max-width:220px;">
           <option v-for="o in (f.enum || [])" :key="o" :value="o">{{ o }}</option>
         </select>
-        <textarea v-else-if="uiOf(f) === 'list'" :disabled="disabled"
+        <textarea v-else-if="uiOf(f) === 'list'" :id="sfId(null, f.name)" :disabled="disabled"
                   :value="listValue(f)" @input="setList(f, $event.target.value)"
                   style="max-width:420px;min-height:64px;"></textarea>
-        <textarea v-else-if="uiOf(f) === 'textarea'" :disabled="disabled"
+        <textarea v-else-if="uiOf(f) === 'textarea'" :id="sfId(null, f.name)" :disabled="disabled"
                   :value="values[f.name]" @input="setField(f.name, $event.target.value)"
                   style="max-width:420px;min-height:64px;"></textarea>
-        <input v-else :type="uiOf(f) === 'password' ? 'password' : 'text'" :disabled="disabled"
+        <input v-else :id="sfId(null, f.name)" :type="uiOf(f) === 'password' ? 'password' : 'text'" :disabled="disabled"
                :value="values[f.name]" @input="setField(f.name, $event.target.value)" style="max-width:320px;" />
       </div>
     </template>

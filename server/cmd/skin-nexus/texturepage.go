@@ -109,6 +109,11 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   a { color: var(--jade); text-decoration: none; }
   a:hover { color: var(--jade-hi); text-decoration: underline; }
   :focus-visible { outline: 2px solid var(--jade); outline-offset: 2px; }
+  .skip-link { position: absolute; left: -9999px; top: 8px; z-index: 90;
+               background: var(--panel); color: var(--text); border: 1px solid var(--line-strong);
+               border-radius: var(--r-m); padding: 8px 16px; }
+  .skip-link:focus { left: 12px; }
+  .wrap:focus { outline: none; }
   .topbar { position: sticky; top: 0; z-index: 50; flex: none; height: var(--topbar-h, 56px);
             background: color-mix(in srgb, var(--bg) 82%, transparent);
             -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
@@ -127,6 +132,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   .topnav a.primary:hover { background: var(--cinnabar-hi); color: var(--on-cinnabar); }
   .wrap { flex: 1 0 auto; width: 100%; max-width: 940px; margin: 0 auto; padding: 32px 24px 56px; }
   .crumb { font-size: 13px; color: var(--muted); margin: 0 0 16px; }
+  .crumb .sep { color: var(--muted); }
   .card { background: var(--panel); border: 1px solid var(--line);
           border-radius: var(--r-l); padding: 32px;
           box-shadow: var(--shadow); }
@@ -199,6 +205,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
 <!--skin-custom-head-->
 </head>
 <body>
+  <a class="skip-link" href="#main-content">跳到主内容</a>
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="/">
@@ -211,8 +218,8 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
       </nav>
     </div>
   </header>
-  <div class="wrap">
-    <nav class="crumb"><a href="/">首页</a> › <a href="/skinlib">皮肤库</a> › {{.Name}}</nav>
+  <div class="wrap" id="main-content" tabindex="-1">
+    <nav class="crumb" aria-label="面包屑导航"><a href="/">首页</a><span class="sep" aria-hidden="true"> › </span><a href="/skinlib">皮肤库</a><span class="sep" aria-hidden="true"> › </span><span aria-current="page">{{.Name}}</span></nav>
     <article class="card" itemscope itemtype="https://schema.org/CreativeWork">
       <h1 itemprop="name">{{.Name}}</h1>
       <p class="sub">Minecraft {{if eq .Type "cape"}}披风{{else}}皮肤{{end}} · 上传者 <span itemprop="author">{{.Nickname}}</span></p>

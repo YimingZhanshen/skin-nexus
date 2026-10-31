@@ -104,6 +104,14 @@ h2 { font-size: var(--fs-l); margin: 0 0 12px; }
 a { color: var(--jade); text-decoration: none; }
 a:hover { color: var(--jade-hi); text-decoration: underline; }
 :focus-visible { outline: 2px solid var(--jade); outline-offset: 2px; }
+/* keyboard users jump straight past the topbar; invisible until focused */
+.skip-link {
+  position: absolute; left: -9999px; top: 8px; z-index: var(--z-toast);
+  background: var(--panel); color: var(--text); border: 1px solid var(--line-strong);
+  border-radius: var(--r-m); padding: 8px 16px;
+}
+.skip-link:focus { left: 12px; }
+#main-content:focus { outline: none; }
 
 /* ── 顶栏：sticky 玻璃带（大改新增组件） ── */
 .topbar {

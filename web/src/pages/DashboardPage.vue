@@ -327,7 +327,7 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
       <tr v-for="tx in textures" :key="tx.id">
         <td>{{ tx.type }}</td>
         <td>{{ tx.model || '—' }}</td>
-        <td><img :src="tx.url" style="height: 48px; image-rendering: pixelated;" /></td>
+        <td><img :src="tx.url" :alt="t('dashboard.colPreview')" style="height: 48px; image-rendering: pixelated;" /></td>
         <td class="muted">{{ tx.hash.slice(0, 12) }}…</td>
         <td>
           <button class="secondary" v-if="!closetIds.has(tx.id)" @click="addToCloset(tx)">{{ t('dashboard.closetAdd') }}</button>

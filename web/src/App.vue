@@ -381,6 +381,7 @@ onMounted(() => {
     <button @click="boot">{{ t('common.retry') }}</button>
   </div>
   <div v-else class="app-shell">
+    <a class="skip-link" href="#main-content">{{ t('common.skipToContent') }}</a>
     <!-- 顶栏：品牌区 + 语言 + 会话操作（sticky 玻璃带） -->
     <header class="topbar" :class="{ wide: view === 'admin' }">
       <div class="topbar-inner">
@@ -415,7 +416,7 @@ onMounted(() => {
       </div>
     </header>
 
-    <div class="container" :class="{ wide: view === 'admin' }">
+    <div id="main-content" class="container" :class="{ wide: view === 'admin' }" tabindex="-1">
     <!-- AUTH VIEWS: 分栏场景式（左=远山+N 牌，右=表单）。独立 v-if：error 横幅
          不参与视图条件链 -->
     <template v-if="['login', 'register', 'forgot', 'reset'].includes(view)">
@@ -439,10 +440,10 @@ onMounted(() => {
     <!-- LOGIN -->
     <div v-if="view === 'login'" class="card">
       <h2>{{ t('auth.loginTitle') }}</h2>
-      <label>{{ t('auth.identifier') }}</label>
-      <input v-model="identifier" autocomplete="username" />
-      <label>{{ t('auth.password') }}</label>
-      <input v-model="password" type="password" autocomplete="current-password" @keyup.enter="doLogin" />
+      <label for="f-identifier">{{ t('auth.identifier') }}</label>
+      <input id="f-identifier" v-model="identifier" autocomplete="username" />
+      <label for="f-password">{{ t('auth.password') }}</label>
+      <input id="f-password" v-model="password" type="password" autocomplete="current-password" @keyup.enter="doLogin" />
       <div style="margin-top: 8px; text-align: right;" v-if="mailEnabled">
         <a href="/forgot-password" class="muted" @click.prevent="forgotSent = false; view = 'forgot'">{{ t('auth.forgotLink') }}</a>
       </div>
@@ -457,17 +458,17 @@ onMounted(() => {
     <!-- REGISTER -->
     <div v-else-if="view === 'register'" class="card">
       <h2>{{ t('auth.registerTitle') }}</h2>
-      <label>{{ t('auth.nickname') }}</label>
-      <input v-model="nickname" />
+      <label for="f-nickname">{{ t('auth.nickname') }}</label>
+      <input id="f-nickname" v-model="nickname" />
       <template v-if="mailEnabled">
-        <label>{{ t('auth.email') }}</label>
-        <input v-model="email" type="email" />
+        <label for="f-email">{{ t('auth.email') }}</label>
+        <input id="f-email" v-model="email" type="email" />
       </template>
-      <label>{{ t('auth.passwordMin') }}</label>
-      <input v-model="password" type="password" @keyup.enter="doRegister" />
+      <label for="f-register-password">{{ t('auth.passwordMin') }}</label>
+      <input id="f-register-password" v-model="password" type="password" @keyup.enter="doRegister" />
       <template v-if="inviteFieldShown">
-        <label class="required">{{ t('auth.invitationCodeRequired') }}</label>
-        <input v-model="invitationCode" @keyup.enter="doRegister" />
+        <label class="required" for="f-invite">{{ t('auth.invitationCodeRequired') }}</label>
+        <input id="f-invite" v-model="invitationCode" @keyup.enter="doRegister" />
       </template>
       <PluginFields form="auth.register" v-model="pluginFormData" />
       <div class="error" v-if="authErr">{{ authErr }}</div>
@@ -490,8 +491,8 @@ onMounted(() => {
         </div>
       </template>
       <template v-else-if="!forgotSent">
-        <label>{{ t('auth.forgotEmail') }}</label>
-        <input v-model="forgotEmail" type="email" autocomplete="email" @keyup.enter="doForgot" />
+        <label for="f-forgot-email">{{ t('auth.forgotEmail') }}</label>
+        <input id="f-forgot-email" v-model="forgotEmail" type="email" autocomplete="email" @keyup.enter="doForgot" />
         <div class="error" v-if="authErr">{{ authErr }}</div>
         <div class="row" style="margin-top: 16px;">
           <button @click="doForgot">{{ t('auth.forgotSubmit') }}</button>
@@ -516,10 +517,10 @@ onMounted(() => {
         </div>
       </template>
       <template v-else-if="resetToken">
-        <label>{{ t('auth.resetNew') }}</label>
-        <input v-model="resetPw1" type="password" autocomplete="new-password" />
-        <label>{{ t('auth.resetConfirm') }}</label>
-        <input v-model="resetPw2" type="password" autocomplete="new-password" @keyup.enter="doReset" />
+        <label for="f-reset1">{{ t('auth.resetNew') }}</label>
+        <input id="f-reset1" v-model="resetPw1" type="password" autocomplete="new-password" />
+        <label for="f-reset2">{{ t('auth.resetConfirm') }}</label>
+        <input id="f-reset2" v-model="resetPw2" type="password" autocomplete="new-password" @keyup.enter="doReset" />
         <div class="error" v-if="authErr">{{ authErr }}</div>
         <div class="row" style="margin-top: 16px;">
           <button @click="doReset">{{ t('auth.resetSubmit') }}</button>
