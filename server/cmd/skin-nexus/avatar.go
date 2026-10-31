@@ -32,10 +32,47 @@ import (
 	"skin-nexus/server/internal/texture"
 )
 
+const skinSessionCookie = "skin_session"
+
 type avatarDeps struct {
 	st       *store.Mysql
 	ts       *texture.Store
 	redirect func(ctx context.Context, hash string, size int, threeD bool) (string, bool)
+}
+
+// previewAuthStore is the slice of the store needed to authorize a private
+// preview: session → uid, uid → permission, tid → owner.
+type previewAuthStore interface {
+	SessionUser(ctx context.Context, token string) (int64, error)
+	UserPermission(ctx context.Context, uid int64) (int, error)
+	TextureOwner(ctx context.Context, tid int64) (int64, error)
+}
+
+// privatePreviewAllowed mirrors the skinlib detail page visibility rule:
+// the owner or an admin (permission > 0) may see a private texture.
+func privatePreviewAllowed(st previewAuthStore, r *http.Request, tid int64) bool {
+	c, err := r.Cookie(skinSessionCookie)
+	if err != nil {
+		return false
+	}
+	uid, err := st.SessionUser(r.Context(), c.Value)
+	if err != nil || uid == 0 {
+		return false
+	}
+	if perm, err := st.UserPermission(r.Context(), uid); err == nil && perm > 0 {
+		return true
+	}
+	owner, err := st.TextureOwner(r.Context(), tid)
+	return err == nil && owner == uid
+}
+
+// previewCacheControl keeps private renders out of shared caches. Public
+// previews stay immutable; the URL carries avatargen.RenderVersion.
+func previewCacheControl(private bool) string {
+	if private {
+		return "private, no-store"
+	}
+	return "public, max-age=31536000, immutable"
 }
 
 func avatarSize(r *http.Request) int {
@@ -191,7 +228,12 @@ func (d *avatarDeps) handlePreviewTID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pub, err := d.st.TextureIsPublic(r.Context(), tid)
-	if err != nil || !pub {
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	private := !pub
+	if private && !privatePreviewAllowed(d.st, r, tid) {
 		http.NotFound(w, r)
 		return
 	}
@@ -204,7 +246,7 @@ func (d *avatarDeps) handlePreviewTID(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
-	d.servePreview(w, r, hash, typ, slim)
+	d.servePreview(w, r, hash, typ, slim, private)
 }
 
 func (d *avatarDeps) handlePreviewHash(w http.ResponseWriter, r *http.Request) {
@@ -223,10 +265,10 @@ func (d *avatarDeps) handlePreviewHash(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
-	d.servePreview(w, r, hash, typ, slim)
+	d.servePreview(w, r, hash, typ, slim, false)
 }
 
-func (d *avatarDeps) servePreview(w http.ResponseWriter, r *http.Request, hash, typ string, slim bool) {
+func (d *avatarDeps) servePreview(w http.ResponseWriter, r *http.Request, hash, typ string, slim, private bool) {
 	if typ != "skin" {
 		// A cape through the body renderer is garbage — 404 keeps the
 		// surface honest (legacy renders it anyway; deviation noted).
@@ -248,7 +290,11 @@ func (d *avatarDeps) servePreview(w http.ResponseWriter, r *http.Request, hash, 
 	if r.URL.Query().Get("small") == "1" {
 		ratio = 5
 	}
-	writePNG(w, avatargen.RenderPreviewAt(skin, slim, ratio), "public, max-age=31536000, immutable")
+	if private {
+		w.Header().Set("Vary", "Cookie")
+		w.Header().Set("X-Robots-Tag", "noindex")
+	}
+	writePNG(w, avatargen.RenderPreviewAt(skin, slim, ratio), previewCacheControl(private))
 }
 
 // handleViewerTexture serves the background-normalized sheet used by the
