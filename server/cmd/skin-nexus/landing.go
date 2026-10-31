@@ -78,10 +78,13 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
     --jade: #67b7a0; --jade-hi: #7fcbb3; --gold: #c9a06a; --ochre: var(--gold);
     --r-s: 4px; --r-m: 6px; --r-l: 10px;
     --shadow: 0 12px 32px -18px rgba(3, 8, 16, .8);
+    --danger: #d9564c; --ok: #6fbf7d;
+    --fs-xs: 12px; --fs-s: 14px; --fs-m: 16px; --fs-l: 20px; --fs-xl: 24px; --fs-2xl: 32px;
+    --ease: cubic-bezier(.22, 1, .36, 1); --t-fast: .14s; --t-mid: .26s;
   }
   body { margin: 0; min-height: 100vh; display: flex; flex-direction: column;
          font-family: "Segoe UI", "Inter", "PingFang SC", "HarmonyOS Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
-         font-size: 15px; line-height: 1.7; -webkit-font-smoothing: antialiased; line-break: strict;
+         font-size: var(--fs-m); line-height: 1.7; -webkit-font-smoothing: antialiased; line-break: strict;
          background: var(--ink); color: var(--moon); }
   /* 远山云雾：全页唯一景（fixed 垫在内容层后，静谧不抢内容） */
   .scene { position: fixed; inset: auto 0 0 0; height: 44vh; min-height: 250px;
@@ -99,8 +102,9 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
   .hero h1 { margin: 0 0 10px; font-family: var(--font-serif); font-size: 48px; font-weight: 600;
              letter-spacing: .06em; line-height: 1.25; }
   .hero .tag { color: var(--moon-2); font-size: 16px; margin: 0 0 28px; }
-  .cta a { display: inline-block; margin: 0 8px; padding: 11px 28px; border-radius: 4px;
-           font-size: 15px; text-decoration: none; font-weight: 600; transition: background .12s, border-color .12s; }
+  .cta a { display: inline-block; margin: 0 8px; padding: 11px 28px; border-radius: var(--r-s);
+           font-size: var(--fs-m); text-decoration: none; font-weight: 600;
+           transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); }
   .cta .primary { background: var(--cinnabar); color: var(--on-cinnabar); }
   .cta .primary:hover { background: var(--cinnabar-hi); }
   .cta .alt { border: 1px solid var(--line); color: var(--moon); }
@@ -116,20 +120,20 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
   .stats div::before { top: 6px; left: 6px; border-right: none; border-bottom: none; }
   .stats div::after { bottom: 6px; right: 6px; border-left: none; border-top: none; }
   .stats b { display: block; font-size: 30px; color: var(--ochre); font-weight: 600; }
-  .stats span { font-size: 14px; color: var(--moon-2); }
+  .stats span { font-size: var(--fs-s); color: var(--moon-2); }
   /* 祥云分隔：一枝纹样 repeat-x */
   .divider { height: 26px; margin: 4px 0 0; opacity: .55; background-repeat: repeat-x;
              background-position: center; background-size: auto 26px;
              background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='132' height='26' viewBox='0 0 132 26'%3E%3Cpath d='M8 19c0-5 4-8 8-7 1-6 10-8 13-2 5-2 10 1 9 6 4 0 7 1 9 3' fill='none' stroke='%23c9a06a' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M60 19c7 0 10-6 16-6 7 0 9 6 16 6 6 0 9-4 14-4' fill='none' stroke='%23c9a06a' stroke-width='1.2' opacity='.65'/%3E%3C/svg%3E"); }
   /* 皮肤库入口：次级按钮（与 CTA 描边款同语言，赭石线 + 金边 hover） */
   .more { text-align: center; margin: 20px 0 0; }
-  .more a { display: inline-block; padding: 9px 24px; border-radius: 4px;
+  .more a { display: inline-block; padding: 9px 24px; border-radius: var(--r-s);
             border: 1px solid var(--line-strong); color: var(--moon);
-            font-size: 14px; font-weight: 600; text-decoration: none;
-            transition: background .12s, border-color .12s; }
+            font-size: var(--fs-s); font-weight: 600; text-decoration: none;
+            transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); }
   .more a:hover { background: var(--ink-3); border-color: var(--ochre);
                   color: var(--moon); text-decoration: none; }
-  .intro { line-height: 1.85; color: var(--moon); margin: 28px 0; max-width: 46em; font-size: 16px; }
+  .intro { line-height: 1.85; color: var(--moon); margin: 28px 0; max-width: 46em; font-size: var(--fs-m); }
   .feat h2 { font-family: var(--font-serif); font-size: 24px; margin: 36px 0 18px; font-weight: 600;
              letter-spacing: .04em; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 16px; }
@@ -141,7 +145,7 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
   .grid figcaption { font-size: 13px; color: var(--moon-2); margin-top: 8px;
                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   footer.site-footer { position: relative; z-index: 1; flex: none; margin-top: 32px; padding: 18px 24px 24px;
-           text-align: center; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+           text-align: center; font-size: var(--fs-xs); color: var(--muted); border-top: 1px solid var(--line); }
   footer.site-footer a { color: var(--jade); text-decoration: none; }
   footer.site-footer a:hover { color: var(--jade-hi); text-decoration: underline; }
   .site-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 0 0 8px; }

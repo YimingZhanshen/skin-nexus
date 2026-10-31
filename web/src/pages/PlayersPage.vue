@@ -155,5 +155,5 @@ onMounted(load)
 .cell-sel { width: 100%; padding: 4px 6px; font-size: 13px; }
 .nowrap { white-space: nowrap; }
 .danger-outline { border-color: var(--danger); color: var(--danger); }
-.danger-outline:hover { background: var(--danger); color: #fff; }
+.danger-outline:hover { background: var(--danger); color: var(--on-danger); }
 </style>

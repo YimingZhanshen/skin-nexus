@@ -178,7 +178,7 @@ onMounted(async () => {
           <div class="plugin-title-row">
             <strong>{{ p.title || p.name }}</strong>
             <span class="badge">v{{ p.version }}</span>
-            <span class="badge" :style="p.trust && p.trust !== 'verified' ? 'color:var(--danger);border-color:var(--danger)' : ''"
+            <span class="badge" :class="{ danger: p.trust && p.trust !== 'verified' }"
                   :title="provenanceTitle(p)">{{ trustText(p) }}</span>
             <span class="muted">{{ sourceText(p) }}</span>
           </div>

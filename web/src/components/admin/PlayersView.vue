@@ -173,5 +173,5 @@ onMounted(load)
 .cell-btn { padding: 3px 8px; min-width: 48px; display: inline-flex; align-items: center; justify-content: center; }
 .uuid { font-size: 11px; letter-spacing: .2px; }
 .danger-outline { border-color: var(--danger); color: var(--danger); }
-.danger-outline:hover { background: var(--danger); color: #fff; }
+.danger-outline:hover { background: var(--danger); color: var(--on-danger); }
 </style>

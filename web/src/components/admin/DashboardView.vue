@@ -52,7 +52,7 @@ onMounted(async () => {
         </div>
       </div>
       <div class="row" style="margin-top: 12px;" v-if="overview">
-        <span class="badge" :style="overview.weakHashUsers > 0 ? 'border-color: var(--danger); color: var(--danger);' : ''">
+        <span class="badge" :class="{ danger: overview.weakHashUsers > 0 }">
           {{ t('admin.weakHash') }} {{ overview.weakHashUsers }}
         </span>
         <span class="badge">{{ t('admin.signKeyFingerprint') }} {{ overview.signKeyFingerprint }}</span>

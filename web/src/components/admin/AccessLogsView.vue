@@ -135,8 +135,8 @@ onMounted(load)
 }
 .ua { font-size: 12px; }
 .oc { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid transparent; }
-.oc-ok { color: #2e9e5b; border-color: #2e9e5b66; }
-.oc-miss { color: var(--muted, #8b93a1); border-color: #8884; }
-.oc-warn { color: #b98900; border-color: #b9890066; }
-.oc-bad { color: var(--danger, #d64545); border-color: #d6454566; }
+.oc-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.oc-miss { color: var(--muted); border-color: var(--line); }
+.oc-warn { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 40%, transparent); }
+.oc-bad { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
 </style>

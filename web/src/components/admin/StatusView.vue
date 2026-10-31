@@ -95,13 +95,13 @@ onMounted(async () => {
           <div class="status-item"><span class="k">{{ t('admin.statusMigration') }}</span><span class="v">{{ show(status.migration) }}</span></div>
         </div>
         <div class="status-badges">
-          <span class="badge" :style="modules.union ? '' : 'opacity: 0.6;'">
+          <span class="badge" :class="{ dim: !modules.union }">
             {{ t('admin.statusUnion') }} {{ modules.union ? t('admin.moduleOn') : t('admin.moduleOff') }}
           </span>
-          <span class="badge" :style="modules.appearance ? '' : 'opacity: 0.6;'">
+          <span class="badge" :class="{ dim: !modules.appearance }">
             {{ t('admin.statusAppearance') }} {{ modules.appearance ? t('admin.moduleOn') : t('admin.moduleOff') }}
           </span>
-          <span class="badge" :style="modules.oidc ? '' : 'opacity: 0.6;'">
+          <span class="badge" :class="{ dim: !modules.oidc }">
             {{ t('admin.statusOIDC') }} {{ modules.oidc ? t('admin.moduleOn') : t('admin.moduleOff') }}
           </span>
           <span class="badge">{{ t('admin.signKeyFingerprint') }} {{ show(status.signKeyFingerprint) }}</span>

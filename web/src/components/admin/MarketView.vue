@@ -189,7 +189,7 @@ onMounted(async () => {
     <div v-if="inspection" class="card" style="margin: 12px 0;">
       <h3 style="margin-top: 0;">{{ inspection.name }} <span class="muted">{{ inspection.version }}</span></h3>
       <p>
-        <span class="badge" :style="inspection.status !== 'verified' ? 'color:var(--danger);border-color:var(--danger)' : ''">{{ trustText(inspection.status) }}</span>
+        <span class="badge" :class="{ danger: inspection.status !== 'verified' }">{{ trustText(inspection.status) }}</span>
         <span v-if="inspection.keyId" class="muted" style="margin-left: 8px;">{{ t('admin.marketSigner') }}: {{ inspection.keyId }}</span>
       </p>
       <p class="muted" style="font-size: var(--fs-xs); word-break: break-all;">

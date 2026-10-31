@@ -198,6 +198,13 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 `--danger-hi` · `--ok` · `--hover-wash`（表格行悬停薄雾）· `--r-s/--r-m/--r-l`（圆角三档）·
 `--shadow/--shadow-lift`（阴影两层）· `--ease/--t-fast/--t-mid`（动效）。
 
+**v3.3 补充键（2026-11-01 前端一致性升级）**：派生别名 `--panel-2`（嵌套面板面，默认
+`--ink-3`；皮肤卡预览/进度槽）与 `--accent-ink`（主色底文字，默认 `--on-cinnabar`）；
+间距刻度 `--sp-1…--sp-8`（4/8/12/16/24/32/48/64px）与层级刻度 `--z-topbar/--z-menu/--z-toast/--z-modal`
+（50/60/70/80）——布局类建议按刻度取值但主题可不覆盖。徽章改走变体类
+`.badge.danger/.ok/.jade/.gold/.dim`，不再用内联 style 改色（主题覆盖 `.badge` 即联动）。
+SSR 落地页/详情页与 SPA 共用同一组字号与动效令牌（`--fs-*`、`--t-*`），值漂移视为 bug。
+
 **新结构类（布局契约，主题可覆盖）**：`.topbar`（sticky 玻璃顶栏，高 `--topbar-h`）、
 `.auth-split/.auth-scene/.auth-pane`（登录/注册/找回/重置的分栏场景布局，≤860px 塌缩）、
 `.user-chip`（侧栏底部用户卡）、`.nav-item .nav-ico`（图标导航，活动态朱砂左条）、

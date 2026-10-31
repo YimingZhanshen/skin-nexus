@@ -19,6 +19,8 @@
   --ink: var(--bg);
   --ink-2: var(--panel);
   --ink-3: #1d2a3d;     /* 嵌套面/悬停（默认值；主题可选覆盖） */
+  --panel-2: var(--ink-3);      /* 嵌套面板面（卡片预览/进度槽） */
+  --accent-ink: var(--on-cinnabar); /* 主色底上的文字 */
   --line: var(--border);
   --line-strong: rgba(169, 138, 95, .45);
   --moon: var(--text);
@@ -48,6 +50,20 @@
   --shadow: 0 12px 32px -18px rgba(3, 8, 16, .8);
   --shadow-lift: 0 18px 40px -20px rgba(3, 8, 16, .9);
   --topbar-h: 56px;
+  /* ── 间距刻度（4px 基） ── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+  /* ── 层级刻度 ── */
+  --z-topbar: 50;
+  --z-menu: 60;
+  --z-toast: 70;
+  --z-modal: 80;
   /* ── 动效 ── */
   --ease: cubic-bezier(.22, 1, .36, 1);
   --t-fast: .14s;
@@ -247,12 +263,17 @@ th { white-space: nowrap; font-size: var(--fs-s); color: var(--muted); font-weig
 td { vertical-align: middle; }
 tbody tr, table tr { transition: background var(--t-fast) var(--ease); }
 tbody tr:hover, table tr:hover { background: var(--hover-wash); }
-/* 徽章：方块母题 */
+/* 徽章：方块母题（状态走变体类，不用内联 :style 改色） */
 .badge {
   display: inline-block; padding: 2px 8px; border-radius: var(--r-s);
   font-size: var(--fs-xs); border: 1px solid var(--line-strong); color: var(--moon-2);
   font-variant-numeric: tabular-nums;
 }
+.badge.danger { color: var(--danger); border-color: var(--danger); }
+.badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
+.badge.jade { color: var(--jade); border-color: color-mix(in srgb, var(--jade) 55%, transparent); }
+.badge.gold { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 55%, transparent); }
+.badge.dim { opacity: .55; }
 
 /* ── 用户中心外壳 ── */
 .user-shell { display: flex; gap: 24px; align-items: flex-start; }

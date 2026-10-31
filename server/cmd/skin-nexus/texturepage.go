@@ -95,11 +95,15 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
     --glow-cinnabar: rgba(176, 69, 58, .6);
     --r-s: 4px; --r-m: 6px; --r-l: 10px;
     --shadow: 0 12px 32px -18px rgba(3, 8, 16, .8);
+    --topbar-h: 56px;
+    --hover-wash: rgba(233, 237, 241, .05);
+    --fs-xs: 12px; --fs-s: 14px; --fs-m: 16px; --fs-l: 20px; --fs-xl: 24px; --fs-2xl: 32px;
+    --ease: cubic-bezier(.22, 1, .36, 1); --t-fast: .14s; --t-mid: .26s;
   }
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; display: flex; flex-direction: column;
          font-family: "Segoe UI", "Inter", "PingFang SC", "HarmonyOS Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
-         font-size: 15px; line-height: 1.7; -webkit-font-smoothing: antialiased; line-break: strict;
+         font-size: var(--fs-m); line-height: 1.7; -webkit-font-smoothing: antialiased; line-break: strict;
          background: var(--ink); color: var(--moon); }
   ::selection { background: var(--sel); }
   a { color: var(--jade); text-decoration: none; }
@@ -117,8 +121,8 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   .topbar .brand span { font-family: var(--font-serif); font-size: 20px; font-weight: 600; letter-spacing: .06em;
                         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .topnav { display: flex; align-items: center; gap: 4px; flex: none; }
-  .topnav a { padding: 6px 10px; border-radius: var(--r-s); color: var(--jade); font-size: 14px; }
-  .topnav a:hover { background: var(--hover-wash, rgba(233,237,241,.05)); color: var(--jade-hi); text-decoration: none; }
+  .topnav a { padding: 6px 10px; border-radius: var(--r-s); color: var(--jade); font-size: var(--fs-s); }
+  .topnav a:hover { background: var(--hover-wash); color: var(--jade-hi); text-decoration: none; }
   .topnav a.primary { background: var(--cinnabar); color: var(--on-cinnabar); font-weight: 600; }
   .topnav a.primary:hover { background: var(--cinnabar-hi); color: var(--on-cinnabar); }
   .wrap { flex: 1 0 auto; width: 100%; max-width: 940px; margin: 0 auto; padding: 32px 24px 56px; }
@@ -128,7 +132,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
           box-shadow: var(--shadow); }
   h1 { margin: 0 0 6px; font-family: var(--font-serif); font-size: 30px; font-weight: 600;
        letter-spacing: .03em; word-break: break-all; }
-  .sub { color: var(--moon-2); font-size: 15px; margin: 0 0 24px; }
+  .sub { color: var(--moon-2); font-size: var(--fs-m); margin: 0 0 24px; }
   .viewer { display: flex; justify-content: center; align-items: center;
             min-height: 340px; margin: 0 0 24px; position: relative; }
   .viewer img.static { max-height: 320px; image-rendering: pixelated; }
@@ -144,15 +148,15 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
               border: 1.5px solid var(--gold); opacity: .55; }
   .meta div::before { top: 5px; left: 5px; border-right: none; border-bottom: none; }
   .meta div::after { bottom: 5px; right: 5px; border-left: none; border-top: none; }
-  .meta dt { font-size: 12px; color: var(--moon-2); margin: 0 0 2px; }
-  .meta dd { margin: 0; font-size: 14px; font-weight: 600; word-break: break-all;
+  .meta dt { font-size: var(--fs-xs); color: var(--moon-2); margin: 0 0 2px; }
+  .meta dd { margin: 0; font-size: var(--fs-s); font-weight: 600; word-break: break-all;
              font-variant-numeric: tabular-nums; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .actions a, .actions button { display: inline-block; padding: 9px 20px; border-radius: var(--r-s);
-        font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer;
-        font-family: inherit; transition: background .14s cubic-bezier(.22,1,.36,1),
-        border-color .14s cubic-bezier(.22,1,.36,1), transform .14s cubic-bezier(.22,1,.36,1),
-        box-shadow .14s cubic-bezier(.22,1,.36,1); }
+        font-size: var(--fs-s); font-weight: 600; text-decoration: none; cursor: pointer;
+        font-family: inherit; transition: background var(--t-fast) var(--ease),
+        border-color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease),
+        box-shadow var(--t-fast) var(--ease); }
   .actions .primary { background: var(--cinnabar); color: var(--on-cinnabar); border: none; }
   .actions .primary:hover { background: var(--cinnabar-hi); transform: translateY(-1px);
         box-shadow: 0 6px 16px -8px var(--glow-cinnabar); text-decoration: none; }
@@ -163,7 +167,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
                   color: var(--moon); text-decoration: none; }
   .like-btn.liked { color: var(--danger); border-color: var(--danger); }
   footer.site-footer { position: relative; flex: none; margin-top: 32px; padding: 18px 24px 24px;
-           text-align: center; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+           text-align: center; font-size: var(--fs-xs); color: var(--muted); border-top: 1px solid var(--line); }
   footer.site-footer a { color: var(--jade); }
   footer.site-footer a:hover { color: var(--jade-hi); }
   .site-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 0 0 8px; }

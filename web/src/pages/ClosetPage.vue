@@ -111,5 +111,5 @@ onMounted(load)
 .hash { font-size: 11px; }
 .nowrap { white-space: nowrap; }
 .danger-outline { border-color: var(--danger); color: var(--danger); }
-.danger-outline:hover { background: var(--danger); color: #fff; }
+.danger-outline:hover { background: var(--danger); color: var(--on-danger); }
 </style>

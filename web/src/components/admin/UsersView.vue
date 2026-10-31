@@ -187,7 +187,7 @@ onMounted(load)
             {{ Number(u.emailVerified) ? '✓' : '—' }}
           </button>
         </td>
-        <td><span class="badge" :style="(u.passwordAlgo || '').startsWith('legacy') ? 'border-color: var(--danger); color: var(--danger);' : ''">{{ u.passwordAlgo }}</span></td>
+        <td><span class="badge" :class="{ danger: (u.passwordAlgo || '').startsWith('legacy') }">{{ u.passwordAlgo }}</span></td>
         <td class="muted nowrap">{{ (u.createdAt || '').slice(0, 10) }}</td>
         <td class="nowrap">
           <button class="secondary" @click="adminResetPassword(u)">{{ t('admin.resetPw') }}</button>
