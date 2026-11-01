@@ -39,7 +39,14 @@ RUN CGO_ENABLED=0 go build \
       -o /out/skin-nexus ./cmd/skin-nexus
 
 # ---- stage 3: runtime ----
-FROM alpine:3.20
+# The shipped layer is pinned to a supported Alpine branch: 3.20 lost its main
+# repository support on 2026-04-01, which quietly turned every image built since
+# then into an unpatched base. Bump this when the branch below reaches its own
+# end-of-support date (see docs/deploy.md §base 镜像更新节奏); the build stages
+# stay on floating tags on purpose — `--pull` in CI refetches them, so a rebuild
+# is the patch, and the running binary reports the exact Go version it was built
+# with on the admin status page.
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 COPY --from=server /out/skin-nexus /app/skin-nexus

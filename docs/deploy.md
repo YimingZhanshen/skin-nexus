@@ -412,3 +412,33 @@ Nginx 反代与 §三完全相同。日志 `journalctl -u skin-nexus -f`。
 - **Union 开关**：管理面板「站点设置」热切换——关 = 全 union 路由 404 + 纹理签名回本地密钥；开 = 即时恢复。开启前须已有成员密钥；面板展示信任声明（Union 模式下纹理签名私钥全网共享）
 - **主题/外观**：主题包放 `skin-data` 卷的 `themes/`（规范见 [theme-spec.md](theme-spec.md)）；自定义 CSS/JS 与 SEO 在管理面板对应区块
 - **定期**：备份任务跑 §2.6 两条命令；证书到期前续期；`docker compose pull` 后看 CHANGELOG 再升级
+
+### 6.1 base 镜像与依赖的更新节奏
+
+这套东西将来是交给「下一个接手的人」的，所以更新规则写成清单，不靠谁临时想起来。
+
+| 层 | 当前值 | 支持窗口 | 谁负责升 |
+|---|---|---|---|
+| 运行时 | `alpine:3.24` | Alpine 分支约 2 年（3.24 至 2028-06） | 维护者，分支到期前换 tag 提 PR |
+| Go 构建器 | `golang:1.26-alpine` | 1.26.x 补丁随 Go 发布 | 浮动 tag + CI `pull: true`，重建即最新补丁 |
+| Node 构建器 | `node:22-alpine` | Node 22 LTS | 同上 |
+| 数据库 | `mysql:8.0`（内置模式） | Oracle 维护窗口 | 站长自选；外部库同理 |
+
+**为什么构建层浮动、运行层钉死**：构建层不进镜像，重构建一次就是补丁——`docker/build-push-action`
+里显式开了 `pull: true`，否则 buildx 缓存会拿旧 base，「重建即补丁」就不成立了。运行层是玩家实际拿到的
+那层，钉在受支持分支上才能追溯；具体构建版本不用猜，管理面板「运行状态」直接报 `goVersion` 与 `mysqlVersion`。
+
+**每季度一次（15 分钟）**：
+
+```bash
+docker build --pull -t skin-nexus:audit .        # 用最新 base 重建一次，看是否报错
+docker run --rm skin-nexus:audit --version       # 版本号
+# 面板「运行状态」核对 goVersion / mysqlVersion / migration
+```
+
+再对照上游：Go 的 release notes、Alpine 安全公告、`cd web && npm audit --audit-level=high`
+（CI 只把 critical 设为阻塞，high 写进 step summary——修 high 常要大版本升级，不能混进功能轮）。
+
+**已知待办**：本仓库还没有 `.github/dependabot.yml`。开了之后 go.mod / package-lock / Docker base
+三类更新会自动开 PR，是「留给后人」最省力的形态；需要有人在设置里启用并审第一批 PR。
+
