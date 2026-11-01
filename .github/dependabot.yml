@@ -1,0 +1,48 @@
+# Dependency updates. The point is not "fresh deps" — it is that a base image
+# or a stdlib patch never waits for someone to remember (alpine:3.20 sat past
+# its support window for seven months, see docs/deploy.md §6.1).
+#
+# Weekly, not daily: this is a one-maintainer repo and every PR costs a review.
+# Minor/patch are grouped into a single PR per ecosystem so the noise stays
+# bounded; majors arrive individually, which is what we want (vue-i18n 9→11 is a
+# deliberate separate round, and its advisories are already recorded).
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /server
+    schedule: { interval: weekly, day: monday, time: "09:00", timezone: Asia/Shanghai }
+    open-pull-requests-limit: 5
+    commit-message: { prefix: "chore(deps)" }
+    groups:
+      go-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /web
+    schedule: { interval: weekly, day: monday, time: "09:00", timezone: Asia/Shanghai }
+    open-pull-requests-limit: 3
+    commit-message: { prefix: "chore(deps)" }
+    groups:
+      js-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # Covers the Dockerfile FROM lines (runtime base + both build stages).
+  # mysql:8.0 in docker-compose.yml is *not* tracked here — the docker ecosystem
+  # reads Dockerfiles only, so that one stays a manual §6.1 item.
+  - package-ecosystem: docker
+    directory: /
+    schedule: { interval: weekly, day: monday, time: "09:00", timezone: Asia/Shanghai }
+    open-pull-requests-limit: 3
+    commit-message: { prefix: "chore(deps)" }
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday, time: "09:00", timezone: Asia/Shanghai }
+    open-pull-requests-limit: 3
+    commit-message: { prefix: "chore(ci)" }
+    groups:
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]

@@ -7,6 +7,7 @@
 - **运行时基础镜像过期修复（自查发现）**：`Dockerfile` 的运行层一直钉在 `alpine:3.20`，而 Alpine 3.20 的 main 仓库支持期 **2026-04-01 已结束**（3.21 也于 2026-11-01 到期）——也就是说 4 月以来构建的每一个镜像都跑在拿不到安全更新的 base 上。运行层升到 `alpine:3.24`（支持到 2028-06）。构建层刻意保持浮动（`golang:1.26-alpine` / `node:22-alpine`，不进最终镜像），但为此必须在 CI 打开 `pull: true`，否则 buildx 缓存会复用旧 base，「重建即补丁」不成立——已加。实际用的 Go 版本不用猜：面板「运行状态」报 `goVersion`。
   - 触发点是一次外部讨论：有人拿 Go/Docker 生态近期的高危 CVE 质疑「你的栈就没洞？」。逐条核过本项目的暴露面：构建时 RCE 走 cgo/SWIG，本仓库 `CGO_ENABLED=0` 且无 SWIG、CI 只构建 `go.sum` 锁定的依赖，攻击面结构上不存在；Docker 那几条容器逃逸的前提是「对不可信容器 `docker cp`」或「装 AuthZ 插件做多租户」，本部署是单机跑自己签名的镜像，前提不成立；标准库的 ASN.1/TLS DoS 两条确实相关，修复动作就是重建。**结论不是「我们没洞」，而是「修一个洞要等谁」——而这次自查证明我们自己也有一条没跟上。**
   - 落地为制度：`docs/deploy.md` 新增 §6.1「base 镜像与依赖的更新节奏」（各层支持窗口表、每季度 15 分钟自检命令、critical 阻塞 / high 只记 summary 的既有分工），并登记待办：本仓库尚无 `.github/dependabot.yml`，开了之后 go.mod / package-lock / Docker base 三类更新会自动开 PR。
+- **依赖更新自动化上线**：新增 `.github/dependabot.yml`，每周一（Asia/Shanghai）检查 go.mod、npm、Dockerfile 的 `FROM` 行与 GitHub Actions 四类更新。minor/patch 每生态合并成一条 PR、major 单独开（vue-i18n 9→11 这类会自己冒出来，不会淹没在小更新里），PR 走同一套 CI。§6.1 的待办转为已启用，并记下一个覆盖不到的口子：dependabot 的 docker 生态只读 Dockerfile，`docker-compose.yml` 里的 `mysql:8.0` 仍需手动核。
 - **README 大幅精简**（中 217 → 115 行，英同步）：删掉重复的两段部署说明、逐条罗列的功能清单压成四段、竞品对照表从 17 行收到 8 行（完整逐格证据本来就在 `docs/competitor-analysis.md`）、文档索引从表格改为分组链接行；语气去掉宣传腔。理由很直接：路人看 README 是为了三分钟判断「这东西对我有没有用」，不是为了读完它。
 
 ## 2026-11-01

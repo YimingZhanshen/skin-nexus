@@ -439,6 +439,11 @@ docker run --rm skin-nexus:audit --version       # 版本号
 再对照上游：Go 的 release notes、Alpine 安全公告、`cd web && npm audit --audit-level=high`
 （CI 只把 critical 设为阻塞，high 写进 step summary——修 high 常要大版本升级，不能混进功能轮）。
 
-**已知待办**：本仓库还没有 `.github/dependabot.yml`。开了之后 go.mod / package-lock / Docker base
-三类更新会自动开 PR，是「留给后人」最省力的形态；需要有人在设置里启用并审第一批 PR。
+**依赖更新已自动化**：`.github/dependabot.yml` 每周一（Asia/Shanghai）检查四类更新并开 PR——
+go.mod（`server/`）、npm（`web/`）、Dockerfile 的 `FROM` 行、GitHub Actions。minor/patch 合并成每个
+生态一条 PR，major 单独开（所以 vue-i18n 9→11 这种大版本会自己冒出来，不会淹没在小更新里）。
+PR 走的是同一套 CI，覆盖率地板与结构闸都在拦。
+
+一个覆盖不到的地方：`docker-compose.yml` 里的 `mysql:8.0` **不在** dependabot 的 docker 生态范围内
+（它只读 Dockerfile），数据库镜像仍要按上面的季度自检手动核。
 
