@@ -1,6 +1,16 @@
+// Package i18n is the message-key layer for API error responses.
+//
+// Every non-2xx body carries a stable machine-readable `code` alongside the
+// human-readable `message`; the frontend translates `code` through its language
+// packs and falls back to `message` when a code is unknown. Nothing imports
+// this package from the backend's language pack side, so it stays a leaf: no
+// dependencies, no lookup table, only the namespace.
 package i18n
 
 // Error codes for the HTTP envelope `{error, code, message}`.
+//
+// Prefixing a constant with `Msg` is the greppable convention — `i18n\.Msg`
+// finds every call site — and `<area>.<reason>` keeps one namespace per area.
 //
 // Naming is `<area>.<reason>`, lowercase, dot-separated; `internal` is the one
 // exception (the 500 fallback, deliberately unprefixed because it is not a

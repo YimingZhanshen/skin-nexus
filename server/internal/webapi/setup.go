@@ -51,14 +51,14 @@ func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 		SkinDomains []string `json:"skin_domains"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.Msg(i18n.MsgSetupBadInput))
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgSetupBadInput)
 		return
 	}
 	req.SiteName = strings.TrimSpace(req.SiteName)
 	req.Nickname = strings.TrimSpace(req.Nickname)
 	req.Email = strings.TrimSpace(req.Email)
 	if req.Nickname == "" || len(req.Password) < 8 {
-		writeErrCode(w, http.StatusBadRequest, "昵称必填、密码至少 8 位", i18n.Msg(i18n.MsgSetupBadInput))
+		writeErrCode(w, http.StatusBadRequest, "昵称必填、密码至少 8 位", i18n.MsgSetupBadInput)
 		return
 	}
 	if req.Email == "" {

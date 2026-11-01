@@ -154,35 +154,42 @@ func writePluginFormError(w http.ResponseWriter, err error) {
 // writeAccountErr maps the shared service's stable codes to the legacy web
 // status codes so existing clients see the same behavior.
 func writeAccountErr(w http.ResponseWriter, err *account.Error) {
-	// Two codes carry structured details the client acts on: the duplicate
-	// points at the existing page, the in-use answer names what blocks deletion.
-	if err.Code == account.CodeDuplicatePub || err.Code == account.CodeInUse {
-		body := map[string]any{"error": err.Code, "message": err.Message}
+	writeJSON(w, accountErrStatus(err.Code), accountErrBody(err))
+}
+
+// accountErrStatus is the code→HTTP half of the mapping, kept apart from the
+// body so a test can assert every code has a status without a database.
+// Unrecognised codes fall back to 500: silently answering 400 for a code we do
+// not know would tell the client its request was at fault when it was not.
+func accountErrStatus(code string) int {
+	switch code {
+	case account.CodeNotFound, account.CodeLibraryNotFnd:
+		return http.StatusNotFound
+	case account.CodeLimit, account.CodeNotOwned, account.CodeForbidden:
+		return http.StatusForbidden
+	case account.CodeNameTaken, account.CodeDuplicatePub, account.CodeInUse, account.CodeBusy:
+		return http.StatusConflict
+	case account.CodeInvalidName, account.CodeInvalid, account.CodeTypeMismatch,
+		account.CodeSourceURLReq, account.CodeSourceURLBad:
+		return http.StatusBadRequest
+	case account.CodeTooLarge:
+		return http.StatusRequestEntityTooLarge
+	}
+	return http.StatusInternalServerError
+}
+
+// accountErrBody always carries `code`. Two codes also flatten their details:
+// the duplicate points at the page the user should use instead, the in-use
+// answer names what still blocks a deletion — either is unactionable as prose.
+func accountErrBody(err *account.Error) map[string]any {
+	body := map[string]any{"error": err.Code, "code": err.Code, "message": err.Message}
+	switch err.Code {
+	case account.CodeDuplicatePub, account.CodeInUse:
 		for k, v := range err.Details {
 			body[k] = v
 		}
-		writeJSON(w, http.StatusConflict, body)
-		return
 	}
-	status := http.StatusInternalServerError
-	switch err.Code {
-	case account.CodeNotFound, account.CodeLibraryNotFnd:
-		status = http.StatusNotFound
-	case account.CodeLimit:
-		status = http.StatusForbidden
-	case account.CodeNameTaken:
-		status = http.StatusConflict
-	case account.CodeInUse, account.CodeBusy:
-		status = http.StatusConflict
-	case account.CodeInvalidName, account.CodeInvalid, account.CodeTypeMismatch,
-		account.CodeSourceURLReq, account.CodeSourceURLBad:
-		status = http.StatusBadRequest
-	case account.CodeTooLarge:
-		status = http.StatusRequestEntityTooLarge
-	case account.CodeNotOwned, account.CodeForbidden:
-		status = http.StatusForbidden
-	}
-	writeErr(w, status, err.Message)
+	return body
 }
 
 // SyncProfileCreate announces a new profile to the Union hub, async and
@@ -350,13 +357,17 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// writeErr is the legacy shape, still used by call sites that have no code yet:
+// `error` holds the status text, `message` the human string. Error-code
+// coverage is tracked by testdata/error-budget.txt and only ever goes down.
 func writeErr(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": http.StatusText(status), "message": msg})
 }
 
 // writeErrCode adds a stable machine-readable code on top of the legacy
-// message shape (i18n skeleton: frontends translate `code`, fall back to
-// `message`). Existing call sites keep writeErr; new errors use this.
+// message shape (frontends translate `code`, fall back to `message`). Once the
+// budget reaches zero, `error` becomes the code here as well so the whole
+// surface answers with one envelope — account errors already do.
 func writeErrCode(w http.ResponseWriter, status int, msg, code string) {
 	writeJSON(w, status, map[string]string{
 		"error": http.StatusText(status), "message": msg, "code": code,

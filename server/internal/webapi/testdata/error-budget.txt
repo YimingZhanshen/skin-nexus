@@ -1,0 +1,15 @@
+# Error-envelope budget, measured 2026-11-01.
+#
+# Each line is `<scope> <counter> <n>`. A number may only go down; when it does,
+# the gate fails until you write the new value here, so the file can never
+# quietly describe code that no longer exists. Reaching `0` on every line is the
+# end state of this round (docs/CHANGELOG.md, 2026-11-01 entry).
+#
+#   uncoded  error responses with no stable `code` — the frontend can only show
+#            prose, so it cannot translate them
+#   chinese  hard-coded Chinese prose on the error path — English by the end of
+#            the round, because the language packs own the translated words
+webapi uncoded 167
+webapi chinese 87
+account uncoded 0
+account chinese 44
