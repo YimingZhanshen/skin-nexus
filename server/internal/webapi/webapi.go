@@ -567,9 +567,7 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// cannot join: send the verification link now. Best-effort — registration
 	// succeeded and the profile page can resend.
 	if req.Email != "" && b.verificationEnabled(r.Context()) {
-		if err := b.sendVerificationMail(r, uid, req.Email); err != nil {
-			log.Printf("register %d: verification mail: %v", uid, err)
-		}
+		b.sendVerificationMailDetached(uid, req.Email)
 	}
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"id": uid, "nickname": req.Nickname, "permission": 0})
 }

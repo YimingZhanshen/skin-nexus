@@ -34,17 +34,21 @@ import (
 // anyway.
 const verifyTokenTTL = 24 * time.Hour
 
+// verifyMailTimeout bounds the detached registration send; the mailer itself
+// enforces a 30s deadline per message.
+const verifyMailTimeout = 45 * time.Second
+
 // verificationEnabled reports the gate's live state (nil = not enforced).
 func (b *Backend) verificationEnabled(ctx context.Context) bool {
 	return b.VerificationEnabled != nil && b.VerificationEnabled(ctx)
 }
 
 // sendVerificationMail mints a token for uid and mails a link to address.
-// It is best-effort by design: callers decide what a failure means (the
-// request endpoint reports it to the owner, registration only logs it) so the
-// transport can never change a protocol response shape.
-func (b *Backend) sendVerificationMail(r *http.Request, uid int64, address string) error {
-	cfg := b.smtpConfig(r.Context())
+// Failure is returned so the caller decides what it means: the request endpoint
+// tells the owner (only they can see it), registration only logs it — a broken
+// SMTP host must never change a protocol response shape.
+func (b *Backend) sendVerificationMail(ctx context.Context, uid int64, address string) error {
+	cfg := b.smtpConfig(ctx)
 	if cfg == nil {
 		return errors.New("mail is not configured")
 	}
@@ -54,7 +58,7 @@ func (b *Backend) sendVerificationMail(r *http.Request, uid int64, address strin
 	}
 	token := hex.EncodeToString(raw[:])
 	digest := sha256.Sum256([]byte(token))
-	if err := b.Store.CreateEmailVerifyToken(r.Context(), uid, hex.EncodeToString(digest[:]), verifyTokenTTL); err != nil {
+	if err := b.Store.CreateEmailVerifyToken(ctx, uid, hex.EncodeToString(digest[:]), verifyTokenTTL); err != nil {
 		return err
 	}
 	link := strings.TrimRight(b.BaseURL, "/") + "/email-verify?token=" + token
@@ -67,6 +71,21 @@ func (b *Backend) sendVerificationMail(r *http.Request, uid int64, address strin
 		return err
 	}
 	return nil
+}
+
+// sendVerificationMailDetached fires the same send off the request: the mailer
+// runs to a 30s deadline, and registration must not stall behind a SMTP host
+// that is down (the SPA gives up at 15s and would show a network error for an
+// account that was in fact created). The context outlives the request on
+// purpose.
+func (b *Backend) sendVerificationMailDetached(uid int64, address string) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), verifyMailTimeout)
+		defer cancel()
+		if err := b.sendVerificationMail(ctx, uid, address); err != nil {
+			log.Printf("register %d: verification mail: %v", uid, err)
+		}
+	}()
 }
 
 // handleEmailVerifyRequest: POST /api/v1/email/verify — mail a fresh link to
@@ -102,7 +121,7 @@ func (b *Backend) handleEmailVerifyRequest(w http.ResponseWriter, r *http.Reques
 	}
 	// The owner of this mailbox is the only party that can be told about a
 	// failure, so the honest answer is safe here (unlike the reset flow).
-	if err := b.sendVerificationMail(r, uid, brief.Email); err != nil {
+	if err := b.sendVerificationMail(r.Context(), uid, brief.Email); err != nil {
 		writeLogged(r, w, http.StatusBadGateway, i18n.MsgEmailSendFailed,
 			"could not send the verification mail, try again later", err)
 		return

@@ -182,7 +182,7 @@ environment:
 
 | 变量 | 默认（源码 / 镜像内） | 说明 |
 |---|---|---|
-| `SKIN_AUTO_MIGRATE` | `false` / `true` | 追踪式建表/补表：`schema_migrations` 逐文件记标，空库全量、既有库自动补新文件（当前 0001–0019） |
+| `SKIN_AUTO_MIGRATE` | `false` / `true` | 追踪式建表/补表：`schema_migrations` 逐文件记标，空库全量、既有库自动补新文件（当前 0001–0021） |
 | `SKIN_MIGRATIONS_DIR` | `./migrations` / `/app/migrations` | DDL 目录 |
 
 **插件市场与主题市场**（语义一致：默认值编译内置，零配置即可用）
@@ -403,7 +403,7 @@ WantedBy=multi-user.target
 ```
 
 要点：工作目录须能读到 `web/dist` 与 `migrations/`（或用 `SKIN_MIGRATIONS_DIR` 指定）；
-手动建表按序执行 `migrations/0001…0019`（以目录实际文件为准），或设 `SKIN_AUTO_MIGRATE=true` 让启动时自动应用。
+手动建表按序执行 `migrations/0001…0021`（以目录实际文件为准），或设 `SKIN_AUTO_MIGRATE=true` 让启动时自动应用。
 Nginx 反代与 §三完全相同。日志 `journalctl -u skin-nexus -f`。
 
 ## 六、运维周期检查
