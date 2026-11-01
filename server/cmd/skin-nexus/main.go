@@ -1004,7 +1004,7 @@ func isKnownSPAPath(p string, uiPath func(string) bool) bool {
 		return uiPath != nil && uiPath(p)
 	}
 	switch p {
-	case "index.html", "login", "register", "forgot-password", "reset-password", "device",
+	case "index.html", "login", "register", "forgot-password", "reset-password", "email-verify", "device",
 		"setup", "skinlib", "user/skinlib", "user/closet", "user/profile",
 		"user/players", "user/dashboard":
 		return true
