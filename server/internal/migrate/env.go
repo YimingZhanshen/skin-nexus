@@ -22,7 +22,7 @@ type LegacyEnv struct {
 	AppURL      string
 	PWDMethods  []string // PASSWORD_METHODS order
 	Salts       []string // SALT slots, positionally aligned with PWDMethods
-	DBDSN       string // legacy DB_* fields, concatenated for reference
+	DBDSN       string   // legacy DB_* fields, concatenated for reference
 	TexturesDir string
 }
 
@@ -141,14 +141,14 @@ func unquote(v string) string {
 // HashDistribution classifies stored hashes by shape (prefix-based; the
 // ground-truth check is VerifyLegacy against real samples — see tests).
 type HashDistribution struct {
-	Bcrypt       int // $2y$/$2a$/$2b$
-	Argon2       int // $argon2*
-	AuthmeSHA    int // $SHA$
-	Hex32        int // raw md5 family
-	Hex64        int // raw sha256 family
-	Hex128       int // raw sha512 family
-	Other        int
-	WeakShare    float64 // (Hex* + AuthmeSHA + Other) / total
+	Bcrypt    int // $2y$/$2a$/$2b$
+	Argon2    int // $argon2*
+	AuthmeSHA int // $SHA$
+	Hex32     int // raw md5 family
+	Hex64     int // raw sha256 family
+	Hex128    int // raw sha512 family
+	Other     int
+	WeakShare float64 // (Hex* + AuthmeSHA + Other) / total
 }
 
 func ClassifyHashes(stored []string) HashDistribution {

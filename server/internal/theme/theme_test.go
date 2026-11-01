@@ -49,8 +49,8 @@ func TestRegistryScanAndValidate(t *testing.T) {
 func TestResolveAssetRejectsEscapes(t *testing.T) {
 	root := t.TempDir()
 	writePack(t, root, "dark", okManifest, map[string]string{
-		"style.css":    "body{}",
-		"preview.png":  "png",
+		"style.css":   "body{}",
+		"preview.png": "png",
 	})
 	r, err := NewRegistry(root, "0.1.0")
 	if err != nil {

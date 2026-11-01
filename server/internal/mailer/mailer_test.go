@@ -126,10 +126,10 @@ func TestSendPlainSession(t *testing.T) {
 	}
 	got := srv.snapshot()
 	for _, want := range []string{
-		"FROM=<noreply@example.com>",                   // envelope strips the display name (client wraps in <>)
-		"From: SkinNexus <noreply@example.com>",        // header keeps it
+		"FROM=<noreply@example.com>",            // envelope strips the display name (client wraps in <>)
+		"From: SkinNexus <noreply@example.com>", // header keeps it
 		"To: user@example.com",
-		"Subject: =?utf-8?",                            // non-ASCII subject is RFC2047 (QEncoding, lowercase charset)
+		"Subject: =?utf-8?", // non-ASCII subject is RFC2047 (QEncoding, lowercase charset)
 		"Content-Type: text/plain; charset=utf-8",
 		"Content-Transfer-Encoding: base64",
 	} {

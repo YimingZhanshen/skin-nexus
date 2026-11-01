@@ -50,8 +50,8 @@ type UnionSigner struct {
 	// WITHOUT firing this callback.
 	OnKeyPersist func(pem, version string) error
 
-	cur atomic.Pointer[signingKey] // nil => fallback mode; lock-free reads
-	hubMode atomic.Bool            // hot toggle: false = ignore hub keys (union_enabled)
+	cur     atomic.Pointer[signingKey] // nil => fallback mode; lock-free reads
+	hubMode atomic.Bool                // hot toggle: false = ignore hub keys (union_enabled)
 
 	mu          sync.Mutex
 	loopRunning bool

@@ -49,7 +49,7 @@ func CleanUuidTable(rows []UuidRow, players map[string]int64) (cleaned []UuidRow
 	}
 
 	pidKnown := map[int64]bool{}
-	folded := map[string]int64{} // caller keys are folded here — the function
+	folded := map[string]int64{}     // caller keys are folded here — the function
 	for name, pid := range players { // is self-contained regardless of key form
 		folded[foldName(name)] = pid
 		pidKnown[pid] = true

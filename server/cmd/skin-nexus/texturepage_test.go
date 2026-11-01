@@ -42,7 +42,7 @@ func TestTexDetailTemplateRenders(t *testing.T) {
 	}
 	body := sb.String()
 	for _, want := range []string{
-		"--bg: #101825", // theme-base tokens injected (single source of truth)
+		"--bg: #101825",     // theme-base tokens injected (single source of truth)
 		"测试皮肤",              // name in h1
 		"Alice",             // uploader
 		"Alex 瘦臂",           // slim model label

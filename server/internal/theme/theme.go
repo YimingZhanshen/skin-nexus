@@ -58,8 +58,8 @@ type Theme struct {
 }
 
 var (
-	idRe    = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
-	fileRe  = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
+	idRe   = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
+	fileRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
 )
 
 // ErrBadID / ErrNotFound signal pack validation failures.

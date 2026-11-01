@@ -25,7 +25,7 @@ type Outbound struct {
 	client *http.Client
 	key    atomic.Value // string: union member key
 	to     time.Duration
-	enable atomic.Bool  // hot-toggled by union_enabled (2026-10-24 拍板)
+	enable atomic.Bool // hot-toggled by union_enabled (2026-10-24 拍板)
 	// access logs every outbound hub call (union_out rows for the admin
 	// panel); nil = off. Recording never affects the call itself.
 	access *accesslog.Logger
@@ -53,7 +53,7 @@ func (o *Outbound) logOut(method, path string, status int, dur time.Duration, er
 		Kind:    accesslog.UnionOut,
 		Outcome: outcome,
 		Who:     method + " " + path,
-		Detail: fmt.Sprintf("status=%d dur=%dms", status, dur.Milliseconds()),
+		Detail:  fmt.Sprintf("status=%d dur=%dms", status, dur.Milliseconds()),
 	})
 }
 

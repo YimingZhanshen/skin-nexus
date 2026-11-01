@@ -102,7 +102,7 @@ func TestJoinAcceptsWireForms(t *testing.T) {
 	}
 	// missing selectedProfile is a parameter error (legacy 400 wording)
 	mr := do(t, api.Handler(), "POST", "/api/yggdrasil/sessionserver/session/minecraft/join",
-		`{"accessToken":"` + tok.AccessToken + `","serverId":"w3"}`, map[string]string{"Content-Type": "application/json"})
+		`{"accessToken":"`+tok.AccessToken+`","serverId":"w3"}`, map[string]string{"Content-Type": "application/json"})
 	if mr.Code != 400 {
 		t.Fatalf("missing selectedProfile = %d (want 400)", mr.Code)
 	}
@@ -125,11 +125,11 @@ func TestMetadataSkinDomainsFormula(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]bool{
-		"skin.example.com":        true,
-		"skin.union-a.example":  true,
-		"site.example:8443":     true,
-		"site.example":          true,
-		"example.com":           true, // httptest request host
+		"skin.example.com":     true,
+		"skin.union-a.example": true,
+		"site.example:8443":    true,
+		"site.example":         true,
+		"example.com":          true, // httptest request host
 	}
 	if len(doc.SkinDomains) != len(want) {
 		t.Fatalf("skinDomains = %v (want %d unique)", doc.SkinDomains, len(want))

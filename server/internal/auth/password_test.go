@@ -18,14 +18,14 @@ import (
 // md5/sha256/sha512 bare values additionally match the well-known public test
 // vectors for "hello", confirming the generation pipeline itself.
 var (
-	vMD5               = "5d41402abc4b2a76b9719d911017c592"
-	vSHA256            = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
-	vSHA512            = "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043"
-	vSALTED2MD5        = "60202731227559b460de2289e6dc072f" // md5(md5("hello")+"ab12cd")
-	vSALTED2SHA256     = "5879f8a3ba6e99c603c79a4964ae4bdf844062a0ec15a02d799d2d85cd6ad7f5"
-	vSALTED2SHA512     = "8e6779149ed5949d2a0fbbb4f1dbfaafb69976e623ab9b8fdb040c3383562b245d187a1166d432a19d71094dab6ec915e7de9779785cdd12b9b8764cc224da01"
+	vMD5                 = "5d41402abc4b2a76b9719d911017c592"
+	vSHA256              = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+	vSHA512              = "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043"
+	vSALTED2MD5          = "60202731227559b460de2289e6dc072f" // md5(md5("hello")+"ab12cd")
+	vSALTED2SHA256       = "5879f8a3ba6e99c603c79a4964ae4bdf844062a0ec15a02d799d2d85cd6ad7f5"
+	vSALTED2SHA512       = "8e6779149ed5949d2a0fbbb4f1dbfaafb69976e623ab9b8fdb040c3383562b245d187a1166d432a19d71094dab6ec915e7de9779785cdd12b9b8764cc224da01"
 	vAuthmeSALTED2SHA512 = "16261c0a5a7d90c72b8c85787e4886db866c353935abbd9260a30b56b5ae0ada9791b65aeda947d1fcf1edb941d48f36fd6f522f315266ceb4ddcfbecfb648d5"
-	vAuthmeSHA256Str   = "$SHA$a1b2c3d4e5f60718$5879f8a3ba6e99c603c79a4964ae4bdf844062a0ec15a02d799d2d85cd6ad7f5"
+	vAuthmeSHA256Str     = "$SHA$a1b2c3d4e5f60718$5879f8a3ba6e99c603c79a4964ae4bdf844062a0ec15a02d799d2d85cd6ad7f5"
 )
 
 func TestLegacyVectors(t *testing.T) {

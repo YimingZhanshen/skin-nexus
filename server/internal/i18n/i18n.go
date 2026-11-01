@@ -10,10 +10,10 @@ package i18n
 // Message keys. Keep them namespaced by area: <area>.<reason>.
 const (
 	// generic
-	MsgBadBody   = "common.bad_body"
-	MsgNotFound  = "common.not_found"
-	MsgInternal  = "common.internal"
-	MsgForbidden = "common.forbidden"
+	MsgBadBody      = "common.bad_body"
+	MsgNotFound     = "common.not_found"
+	MsgInternal     = "common.internal"
+	MsgForbidden    = "common.forbidden"
 	MsgUnauthorized = "common.unauthorized"
 
 	// setup / install

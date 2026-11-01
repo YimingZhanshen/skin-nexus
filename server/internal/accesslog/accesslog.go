@@ -15,16 +15,16 @@ import (
 
 // Kinds (column: kind VARCHAR(24)).
 const (
-	WebLogin       = "web_login"
-	WebRegister    = "web_register"
+	WebLogin        = "web_login"
+	WebRegister     = "web_register"
 	YggAuthenticate = "ygg_authenticate"
-	YggRefresh     = "ygg_refresh"
-	YggValidate    = "ygg_validate"
-	YggJoin        = "ygg_join"
-	YggHasJoined   = "ygg_hasjoined"
-	YggProfile     = "ygg_profile"
-	UnionIn        = "union_in"
-	UnionOut       = "union_out"
+	YggRefresh      = "ygg_refresh"
+	YggValidate     = "ygg_validate"
+	YggJoin         = "ygg_join"
+	YggHasJoined    = "ygg_hasjoined"
+	YggProfile      = "ygg_profile"
+	UnionIn         = "union_in"
+	UnionOut        = "union_out"
 )
 
 // Outcomes (column: outcome VARCHAR(16)).

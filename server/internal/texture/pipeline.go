@@ -2,13 +2,13 @@
 //
 // Pipeline (docs/phase1-dev-plan.md §4, security-critical — public upload face):
 //
-//	1. size limit        (bytes, before any parsing)
-//	2. IHDR precheck     (width/height/pixels BEFORE full decode — PNG bomb gate)
-//	3. dimension rules   (skin 64x32 / 64x64 family; cape 64x32 / 22x17 family)
-//	4. strict decode     (image/png only)
-//	5. pixel semantics   (skin model from pixels; legacy cape padded to 64x32)
-//	6. re-encode         (drops ancillary chunks / polyglot payloads)
-//	7. content address   (sha256 of the RE-ENCODED bytes = filename = cache key)
+//  1. size limit        (bytes, before any parsing)
+//  2. IHDR precheck     (width/height/pixels BEFORE full decode — PNG bomb gate)
+//  3. dimension rules   (skin 64x32 / 64x64 family; cape 64x32 / 22x17 family)
+//  4. strict decode     (image/png only)
+//  5. pixel semantics   (skin model from pixels; legacy cape padded to 64x32)
+//  6. re-encode         (drops ancillary chunks / polyglot payloads)
+//  7. content address   (sha256 of the RE-ENCODED bytes = filename = cache key)
 //
 // Legacy migration files are never rewritten: they are served byte-exact and
 // only IHDR-scanned (phase-1 decision: 原样搬迁). Step 5 therefore applies to

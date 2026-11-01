@@ -61,10 +61,10 @@ func TestWrapRootFallThrough(t *testing.T) {
 		method, path string
 		want         int
 	}{
-		{"GET", "/a/b.json", http.StatusTeapot},   // multi-segment -> SPA
-		{"GET", "/index.html", http.StatusTeapot}, // wrong suffix -> SPA
-		{"GET", "/api/v1/me", http.StatusTeapot},  // api path -> mux
-		{"POST", "/Steve.json", http.StatusTeapot},// method -> SPA (parity)
+		{"GET", "/a/b.json", http.StatusTeapot},    // multi-segment -> SPA
+		{"GET", "/index.html", http.StatusTeapot},  // wrong suffix -> SPA
+		{"GET", "/api/v1/me", http.StatusTeapot},   // api path -> mux
+		{"POST", "/Steve.json", http.StatusTeapot}, // method -> SPA (parity)
 		// intercepted: nil store resolves to 404 inside the handler
 		{"GET", "/Steve.json", http.StatusNotFound},
 		{"HEAD", "/Alex.json", http.StatusNotFound},

@@ -14,11 +14,11 @@ import (
 // full re-hash (filename must equal sha256 of BYTES) + IHDR check.
 // Nothing is rewritten; problems are reported for human handling.
 type TextureScan struct {
-	Checked     int
-	OK          int
+	Checked      int
+	OK           int
 	HashMismatch []string // filename != content hash (cache-key integrity broken)
-	BadIHDR     []string // unreadable header (candidate for background decode audit)
-	NotHexName  []string // filename not 64-hex (legacy anomalies)
+	BadIHDR      []string // unreadable header (candidate for background decode audit)
+	NotHexName   []string // filename not 64-hex (legacy anomalies)
 }
 
 func (s TextureScan) String() string {

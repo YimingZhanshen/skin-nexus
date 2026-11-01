@@ -57,7 +57,7 @@ func TestDualTTLThreeWayGate(t *testing.T) {
 	ctx := context.Background()
 
 	young := f.issue(t, "young", 24*time.Hour)
-	stale := f.issue(t, "stale", 96*time.Hour)  // 4d: soft (3d) gone, hard (7d) alive
+	stale := f.issue(t, "stale", 96*time.Hour) // 4d: soft (3d) gone, hard (7d) alive
 	dead := f.issue(t, "dead", 8*24*time.Hour) // 8d: past both
 
 	// validate: only the young token passes

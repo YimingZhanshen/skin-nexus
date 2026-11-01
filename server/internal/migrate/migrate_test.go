@@ -97,10 +97,10 @@ func TestMethodNormalize(t *testing.T) {
 
 func TestClassifyHashes(t *testing.T) {
 	d := ClassifyHashes([]string{
-		"$2y$04$abcdefghijklmnopqrstuv", // bcrypt
-		"$argon2i$v=19$m=65536,t=4,p=1$c2FsdA$aGFzaA", // argon2
-		"$SHA$a1b2c3d4e5f60718$deadbeef",               // authme
-		"5d41402abc4b2a76b9719d911017c592",             // hex32 (weak)
+		"$2y$04$abcdefghijklmnopqrstuv",                                    // bcrypt
+		"$argon2i$v=19$m=65536,t=4,p=1$c2FsdA$aGFzaA",                      // argon2
+		"$SHA$a1b2c3d4e5f60718$deadbeef",                                   // authme
+		"5d41402abc4b2a76b9719d911017c592",                                 // hex32 (weak)
 		"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", // hex64 (weak)
 		"garbage",
 	})
@@ -115,10 +115,10 @@ func TestClassifyHashes(t *testing.T) {
 func TestCleanUuidTableFiveSteps(t *testing.T) {
 	rows := []UuidRow{
 		{ID: 1, Name: "Steve", UUID: "aaa", PID: 10},
-		{ID: 2, Name: "Steve", UUID: "bbb", PID: 0},    // dup name -> step1 drop
-		{ID: 3, Name: "Alex", UUID: "aaa", PID: 11},    // dup uuid -> step2 drop
-		{ID: 4, Name: "Noor", UUID: "ccc", PID: 0},     // backfillable -> step3
-		{ID: 5, Name: "Ghost", UUID: "ddd", PID: 0},    // orphan -> step4 drop
+		{ID: 2, Name: "Steve", UUID: "bbb", PID: 0}, // dup name -> step1 drop
+		{ID: 3, Name: "Alex", UUID: "aaa", PID: 11}, // dup uuid -> step2 drop
+		{ID: 4, Name: "Noor", UUID: "ccc", PID: 0},  // backfillable -> step3
+		{ID: 5, Name: "Ghost", UUID: "ddd", PID: 0}, // orphan -> step4 drop
 	}
 	players := map[string]int64{"Steve": 10, "Alex": 11, "Noor": 12}
 	cleaned, rep := CleanUuidTable(rows, players)

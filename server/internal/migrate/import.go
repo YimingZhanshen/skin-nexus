@@ -28,12 +28,12 @@ import (
 
 // ImportOptions configures one import run.
 type ImportOptions struct {
-	Source      *sql.DB        // legacy database connection
-	Target      *sql.DB        // skin_nexus database connection
-	SourcePrefix string        // e.g. "legacy." or "legacy_"
-	TexturesSrc string         // legacy storage/textures dir ("" = skip files)
-	TexturesDst *texture.Store // where files land (nil = skip files)
-	DryRun      bool           // read-only report, no writes
+	Source       *sql.DB        // legacy database connection
+	Target       *sql.DB        // skin_nexus database connection
+	SourcePrefix string         // e.g. "legacy." or "legacy_"
+	TexturesSrc  string         // legacy storage/textures dir ("" = skip files)
+	TexturesDst  *texture.Store // where files land (nil = skip files)
+	DryRun       bool           // read-only report, no writes
 }
 
 // TableStat counts one imported table.
@@ -45,11 +45,11 @@ type TableStat struct {
 
 // ImportReport is the evidence artifact of one run.
 type ImportReport struct {
-	Tables   map[string]TableStat `json:"tables"`
-	UUID     CleanReport          `json:"uuid"`
-	Textures TextureScan          `json:"texture_scan"`
-	FilesCopied int               `json:"files_copied"`
-	Warnings []string             `json:"warnings"`
+	Tables      map[string]TableStat `json:"tables"`
+	UUID        CleanReport          `json:"uuid"`
+	Textures    TextureScan          `json:"texture_scan"`
+	FilesCopied int                  `json:"files_copied"`
+	Warnings    []string             `json:"warnings"`
 }
 
 // RunImport executes the full import (or dry-run report).
@@ -87,18 +87,18 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 		return rep, fmt.Errorf("users select: %w", err)
 	}
 	type userRow struct {
-		id             int64
+		id                  int64
 		email, nick, pw, ip string
-		avatar         int64
-		registerAt     sql.NullTime
-		verified       int64
-		score          int64
-		locale         sql.NullString
-		dark           int64
-		permission     int64
-		lastSign       sql.NullTime
-		verifToken     string
-		playerCount    int64
+		avatar              int64
+		registerAt          sql.NullTime
+		verified            int64
+		score               int64
+		locale              sql.NullString
+		dark                int64
+		permission          int64
+		lastSign            sql.NullTime
+		verifToken          string
+		playerCount         int64
 	}
 	var users []userRow
 	for rows.Next() {
@@ -396,8 +396,8 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 		return rep, fmt.Errorf("closet select: %w", err)
 	}
 	type closetRow struct {
-		uid, tid   int64
-		itemName   sql.NullString
+		uid, tid int64
+		itemName sql.NullString
 	}
 	var closet []closetRow
 	for rows.Next() {
@@ -441,11 +441,11 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 		return rep, fmt.Errorf("invitation select: %w", err)
 	}
 	type invRow struct {
-		id, usedBy   int64
-		code         string
-		generatedAt  sql.NullTime
-		usedAt       sql.NullTime
-		description  sql.NullString
+		id, usedBy  int64
+		code        string
+		generatedAt sql.NullTime
+		usedAt      sql.NullTime
+		description sql.NullString
 	}
 	var invs []invRow
 	for rows.Next() {

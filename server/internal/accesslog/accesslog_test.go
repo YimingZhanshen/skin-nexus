@@ -9,7 +9,7 @@ import (
 
 func TestNilLoggerNeverPanics(t *testing.T) {
 	var nilL *Logger
-	nilL.Log(context.Background(), Entry{Kind: WebLogin, Outcome: OutcomeOK}) // nil receiver
+	nilL.Log(context.Background(), Entry{Kind: WebLogin, Outcome: OutcomeOK})     // nil receiver
 	New(nil).Log(context.Background(), Entry{Kind: WebLogin, Outcome: OutcomeOK}) // nil sink
 	// Kind/outcome are mandatory — half-filled entries are dropped.
 	called := false

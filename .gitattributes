@@ -1,0 +1,6 @@
+# Go source is authored and stored with LF endings. Without this, autocrlf
+# checkouts on Windows turn the working copy into CRLF, which makes `gofmt -l`
+# report a false positive for every file whose alignment it would otherwise
+# leave alone — the CI format gate can only be trusted if the checkout matches
+# the blob.
+*.go text eol=lf

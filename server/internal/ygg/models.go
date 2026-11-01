@@ -60,9 +60,9 @@ type CapeTexture struct {
 
 // TextureSet describes a player's resolved textures.
 type TextureSet struct {
-	SkinURL    string // empty = no skin
-	SkinModel  string // "default" | "slim"
-	CapeURL    string // empty = no cape
+	SkinURL   string // empty = no skin
+	SkinModel string // "default" | "slim"
+	CapeURL   string // empty = no cape
 }
 
 // AssembleTextures builds the Base64 textures property value and its

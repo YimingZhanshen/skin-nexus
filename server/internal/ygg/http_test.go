@@ -16,9 +16,9 @@ import (
 // ---- in-memory store for contract tests ----
 
 type memStore struct {
-	users   map[string]User     // by identifier
+	users   map[string]User // by identifier
 	byID    map[int64]User
-	players map[string]Player   // by name
+	players map[string]Player // by name
 	byUUID  map[string]Player
 	tokens  map[string]Token
 	joins   []JoinSession
@@ -146,7 +146,7 @@ func newTestAPI(t *testing.T) (*API, *memStore) {
 	store.users["steve"] = u
 	store.users["steve@example.com"] = u
 	p := Player{ID: 10, UID: 1, Name: "Steve", UUID: testUUID,
-		SkinURL: "https://skin.example.com/textures/" + strings.Repeat("ab", 32),
+		SkinURL:   "https://skin.example.com/textures/" + strings.Repeat("ab", 32),
 		SkinModel: "slim", CapeURL: ""}
 	store.players["Steve"] = p
 	store.byUUID[testUUID] = p
@@ -250,7 +250,7 @@ func Test204Semantics(t *testing.T) {
 	api, _ := newTestAPI(t)
 	h := api.Handler()
 	cases := []struct{ method, path, body string }{
-		{"POST", "/api/yggdrasil/authserver/invalidate", `{"accessToken":"nope"}`}, // always 204
+		{"POST", "/api/yggdrasil/authserver/invalidate", `{"accessToken":"nope"}`},       // always 204
 		{"POST", "/api/yggdrasil/authserver/signout", `{"username":"x","password":"y"}`}, // always 204
 		{"GET", "/api/yggdrasil/sessionserver/session/minecraft/hasJoined?username=Ghost&serverId=x", ""},
 		{"GET", "/api/yggdrasil/sessionserver/session/minecraft/profile/" + strings.Repeat("0", 32), ""},
@@ -362,7 +362,9 @@ func TestRefreshInvalidatesOldToken(t *testing.T) {
 	h := api.Handler()
 	rec := do(t, h, "POST", "/api/yggdrasil/authserver/authenticate",
 		`{"username":"steve","password":"pw-ok","clientToken":"ct1"}`, nil)
-	var resp struct{ AccessToken string `json:"accessToken"` }
+	var resp struct {
+		AccessToken string `json:"accessToken"`
+	}
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
 
 	rec2 := do(t, h, "POST", "/api/yggdrasil/authserver/refresh",
