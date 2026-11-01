@@ -15,6 +15,7 @@ const asyncPage = (loader) => defineAsyncComponent({
 const AdminPanel = asyncPage(() => import('./components/AdminPanel.vue'))
 const DevicePage = asyncPage(() => import('./pages/DevicePage.vue'))
 const AuthorizedAppsPage = asyncPage(() => import('./pages/AuthorizedAppsPage.vue'))
+const NotificationsPage = asyncPage(() => import('./pages/NotificationsPage.vue'))
 const UnionBindPage = asyncPage(() => import('./pages/UnionBindPage.vue'))
 const SetupPage = asyncPage(() => import('./pages/SetupPage.vue'))
 const DashboardPage = asyncPage(() => import('./pages/DashboardPage.vue'))
@@ -103,6 +104,7 @@ const navIcons = {
   profile: '<path d="M3 5h18v14H3zM7 9h4M7 13h8M7 17h6"/>',
   apps: '<path d="M14 7a4 4 0 1 1 3 6.9L12 18l-3 3-2-2 3-3-4.1-5A4 4 0 0 1 14 7z"/>',
   union: '<path d="M12 3a9 9 0 1 0 9 9M12 3a9 9 0 0 1 9 9M12 8a4 4 0 1 0 4 4"/>',
+  notifications: '<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/>',
   admin: '<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3zM9.5 12l2 2 3.5-4"/>',
 }
 const navGroups = computed(() => {
@@ -118,6 +120,10 @@ const navGroups = computed(() => {
       { id: 'closet', labelKey: 'nav.closet', icon: navIcons.closet },
       { id: 'players', labelKey: 'nav.players', icon: navIcons.players },
       { id: 'profile', labelKey: 'nav.profile', icon: navIcons.profile },
+      {
+        id: 'notifications', labelKey: 'nav.notifications', icon: navIcons.notifications,
+        badge: Number(user.value.unreadNotifications || 0),
+      },
       { id: 'apps', labelKey: 'nav.apps', icon: navIcons.apps },
       ...(unionEnabled.value ? [{ id: 'union', labelKey: 'nav.union', icon: navIcons.union }] : []),
       ...pluginItems,
@@ -385,6 +391,12 @@ async function doEmailVerify() {
   }
 }
 
+// The inbox clears its badge locally when the page marks rows read; the count
+// is re-fetched on the next boot anyway.
+function onInboxRead() {
+  if (user.value) user.value.unreadNotifications = 0
+}
+
 async function doLogout() {
   try {
     await api.logout()
@@ -626,6 +638,7 @@ onMounted(() => {
               <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                    stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" v-html="n.icon"></svg>
               <span>{{ n.label || t(n.labelKey) }}</span>
+              <span v-if="n.badge" class="nav-badge">{{ n.badge > 99 ? '99+' : n.badge }}</span>
             </button>
           </nav>
           <!-- 底部用户卡：昵称 + 退出（v3 布局） -->
@@ -640,6 +653,7 @@ onMounted(() => {
           <ClosetPage v-else-if="view === 'closet'" />
           <PlayersPage v-else-if="view === 'players'" />
           <ProfilePage v-else-if="view === 'profile'" />
+          <NotificationsPage v-else-if="view === 'notifications'" @read="onInboxRead" />
           <AuthorizedAppsPage v-else-if="view === 'apps'" />
           <UnionBindPage v-else-if="view === 'union'" />
           <PluginPage v-else-if="view === 'ext'" :path="extPath" />

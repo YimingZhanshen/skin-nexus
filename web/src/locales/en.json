@@ -187,6 +187,7 @@
     "closet": "Closet",
     "players": "Profiles",
     "profile": "Profile",
+    "notifications": "Notifications",
     "adminPanel": "Admin panel",
     "apps": "Authorized apps",
     "union": "Union binding",
@@ -407,6 +408,34 @@
     "approved": "Authorized — return to the launcher to continue.",
     "denied": "Denied — you can return to the launcher.",
     "needLoginOnSubmit": "Sign in first, then approve"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "hint": "Moderation and account decisions about you or your textures land here. Rows are kept for 90 days.",
+    "unreadOnly": "Unread only",
+    "markAll": "Mark all read",
+    "markRead": "Mark read",
+    "unread": "unread",
+    "colWhat": "What happened",
+    "colWhen": "When",
+    "empty": "Nothing here yet",
+    "emptyUnread": "No unread notifications",
+    "kinds": {
+      "account": {
+        "banned": "Your account was banned by a site administrator",
+        "unbanned": "Your account ban was lifted"
+      },
+      "moderation": {
+        "lifted": "The violation verdict on “{name}” was lifted — you may publish it again"
+      },
+      "report": {
+        "dismissed": "A report on “{name}” was dismissed",
+        "resolved": "A report on “{name}” was upheld"
+      },
+      "texture": {
+        "hidden": "“{name}” was taken down and marked a violation"
+      }
+    }
   },
   "apps": {
     "title": "Authorized apps ({count})",

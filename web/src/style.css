@@ -296,6 +296,12 @@ tbody tr:hover, table tr:hover { background: var(--hover-wash); }
 }
 .nav-ico { width: 16px; height: 16px; flex: none; display: block; opacity: .85; }
 .nav-item.active .nav-ico { opacity: 1; }
+/* 未读通知数（大改新增） */
+.nav-badge {
+  margin-left: auto; min-width: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--cinnabar); color: var(--on-cinnabar);
+  font-size: var(--fs-xs); line-height: 18px; text-align: center; font-weight: 600;
+}
 /* 底部用户卡（大改新增） */
 .user-chip {
   margin-top: 12px; padding: 12px;

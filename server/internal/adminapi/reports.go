@@ -96,6 +96,11 @@ func (b *Backend) handleReportResolve(w http.ResponseWriter, r *http.Request) {
 		b.Store.InsertAudit(r.Context(), handledBy, event, map[string]any{
 			"report": row.ID, "texture": row.TextureID,
 		})
+		kind := store.NotifReportResolved
+		if status == "dismissed" {
+			kind = store.NotifReportDismissed
+		}
+		b.notifyTextureOwner(r.Context(), kind, row.TextureID)
 	case "hide":
 		if err := b.Store.StrikeTexture(r.Context(), row.TextureID, id, handledBy); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
@@ -108,6 +113,7 @@ func (b *Backend) handleReportResolve(w http.ResponseWriter, r *http.Request) {
 		b.Store.InsertAudit(r.Context(), handledBy, "texture_report_hide", map[string]any{
 			"report": row.ID, "texture": row.TextureID, "moderation": "violation",
 		})
+		b.notifyTextureOwner(r.Context(), store.NotifTextureHidden, row.TextureID)
 	default:
 		writeErrCode(w, http.StatusBadRequest, "action must be resolve|dismiss|hide", i18n.MsgUnknownAction)
 		return
@@ -144,6 +150,7 @@ func (b *Backend) handleTextureModeration(w http.ResponseWriter, r *http.Request
 		return
 	}
 	b.Store.InsertAudit(r.Context(), handledBy, "texture_moderation_lift", map[string]any{"texture": tid})
+	b.notifyTextureOwner(r.Context(), store.NotifModerationLifted, tid)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 

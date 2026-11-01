@@ -238,6 +238,10 @@ func (b *Backend) Handler() http.Handler {
 	// the link works from the device the player opened it on.
 	mux.HandleFunc("POST /api/v1/email/verify", b.handleEmailVerifyRequest)
 	mux.HandleFunc("POST /api/v1/email/confirm", b.handleEmailVerifyConfirm)
+	// 站内通知 (2026-11-02): pull-only inbox; the unread badge rides along on
+	// /me rather than polling.
+	mux.HandleFunc("GET /api/v1/me/notifications", b.handleNotificationsList)
+	mux.HandleFunc("POST /api/v1/me/notifications/read", b.handleNotificationMarkRead)
 	// User-center self-service (A 级批次): profile edit / account delete /
 	// avatar / own-player rename+delete — ownership-gated, blessing parity.
 	mux.HandleFunc("PUT /api/v1/me/profile", b.handleProfileUpdate)
@@ -747,6 +751,8 @@ func (b *Backend) handleMe(w http.ResponseWriter, r *http.Request) {
 		"permission":  perm,
 		"playerCount": playerCount, "storageBytes": storageBytes,
 		"avatarHash": avatarHash,
+		// Inbox badge rides along so the shell does not need a second round trip.
+		"unreadNotifications": b.unreadNotifications(r.Context(), uid),
 	})
 }
 

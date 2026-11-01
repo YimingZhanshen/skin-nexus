@@ -39,6 +39,10 @@ export const api = {
   // 单次令牌，失败一律同一句话（不透露令牌属于哪种失败）。
   requestEmailVerification: () => req('POST', '/api/v1/email/verify'),
   confirmEmailVerification: (token) => req('POST', '/api/v1/email/confirm', { token }),
+  // 站内通知 (2026-11-02): inbox 列表（分页 / 只看未读）与标记已读。
+  notifications: (page, perPage, unread) =>
+    req('GET', `/api/v1/me/notifications?page=${Number(page) || 1}&perPage=${Number(perPage) || 20}${unread ? '&unread=1' : ''}`),
+  markNotificationsRead: (body) => req('POST', '/api/v1/me/notifications/read', body),
   closet: () => req('GET', '/api/v1/me/closet'),
   closetAdd: (textureId, itemName = '') => req('POST', '/api/v1/me/closet', { textureId, itemName }),
   closetRename: (id, itemName) => req('PUT', `/api/v1/me/closet/${id}`, { itemName }),

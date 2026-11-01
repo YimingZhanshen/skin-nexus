@@ -187,6 +187,7 @@
     "closet": "衣柜",
     "players": "角色管理",
     "profile": "个人资料",
+    "notifications": "站内通知",
     "adminPanel": "管理面板",
     "apps": "授权管理",
     "union": "联盟绑定",
@@ -407,6 +408,34 @@
     "approved": "已授权，可返回启动器继续登录。",
     "denied": "已拒绝，可返回启动器。",
     "needLoginOnSubmit": "请先登录皮肤站账号后再批准"
+  },
+  "notifications": {
+    "title": "站内通知",
+    "hint": "与你的账号或材质相关的处置决定会记在这里，保留 90 天。",
+    "unreadOnly": "只看未读",
+    "markAll": "全部标记已读",
+    "markRead": "标记已读",
+    "unread": "未读",
+    "colWhat": "内容",
+    "colWhen": "时间",
+    "empty": "还没有通知",
+    "emptyUnread": "没有未读通知",
+    "kinds": {
+      "account": {
+        "banned": "你的账号已被管理员封禁",
+        "unbanned": "你的账号封禁已解除"
+      },
+      "moderation": {
+        "lifted": "「{name}」的违规判定已解除，可以再次公开"
+      },
+      "report": {
+        "dismissed": "针对「{name}」的举报已被驳回",
+        "resolved": "针对「{name}」的举报已被认定成立"
+      },
+      "texture": {
+        "hidden": "「{name}」已被下架并标记为违规"
+      }
+    }
   },
   "apps": {
     "title": "已授权应用（{count}）",

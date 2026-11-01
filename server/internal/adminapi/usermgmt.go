@@ -356,9 +356,19 @@ func (b *Backend) handleUserSetPermission(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
+	// The notice fires on the transition, not on every write: re-saving the
+	// same permission must not add another row to the inbox.
+	prevPerm, prevErr := b.Store.UserPermission(r.Context(), id)
 	if err := b.Store.SetUserPermission(r.Context(), id, perm); err != nil {
 		writeStoreErr(w, err, i18n.MsgEmailTaken, "that email is already used by another account")
 		return
+	}
+	if prevErr == nil {
+		if perm == -1 && prevPerm != -1 {
+			b.notifyUser(r.Context(), id, store.NotifAccountBanned)
+		} else if perm != -1 && prevPerm == -1 {
+			b.notifyUser(r.Context(), id, store.NotifAccountUnbanned)
+		}
 	}
 	// A demoted/banned admin's session must die now — the session gate
 	// re-checks permission per request, but their tokens/grants linger.
