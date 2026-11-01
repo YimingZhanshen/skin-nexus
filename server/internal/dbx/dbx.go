@@ -89,17 +89,17 @@ func (d *DB) Dialect() dialect.Engine { return d.eng }
 
 // ExecContext runs a statement after placeholder rewriting.
 func (d *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	return d.DB.ExecContext(ctx, d.Bind(query), args...)
+	return d.DB.ExecContext(ctx, d.Bind(query), d.args(args)...)
 }
 
 // QueryContext runs a query after placeholder rewriting.
 func (d *DB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	return d.DB.QueryContext(ctx, d.Bind(query), args...)
+	return d.DB.QueryContext(ctx, d.Bind(query), d.args(args)...)
 }
 
 // QueryRowContext runs a row-returning query after placeholder rewriting.
 func (d *DB) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
-	return d.DB.QueryRowContext(ctx, d.Bind(query), args...)
+	return d.DB.QueryRowContext(ctx, d.Bind(query), d.args(args)...)
 }
 
 // BeginTx starts a transaction whose statements are rewritten the same way.
@@ -126,17 +126,46 @@ func (t *Tx) Bind(query string) string { return t.db.eng.Bind(query) }
 
 // ExecContext runs a statement after placeholder rewriting.
 func (t *Tx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	return t.Tx.ExecContext(ctx, t.Bind(query), args...)
+	return t.Tx.ExecContext(ctx, t.Bind(query), t.db.args(args)...)
 }
 
 // QueryContext runs a query after placeholder rewriting.
 func (t *Tx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	return t.Tx.QueryContext(ctx, t.Bind(query), args...)
+	return t.Tx.QueryContext(ctx, t.Bind(query), t.db.args(args)...)
 }
 
 // QueryRowContext runs a row-returning query after placeholder rewriting.
 func (t *Tx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
-	return t.Tx.QueryRowContext(ctx, t.Bind(query), args...)
+	return t.Tx.QueryRowContext(ctx, t.Bind(query), t.db.args(args)...)
+}
+
+// args normalises arguments that SQLite stores as text.
+//
+// The driver writes a time.Time as "2006-01-02 15:04:05.999 -0700 MST", so on
+// SQLite a deadline written from a +08 clock and one written from UTC are two
+// different strings — and text comparison silently stops being time
+// comparison. Forcing UTC here is what makes the DDL defaults
+// (`strftime(... +0000 UTC','now')`) and every bound value order alike. MySQL
+// and PostgreSQL store instants and need nothing, so the slice passes through
+// untouched.
+func (d *DB) args(args []any) []any {
+	if d.eng != dialect.SQLite {
+		return args
+	}
+	var out []any
+	for i, a := range args {
+		if t, ok := a.(time.Time); ok {
+			if out == nil {
+				out = make([]any, len(args))
+				copy(out, args)
+			}
+			out[i] = t.UTC()
+		}
+	}
+	if out == nil {
+		return args
+	}
+	return out
 }
 
 // dsnFor maps the portable DSN onto the driver name plus driver specifics.
@@ -170,13 +199,26 @@ func dsnFor(e dialect.Engine, dsn string) (driver string, out string, tune func(
 			db.SetMaxIdleConns(8)
 		}, nil
 	case dialect.SQLite:
+		mem := isMemoryPath(dsn)
 		return e.Driver(), sqliteDSN(dsn), func(db *sql.DB) {
-			// One connection: SQLite serialises writers anyway, and a
-			// read-then-upgrade transaction cannot retry inside itself —
-			// a pool would turn contention into SQLITE_BUSY errors. Sites
-			// that need concurrency take MySQL or PostgreSQL.
-			db.SetMaxOpenConns(1)
-			db.SetMaxIdleConns(1)
+			if mem {
+				// Every connection to ":memory:" gets its OWN database, so a
+				// pooled memory database splits in two: tables created on one
+				// connection are missing on the next. One connection is the
+				// only honest shape — and a memory database is a test fixture,
+				// never a deployment.
+				db.SetMaxOpenConns(1)
+				db.SetMaxIdleConns(1)
+				return
+			}
+			// A file database keeps a small pool. WAL lets readers run while one
+			// writer holds the lock and busy_timeout makes that a wait instead
+			// of an error. Pinning this to one connection would deadlock any
+			// path that queries again while it is still draining a Rows — a
+			// class of bug that MySQL and PostgreSQL never show.
+			db.SetMaxOpenConns(4)
+			db.SetMaxIdleConns(4)
+			db.SetConnMaxLifetime(0) // a file database has no server to expire
 		}, nil
 	}
 	return "", "", nil, fmt.Errorf("unsupported engine %q", e)

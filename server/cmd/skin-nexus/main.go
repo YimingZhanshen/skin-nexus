@@ -148,7 +148,7 @@ func main() {
 	// schema_migrations markers skip completed files, duplicate-object
 	// collisions from pre-tracking databases are tolerated, all else fatal.
 	if cfg.AutoMigrate {
-		if err := migrate.ApplySQLDirTracked(st.DB(), cfg.MigrationsDir); err != nil {
+		if err := migrate.ApplySQLDirTracked(st.DB(), cfg.MigrationsDir, st.Engine()); err != nil {
 			log.Fatalf("schema: %v", err)
 		}
 	}

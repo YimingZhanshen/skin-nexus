@@ -1,41 +1,11 @@
-// sqldir.go: apply a migrations directory to a live *sql.DB. Used by the
-// empty-database auto-init at boot (docker first-run) and by the MySQL
-// integration suite. Statements are split on ';' — the shipped DDL contains
-// no routines/DELIMITER blocks. Comments ('-- …') are skipped.
+// sqldir.go: the statement splitter the tracked migrator feeds to a live
+// connection. The shipped DDL contains no routines or DELIMITER blocks, so
+// splitting on a line-final ';' is enough; whole-line '--' comments are dropped
+// (an inline comment rides along with its statement, which every engine
+// accepts).
 package migrate
 
-import (
-	"database/sql"
-	"fmt"
-	"os"
-	"path/filepath"
-	"sort"
-	"strings"
-)
-
-// ApplySQLDir executes every *.sql in dir, in filename order.
-func ApplySQLDir(db *sql.DB, dir string) error {
-	files, err := filepath.Glob(filepath.Join(dir, "*.sql"))
-	if err != nil {
-		return err
-	}
-	if len(files) == 0 {
-		return fmt.Errorf("migrate: no *.sql found in %s", dir)
-	}
-	sort.Strings(files)
-	for _, f := range files {
-		raw, err := os.ReadFile(f)
-		if err != nil {
-			return err
-		}
-		for _, stmt := range SplitSQL(string(raw)) {
-			if _, err := db.Exec(stmt); err != nil {
-				return fmt.Errorf("migrate: %s: %w\nstmt: %s", filepath.Base(f), err, stmt)
-			}
-		}
-	}
-	return nil
-}
+import "strings"
 
 // SplitSQL splits a DDL script into executable statements.
 func SplitSQL(script string) []string {

@@ -75,7 +75,7 @@ func openTestStore(t *testing.T) *Mysql {
 func applyMigrations(t *testing.T, m *Mysql) {
 	t.Helper()
 	dir := filepath.Join("..", "..", "migrations")
-	if err := migrate.ApplySQLDirTracked(m.DB(), dir); err != nil {
+	if err := migrate.ApplySQLDirTracked(m.DB(), dir, m.Engine()); err != nil {
 		t.Fatalf("apply migrations: %v", err)
 	}
 }
