@@ -33,6 +33,7 @@ type User struct {
 	Nickname      string
 	EmailVerified bool
 	CanJoinServer bool
+	CreatedAt     time.Time
 }
 
 // Player is one profile (character) owned by a user.
@@ -107,6 +108,12 @@ type Service struct {
 	// admin options panel writes the `require_verification` option and it
 	// applies without restart (nil = static RequireVerification field).
 	RequireVerificationResolver func(ctx context.Context) bool
+	// VerifyGrace is how long a freshly registered account may join without
+	// verifying, and VerifyGraceResolver reads `email_verify_grace_days`
+	// per request (nil = static field). Without a grace window turning the
+	// gate on locks every account that was never asked to verify.
+	VerifyGrace         time.Duration
+	VerifyGraceResolver func(ctx context.Context) time.Duration
 	// Limiter protects authenticate/refresh from credential guessing
 	// (nil = off; main wires settings-panel thresholds).
 	Limiter *ratelimit.Limiter
@@ -266,6 +273,27 @@ func (s *Service) requireVerification(ctx context.Context) bool {
 	return s.RequireVerification
 }
 
+func (s *Service) verifyGrace(ctx context.Context) time.Duration {
+	if s.VerifyGraceResolver != nil {
+		return s.VerifyGraceResolver(ctx)
+	}
+	return s.VerifyGrace
+}
+
+// verificationBlocks is the whole email gate: option on, address unverified,
+// grace window spent. Zero CreatedAt (a record built by a caller that never
+// looked at the column) counts as "no grace", so the gate fails closed.
+func (s *Service) verificationBlocks(ctx context.Context, u User) bool {
+	if !s.requireVerification(ctx) || u.EmailVerified {
+		return false
+	}
+	g := s.verifyGrace(ctx)
+	if g > 0 && !u.CreatedAt.IsZero() && s.now().Sub(u.CreatedAt) < g {
+		return false
+	}
+	return true
+}
+
 const (
 	DefaultJoinTTL  = 120 * time.Second
 	DefaultTokenTTL = 30 * 24 * time.Hour
@@ -359,7 +387,7 @@ func (s *Service) Authenticate(ctx context.Context, username, password, clientTo
 	}
 	// Legacy CheckLoginCredentials gates at authenticate, not only at join:
 	// banned users and (gate on) unverified users are rejected at login.
-	if s.requireVerification(ctx) && !u.EmailVerified {
+	if s.verificationBlocks(ctx, u) {
 		return Token{}, nil, ErrEmailUnverified
 	}
 	if !u.CanJoinServer {
@@ -508,7 +536,7 @@ func (s *Service) Join(ctx context.Context, accessToken, playerUUID, serverID, s
 	if err != nil {
 		return ErrTokenInvalid
 	}
-	if s.requireVerification(ctx) && !u.EmailVerified {
+	if s.verificationBlocks(ctx, u) {
 		return ErrEmailUnverified
 	}
 	if !u.CanJoinServer {

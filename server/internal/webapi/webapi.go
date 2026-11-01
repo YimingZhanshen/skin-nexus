@@ -66,6 +66,11 @@ type Backend struct {
 	SMTPDefaults map[string]string
 	BaseURL      string
 	SiteName     string
+	// VerificationEnabled reports whether the site enforces email verification
+	// at join right now (options panel, per request). main wires the same
+	// resolver the Yggdrasil gate uses, so the register flow mails a link
+	// exactly when a missing flag would lock the player out.
+	VerificationEnabled func(ctx context.Context) bool
 	// Appearance supplies the public footer config (nil = default credit).
 	Appearance *appearance.Engine
 
@@ -228,6 +233,11 @@ func (b *Backend) Handler() http.Handler {
 	// reset consumes the single-use token and mirrors change's revocation.
 	mux.HandleFunc("POST /api/v1/password/forgot", b.handleForgotPassword)
 	mux.HandleFunc("POST /api/v1/password/reset", b.handleResetPassword)
+	// 邮箱验证 (2026-11-02): verify is session-scoped — the mail can only ever
+	// go to the signed-in account's own address — and confirm is token-only so
+	// the link works from the device the player opened it on.
+	mux.HandleFunc("POST /api/v1/email/verify", b.handleEmailVerifyRequest)
+	mux.HandleFunc("POST /api/v1/email/confirm", b.handleEmailVerifyConfirm)
 	// User-center self-service (A 级批次): profile edit / account delete /
 	// avatar / own-player rename+delete — ownership-gated, blessing parity.
 	mux.HandleFunc("PUT /api/v1/me/profile", b.handleProfileUpdate)
@@ -549,6 +559,14 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 		UserID: uid, PlayerName: req.Nickname, IP: ygg.ClientIP(r),
 		Data: evData,
 	})
+	// Sites that enforce the gate would otherwise hand out an account that
+	// cannot join: send the verification link now. Best-effort — registration
+	// succeeded and the profile page can resend.
+	if req.Email != "" && b.verificationEnabled(r.Context()) {
+		if err := b.sendVerificationMail(r, uid, req.Email); err != nil {
+			log.Printf("register %d: verification mail: %v", uid, err)
+		}
+	}
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"id": uid, "nickname": req.Nickname, "permission": 0})
 }
 

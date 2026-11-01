@@ -50,7 +50,8 @@ var settingsWhitelist = []settingSpec{
 	{"site_url", true, "basic", "站点地址（http(s) 绝对地址；页面链接、sitemap 与纹理/预览/头像 URL 的共同基址，重启后一起生效。OIDC issuer 只认 SKIN_OIDC_ISSUER/SKIN_BASE_URL，不由此项决定）", false}, // B4 (blessing 原名 — 迁移导入器原样搬运生产 options，改名会让存量值成死键)
 	{"announcement", false, "basic", "站点公告（Markdown，支持标题/粗体/链接/列表；双层消毒渲染，留空隐藏）", false},
 	{"invite_required", false, "register", "注册强制邀请码（立即生效）", false},
-	{"require_verification", false, "register", "join 前须邮箱验证（立即生效；邮件流未上线前开了会挡住所有新号进服）", false},
+	{"require_verification", false, "register", "进服前须邮箱验证（立即生效；开启后新注册账号会自动收到验证邮件，配合下方宽限期使用）", false},
+	{"email_verify_grace_days", false, "register", "邮箱验证宽限期（天；注册后 N 天内即使未验证也放行，0=立即执行门禁；立即生效）", false},
 	{"regs_per_ip", false, "register", "每 IP 可注册账号数上限（0=不限制，立即生效）", false},
 	{"smtp_host", false, "mail", "SMTP 服务器地址（留空=关闭邮件功能；须同时配 smtp_user 或 smtp_from 作为发件人，否则视为未配置；立即生效）", false},
 	{"smtp_port", false, "mail", "SMTP 端口（465=隐式 TLS 直连；其它端口自动 STARTTLS 升级；默认 465）", false},
@@ -169,7 +170,7 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		}
 		val = strings.Join(clean, ",")
 	case "rate_limit_auth", "login_fail_limit", "regs_per_ip", "player_name_length_min", "player_name_length_max",
-		"ygg_token_expire_1", "ygg_token_expire_2", "ygg_tokens_limit", "ygg_rate_limit":
+		"ygg_token_expire_1", "ygg_token_expire_2", "ygg_tokens_limit", "ygg_rate_limit", "email_verify_grace_days":
 		// numeric knobs (review P2: garbage silently desynced panel vs boot
 		// fallback, and negatives silently disabled the limiter layers)
 		n, err := strconv.Atoi(val)

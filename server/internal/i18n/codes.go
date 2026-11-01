@@ -113,6 +113,13 @@ const (
 
 	// mail
 	MsgMailNotConfigured = "mail.not_configured"
+	// Email verification (2026-11-02). link_invalid covers every failed token
+	// check for the same reason auth.reset_link_invalid does: the endpoint must
+	// not say which check failed.
+	MsgEmailNotSet          = "email.not_set"             // account has no address to verify
+	MsgEmailAlreadyVerified = "email.already_verified"    // nothing to send
+	MsgEmailLink            = "email.link_invalid"        // unknown / expired / used token
+	MsgEmailSendFailed      = "email.verification_failed" // mail transport failed
 
 	// federation (MUA Union)
 	MsgUnionConvergeFailed = "union.converge_failed" // hub accepted, local write failed

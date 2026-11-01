@@ -66,6 +66,14 @@ async function changePassword() {
   finally { pwBusy.value = false }
 }
 
+async function requestEmailVerification() {
+  err.value = ''; ok.value = ''
+  try {
+    await api.requestEmailVerification()
+    ok.value = t('auth.verifySent')
+  } catch (e) { if (!guard401(e)) err.value = e.message }
+}
+
 async function setAvatar(c) {
   err.value = ''; ok.value = ''
   try {
@@ -137,6 +145,7 @@ onMounted(load)
     </div>
     <div class="row" style="margin-top: 8px;">
       <button @click="saveProfile">{{ t('common.save') }}</button>
+      <button class="secondary" v-if="me && !me.emailVerified" @click="requestEmailVerification">{{ t('auth.verifySubmit') }}</button>
       <span class="muted" v-if="me">{{ t('profile.verifiedState', { state: me.emailVerified ? t('profile.verified') : t('profile.unverified') }) }}</span>
     </div>
     <div class="muted" style="margin-top: 6px; font-size: var(--fs-xs);">{{ t('profile.emailResetHint') }}</div>

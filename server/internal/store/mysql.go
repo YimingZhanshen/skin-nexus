@@ -100,7 +100,7 @@ type rowScanner interface{ Scan(...interface{}) error }
 
 func scanUser(s rowScanner) (ygg.User, error) {
 	var u ygg.User
-	err := s.Scan(&u.ID, &u.Nickname, &u.EmailVerified, &u.CanJoinServer)
+	err := s.Scan(&u.ID, &u.Nickname, &u.EmailVerified, &u.CanJoinServer, &u.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ygg.User{}, ErrNotFound
 	}
@@ -109,7 +109,7 @@ func scanUser(s rowScanner) (ygg.User, error) {
 
 func (m *Mysql) UserByID(ctx context.Context, id int64) (ygg.User, error) {
 	return scanUser(m.db.QueryRowContext(ctx,
-		"SELECT id, nickname, email_verified, can_join_server FROM users WHERE id = ?", id))
+		"SELECT id, nickname, email_verified, can_join_server, created_at FROM users WHERE id = ?", id))
 }
 
 func (m *Mysql) UserByIdentifier(ctx context.Context, ident string) (ygg.User, error) {
@@ -118,7 +118,7 @@ func (m *Mysql) UserByIdentifier(ctx context.Context, ident string) (ygg.User, e
 	// error on MySQL 5.7 (8.0 tolerates it) and made every login fail with
 	// "account or password" while the register->session path stayed healthy.
 	return scanUser(m.db.QueryRowContext(ctx,
-		"SELECT id, nickname, email_verified, can_join_server FROM users WHERE email COLLATE utf8mb4_general_ci = ? OR nickname = ? LIMIT 1",
+		"SELECT id, nickname, email_verified, can_join_server, created_at FROM users WHERE email COLLATE utf8mb4_general_ci = ? OR nickname = ? LIMIT 1",
 		ident, ident))
 }
 

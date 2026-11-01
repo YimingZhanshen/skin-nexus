@@ -51,6 +51,12 @@
       "unavailable": "This feature is currently unavailable",
       "unknown_action": "Unknown action"
     },
+    "email": {
+      "already_verified": "This email address is already verified",
+      "link_invalid": "Verification link is invalid or expired, request a new one",
+      "not_set": "This account has no email address, add one first",
+      "verification_failed": "The verification mail could not be sent, try again later"
+    },
     "invite": {
       "code_not_found": "Invitation code not found",
       "invalid": "Invitation code is not valid",
@@ -240,7 +246,15 @@
     "resetMismatch": "The two passwords do not match",
     "invitationCodeRequired": "Invitation code (required)",
     "inviteRequiredErr": "Please enter the invitation code",
-    "mailDisabled": "This site has no mail service configured, so password recovery is unavailable; contact the site owner."
+    "mailDisabled": "This site has no mail service configured, so password recovery is unavailable; contact the site owner.",
+    "verifyTitle": "Email verification",
+    "verifyIntro": "The link in this mail proves the address on your account is yours.",
+    "verifySubmit": "Send verification email",
+    "verifySent": "Verification mail sent — check your inbox (and spam). The link expires in 24 hours.",
+    "verifyDone": "Email verified. You can close this page.",
+    "verifyInvalid": "This verification link is invalid or expired — sign in and request a new one.",
+    "verifyNeedsAddress": "Add an email address on your profile page first.",
+    "verifyBackToProfile": "Open profile"
   },
   "dashboard": {
     "uploadTitle": "Upload texture",

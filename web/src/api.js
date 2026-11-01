@@ -35,6 +35,10 @@ export const api = {
   // 单次令牌，失败统一「链接无效或已过期」。
   forgotPassword: (email) => req('POST', '/api/v1/password/forgot', { email }),
   resetPassword: (token, password) => req('POST', '/api/v1/password/reset', { token, password }),
+  // 邮箱验证 (2026-11-02): verify 只发给当前登录账号自己填的邮箱；confirm 是
+  // 单次令牌，失败一律同一句话（不透露令牌属于哪种失败）。
+  requestEmailVerification: () => req('POST', '/api/v1/email/verify'),
+  confirmEmailVerification: (token) => req('POST', '/api/v1/email/confirm', { token }),
   closet: () => req('GET', '/api/v1/me/closet'),
   closetAdd: (textureId, itemName = '') => req('POST', '/api/v1/me/closet', { textureId, itemName }),
   closetRename: (id, itemName) => req('PUT', `/api/v1/me/closet/${id}`, { itemName }),

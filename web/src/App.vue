@@ -60,6 +60,8 @@ const resetToken = ref('')
 const resetPw1 = ref('')
 const resetPw2 = ref('')
 const resetDone = ref(false)
+// 邮箱验证 (2026-11-02): /email-verify?token=… 由邮件带入，进页面即消费令牌。
+const verifyState = ref('')      // '' | 'working' | 'done' | 'invalid' | 'login'
 // Public site capabilities (GET /api/v1/site-config): the auth forms follow
 // the deployment's real configuration — invite field required-or-absent,
 // email field + forgot flow available-or-hidden. Until the fetch resolves
@@ -178,6 +180,9 @@ function onPopState() {
   if (location.pathname.startsWith('/ext/')) {
     if (user.value) openExt(location.pathname)
     else { pendingExt.value = location.pathname; view.value = 'login' }
+  } else if (location.pathname === '/email-verify') {
+    view.value = 'verify'
+    doEmailVerify()
   } else {
     const v = legacyRoutes[location.pathname]
     if (v) view.value = v
@@ -232,6 +237,11 @@ function applyInitialRoute() {
     view.value = 'reset'
   }
   else if (location.pathname === '/forgot-password') view.value = 'forgot'
+  // 邮箱验证: 邮件里的链接是单次令牌，进来就兑换，不让用户再点一次。
+  else if (location.pathname === '/email-verify') {
+    view.value = 'verify'
+    doEmailVerify()
+  }
   else if (!user.value && location.pathname === '/register') view.value = 'register'
   else if (legacyRoutes[location.pathname]) {
     // launcher deep link: logged in → straight there; logged out → login card,
@@ -360,6 +370,21 @@ async function doReset() {
   } catch (e) { authErr.value = e.message }
 }
 
+// 邮箱验证 (2026-11-02): the link is single-use, so the landing page consumes
+// it immediately. The server never says which check failed (unknown / expired
+// / already used), so the UI has one failure state and it says exactly that.
+async function doEmailVerify() {
+  verifyState.value = 'working'
+  const token = new URLSearchParams(location.search).get('token') || ''
+  if (!token) { verifyState.value = 'invalid'; return }
+  try {
+    await api.confirmEmailVerification(token)
+    verifyState.value = 'done'
+  } catch (e) {
+    verifyState.value = 'invalid'
+  }
+}
+
 async function doLogout() {
   try {
     await api.logout()
@@ -425,7 +450,7 @@ onMounted(() => {
     <div id="main-content" class="container" :class="{ wide: view === 'admin' }" tabindex="-1">
     <!-- AUTH VIEWS: 分栏场景式（左=远山+N 牌，右=表单）。独立 v-if：error 横幅
          不参与视图条件链 -->
-    <template v-if="['login', 'register', 'forgot', 'reset'].includes(view)">
+    <template v-if="['login', 'register', 'forgot', 'reset', 'verify'].includes(view)">
       <div class="auth-split">
         <aside class="auth-scene" aria-hidden="true">
           <span class="brandmark" v-html="brandSVG"></span>
@@ -541,7 +566,26 @@ onMounted(() => {
         </div>
       </template>
     </div>
-        </div><!-- /auth-pane -->
+
+    <!-- EMAIL VERIFY (2026-11-02, /email-verify?token=…) -->
+    <div v-else-if="view === 'verify'" class="card">
+      <h2>{{ t('auth.verifyTitle') }}</h2>
+      <p class="muted" v-if="verifyState === 'working'">{{ t('common.loading') }}</p>
+      <template v-else-if="verifyState === 'done'">
+        <p class="success">{{ t('auth.verifyDone') }}</p>
+        <div class="row" style="margin-top: 16px;">
+          <button @click="view = user ? 'profile' : 'login'">{{ user ? t('nav.userCenter') : t('common.login') }}</button>
+        </div>
+      </template>
+      <template v-else>
+        <p class="error">{{ t('auth.verifyInvalid') }}</p>
+        <div class="row" style="margin-top: 16px;">
+          <button v-if="user" @click="view = 'profile'">{{ t('auth.verifyBackToProfile') }}</button>
+          <button v-else class="secondary" @click="view = 'login'">{{ t('auth.toLogin') }}</button>
+        </div>
+      </template>
+    </div>
+      </div><!-- /auth-pane -->
       </div><!-- /auth-split -->
     </template>
 

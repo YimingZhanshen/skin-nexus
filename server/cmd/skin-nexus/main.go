@@ -468,11 +468,23 @@ func main() {
 		}
 	}
 	// Options panel → request-time join gate (no restart needed).
-	yggSvc.RequireVerificationResolver = func(ctx context.Context) bool {
+	verifyGate := func(ctx context.Context) bool {
 		if v, ok, err := st.GetOption(ctx, "require_verification"); err == nil && ok {
 			return v == "1" || v == "true"
 		}
 		return cfg.RequireVerification
+	}
+	yggSvc.RequireVerificationResolver = verifyGate
+	backend.VerificationEnabled = verifyGate
+	// 邮箱验证宽限期 (2026-11-02): options-panel `email_verify_grace_days`,
+	// 0 (or unreadable) = enforce immediately.
+	yggSvc.VerifyGraceResolver = func(ctx context.Context) time.Duration {
+		if v, ok, err := st.GetOption(ctx, "email_verify_grace_days"); err == nil && ok {
+			if n, e := strconv.Atoi(strings.TrimSpace(v)); e == nil && n > 0 {
+				return time.Duration(n) * 24 * time.Hour
+			}
+		}
+		return 0
 	}
 	// B5.1 dual-TTL windows (blessing ygg_token_expire_1/2): live options
 	// override the defaults at request time (soft is fixed into expires_at

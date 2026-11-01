@@ -46,7 +46,7 @@ JWT access token 实测形状：`aud="2"（shared_client_id）、sub=uid、scope
 
 | 项 | 状态 | 说明 |
 |---|---|---|
-| 邮箱验证门 | 🔧 语义 | `email_verified` 字段与 join 门禁就位（`SKIN_REQUIRE_VERIFICATION`，默认关）。开启后未验证账号一律拒绝进服；老站迁移过来的账号只有管理员代设该标志一途 |
+| 邮箱验证门 | 🔧 语义 | `email_verified` 字段、发信验证链路与 join 门禁就位（面板 `require_verification`，默认关；`email_verify_grace_days` 给新号宽限期）。老站迁移过来的账号仍只有管理员代设标志一途——迁移不带验证状态 |
 | `uploadableTextures` 按能力位裁剪 | 🔧 取舍 | 本站恒答 `skin,cape`（`server/internal/ygg/models.go:103`），且与事实一致——上传不按类型设限（`type` 只校验 `skin\|cape`）。老站可按用户能力逐位裁剪，前提是有按位能力位；本站 `permission` 是整型档位（0 普通 / >0 管理员 / -1 封禁，`server/internal/store/web.go:151`），要做「站长关掉披风上传」得先重做权限模型，不属兼容缺口 |
 | 通知/纹理广场 · OAuth 社交登录 · API PAT 面 · 积分商城 · 2FA · 验证码 · `/api` 根装饰 | ➖ 超出兼容范围 | 老站的增强面，不在「协议与数据可直迁」的口径内 |
 | 删除材质后已下发的纹理 URL | 🔧 取舍 | `/textures/{hash}` 只查磁盘、不校验行与可见性，且响应是 `max-age=31536000, immutable`。删除保证**源站停止供源**并保留取证记录，不保证浏览器/中间缓存/CDN 上的旧副本失效（hash 即 URL，无法主动失效）。加每请求 DB 校验会推翻纹理分发的性能模型，故不做 |

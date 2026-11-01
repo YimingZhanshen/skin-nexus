@@ -123,7 +123,7 @@ environment:
 | `SKIN_SERVER_NAME` | `SkinNexus` | Yggdrasil 元数据里的服务器显示名（面板可改） |
 | `SKIN_SKIN_DOMAINS` | 空 | 皮肤域白名单，逗号分隔；不接联盟填本站域名，接入 MUA Union 以联盟公布清单为准（改动会破坏联盟互认） |
 | `SKIN_INVITE_REQUIRED` | `false` | 注册强制邀请码（等价老站必填语义）；面板「站点设置」可改 |
-| `SKIN_REQUIRE_VERIFICATION` | `false` | join 邮箱验证门（按 `email_verified` 判定）；开启后未验证账号一律拒绝进服，迁移站尤须先核对存量标志位 |
+| `SKIN_REQUIRE_VERIFICATION` | `false` | join 邮箱验证门（按 `email_verified` 判定）；面板可热切。开启后新注册账号会自动收到验证邮件，宽限期由面板 `email_verify_grace_days` 决定（默认 0=立即执行）——迁移站务必先设宽限或先核对存量标志位，否则老号一律进不了服 |
 
 **认证、限流与正版兜底**
 

@@ -51,6 +51,12 @@
       "unavailable": "该功能当前不可用",
       "unknown_action": "未知的操作"
     },
+    "email": {
+      "already_verified": "该邮箱已经验证过了",
+      "link_invalid": "验证链接无效或已过期，请重新申请",
+      "not_set": "这个账号还没有填写邮箱，请先补充邮箱",
+      "verification_failed": "验证邮件发送失败，请稍后重试"
+    },
     "invite": {
       "code_not_found": "邀请码不存在",
       "invalid": "邀请码无效",
@@ -221,6 +227,14 @@
     "invitationCodeRequired": "邀请码（必填）",
     "inviteRequiredErr": "请填写邀请码",
     "mailDisabled": "站点未配置邮件服务，找回密码暂不可用；如需找回请联系管理员。",
+    "verifyTitle": "邮箱验证",
+    "verifyIntro": "邮件里的链接用来证明这个邮箱确实归你所有。",
+    "verifySubmit": "发送验证邮件",
+    "verifySent": "验证邮件已发送——请查收收件箱（含垃圾邮件）。链接 24 小时内有效。",
+    "verifyDone": "邮箱已验证，这个页面可以关闭了。",
+    "verifyInvalid": "验证链接无效或已过期——请登录后重新申请。",
+    "verifyNeedsAddress": "请先在个人资料页填写邮箱。",
+    "verifyBackToProfile": "前往个人资料",
     "pwTitle": "修改密码",
     "pwCurrent": "当前密码",
     "pwNew": "新密码（≥8 位）",

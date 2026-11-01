@@ -179,10 +179,20 @@ var ErrDuplicate = errors.New("store: duplicate key")
 // UpdateUserEmail sets a user's email ("" clears to NULL). Duplicate
 // collision → ErrDuplicate.
 func (m *Mysql) UpdateUserEmail(ctx context.Context, uid int64, email string) error {
+	// Changing the address clears the verified flag: a verified mailbox is no
+	// longer evidence that the *current* one is reachable. When the value is
+	// unchanged the flag survives, so a no-op edit cannot lock a player out.
+	// The flag assignment comes FIRST on purpose: MySQL evaluates SET left to
+	// right and later assignments see already-updated columns, so comparing
+	// after `email = ?` would always compare the new value with itself.
 	_, err := m.db.ExecContext(ctx,
-		`UPDATE users SET email = ? WHERE id = ?`, nullableStr(email), uid)
+		`UPDATE users SET email_verified = IF(email <=> ?, email_verified, 0), email = ?
+		 WHERE id = ?`, nullableStr(email), nullableStr(email), uid)
 	if isDupKey(err) {
 		return ErrDuplicate
+	}
+	if err == nil {
+		_ = m.InvalidateEmailVerifyTokens(ctx, uid)
 	}
 	return err
 }
