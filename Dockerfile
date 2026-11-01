@@ -4,7 +4,7 @@
 # touch it. Schema bootstrap happens at boot when SKIN_AUTO_MIGRATE=true.
 
 # ---- stage 1: web ----
-FROM node:22-alpine AS web
+FROM node:26-alpine AS web
 WORKDIR /build/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
