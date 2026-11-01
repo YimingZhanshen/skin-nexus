@@ -1,6 +1,6 @@
-# SkinNexus
+# SkinNexus / 肤枢
 
-<p align="center"><img src="docs/assets/logo.svg" width="140" alt="SkinNexus pixel-nexus N logo"></p>
+<p align="center"><img src="docs/assets/logo.svg" width="140" alt="SkinNexus pixel hub N mark"></p>
 
 <p align="center">
   <a href="https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml"><img src="https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -8,27 +8,20 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-green" alt="AGPL-3.0"></a>
 </p>
 
-> Self-hosted Minecraft skin server: full Yggdrasil compatibility, lossless migration from blessing-skin-server.
+A self-hosted Minecraft skin station. Players upload and manage skins and capes in the browser and join servers through launcher passwordless login; the operator runs it themselves — accounts, texture files and the signing key stay on their own machine.
 
-[中文文档](README.md) | **English**
+One Go binary + Vue 3 + MySQL, AGPL-3.0. The protocol layer is compatible with [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) and its plugin ecosystem, so a legacy site can be migrated losslessly: primary keys preserved, player UUIDs unchanged, old password hashes still verifiable. A real production site has been migrated and cut over — 67 users / 61 textures, zero rows lost.
 
-**SkinNexus** is a skin server for Minecraft servers and communities. Players upload and manage skins and capes in the browser, then join game servers through launcher passwordless login. Operators self-host everything — accounts, textures and the signing key stay on their own machine.
+Current release v0.5.0 (2026-11-01). Iteration history lives in [`docs/CHANGELOG.md`](docs/CHANGELOG.md) (Chinese).
 
-It is a modern rewrite of [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) in **Go + Vue 3**, already proven in a real production migration: **67 users / 61 textures with zero row loss and zero player-UUID drift**.
+## Deploy
 
-- **Release**: v0.5.0 (released 2026-11-01) · iteration history in [`docs/CHANGELOG.md`](docs/CHANGELOG.md) (Chinese)
-- **License**: AGPL-3.0 · **Author / copyright holder**: YMZS
-
-## Deploy in 10 minutes (Docker Compose)
-
-The image is public on GHCR (anonymous pull, no `docker login`); the commands
-below pull it directly, no source checkout required:
+Images are on GHCR (public, no `docker login` needed). This does not require cloning the source:
 
 ```bash
 mkdir skin-nexus && cd skin-nexus
 curl -fsSLO https://raw.githubusercontent.com/YimingZhanshen/skin-nexus/main/docker-compose.quickstart.yml
 cat > .env <<EOF
-# your public URL, set before first start
 SKIN_BASE_URL=https://skin.example.com
 SKIN_DB_PASSWORD=$(openssl rand -hex 16)
 SKIN_DB_ROOT_PASSWORD=$(openssl rand -hex 16)
@@ -37,184 +30,88 @@ EOF
 docker compose -f docker-compose.quickstart.yml up -d
 ```
 
-Open `http://<host>:8080/setup` and finish the site name, admin account and
-skin-domain wizard.
+Open `http://<host>:8080/setup` and fill in the site name, admin account and skin domain. Upgrades are
+`docker compose pull && docker compose up -d`; data volumes are never touched.
 
-<details>
-<summary><b>Already have MySQL? Pull the image and run it directly</b></summary>
+External MySQL, a bare binary or a source build: [`docs/deploy.md`](docs/deploy.md) and [`docs/build.md`](docs/build.md).
+Migrating from a legacy site: [`docs/migration.md`](docs/migration.md) (`preflight → dry-run → import`, rollback available).
 
-```bash
-docker pull ghcr.io/yimingzhanshen/skin-nexus:latest
-docker run -d --name skin-nexus --restart unless-stopped -p 8080:8080 \
-  -v skin-data:/data \
-  -e SKIN_DATA_DIR=/data \
-  -e SKIN_BASE_URL=https://skin.example.com \
-  -e SKIN_DATABASE_DSN='skin:PASS@tcp(your-mysql:3306)/skin_nexus?parseTime=true&charset=utf8mb4' \
-  -e SKIN_ADMIN_TOKEN=$(openssl rand -hex 32) \
-  -e SKIN_AUTO_MIGRATE=true \
-  ghcr.io/yimingzhanshen/skin-nexus:latest
-```
+Two things are required before going live:
 
-</details>
+1. The reverse proxy must forward `X-Forwarded-Proto` and `X-Forwarded-For`, otherwise scheme detection breaks and the whole site shares one rate-limit bucket.
+2. Back up the signing key (in the `skin-data` volume at `/data/sign-key.pem`). Losing it invalidates the signatures of every texture already served.
 
-**Lossless migration from blessing-skin-server**: run `preflight → dry-run →
-import` from [`docs/migration.md`](docs/migration.md); small sites usually
-finish in about 10 minutes, fully rollback-able. External MySQL, reverse proxy,
-upgrades and backups: [`docs/deploy.md`](docs/deploy.md).
+## Features
+
+**Players**: registration and login (invite-code gating optional), skin and cape uploads (drag-and-drop, progress, 3D preview, HD skins keep native resolution), texture name and provenance (original / derivative / repost, the last two require the upstream URL), Markdown descriptions, private uploads, closet and character management, set-as-avatar, skin library with filters and a shareable detail page, likes that add to the closet, reports, OAuth app and device management, account deletion.
+
+**Operators**: admin panel (overview, users / characters / textures, invite codes, site settings, runtime status, self-diagnostics), announcements and custom CSS/JS, theme packs and a theme market (Ed25519-verified, install and uninstall take effect without a restart), local theme uploads, configurable footer, bans enforced at three layers (login / authenticate / `hasJoined`), authentication rate limiting with lockout, SMTP password reset, login and server communication logs (90 days), audit trail. Email verification and an in-site notification centre are not implemented yet — they are on the roadmap.
+
+**Protocols and integration**: full Yggdrasil endpoint set (authlib-injector works without configuration changes), built-in OIDC passwordless login (device code flow + refresh rotation, no Janus sidecar), MUA Union member-site module (off by default = zero surface), CustomSkinAPI / USM / legacy raw PNG / public read-only API, Mojang premium fallback (origin query when local lookup misses, with outbound address protection and a hot toggle in the panel), server-side avatar and preview rendering, a launcher Bearer API (`launcher-api` plugin), skin import (`skin-importer` plugin, single and batch from Mojang or a legacy site).
+
+**Content and extensions**: zh-CN / en (language packs are extensible), theme pack system (no build step: `theme.json` + CSS + optional JS), signed plugin platform (goja host: config/secrets, namespaced data, three route tiers, events and guards, iframe UI), SEO (server-rendered landing and texture detail pages, `sitemap.xml`, `robots.txt`, `llms.txt`, per-page meta/OG and JSON-LD).
 
 ## Screenshots
 
-<p align="center"><img src="docs/assets/showcase/landing.jpg" alt="Landing page" width="100%"></p>
+<p align="center">
+  <img src="docs/assets/showcase/landing.jpg" alt="Landing page" width="100%">
+</p>
 
 <p align="center">
   <img src="docs/assets/showcase/skinlib.jpg" alt="Skin library" width="49%">
   <img src="docs/assets/showcase/market.jpg" alt="Plugin market" width="49%">
 </p>
 
-<p align="center"><img src="docs/assets/showcase/launcher-plugin.jpg" alt="Launcher API plugin" width="100%"></p>
+> Screenshots come from a real production instance; site name and sensitive configuration are replaced, skins and nicknames come from the public library.
 
-> Taken from a real production instance. The site name and sensitive settings are
-> replaced; skins and nicknames come from the public skin library.
+## How it differs
 
-## Why SkinNexus
-
-- **Migration keeps your data** — primary keys preserved, UUIDs never drift, all password algorithms still verify (12 legacy schemes + argon2id lazy rehash). `preflight → dry-run → import`, fully rollback-able.
-- **Modern login path** — built-in OIDC passwordless login (device code + refresh-token rotation), no Janus sidecar. The passwordless flow for community launchers such as SJMCL is implemented; real-device acceptance is in progress.
-- **Observable operations** — login and federation traffic logs (90 days), audit trail, auth rate limiting, three-layer bans (login / authenticate / `hasJoined`), in-panel self-diagnostics.
-- **Content that gets indexed** — server-rendered landing and skin detail pages, `sitemap.xml`, `robots.txt`, `llms.txt`, per-page meta/OG/Twitter Card plus WebSite/Organization/CreativeWork JSON-LD — none of the three mainstream competitors goes this far (see the table below).
-- **Simple deployment and upgrades** — single Go binary or Docker Compose; CI publishes an image to GHCR on every push to `main`, deploy hosts only pull.
-
-Measured on a 2-core / 3.5 GB production VPS: ~600 RPS landing, 5182 RPS texture delivery, 2365 RPS Yggdrasil metadata, zero errors (see CHANGELOG).
+Server-rendered SEO, shareable texture detail URLs, a closed texture lifecycle, and an error contract enforced by the build — none of the four comparison projects has all four. Per-cell evidence (`file:line` in their repositories, snapshot 2026-11-01) is in [`docs/competitor-analysis.md`](docs/competitor-analysis.md); this is only the summary:
 
 <details>
-<summary><b>Capability comparison with blessing-skin-server / element-skin / vSkin (source-verified)</b></summary>
-
-> All four columns were re-checked on 2026-11-01 (each repository's HEAD commit date is listed in the doc header); method and per-cell `file:line` evidence in [`docs/competitor-analysis.md`](docs/competitor-analysis.md). The blessing column additionally rests on live measurements against the legacy site (see [`docs/compat-matrix.md`](docs/compat-matrix.md) and [`docs/migration.md`](docs/migration.md)). The same pass also examined Drasl (Go, full Yggdrasil + services/discovery family) and the LittleSkin premium-verification ecosystem; they sit in a different niche (no SEO, no library operations surface) so they are not columns here — see §2.3 of that document and [`docs/license-binding.md`](docs/license-binding.md). We credit rivals where they lead and never guess a ❌ — errata are corrected in place and logged in the CHANGELOG.
+<summary><b>Against blessing-skin-server / element-skin / vSkin</b></summary>
 
 | Capability | SkinNexus | blessing | element-skin | vSkin |
 |---|---|---|---|---|
-| SEO (sitemap / robots / per-page meta·OG·JSON-LD) | ✅ complete | ⚠️ per-page title + one site-wide description | ❌ | ❌ |
-| Server-rendered, indexable content pages | ✅ landing + skin detail | ⚠️ Twig shell, body client-rendered | ❌ SPA shell | ❌ SPA shell |
-| Shareable per-skin URLs | ✅ `/skinlib/{tid}` | ✅ `/skinlib/show/{tid}` | ❌ list + modal | ❌ list only |
-| Launcher deep links | ✅ `/user/closet`·`/user/profile` | ✅ origin of the convention | ❌ | ❌ |
-| Mojang official fallback | ✅ hardened outbound + hot switch | ❌ | ✅ | ✅ |
-| Password reset + SMTP | ✅ enumeration-proof, single-use | ✅ | ✅ | ✅ |
-| OIDC passwordless login | ✅ built in, device-code flow + refresh rotation | ⚠️ needs Janus sidecar | ⚠️ discovery under-announces | ⚠️ weak OAuth details |
-| MUA Union federation | ✅ built-in opt-in + outbound sync | ✅ via plugin | ❌ | ⚠️ config shell only |
-| blessing migration (ID-preserving / zero UUID drift) | ✅ preflight→dry-run→import | — (source) | ❌ | ❌ |
-| Texture lifecycle (pixels decide the model → violation blocks re-publishing → delete after reference audit, with evidence retained) | ✅ all three; deletion and upload share a hash-level lock | ⚠️ model trusted from the form; the report "delete" action **skips** the reference count | ❌ model from the form; deleting removes the row and leaves the file forever | ❌ model from the form; delete removes one row, no counting |
-| Error contract (stable code + enforced) | ✅ `{error, code, message}` behind an AST gate (a missing code or Chinese prose fails the build) | ❌ `code` is a coarse 0/1/2 int; text is localized server-side | ✅ `{object, operation, reason}` closed enum, but no matching gate | ❌ `{"detail": "sentence"}` only |
-| Quality gates (coverage / integration matrix) | ⚠️ floor 40% + the set of 0%-covered packages pinned + MySQL 5.7/8.0 | ⚠️ uploads to Codecov with **no threshold** | ✅ hard 90% overall threshold | ❌ no CI in the repository |
-| Email verification / notification center | ❌ flag and join gate only (password reset ships); notifications are transient toasts | ⚠️ exists, but the link **never expires** and the resend limit lives in the session / ✅ | ✅ 300s TTL code + resend limit / ✅ three tables | ✅ hashed code with TTL / ❌ |
-| Agent-free client surface (services / discovery / certificates) | ❌ not mounted; trade-off recorded in `docs/compat-matrix.md` (only Drasl mounts the whole family in this evidence pass — see §2.3) | ❌ | not evidenced | not evidenced |
-| Ban enforcement | ✅ login / authenticate / hasJoined | ✅ permission-level | ✅ | ❌ hasJoined only |
-| Ops observability (login + traffic logs + audit) | ✅ full-chain in panel | ❌ | ⚠️ permission audit only | ❌ |
-| Deployment shape | Go binary / Docker, CI-published images | PHP 8.1 + Laravel 10 (PHP 8.1 EOL) | Go + PostgreSQL + Redis | FastAPI + SQLite |
+| SEO (sitemap / robots / per-page meta·OG·JSON-LD) | ✅ | ⚠️ title only | ❌ | ❌ |
+| Server-rendered content pages (indexable without JS) | ✅ landing + detail | ⚠️ Twig shell | ❌ SPA | ❌ SPA |
+| Skin library detail page (shareable URL) | ✅ | ✅ | ❌ modal | ❌ |
+| OIDC passwordless login | ✅ built in | ⚠️ needs Janus | ⚠️ discovery under-announces | ⚠️ weak details |
+| Texture lifecycle (pixels decide model / violations block re-publish / audited delete with evidence) | ✅ | ⚠️ report delete skips the reference count | ❌ files stay forever | ❌ delete does not count |
+| Error contract (stable code + build gate) | ✅ | ❌ coarse int codes | ⚠️ codes, no gate | ❌ prose only |
+| CI gates (coverage / two-version integration matrix) | ⚠️ floor 40% + MySQL 5.7/8.0 | ⚠️ Codecov, no threshold | ✅ hard 90% | ❌ no CI |
+| Deployment shape | Go binary / Docker | PHP 8.1 (EOL) + Laravel 10 | Go + PostgreSQL + Redis | FastAPI + SQLite |
 
 </details>
 
-## Features
-
-**For players**
-- Sign up / sign in (optional invite-code gate), profile and password management
-- Upload skins and capes (drag & drop, live 3D preview, HD skins keep native resolution, optional private textures)
-- Arm model read from the texture pixels (nothing to declare); legacy 22×17 capes are padded to the standard layout on upload
-- Closet and character management, set avatar
-- Skin library with three visibility levels, filters, sorting and likes; shareable server-rendered detail pages with Markdown descriptions, source links and a report button; delete your own textures for good
-- Authorized apps, device management, Union binding, account deletion
-
-**For operators**
-- Admin panel: stats, users / characters / textures / reports, invite codes, grouped site settings, Union operations, runtime status (build/environment/dependencies), self-diagnostics
-- Announcements (Markdown with dual sanitization), custom CSS/JS, theme packs, **signed theme market** (browse/install/update/uninstall from the official registry, hot-applied without a restart) and local theme-pack upload, configurable footer (text + friend links / ICP line, shared by SSR and SPA; the copyright line is fixed)
-- Three-layer ban enforcement, auth rate limiting and lockout, SMTP password reset
-- Report handling: take a texture down and record a violation verdict (a struck texture cannot be republished until an operator lifts the ban), or delete it outright — refused while characters, closet entries or avatars still reference it, unless unbinding is explicitly confirmed; deletions keep an evidence record
-- Login and server/federation traffic logs (90 days), audit trail
-
-**Compatibility & integrations**
-- Full Yggdrasil API: authlib-injector works with zero config changes, UUIDs never drift
-- OIDC passwordless login (device-code flow + refresh rotation, authorization code also supported); MUA Union member module (off by default = zero surface)
-- CustomSkinAPI / USM / legacy bare PNG / public read-only API
-- Mojang official fallback: on a local miss, query the official sessionserver (hardened outbound + panel hot switch)
-- Server-side avatar and preview rendering: `/avatar/...`, `/preview/...` output PNG
-
-**Appearance & content**
-- Theme packs (zero build: `theme.json` + CSS + optional JS), distributable through the signed official theme market or uploaded locally; see the [theme spec and AI prompt template](docs/theme-spec.md)
-- Plugin platform v2 (goja): single hookApi 2 with config/secrets, namespaced data, tiered routes, events/guards, sandboxed iframe UI; P2 adds signed bundle install/upgrade/rollback, a single-source signed market and the `skin-plugin` publishing CLI; v0.5 adds scoped outbound `net:http` and durable `schedule:jobs`; official plugin sources and market live in [skin-nexus-plugins](https://github.com/YimingZhanshen/skin-nexus-plugins) with PR contributions signed by CI; `launcher-api` exposes a Bearer character API for desktop launchers ([spec](docs/launcher-api.md)), and `skin-importer` imports Mojang/Blessing skins singly or in admin batches; see [docs/plugin-spec.md](docs/plugin-spec.md)
-- zh-CN / en built in, language packs extensible
-- SEO: SSR landing and skin detail pages, sitemap, robots, optional site-wide noindex for staging
-
-## Quick start
-
-**Requirements**: Docker 20+ / Compose v2; MySQL 5.7 or 8.0 (compose bundles 8.0, external DB supported).
-
-```bash
-git clone https://github.com/YimingZhanshen/skin-nexus.git
-cd skin-nexus
-
-# Edit docker-compose.yml — at minimum:
-#   SKIN_BASE_URL      your public URL (set BEFORE first start; baked into texture URLs and the OIDC issuer)
-#   SKIN_DATABASE_DSN  DSN (password must match MYSQL_PASSWORD below)
-#   SKIN_ADMIN_TOKEN   machine/API admin token (openssl rand -hex 32)
-
-docker compose up -d
-```
-
-Open `http://<host>:8080/setup` (on an empty database, visiting any page enters the wizard automatically), then fill in site name, admin account and skin domains.
-
-- **Upgrade**: `docker compose pull && docker compose up -d` (volumes untouched)
-- **Migrate from blessing-skin-server**: see [`docs/migration.md`](docs/migration.md) (`preflight → dry-run → import`, rollback-able)
-- **Source build / no Docker**: see [`docs/build.md`](docs/build.md) and [`docs/deploy.md`](docs/deploy.md) §5
-
-**Before going live**
-
-1. Your reverse proxy must forward `X-Forwarded-Proto` and `X-Forwarded-For` (otherwise the protocol header is wrong and all users share one rate-limit bucket).
-2. Back up the signing key (`/data/sign-key.pem` in the `skin-data` volume for Docker; `data/sign-key.pem` by default for source builds) — losing it invalidates every skin signature.
-
-Full env-var tables, reverse-proxy examples, backup/restore and troubleshooting: [`docs/deploy.md`](docs/deploy.md).
+Measured on one 2-core / 3.5 GB production VPS: landing ~600 RPS, texture delivery 5182 RPS, Yggdrasil metadata 2365 RPS, zero errors.
 
 ## Documentation
 
-| Document | Contents |
-|---|---|
-| [`docs/deploy.md`](docs/deploy.md) | Deployment: compose DB modes, env vars, Nginx, operations |
-| [`docs/build.md`](docs/build.md) | Build guide: requirements, source build, Docker image, CI artifacts |
-| [`docs/migration.md`](docs/migration.md) | Full migration from blessing-skin-server: CLI, reconciliation, cutover |
-| [`docs/compat-matrix.md`](docs/compat-matrix.md) | Compatibility matrix: per-endpoint measured baseline |
-| [`docs/theme-spec.md`](docs/theme-spec.md) | Theme pack spec and AI prompt template |
-| [`docs/plugin-spec.md`](docs/plugin-spec.md) | Plugin authoring spec (goja host v2: config/data/routes/events/guards/UI) |
-| [`docs/plugin-publishing.md`](docs/plugin-publishing.md) | Signed bundles, registry, GitHub Pages publishing and key custody |
-| [`docs/launcher-api.md`](docs/launcher-api.md) | Launcher API v1 (Bearer/OIDC, characters/textures/library) |
-| [`docs/competitor-analysis.md`](docs/competitor-analysis.md) | Source evidence behind the comparison table |
-| [`docs/license-binding.md`](docs/license-binding.md) | Official-account binding design (routes, open questions, red lines; no implementation) |
-| [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | Iteration history |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributing: translations / themes / code and docs |
-| [`AGENTS.md`](AGENTS.md) | Repository map, iron rules, collaboration discipline |
-| [`GOVERNANCE.md`](GOVERNANCE.md) · [`CITATION.cff`](CITATION.cff) | Governance (BDFL) and citation |
-| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) · [`SECURITY.md`](SECURITY.md) · [`ACCESSIBILITY.md`](ACCESSIBILITY.md) | Community conduct, vulnerability reporting, accessibility statement |
+- Deployment and operations [`docs/deploy.md`](docs/deploy.md) · build and CI [`docs/build.md`](docs/build.md) · migration [`docs/migration.md`](docs/migration.md)
+- Compatibility baseline [`docs/compat-matrix.md`](docs/compat-matrix.md) · launcher API [`docs/launcher-api.md`](docs/launcher-api.md)
+- Theme packs [`docs/theme-spec.md`](docs/theme-spec.md) · plugins [`docs/plugin-spec.md`](docs/plugin-spec.md) · publishing and signing [`docs/plugin-publishing.md`](docs/plugin-publishing.md)
+- Competitor evidence [`docs/competitor-analysis.md`](docs/competitor-analysis.md) · official-account binding design [`docs/license-binding.md`](docs/license-binding.md) · iteration history [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
+- Contributing [`CONTRIBUTING.md`](CONTRIBUTING.md) · governance [`GOVERNANCE.md`](GOVERNANCE.md) · vulnerability reporting [`SECURITY.md`](SECURITY.md) · code of conduct [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) · accessibility [`ACCESSIBILITY.md`](ACCESSIBILITY.md) · repository collaboration notes [`AGENTS.md`](AGENTS.md)
 
-Most detailed docs are currently in Chinese.
+Most detailed documentation is still Chinese-first.
 
 ## Roadmap
 
-| Status | Item |
-|---|---|
-| ✅ Done | Phases 1–3: full Yggdrasil, OIDC passwordless, Union module, i18n / SEO / theme packs, migration toolchain, admin panel; production migration and cutover; v0.2.0 (password reset / Mojang fallback / ops logs / SEO); v0.3.0 (signed plugin install/market/rollback + publishing CLI); v0.4.0 (all slots wired, plugin form fields, avatar CDN, profile/rename guards, capability introspection, local bundle trust levels); v0.5.0 (public texture dedupe, scoped outbound HTTP, durable jobs + `skin-importer`, theme market, texture lifecycle, error contract + quality gates) |
-| 🔶 In progress | 0.5.x patch window: production rollout with the stock correction (`skin-nexus redetect-models`) and post-release field feedback; launcher acceptance on real devices (SJMCL and community launchers: OAuth → character select → join); the absolute-URL parity check when the panel `site_url` differs from the environment variable still needs an instance where the base can be changed |
-| ⬜ Planned | Official-account binding (design and red lines in [`docs/license-binding.md`](docs/license-binding.md), not scheduled), email verification + notification centre, object storage and CDN invalidation, plugin marketplace operations / sidecar isolation / first-party native plugins |
+- Done: v0.1–v0.5 — full Yggdrasil, OIDC passwordless, Union module, i18n / SEO / theme packs, migration toolchain, admin panel, signed plugin and theme markets, durable job queue, texture lifecycle, error contract and quality gates.
+- In progress: the 0.5.x patch window — stock model correction in production (`redetect-models`), real-device launcher acceptance (SJMCL and community launchers).
+- Planned: email verification and a notification centre, object storage with CDN invalidation, official-account binding (design and red lines only, not scheduled).
 
 ## Frozen compatibility contracts
 
-Read [`AGENTS.md`](AGENTS.md) and run the contract tests before changing any of these:
+Before changing any of these, read the iron rules in [`AGENTS.md`](AGENTS.md) and run the matching contract tests:
 
-1. `/api/yggdrasil/**` semantics (204 lists, `{error,errorMessage}` bodies, millisecond timestamps, strict PEM format)
-2. Player UUID stability (`OfflinePlayer:` md5 variant; renames never recompute)
-3. Persistence layout stays directly migratable from blessing-skin-server storage conventions
-4. `internal/union` wire contract and `internal/plugin` hook contract are frozen
-
-## Contributing
-
-Translations, theme packs, code and docs are all welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md). The project is BDFL-governed; everyday changes go through PRs. AI-assisted contributions are welcome, but the human submitter is responsible for verifying the output.
+1. The original semantics of `/api/yggdrasil/**` (204 list, `{error,errorMessage}` bodies, millisecond timestamps, strict PEM format)
+2. Zero player-UUID drift (the `OfflinePlayer:` md5 variant; renaming never recomputes)
+3. Persisted data stays isomorphic to blessing-skin-server storage conventions and directly migratable
+4. The `internal/union` wire contract and the `internal/plugin` hook contract are frozen
 
 ## License
 
-AGPL-3.0 — see [`LICENSE`](LICENSE). Copyright line: `Copyright (c) 2026 YMZS (YimingZhanshen) and SkinNexus contributors`.
+AGPL-3.0 (see [`LICENSE`](LICENSE)). `Copyright (c) 2026 YMZS (YimingZhanshen) and SkinNexus contributors`.
+Translations, theme packs, code and documentation contributions are welcome; governance is BDFL and changes go through PRs.
