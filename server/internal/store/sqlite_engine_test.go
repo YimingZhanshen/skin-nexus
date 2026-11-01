@@ -342,6 +342,61 @@ func TestSQLiteEngineHashLockRunsTheWork(t *testing.T) {
 	}
 }
 
+func TestSQLiteEngineZeroMeansUnset(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid, err := st.CreateUser(ctx, "wear@example.com", "wearer", "x", 3, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, _, err := st.CreatePlayer(ctx, uid, "Wearer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tid, err := st.AddTexture(ctx, uid, "skin", hashOf("f"), "default", TextureMeta{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetPlayerTextures(ctx, pid, tid, 0); err != nil {
+		t.Fatalf("set textures: %v", err)
+	}
+	var skinNull, capeNull int
+	if err := st.DB().QueryRow(`SELECT CASE WHEN tid_skin IS NULL THEN 1 ELSE 0 END,
+		CASE WHEN tid_cape IS NULL THEN 1 ELSE 0 END FROM players WHERE id = ?`, pid).
+		Scan(&skinNull, &capeNull); err != nil {
+		t.Fatal(err)
+	}
+	if skinNull != 0 || capeNull != 1 {
+		t.Errorf("tid=%d set / 0 cleared => skinNull=%d capeNull=%d, want 0 and 1", tid, skinNull, capeNull)
+	}
+	// Clearing again must land on NULL, not on 0: 0 is a valid-looking id for
+	// every reader that only checks `IS NOT NULL`.
+	if err := st.SetPlayerTextures(ctx, pid, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DB().QueryRow(`SELECT CASE WHEN tid_skin IS NULL THEN 1 ELSE 0 END FROM players WHERE id = ?`, pid).
+		Scan(&skinNull); err != nil {
+		t.Fatal(err)
+	}
+	if skinNull != 1 {
+		t.Error("passing 0 must clear the column to NULL")
+	}
+	if err := st.SetUserAvatar(ctx, uid, tid); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetUserAvatar(ctx, uid, 0); err != nil {
+		t.Fatal(err)
+	}
+	var avatarNull int
+	if err := st.DB().QueryRow(`SELECT CASE WHEN avatar_tid IS NULL THEN 1 ELSE 0 END FROM users WHERE id = ?`, uid).
+		Scan(&avatarNull); err != nil {
+		t.Fatal(err)
+	}
+	if avatarNull != 1 {
+		t.Error("avatar 0 must clear users.avatar_tid")
+	}
+}
+
 func TestSQLiteEngineClosetDropsOneCopy(t *testing.T) {
 	st := openSQLiteStore(t)
 	ctx := context.Background()

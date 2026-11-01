@@ -86,48 +86,71 @@ func (e Engine) Bind(query string) string {
 	b.Grow(len(query) + 8)
 	n := 0
 	for i := 0; i < len(query); {
-		c := query[i]
-		switch c {
-		case '\'', '"', '`':
-			end := skipQuoted(query, i, c)
-			b.WriteString(query[i:end])
-			i = end
-		case '-':
-			if strings.HasPrefix(query[i:], "--") {
-				end := strings.IndexByte(query[i:], '\n')
-				if end < 0 {
-					end = len(query) - i
-				}
-				b.WriteString(query[i : i+end])
-				i += end
-				continue
-			}
-			b.WriteByte(c)
-			i++
-		case '/':
-			if strings.HasPrefix(query[i:], "/*") {
-				end := strings.Index(query[i+2:], "*/")
-				if end < 0 {
-					end = len(query)
-				} else {
-					end += 4 // through the closing */
-				}
-				b.WriteString(query[i : i+end])
-				i += end
-				continue
-			}
-			b.WriteByte(c)
-			i++
+		at, kind, past := nextSpecial(query, i)
+		b.WriteString(query[i:at])
+		switch kind {
 		case '?':
 			n++
 			fmt.Fprintf(&b, "$%d", n)
-			i++
+		case 0:
+			// exhausted
 		default:
-			b.WriteByte(c)
-			i++
+			b.WriteString(query[at:past])
 		}
+		i = past
 	}
 	return b.String()
+}
+
+// CountParams reports how many `?` placeholders a statement carries, using the
+// same scan Bind uses. The store layer checks it against its argument list
+// before the driver sees the statement: SQLite's driver accepts extra
+// arguments and ignores them, so an off-by-one binding silently reads the
+// wrong column instead of failing.
+func CountParams(query string) int {
+	n := 0
+	for i := 0; i < len(query); {
+		_, kind, past := nextSpecial(query, i)
+		if kind == '?' {
+			n++
+		}
+		i = past
+	}
+	return n
+}
+
+// nextSpecial finds the next structurally interesting position from i and
+// returns it, what kind of construct starts there (0 when the input runs out)
+// and the index just past that construct. A `?` inside `'why?'`, a backticked
+// identifier or a comment is data, not a placeholder.
+func nextSpecial(s string, i int) (at int, kind byte, past int) {
+	for ; i < len(s); i++ {
+		switch s[i] {
+		case '\'', '"', '`':
+			return i, s[i], skipQuoted(s, i, s[i])
+		case '-':
+			if strings.HasPrefix(s[i:], "--") {
+				e := strings.IndexByte(s[i:], '\n')
+				if e < 0 {
+					e = len(s) - i
+				}
+				return i, '-', i + e
+			}
+		case '/':
+			if strings.HasPrefix(s[i:], "/*") {
+				e := strings.Index(s[i+2:], "*/")
+				if e < 0 {
+					e = len(s)
+				} else {
+					e += 4 // through the closing */
+				}
+				return i, '/', i + e
+			}
+		case '?':
+			return i, '?', i + 1
+		}
+	}
+	return len(s), 0, len(s)
 }
 
 // skipQuoted returns the index just past the quoted run starting at i.
@@ -172,11 +195,25 @@ func (e Engine) CIContains(col string) string {
 	return fmt.Sprintf("LOWER(%s) LIKE LOWER(?)", col)
 }
 
-// NullSafeEq compares two expressions treating NULL = NULL as true. Written
-// out rather than per-engine (`<=>` on MySQL, `IS` on SQLite,
-// `IS NOT DISTINCT FROM` on PG) because the long form is legal everywhere.
-func NullSafeEq(left, right string) string {
-	return fmt.Sprintf("(%s = %s OR (%s IS NULL AND %s IS NULL))", left, right, left, right)
+// NullSafeEq compares two expressions treating NULL = NULL as true.
+//
+// Spelled per engine on purpose. The "portable" long form
+// `(a = b OR (a IS NULL AND b IS NULL))` is exactly what PostgreSQL cannot
+// type-check when one side is an untyped placeholder: it answers
+// "could not determine data type of parameter $n" (SQLSTATE 42P18) and the
+// query never runs. Each engine has a native null-safe comparison instead —
+// `<=>` on MySQL, `IS` on SQLite, and the negation of `IS DISTINCT FROM` on
+// PostgreSQL, whose construct resolves the placeholder from the typed side.
+func (e Engine) NullSafeEq(left, right string) string {
+	switch e {
+	case SQLite:
+		return fmt.Sprintf("(%s IS %s)", left, right)
+	case Postgres:
+		return fmt.Sprintf("(NOT (%s IS DISTINCT FROM %s))", left, right)
+	case MySQL:
+		return fmt.Sprintf("(%s <=> %s)", left, right)
+	}
+	return fmt.Sprintf("(%s = %s)", left, right)
 }
 
 // Upsert builds an INSERT that resolves a key collision by overwriting.

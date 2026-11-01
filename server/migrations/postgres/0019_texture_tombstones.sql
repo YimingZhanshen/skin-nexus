@@ -5,9 +5,9 @@
 CREATE TABLE texture_tombstones (
   texture_id  BIGINT NOT NULL PRIMARY KEY,
   uid         BIGINT NOT NULL,
-  type        VARCHAR(6) NOT NULL CHECK (type IN ('skin','cape')),
+  type        VARCHAR(10) NOT NULL CHECK (type IN ('skin','cape')),
   hash        VARCHAR(64) NOT NULL,
-  model       VARCHAR(6) NULL CHECK (model IN ('default','slim') OR model IS NULL),
+  model       VARCHAR(10) NULL CHECK (model IN ('default','slim') OR model IS NULL),
   description VARCHAR(255) NULL,
   source      VARCHAR(16) NOT NULL DEFAULT '',
   source_url  VARCHAR(512) NULL,

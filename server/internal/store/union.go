@@ -67,11 +67,25 @@ func (m *Mysql) RemapUUIDs(ctx context.Context, remap map[string]string) (applie
 			skipped++
 			continue
 		}
+		// PostgreSQL aborts the entire transaction as soon as one statement
+		// fails, so a collision cannot be caught and stepped over the way
+		// MySQL tolerates it. Ask first, then write: the answer is the same
+		// (never blind-overwrite an existing target uuid), and the batch keeps
+		// its "one bad pair does not roll back the merge" property everywhere.
+		var taken int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM uuid_map WHERE uuid = ?`, new).Scan(&taken); err != nil {
+			return applied, skipped, err
+		}
+		if taken > 0 {
+			skipped++ // collision: target row exists
+			continue
+		}
 		res, err := tx.ExecContext(ctx,
 			`UPDATE uuid_map SET uuid = ? WHERE uuid = ? AND player_id IS NOT NULL`, new, old)
 		if err != nil {
 			if isDupKey(err) {
-				skipped++ // collision: target row exists — never blind-overwrite
+				skipped++ // race with a concurrent write — same verdict
 				continue
 			}
 			return applied, skipped, err

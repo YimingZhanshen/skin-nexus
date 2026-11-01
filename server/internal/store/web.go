@@ -8,8 +8,6 @@ import (
 	"errors"
 	"strings"
 	"time"
-
-	"skin-nexus/server/internal/dialect"
 )
 
 // ---- registration & web sessions ----
@@ -189,10 +187,11 @@ func (m *Mysql) UpdateUserEmail(ctx context.Context, uid int64, email string) er
 	// updated columns, so `email` is still old here), and PostgreSQL/SQLite
 	// always evaluate every right-hand side against the old row — all three
 	// therefore compare the pre-update email with the incoming value.
+	value := nullableStr(email)
 	_, err := m.db.ExecContext(ctx,
-		`UPDATE users SET email_verified = CASE WHEN `+dialect.NullSafeEq("email", "?")+` THEN email_verified ELSE 0 END, email = ?
+		`UPDATE users SET email_verified = CASE WHEN `+m.db.Dialect().NullSafeEq("email", "?")+` THEN email_verified ELSE 0 END, email = ?
 		 WHERE id = ?`,
-		nullableStr(email), nullableStr(email), nullableStr(email), uid)
+		value, value, uid)
 	if isDupKey(err) {
 		return ErrDuplicate
 	}
@@ -619,13 +618,26 @@ func (m *Mysql) CreatePlayer(ctx context.Context, uid int64, name string) (int64
 }
 
 // SetPlayerTextures points a player at texture ids (0 = clear).
+//
+// The zero means NULL, and it is decided here rather than with
+// `CASE WHEN ? = 0 THEN NULL ELSE ? END`: PostgreSQL cannot type a placeholder
+// that only ever appears inside such a comparison, so the same statement that
+// MySQL and SQLite accept fails with "could not determine data type of
+// parameter". Binding the value the caller already knows is also one fewer
+// thing for the reader to unwrap.
 func (m *Mysql) SetPlayerTextures(ctx context.Context, pid, skinTid, capeTid int64) error {
 	_, err := m.db.ExecContext(ctx,
-		`UPDATE players SET
-		 tid_skin = CASE WHEN ? = 0 THEN NULL ELSE ? END,
-		 tid_cape = CASE WHEN ? = 0 THEN NULL ELSE ? END
-		 WHERE id = ?`, skinTid, skinTid, capeTid, capeTid, pid)
+		`UPDATE players SET tid_skin = ?, tid_cape = ? WHERE id = ?`,
+		nullableTID(skinTid), nullableTID(capeTid), pid)
 	return err
+}
+
+// nullableTID maps a legacy "0 means unset" texture id onto a NULL column.
+func nullableTID(tid int64) any {
+	if tid == 0 {
+		return nil
+	}
+	return tid
 }
 
 // SetUserAvatar points users.avatar_tid at a texture the user owns
@@ -634,7 +646,7 @@ func (m *Mysql) SetPlayerTextures(ctx context.Context, pid, skinTid, capeTid int
 // job (webapi checks TextureOwner first); this method only writes.
 func (m *Mysql) SetUserAvatar(ctx context.Context, uid, tid int64) error {
 	_, err := m.db.ExecContext(ctx,
-		`UPDATE users SET avatar_tid = CASE WHEN ? = 0 THEN NULL ELSE ? END WHERE id = ?`, tid, tid, uid)
+		`UPDATE users SET avatar_tid = ? WHERE id = ?`, nullableTID(tid), uid)
 	return err
 }
 

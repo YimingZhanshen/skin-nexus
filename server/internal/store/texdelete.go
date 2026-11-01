@@ -66,17 +66,34 @@ func (m *Mysql) WithHashLock(ctx context.Context, hash string, fn func(context.C
 	// a content address well beyond any realistic collision set, and a
 	// collision would only cost an extra serialization.
 	name := "tex:" + hash[:min(len(hash), 32)]
-	var got sql.NullInt64
-	// The lock statement runs on a pinned *sql.Conn, which is not the rewriting
-	// wrapper — bind the placeholder here or PostgreSQL never sees $1.
-	if err := conn.QueryRowContext(ctx, m.db.Bind(acquire), name).Scan(&got); err != nil {
-		return fmt.Errorf("hash lock %s: %w", name, err)
-	}
-	if !got.Valid {
-		return fmt.Errorf("hash lock %s: not granted", name)
-	}
-	if got.Int64 != 1 {
-		return ErrBusy
+	// MySQL's GET_LOCK waits for its timeout argument and then answers 0;
+	// PostgreSQL has no timed advisory lock at all, only try-and-return-false.
+	// Waiting lives here so both engines give the caller the same contract: run
+	// the body when the lock is free, ErrBusy once the budget is spent.
+	const lockWait = 5 * time.Second
+	deadline := time.Now().Add(lockWait)
+	for {
+		var got sql.NullInt64
+		// The lock statement runs on a pinned *sql.Conn, which is not the
+		// rewriting wrapper — bind the placeholder here or PostgreSQL never
+		// sees $1.
+		if err := conn.QueryRowContext(ctx, m.db.Bind(acquire), name).Scan(&got); err != nil {
+			return fmt.Errorf("hash lock %s: %w", name, err)
+		}
+		if !got.Valid {
+			return fmt.Errorf("hash lock %s: not granted", name)
+		}
+		if got.Int64 == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			return ErrBusy
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("hash lock %s: %w", name, ctx.Err())
+		case <-time.After(100 * time.Millisecond):
+		}
 	}
 	// The lock belongs to this connection and the pool hands the same
 	// connection to the next caller, so releasing it is not optional. Deferred

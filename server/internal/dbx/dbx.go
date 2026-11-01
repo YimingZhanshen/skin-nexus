@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -91,16 +92,29 @@ func (d *DB) Dialect() dialect.Engine { return d.eng }
 
 // ExecContext runs a statement after placeholder rewriting.
 func (d *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	if err := d.check(query, args); err != nil {
+		return nil, err
+	}
 	return d.DB.ExecContext(ctx, d.Bind(query), d.args(args)...)
 }
 
 // QueryContext runs a query after placeholder rewriting.
 func (d *DB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	if err := d.check(query, args); err != nil {
+		return nil, err
+	}
 	return d.DB.QueryContext(ctx, d.Bind(query), d.args(args)...)
 }
 
 // QueryRowContext runs a row-returning query after placeholder rewriting.
 func (d *DB) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	if err := d.check(query, args); err != nil {
+		// sql.Row carries no error of its own, so a mismatch would otherwise
+		// reach the caller as ErrNoRows — indistinguishable from "no such row".
+		// Report it and hand back an empty result instead of a wrong one.
+		log.Printf("dbx: %v", err)
+		return d.DB.QueryRowContext(ctx, `SELECT NULL WHERE 0`)
+	}
 	return d.DB.QueryRowContext(ctx, d.Bind(query), d.args(args)...)
 }
 
@@ -128,17 +142,52 @@ func (t *Tx) Bind(query string) string { return t.db.eng.Bind(query) }
 
 // ExecContext runs a statement after placeholder rewriting.
 func (t *Tx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	if err := t.db.check(query, args); err != nil {
+		return nil, err
+	}
 	return t.Tx.ExecContext(ctx, t.Bind(query), t.db.args(args)...)
 }
 
 // QueryContext runs a query after placeholder rewriting.
 func (t *Tx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	if err := t.db.check(query, args); err != nil {
+		return nil, err
+	}
 	return t.Tx.QueryContext(ctx, t.Bind(query), t.db.args(args)...)
 }
 
 // QueryRowContext runs a row-returning query after placeholder rewriting.
 func (t *Tx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	if err := t.db.check(query, args); err != nil {
+		log.Printf("dbx: %v", err)
+		return t.Tx.QueryRowContext(ctx, `SELECT NULL WHERE 0`)
+	}
 	return t.Tx.QueryRowContext(ctx, t.Bind(query), t.db.args(args)...)
+}
+
+// check compares a statement's placeholder count with its arguments.
+//
+// Queries are written with `?` on every engine, so an engine helper whose
+// fragment spells the same predicate with a different number of placeholders
+// changes the arity of the statement it is interpolated into. SQLite's driver
+// does not reject the mismatch: it binds by index and drops the rest, which
+// turns a refactor into a statement that silently matches no rows. Counting at
+// the boundary makes it a failure that names the statement instead.
+func (d *DB) check(query string, args []any) error {
+	n := dialect.CountParams(query)
+	if n == len(args) {
+		return nil
+	}
+	return fmt.Errorf("dbx: statement has %d placeholder(s) but got %d argument(s): %s",
+		n, len(args), clampLine(query))
+}
+
+func clampLine(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) > 160 {
+		return s[:160] + "…"
+	}
+	return s
 }
 
 // args normalises arguments that SQLite stores as text.
@@ -155,28 +204,52 @@ func (t *Tx) QueryRowContext(ctx context.Context, query string, args ...any) *sq
 // matched only the first, and an expired key bound as *time.Time stayed
 // readable on SQLite — so all three are handled, and the test pins it.
 func (d *DB) args(args []any) []any {
-	if d.eng != dialect.SQLite {
-		return args
-	}
-	out := make([]any, len(args))
-	copy(out, args)
-	for i, a := range out {
-		switch v := a.(type) {
-		case time.Time:
-			out[i] = v.UTC()
-		case *time.Time:
-			if v != nil {
-				utc := v.UTC()
-				out[i] = &utc
-			}
-		case sql.NullTime:
-			if v.Valid {
-				v.Time = v.Time.UTC()
-				out[i] = v
+	switch d.eng {
+	case dialect.SQLite:
+		out := make([]any, len(args))
+		copy(out, args)
+		for i, a := range out {
+			switch v := a.(type) {
+			case time.Time:
+				out[i] = v.UTC()
+			case *time.Time:
+				if v != nil {
+					utc := v.UTC()
+					out[i] = &utc
+				}
+			case sql.NullTime:
+				if v.Valid {
+					v.Time = v.Time.UTC()
+					out[i] = v
+				}
 			}
 		}
+		return out
+	case dialect.Postgres:
+		// Every flag in this schema is a 0/1 column, because that is what
+		// MySQL's TINYINT(1) was. pgx refuses to encode a Go bool into int2, so
+		// the boolean-shaped callers (the OIDC backend's done/denied/is_public)
+		// land here; reads still work because database/sql converts 0/1 back to
+		// a bool for a *bool destination.
+		var out []any
+		for i, a := range args {
+			if b, ok := a.(bool); ok {
+				if out == nil {
+					out = make([]any, len(args))
+					copy(out, args)
+				}
+				out[i] = 0
+				if b {
+					out[i] = 1
+				}
+			}
+		}
+		if out == nil {
+			return args
+		}
+		return out
 	}
-	return out
+	return args
 }
 
 // dsnFor maps the portable DSN onto the driver name plus driver specifics.

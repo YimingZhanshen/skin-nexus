@@ -24,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
+
 	"skin-nexus/server/internal/dbx"
 	"skin-nexus/server/internal/dialect"
 	"skin-nexus/server/internal/texture"
@@ -31,7 +33,7 @@ import (
 
 // ImportOptions configures one import run.
 type ImportOptions struct {
-	Source       *sql.DB        // legacy database connection (always MySQL)
+	Source       *dbx.DB        // legacy site, any supported engine
 	Target       *dbx.DB        // skin_nexus connection (carries its engine)
 	SourcePrefix string         // e.g. "legacy." or "legacy_"
 	TexturesSrc  string         // legacy storage/textures dir ("" = skip files)
@@ -451,13 +453,13 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 		WHERE NOT EXISTS (
 			SELECT 1 FROM user_closet
 			WHERE user_uid = ? AND texture_tid = ?
-			  AND %s)`, dialect.NullSafeEq(nameCol, "?"))
+			  AND %s)`, eng.NullSafeEq(nameCol, "?"))
 	for _, c := range closet {
 		if opt.DryRun {
 			continue
 		}
 		res, err := opt.Target.ExecContext(ctx, closetIns,
-			c.uid, c.tid, c.itemName, c.uid, c.tid, c.itemName, c.itemName)
+			c.uid, c.tid, c.itemName, c.uid, c.tid, c.itemName)
 		if err != nil {
 			return rep, fmt.Errorf("closet insert uid=%d tid=%d: %w", c.uid, c.tid, err)
 		}
@@ -548,35 +550,67 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 			}
 		}
 	}
+
+	// A site that keeps registering players must not collide with the rows that
+	// were just imported.
+	if !opt.DryRun {
+		if err := resyncSequences(ctx, opt.Target); err != nil {
+			return rep, err
+		}
+	}
 	return rep, nil
 }
 
-// ValidateDSNs enforces the driver settings the importer depends on
-// (review A1): parseTime=true on both sides (otherwise every time.Time scan
-// fails at runtime) and identical loc= (otherwise wall-clock timestamps
-// shift by the UTC offset between the two sides).
-func ValidateDSNs(src, tgt string) error {
-	if !strings.Contains(src, "parseTime=true") || !strings.Contains(tgt, "parseTime=true") {
-		return fmt.Errorf("import: both DSNs must carry parseTime=true")
+// resyncSequences moves PostgreSQL's generated-key counters past the highest id
+// the import wrote. PG does not look at the rows when ids are supplied
+// explicitly, so the next registration would take id 1 and die on the primary
+// key. MySQL raises AUTO_INCREMENT as it inserts and SQLite's rowid is max+1 by
+// definition, so only PG needs the step.
+func resyncSequences(ctx context.Context, target *dbx.DB) error {
+	if target.Engine() != dialect.Postgres {
+		return nil
 	}
-	if locOf(src) != locOf(tgt) {
-		return fmt.Errorf("import: DSNs must use the same loc (got %q vs %q)", locOf(src), locOf(tgt))
+	for _, tbl := range []string{"users", "players", "textures", "invitation_codes"} {
+		q := fmt.Sprintf(
+			`SELECT setval(pg_get_serial_sequence('%[1]s', 'id'), (SELECT COALESCE(MAX(id), 1) FROM %[1]s))`, tbl)
+		if _, err := target.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("resync %s sequence after import: %w", tbl, err)
+		}
 	}
 	return nil
 }
 
-// locOf extracts the loc= query parameter ("" = driver default UTC).
-func locOf(dsn string) string {
-	q := dsn
-	if i := strings.Index(dsn, "?"); i >= 0 {
-		q = dsn[i+1:]
-	}
-	for _, kv := range strings.Split(q, "&") {
-		if v, ok := strings.CutPrefix(kv, "loc="); ok {
-			return v
+// ValidateDSNs fails fast on connections the importer cannot use, before any
+// legacy table is touched.
+//
+// It used to demand parseTime=true and an identical loc= on both sides, because
+// a MySQL DSN without them makes every time.Time scan fail at runtime and a
+// differing loc shifts wall-clock values between the two databases. dbx.Open
+// forces parseTime, a UTC session and UTC-located reads by itself now, so what
+// is left to check offline is that each DSN parses for the engine it claims.
+// SQLite and PostgreSQL need nothing further: their drivers surface the real
+// error at connect time, and dbx.Open reports it.
+func ValidateDSNs(src, tgt string) error {
+	for _, d := range []struct {
+		label string
+		dsn   string
+	}{
+		{"source", src}, {"target", tgt},
+	} {
+		if strings.TrimSpace(d.dsn) == "" {
+			return fmt.Errorf("import: empty %s DSN", d.label)
+		}
+		eng, ok := dialect.FromDSN(d.dsn)
+		if !ok {
+			eng = dialect.MySQL // no scheme = the pre-multi-engine MySQL DSN
+		}
+		if eng == dialect.MySQL {
+			if _, err := mysql.ParseDSN(d.dsn); err != nil {
+				return fmt.Errorf("import: %s DSN: %w", d.label, err)
+			}
 		}
 	}
-	return ""
+	return nil
 }
 
 // safeTime normalizes a scanned legacy timestamp (review A1/A2: NULL or

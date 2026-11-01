@@ -43,9 +43,9 @@ CREATE INDEX idx_players_uid ON players (uid);
 CREATE TABLE textures (
   id          BIGSERIAL PRIMARY KEY,
   uid         BIGINT NOT NULL,
-  type        VARCHAR(6) NOT NULL CHECK (type IN ('skin','cape')),
+  type        VARCHAR(10) NOT NULL CHECK (type IN ('skin','cape')),
   hash        VARCHAR(64) NOT NULL,
-  model       VARCHAR(6) NULL CHECK (model IN ('default','slim') OR model IS NULL),
+  model       VARCHAR(10) NULL CHECK (model IN ('default','slim') OR model IS NULL),
   description VARCHAR(255) NULL,
   upload_at   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

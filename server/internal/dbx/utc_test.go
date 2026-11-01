@@ -228,6 +228,37 @@ func TestSQLiteNormalisesPointerAndNullTimeArgs(t *testing.T) {
 	}
 }
 
+// TestPostgresMapsBoolFlagsToSmallInt covers the other engine's argument
+// mismatch: every flag column in this schema is 0/1 (MySQL TINYINT(1) heritage)
+// and pgx refuses to encode a Go bool into int2 — the OIDC backend writes
+// done/denied/is_public as booleans and failed on the first round against
+// PostgreSQL.
+func TestPostgresMapsBoolFlagsToSmallInt(t *testing.T) {
+	d := &DB{eng: dialect.Postgres}
+	in := []any{true, false, "argon2id", 7}
+	out := d.args(in)
+	if out[0] != 1 || out[1] != 0 {
+		t.Errorf("bools mapped to %#v/%#v, want 1 and 0", out[0], out[1])
+	}
+	if out[2] != "argon2id" || out[3] != 7 {
+		t.Errorf("non-bool arguments changed: %#v %#v", out[2], out[3])
+	}
+	if in[0] != true {
+		t.Error("normalisation mutated the caller's slice")
+	}
+	// Nothing to convert means no allocation and the original slice.
+	if got := d.args([]any{"a", 1}); len(got) != 2 || got[0] != "a" {
+		t.Errorf("passthrough broken: %#v", got)
+	}
+	// MySQL and SQLite take booleans from the driver as they please.
+	for _, eng := range []dialect.Engine{dialect.MySQL, dialect.SQLite} {
+		d := &DB{eng: eng}
+		if got := d.args([]any{true}); got[0] != true {
+			t.Errorf("%s rewrote a bool the driver can handle itself: %#v", eng, got[0])
+		}
+	}
+}
+
 // TestFilePoolKeepsReadersRunning documents the deadlock that a pinned pool
 // would cause: rows still open while another query is issued.
 func TestFilePoolKeepsReadersRunning(t *testing.T) {

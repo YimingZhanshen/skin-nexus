@@ -154,11 +154,21 @@ func TestPortablePredicates(t *testing.T) {
 	if got := SQLite.CIContains("nickname"); got != "LOWER(nickname) LIKE LOWER(?)" {
 		t.Errorf("CIContains = %q", got)
 	}
-	// The long form has to be legal on all three engines — `<=>` is MySQL-only,
-	// `IS` is SQLite-only, `IS NOT DISTINCT FROM` is PG-only.
-	want := "(a = b OR (a IS NULL AND b IS NULL))"
-	if got := NullSafeEq("a", "b"); got != want {
-		t.Errorf("NullSafeEq = %q, want %q", got, want)
+	// Each engine gets its own native null-safe comparison: the long
+	// `a = b OR (a IS NULL AND b IS NULL)` form is what PostgreSQL cannot type
+	// when one side is a bound placeholder (SQLSTATE 42P18).
+	nsCases := []struct {
+		eng  Engine
+		want string
+	}{
+		{MySQL, "(a <=> b)"},
+		{SQLite, "(a IS b)"},
+		{Postgres, "(NOT (a IS DISTINCT FROM b))"},
+	}
+	for _, c := range nsCases {
+		if got := c.eng.NullSafeEq("a", "b"); got != c.want {
+			t.Errorf("%s NullSafeEq = %q, want %q", c.eng, got, c.want)
+		}
 	}
 	if got := Postgres.ConcatList("id"); got != "string_agg(id::text, ',')" {
 		t.Errorf("ConcatList(pg) = %q", got)

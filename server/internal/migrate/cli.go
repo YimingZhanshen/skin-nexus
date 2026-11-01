@@ -3,7 +3,6 @@ package migrate
 import (
 	"bufio"
 	"context"
-	"database/sql"
 	"flag"
 	"fmt"
 	"io"
@@ -152,7 +151,10 @@ func runImport(args []string, out io.Writer) error {
 	if err := ValidateDSNs(*sourceDSN, *targetDSN); err != nil {
 		return err
 	}
-	src, err := sql.Open("mysql", *sourceDSN)
+	// The legacy site is whatever engine it runs on — blessing ships MySQL,
+	// its compose image SQLite, and forks exist on PostgreSQL. dbx picks the
+	// driver from the DSN, so a cross-engine cutover is one flag.
+	src, err := dbx.Open(context.Background(), "", *sourceDSN)
 	if err != nil {
 		return err
 	}
