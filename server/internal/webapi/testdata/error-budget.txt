@@ -9,7 +9,7 @@
 #            prose, so it cannot translate them
 #   chinese  hard-coded Chinese prose on the error path — English by the end of
 #            the round, because the language packs own the translated words
-webapi uncoded 94
+webapi uncoded 56
 webapi chinese 87
 account uncoded 0
 account chinese 44

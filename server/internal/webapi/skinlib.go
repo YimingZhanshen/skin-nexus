@@ -15,6 +15,7 @@ import (
 
 	"skin-nexus/server/internal/account"
 	"skin-nexus/server/internal/avatargen"
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/ygg"
 )
@@ -44,7 +45,7 @@ func (b *Backend) handleSkinlibList(w http.ResponseWriter, r *http.Request) {
 		Page:        page,
 	})
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "list failed")
+		writeErrCode(w, http.StatusInternalServerError, "list failed", i18n.MsgInternal)
 		return
 	}
 	items := make([]map[string]any, 0, len(rows))
@@ -87,21 +88,21 @@ func (b *Backend) handleSkinlibList(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleSkinlibLike(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "请先登录")
+		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
 		return
 	}
 	tid, perr := strconv.ParseInt(r.PathValue("tid"), 10, 64)
 	if perr != nil || tid <= 0 {
-		writeErr(w, http.StatusBadRequest, "bad tid")
+		writeErrCode(w, http.StatusBadRequest, "bad tid", i18n.MsgTextureBadID)
 		return
 	}
 	created, err := b.Store.AddClosetEntry(r.Context(), uid, tid, "")
 	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "纹理不存在")
+		writeErrCode(w, http.StatusNotFound, "纹理不存在", i18n.MsgTextureNotFound)
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "like failed")
+		writeErrCode(w, http.StatusInternalServerError, "like failed", i18n.MsgInternal)
 		return
 	}
 	likes, _ := b.Store.ClosetLikes(r.Context(), tid)
@@ -112,19 +113,19 @@ func (b *Backend) handleSkinlibLike(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleSkinlibUnlike(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "请先登录")
+		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
 		return
 	}
 	tid, perr := strconv.ParseInt(r.PathValue("tid"), 10, 64)
 	if perr != nil || tid <= 0 {
-		writeErr(w, http.StatusBadRequest, "bad tid")
+		writeErrCode(w, http.StatusBadRequest, "bad tid", i18n.MsgTextureBadID)
 		return
 	}
 	if err := b.Store.RemoveClosetEntryByTID(r.Context(), uid, tid); errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "未收藏")
+		writeErrCode(w, http.StatusNotFound, "未收藏", i18n.MsgLikeMissing)
 		return
 	} else if err != nil {
-		writeErr(w, http.StatusInternalServerError, "unlike failed")
+		writeErrCode(w, http.StatusInternalServerError, "unlike failed", i18n.MsgInternal)
 		return
 	}
 	likes, _ := b.Store.ClosetLikes(r.Context(), tid)
@@ -136,12 +137,12 @@ func (b *Backend) handleSkinlibUnlike(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "请先登录")
+		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
 		return
 	}
 	tid, perr := strconv.ParseInt(r.PathValue("tid"), 10, 64)
 	if perr != nil || tid <= 0 {
-		writeErr(w, http.StatusBadRequest, "bad tid")
+		writeErrCode(w, http.StatusBadRequest, "bad tid", i18n.MsgTextureBadID)
 		return
 	}
 	var req struct {
@@ -153,20 +154,20 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 		Model     *string `json:"model"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	if req.Name != nil {
 		*req.Name = strings.TrimSpace(*req.Name)
 		if len([]rune(*req.Name)) > 50 {
-			writeErr(w, http.StatusBadRequest, "名称过长")
+			writeErrCode(w, http.StatusBadRequest, "名称过长", i18n.MsgTooLong)
 			return
 		}
 	}
 	if req.Detail != nil {
 		*req.Detail = strings.TrimSpace(*req.Detail)
 		if len([]rune(*req.Detail)) > 4000 {
-			writeErr(w, http.StatusBadRequest, "描述最多 4000 个字")
+			writeErrCode(w, http.StatusBadRequest, "描述最多 4000 个字", i18n.MsgTooLong)
 			return
 		}
 	}
@@ -179,22 +180,22 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 			}
 		case "derivative", "repost":
 			if req.SourceURL == nil || strings.TrimSpace(*req.SourceURL) == "" {
-				writeErr(w, http.StatusBadRequest, "二创/转载必须填写原始发布地址")
+				writeErrCode(w, http.StatusBadRequest, "二创/转载必须填写原始发布地址", account.CodeSourceURLReq)
 				return
 			}
 			if !validSourceURL(*req.SourceURL) {
-				writeErr(w, http.StatusBadRequest, "原始发布地址必须是 http(s) 链接")
+				writeErrCode(w, http.StatusBadRequest, "原始发布地址必须是 http(s) 链接", account.CodeSourceURLBad)
 				return
 			}
 		default:
-			writeErr(w, http.StatusBadRequest, "材质来源不合法")
+			writeErrCode(w, http.StatusBadRequest, "材质来源不合法", i18n.MsgTextureSourceBad)
 			return
 		}
 	}
 	if req.SourceURL != nil {
 		*req.SourceURL = strings.TrimSpace(*req.SourceURL)
 		if len(*req.SourceURL) > 512 {
-			writeErr(w, http.StatusBadRequest, "来源地址过长")
+			writeErrCode(w, http.StatusBadRequest, "来源地址过长", i18n.MsgTooLong)
 			return
 		}
 	}
@@ -216,7 +217,7 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 			srcURL = *req.SourceURL
 		}
 		if (src == "derivative" || src == "repost") && !validSourceURL(srcURL) {
-			writeErr(w, http.StatusBadRequest, "二创/转载必须填写合法的原始发布地址")
+			writeErrCode(w, http.StatusBadRequest, "二创/转载必须填写合法的原始发布地址", account.CodeSourceURLBad)
 			return
 		}
 	}
@@ -226,22 +227,22 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 	if req.Model != nil {
 		m := strings.TrimSpace(*req.Model)
 		if m != "default" && m != "slim" {
-			writeErr(w, http.StatusBadRequest, "手臂模型只能是 default 或 slim")
+			writeErrCode(w, http.StatusBadRequest, "手臂模型只能是 default 或 slim", i18n.MsgTextureModelBad)
 			return
 		}
 		patch.Model = &m
 	}
 	if err := b.Store.UpdateTextureMeta(r.Context(), tid, owner, patch); errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "纹理不存在")
+		writeErrCode(w, http.StatusNotFound, "纹理不存在", i18n.MsgTextureNotFound)
 		return
 	} else if errors.Is(err, store.ErrForbidden) {
-		writeErr(w, http.StatusForbidden, "只有上传者可以修改")
+		writeErrCode(w, http.StatusForbidden, "只有上传者可以修改", i18n.MsgTextureNotOwner)
 		return
 	} else if errors.Is(err, store.ErrModerationBan) {
-		writeErr(w, http.StatusForbidden, "该材质已被判定违规，不能再次公开")
+		writeErrCode(w, http.StatusForbidden, "该材质已被判定违规，不能再次公开", i18n.MsgTextureModeration)
 		return
 	} else if err != nil {
-		writeErr(w, http.StatusInternalServerError, "update failed")
+		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
 		return
 	}
 	// Visibility and arm model are moderation-relevant changes: without this
@@ -277,12 +278,12 @@ func validSourceURL(raw string) bool {
 func (b *Backend) handleTextureDeleteSelf(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "请先登录")
+		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
 		return
 	}
 	tid, err := strconv.ParseInt(r.PathValue("tid"), 10, 64)
 	if err != nil || tid <= 0 {
-		writeErr(w, http.StatusBadRequest, "材质编号不合法")
+		writeErrCode(w, http.StatusBadRequest, "材质编号不合法", i18n.MsgTextureBadID)
 		return
 	}
 	force := r.URL.Query().Get("force") == "1"
@@ -301,12 +302,12 @@ var reportReasons = map[string]bool{
 func (b *Backend) handleTextureReport(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "请先登录")
+		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
 		return
 	}
 	tid, perr := strconv.ParseInt(r.PathValue("tid"), 10, 64)
 	if perr != nil || tid <= 0 {
-		writeErr(w, http.StatusBadRequest, "bad tid")
+		writeErrCode(w, http.StatusBadRequest, "bad tid", i18n.MsgTextureBadID)
 		return
 	}
 	var req struct {
@@ -314,47 +315,47 @@ func (b *Backend) handleTextureReport(w http.ResponseWriter, r *http.Request) {
 		Detail string `json:"detail"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	req.Reason = strings.ToLower(strings.TrimSpace(req.Reason))
 	req.Detail = strings.TrimSpace(req.Detail)
 	if !reportReasons[req.Reason] {
-		writeErr(w, http.StatusBadRequest, "举报原因不合法")
+		writeErrCode(w, http.StatusBadRequest, "举报原因不合法", i18n.MsgInvalidValue)
 		return
 	}
 	if len([]rune(req.Detail)) > 500 {
-		writeErr(w, http.StatusBadRequest, "补充说明最多 500 个字")
+		writeErrCode(w, http.StatusBadRequest, "补充说明最多 500 个字", i18n.MsgTooLong)
 		return
 	}
 	pub, err := b.Store.TextureIsPublic(r.Context(), tid)
 	if err != nil || !pub {
-		writeErr(w, http.StatusNotFound, "纹理不存在或未公开")
+		writeErrCode(w, http.StatusNotFound, "纹理不存在或未公开", i18n.MsgTextureNotVisible)
 		return
 	}
 	owner, err := b.Store.TextureOwner(r.Context(), tid)
 	if err != nil {
-		writeErr(w, http.StatusNotFound, "纹理不存在")
+		writeErrCode(w, http.StatusNotFound, "纹理不存在", i18n.MsgTextureNotFound)
 		return
 	}
 	if owner == uid {
-		writeErr(w, http.StatusBadRequest, "不能举报自己的材质")
+		writeErrCode(w, http.StatusBadRequest, "不能举报自己的材质", i18n.MsgReportSelf)
 		return
 	}
 	since := time.Now().Add(-24 * time.Hour)
 	if n, err := b.Store.CountReportsByUserSince(r.Context(), uid, since); err == nil && n >= 10 {
-		writeErr(w, http.StatusTooManyRequests, "今日举报次数过多，请稍后再试")
+		writeErrCode(w, http.StatusTooManyRequests, "今日举报次数过多，请稍后再试", i18n.MsgReportQuota)
 		return
 	}
 	if n, err := b.Store.CountReportsByTextureSince(r.Context(), tid, since); err == nil && n >= 50 {
-		writeErr(w, http.StatusTooManyRequests, "该材质今日举报次数过多")
+		writeErrCode(w, http.StatusTooManyRequests, "该材质今日举报次数过多", i18n.MsgReportQuota)
 		return
 	}
 	if _, err := b.Store.CreateReport(r.Context(), tid, uid, req.Reason, req.Detail); errors.Is(err, store.ErrDuplicateReport) {
-		writeErr(w, http.StatusConflict, "你已经举报过该材质")
+		writeErrCode(w, http.StatusConflict, "你已经举报过该材质", i18n.MsgReportDuplicate)
 		return
 	} else if err != nil {
-		writeErr(w, http.StatusInternalServerError, "提交举报失败")
+		writeErrCode(w, http.StatusInternalServerError, "提交举报失败", i18n.MsgReportFailed)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true})
