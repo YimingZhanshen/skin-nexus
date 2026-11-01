@@ -4,6 +4,15 @@
 
 ## 2026-11-01
 
+- **真机验收（生产 `bd9dbf2`）当场抓出四项，均已修**：
+  - **管理员无筛选的材质库查询直接 500**：`store.SkinlibOpts.where()` 在「查看者是管理员 + 没有 filter/keyword/uploader」时返回空串，调用方拼成 `... textures t WHERE ORDER BY` 被 MySQL 拒绝。SPA 四个 tab 恒带类型筛选，所以浏览器里永远看不出来；任何按文档省略 `filter` 的 API 客户端（或将来加「全部」tab）都会踩爆。生产实测矩阵确认边界：`?filter=skin`/`?keyword=a`/`?uploader=8` 全 200，无 filter 与 `?page=2`（跨类型翻页）全 500。修法是补一个 `1=1` 兜底，并加免库单测把「WHERE 不得为空」钉住（同类的 `jobs.List`/`ListReports` 本来就写死 `1=1`，只有这处漏了）。
+  - **`error` 与 `code` 在玩家面不一致**：`webapi.writeErrCode` 发的是 `http.StatusText(status)`，而 `docs/launcher-api.md` 与本仓库注释都写作 `{"error":"stable.code"}`，`adminapi` 与 `account` 信封也早就是 code——同一个约定两种实现。形状测试当时只断言「`error` 非空」，所以字面量闸和形状闸双双放行。现两面统一为 `error == code`，并把该断言补进测试（`error != code` 即失败）。
+  - **33 处 500 把原因吞了**：`writeErrCode(w, 500, "list failed", ...)` 既不记日志也不回客户端，线上只能靠复现猜。新增 `writeLogged`/`writeInternal`（日志带方法+路径+底层 err，响应固定 `operation failed`），33 个调用点全部收敛——这正是 P3 定的「改码必须补日志」纪律，本轮补上它自己的欠账。
+  - **`message` 仍有中文漏网**：角色名长度/规则两条提示是 `store` 现场拼的字符串，字面量闸扫不到（闸只看调用点的字面量）。改英文；界面文案不受影响，因为 `errors.player.name_invalid` 词典命中在前（实测：中文界面「角色名不合法」，英文界面 "Player name is not valid"，服务端 message 已是英文）。
+- **生产实测通过的验收项**（补齐上轮挂着的三条）：`GET /api/admin/v1/settings` 三个密键恒空值 + `secret`/`set` 布尔（`smtp_pass` set:false 走 env、`union_member_key`/签名私钥 set:true 且不回显），`PUT smtp_pass=""` 返回 `ok:true` 且状态不变——空值即保持的语义成立；禁用 WebGL 后 `GET` 面板降级为 `image-rendering: pixelated` 的 `<img>`（players 页无 canvas 残留）；错误词典在中英文界面均命中真实后端响应。
+- 尚未在生产验：面板改 `site_url` 后三处绝对 URL 一致——该项会在演示实例上做（生产改基址会让已签发的 immutable URL 与新 URL 并存，属于有代价的操作）。
+- 验证：`go build`/`gofmt`/`go vet`（含 integration tag）/`go test ./...` 全绿；新增免库单测两条。
+
 - **竞品取证第三轮（快照口径 2026-11-01）**：`docs/competitor-analysis.md` 重写为按各仓 HEAD 提交日锚定的快照，逐格 `文件:行` 证据且**我方自己那一列同样给证据**；10-26 正文整体降级为附录 A，不再冒充当前事实。新增 Drasl（Go，Yggdrasil + services/discovery 全族）与 LittleSkin 正版校验生态的取证，并把差距按「真缺口 / 伪需求」排序：对象存储与纹理失效仍是最大真缺口；`/publickeys` + certificates 确有真实消费方，但取证修正了上一轮的判断——authlib-injector 自己本地生公钥与 profile key，只有**不挂 agent 的原生客户端**才是服务端端点的消费者；「签名密钥轮换」判为伪需求（没有已泄露的密钥要处理）。另收四家工程纪律（覆盖率闸、错误三元组、公开配置白名单、迁移前备份、未实现端点答 501）与反面教材，含**我方自查清单**：`internal/auth/authsource.go` 是无人引用的占位、插件 manifest 声明的 7 项权限未被强制、码目录 3 个码尚无发出点、7 条管理路由无 SPA 消费者、墓碑表只增不清。快照会过期：引用前重新取证，这条写在文档表头。
 - **正版账号绑定：出方案不出实现**（新增 `docs/license-binding.md`）：路线 A（Microsoft/XBL/XSTS + entitlement 验签，绑长期身份）与路线 B（Drasl 式无状态换肤挑战，不绑账号）按依赖、留存、撤销、失败模式、适配成本逐维度对比，结论是先做**方案 0**——零新出站依赖，用现有只读兜底 + 面板灰度把「绑定被冒用 / 进服被踢」压到可接受，路线 A 单独分段拍板。七条设计问题必须在实施前落定（票据生命周期与撤销、与封禁面的交集、`require_verification` 的语义冲突、材质 URL 与 `skinDomains`、无正版玩家的可玩性、面板灰度回退、审计保留期）；外部前置动作清单（Entra 应用注册与回调可达性、域名/ICP、公钥分发、客户端密钥只走 env）；红线写死 LittleSkin 的「凭缓存码按邮箱匹配免密继承旧绑定」为禁止形态，并明确 `enforce-secure-profile` 与混合认证不兼容、我方无 services/discovery 族故「不挂 javaagent 接入」当前不可达。排期触发条件三选一写在文档开头。
 - **对照表与索引同步**：README 中英两表按同快照更新（新增纹理生命周期、错误契约与结构闸、质量门禁、邮箱验证/通知、无 agent 客户端接入面五行），并说明 Drasl / LittleSkin 为何不进表（定位不同：无 SEO、无皮肤库运营面）；`compat-matrix.md` §4 补一行「`uploadableTextures` 按位裁剪」的取舍——本站恒答 `skin,cape` 与「上传不按类型设限」的事实一致，要做按位裁剪得先把整型档位权限模型改成能力位；两份 README 与 `AGENTS.md` 的文档索引加入 `docs/license-binding.md`。
