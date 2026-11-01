@@ -26,7 +26,8 @@ func (m *Mysql) AdminPlayers(ctx context.Context, q string, uidFilter int64, pag
 	}
 	if q != "" {
 		ci := m.db.Dialect()
-		where += " AND (" + ci.CIContains("p.name") + " OR " + ci.CIContains("usr.nickname") + ")"
+		// The clause opens here and closes after the optional uid term below.
+		where += " AND (" + ci.CIContains("p.name") + " OR " + ci.CIContains("usr.nickname")
 		like := "%" + q + "%"
 		args = append(args, like, like)
 		if uidFilter == 0 {
