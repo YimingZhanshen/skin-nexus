@@ -4,6 +4,26 @@
 
 ## 2026-11-02
 
+- **CodeQL 首轮 15 条告警全部分诊**（三路代理并行读码 + 本人逐条复核证据后定性）：**6 条改代码，9 条按误报关闭并写明依据**。
+  - 改：`plugin/archive.go` 补目录穿越的落点校验（同 `signedpkg/extract.go` 已有的那段，此前**只有那一个**提取器有）；
+    `signedpkg/extract.go` 把校验提到 `IsDir` 分支之前——原来 `os.MkdirAll` 跑在校验前面，防线漏掉了目录项；
+    `cmd/skin-nexus/main.go` 的 SPA 资源探测先做包含性判断再 `os.Stat`（只读探测，但越界路径会泄露目录外文件是否存在）；
+    `plugin/assets.go` 拒绝控制字符与 NUL（保留 unicode 文件名，插件作者可以用非 ASCII 资源名）；
+    `web/src/App.vue` 的 `?next=` 同源判断补上反斜杠——`/\evil.com` 以 `/` 开头、不是 `//`，但 WHATWG 解析会当成跨域，登录后 token 上下文会外泄。
+  - 关：`mailer.go` 的 email injection（收件人经 `mailRe` + `checkAddr` 双重拒绝 CR/LF，主题 Q-encoding、正文 base64，且已有
+    `TestSendRejectsHeaderInjection`）；`compress.go` 的反射 XSS（该行走的是 gzip 透传，HTML 全部经 `html/template`，
+    唯一反射路径是标准库 `http.Redirect` 自带转义）；`main.go` 的开放重定向（跳转目标是站长配置项并写入时校验，
+    请求参数只贡献 `?` 之后且逐个 `QueryEscape`）；三条 legacy 密码哈希（MD5/SHA256/SHA512 只用于**比对**
+    blessing 存量哈希，`hmac.Equal` 消费，新密码一律 argon2id，且只有 `password_algo LIKE 'legacy%'` 的行会走到这里）；
+    三条预分配（容量取分页/批量上限并已有 clamp，不是 `COUNT(*)`）。
+  - 没有为了讨好扫描器改写已经足够强的守卫链：`plugin/assets.go` 的 `path.Clean` + 段检查 + 两次 `filepath.Rel`
+    包含性 + `EvalSymlinks` + `Lstat` 只允许常规文件，是读得懂的防御，改成正则白名单反而会让 CodeQL 满意而让代码变差，
+    所以那两条走带理由的关闭。
+- **dependabot 首批 9 条 PR 处置**：合并 go 补丁组、`golang:1.26→1.27`、三条 GitHub Actions 升级；
+  关闭 `node:22→26`（26 不是 LTS，依赖分析不认 LTS 线）并在 `.github/dependabot.yml` 给 node 加 major 忽略；
+  vite 6→8 与 @vitejs/plugin-vue 5→6 **必须同批**（单独升 vite 会 ERESOLVE 装不上），与 vue-i18n 9→11 一起留作前端工具链专轮。
+  Dockerfile 里「builder tag 必须等于 go directive」的注释按实际语义改准（须 ≥，前进正是拿到工具链补丁的方式）。
+
 - **运行时基础镜像过期修复（自查发现）**：`Dockerfile` 的运行层一直钉在 `alpine:3.20`，而 Alpine 3.20 的 main 仓库支持期 **2026-04-01 已结束**（3.21 也于 2026-11-01 到期）——也就是说 4 月以来构建的每一个镜像都跑在拿不到安全更新的 base 上。运行层升到 `alpine:3.24`（支持到 2028-06）。构建层刻意保持浮动（`golang:1.26-alpine` / `node:22-alpine`，不进最终镜像），但为此必须在 CI 打开 `pull: true`，否则 buildx 缓存会复用旧 base，「重建即补丁」不成立——已加。实际用的 Go 版本不用猜：面板「运行状态」报 `goVersion`。
   - 触发点是一次外部讨论：有人拿 Go/Docker 生态近期的高危 CVE 质疑「你的栈就没洞？」。逐条核过本项目的暴露面：构建时 RCE 走 cgo/SWIG，本仓库 `CGO_ENABLED=0` 且无 SWIG、CI 只构建 `go.sum` 锁定的依赖，攻击面结构上不存在；Docker 那几条容器逃逸的前提是「对不可信容器 `docker cp`」或「装 AuthZ 插件做多租户」，本部署是单机跑自己签名的镜像，前提不成立；标准库的 ASN.1/TLS DoS 两条确实相关，修复动作就是重建。**结论不是「我们没洞」，而是「修一个洞要等谁」——而这次自查证明我们自己也有一条没跟上。**
   - 落地为制度：`docs/deploy.md` 新增 §6.1「base 镜像与依赖的更新节奏」（各层支持窗口表、每季度 15 分钟自检命令、critical 阻塞 / high 只记 summary 的既有分工），并登记待办：本仓库尚无 `.github/dependabot.yml`，开了之后 go.mod / package-lock / Docker base 三类更新会自动开 PR。

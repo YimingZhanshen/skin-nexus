@@ -25,6 +25,10 @@ func ExtractZip(zipPath, dest string) error {
 	}
 	var total int64
 	seen := map[string]bool{}
+	absDest, err := filepath.Abs(dest)
+	if err != nil {
+		return err
+	}
 	for _, f := range zr.File {
 		name := f.Name
 		if err := ValidateEntryName(name); err != nil {
@@ -35,8 +39,20 @@ func ExtractZip(zipPath, dest string) error {
 			return fmt.Errorf("duplicate/case-colliding zip entry %q", name)
 		}
 		seen[lower] = true
+		target := filepath.Join(dest, filepath.FromSlash(name))
+		// defense in depth: resolved path must stay inside dest (entry names
+		// are already validated, this catches any future gap). Checked before
+		// any filesystem call — the directory branch below creates paths too,
+		// and a guard that runs after it protects nothing.
+		absTarget, err := filepath.Abs(target)
+		if err != nil {
+			return err
+		}
+		if !strings.HasPrefix(absTarget, absDest+string(os.PathSeparator)) {
+			return fmt.Errorf("zip entry %q escapes destination directory", name)
+		}
 		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(filepath.Join(dest, filepath.FromSlash(name)), 0o755); err != nil {
+			if err := os.MkdirAll(target, 0o755); err != nil {
 				return err
 			}
 			continue
@@ -57,20 +73,6 @@ func ExtractZip(zipPath, dest string) error {
 		total += int64(f.UncompressedSize64)
 		if total > MaxTotalBytes {
 			return fmt.Errorf("zip exceeds %d uncompressed bytes", MaxTotalBytes)
-		}
-		target := filepath.Join(dest, filepath.FromSlash(name))
-		// defense in depth: resolved path must stay inside dest (entry names
-		// are already validated, this catches any future gap)
-		absDest, err := filepath.Abs(dest)
-		if err != nil {
-			return err
-		}
-		absTarget, err := filepath.Abs(target)
-		if err != nil {
-			return err
-		}
-		if !strings.HasPrefix(absTarget, absDest+string(os.PathSeparator)) {
-			return fmt.Errorf("zip entry %q escapes destination directory", name)
 		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err

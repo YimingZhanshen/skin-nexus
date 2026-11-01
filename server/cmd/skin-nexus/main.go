@@ -1013,8 +1013,13 @@ func spaHandler(dir string, seoEng *seo.Engine, appearEng *appearance.Engine, si
 			}
 			inject := !strings.HasPrefix(p, "api/")
 			if inject {
-				if fi, err := os.Stat(dir + "/" + p); err == nil && !fi.IsDir() && p != "index.html" {
-					inject = false // real asset file
+				// Read-only probe, but an escaping path would still reveal which
+				// files exist outside dir, so contain it before statting. Join
+				// already cleans ".." segments; the prefix check catches the rest.
+				if full := filepath.Join(dir, p); strings.HasPrefix(full, dir+string(filepath.Separator)) {
+					if fi, err := os.Stat(full); err == nil && !fi.IsDir() && p != "index.html" {
+						inject = false // real asset file
+					}
 				}
 			}
 			// Unknown SPA paths get a real 404 (2026-10-27 逻辑修复：软 404 —

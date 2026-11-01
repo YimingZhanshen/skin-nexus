@@ -41,7 +41,11 @@ func (m *Manager) AssetHandler() http.Handler {
 			return
 		}
 		clean := path.Clean("/" + rel)
-		if clean == "/" || hasDotDotSegment(clean) || strings.Contains(clean, "\\") {
+		// Control characters and NUL have no business in an asset name and can
+		// confuse a downstream path consumer; unicode is fine (plugin authors may
+		// ship non-ASCII filenames).
+		if clean == "/" || hasDotDotSegment(clean) || strings.Contains(clean, "\\") ||
+			strings.ContainsFunc(clean, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
 			http.NotFound(w, r)
 			return
 		}

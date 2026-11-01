@@ -34,6 +34,10 @@ func extractZip(zipPath, dest string) error {
 	}
 	var total int64
 	seen := map[string]bool{}
+	absDest, err := filepath.Abs(dest)
+	if err != nil {
+		return err
+	}
 	for _, f := range zr.File {
 		name := f.Name
 		if err := validateZipName(name); err != nil {
@@ -44,8 +48,19 @@ func extractZip(zipPath, dest string) error {
 			return fmt.Errorf("duplicate/case-colliding zip entry %q", name)
 		}
 		seen[lower] = true
+		target := filepath.Join(dest, filepath.FromSlash(name))
+		// Same backstop as signedpkg.ExtractZip: validateZipName rejects ".."
+		// segments, but the containment check has to dominate every write,
+		// including the directory branch below, or it protects nothing.
+		absTarget, err := filepath.Abs(target)
+		if err != nil {
+			return err
+		}
+		if !strings.HasPrefix(absTarget, absDest+string(os.PathSeparator)) {
+			return fmt.Errorf("zip entry %q escapes destination directory", name)
+		}
 		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(filepath.Join(dest, filepath.FromSlash(name)), 0o755); err != nil {
+			if err := os.MkdirAll(target, 0o755); err != nil {
 				return err
 			}
 			continue
@@ -67,7 +82,6 @@ func extractZip(zipPath, dest string) error {
 		if total > maxZipTotalBytes {
 			return fmt.Errorf("zip exceeds %d uncompressed bytes", maxZipTotalBytes)
 		}
-		target := filepath.Join(dest, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}

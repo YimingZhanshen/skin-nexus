@@ -294,7 +294,9 @@ function onLocaleChange(e) {
 // 其次设备页流程、launcher 深链恢复；落地即清 pendingView（防"迟到恢复"跳页）。
 function finishAuth() {
   const next = new URLSearchParams(location.search).get('next')
-  if (next && next.startsWith('/') && !next.startsWith('//')) {
+  // Same-origin only. `//host` is a protocol-relative host, and WHATWG URL
+  // parsing also treats a backslash as a separator, so `/\host` escapes too.
+  if (next && next.startsWith('/') && !/^\/[/\\]/.test(next)) {
     pendingView.value = ''
     location.href = next
     return
