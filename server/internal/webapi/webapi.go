@@ -154,7 +154,9 @@ func writePluginFormError(w http.ResponseWriter, err error) {
 // writeAccountErr maps the shared service's stable codes to the legacy web
 // status codes so existing clients see the same behavior.
 func writeAccountErr(w http.ResponseWriter, err *account.Error) {
-	if err.Code == account.CodeDuplicatePub {
+	// Two codes carry structured details the client acts on: the duplicate
+	// points at the existing page, the in-use answer names what blocks deletion.
+	if err.Code == account.CodeDuplicatePub || err.Code == account.CodeInUse {
 		body := map[string]any{"error": err.Code, "message": err.Message}
 		for k, v := range err.Details {
 			body[k] = v
@@ -169,6 +171,8 @@ func writeAccountErr(w http.ResponseWriter, err *account.Error) {
 	case account.CodeLimit:
 		status = http.StatusForbidden
 	case account.CodeNameTaken:
+		status = http.StatusConflict
+	case account.CodeInUse, account.CodeBusy:
 		status = http.StatusConflict
 	case account.CodeInvalidName, account.CodeInvalid, account.CodeTypeMismatch,
 		account.CodeSourceURLReq, account.CodeSourceURLBad:
@@ -234,6 +238,7 @@ func (b *Backend) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/plugins/ui", b.handlePluginUI)
 	mux.HandleFunc("GET /api/v1/me/textures", b.handleListTextures)
 	mux.HandleFunc("POST /api/v1/me/textures", b.handleUploadTexture)
+	mux.HandleFunc("DELETE /api/v1/me/textures/{tid}", b.handleTextureDeleteSelf)
 	mux.HandleFunc("GET /api/v1/me/players", b.handleListPlayers)
 	mux.HandleFunc("POST /api/v1/me/players", b.handleCreatePlayer)
 	mux.HandleFunc("PUT /api/v1/me/players/{id}/skin", b.handleSetSkin)

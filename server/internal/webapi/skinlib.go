@@ -13,8 +13,10 @@ import (
 	"strings"
 	"time"
 
+	"skin-nexus/server/internal/account"
 	"skin-nexus/server/internal/avatargen"
 	"skin-nexus/server/internal/store"
+	"skin-nexus/server/internal/ygg"
 )
 
 // GET /api/v1/skinlib?filter=&keyword=&uploader=&sort=&page=
@@ -148,6 +150,7 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 		Source    *string `json:"source"`
 		SourceURL *string `json:"sourceUrl"`
 		Public    *bool   `json:"public"`
+		Model     *string `json:"model"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid JSON")
@@ -220,15 +223,41 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 	patch := store.TextureMetaPatch{
 		Name: req.Name, DetailMD: req.Detail, Source: req.Source, SourceURL: req.SourceURL, Public: req.Public,
 	}
+	if req.Model != nil {
+		m := strings.TrimSpace(*req.Model)
+		if m != "default" && m != "slim" {
+			writeErr(w, http.StatusBadRequest, "手臂模型只能是 default 或 slim")
+			return
+		}
+		patch.Model = &m
+	}
 	if err := b.Store.UpdateTextureMeta(r.Context(), tid, owner, patch); errors.Is(err, store.ErrNotFound) {
 		writeErr(w, http.StatusNotFound, "纹理不存在")
 		return
 	} else if errors.Is(err, store.ErrForbidden) {
 		writeErr(w, http.StatusForbidden, "只有上传者可以修改")
 		return
+	} else if errors.Is(err, store.ErrModerationBan) {
+		writeErr(w, http.StatusForbidden, "该材质已被判定违规，不能再次公开")
+		return
 	} else if err != nil {
 		writeErr(w, http.StatusInternalServerError, "update failed")
 		return
+	}
+	// Visibility and arm model are moderation-relevant changes: without this
+	// line the panel cannot tell a republished texture from one that never left
+	// the library, nor who corrected a legacy skin.
+	if req.Public != nil {
+		event := "texture_make_private"
+		if *req.Public {
+			event = "texture_make_public"
+		}
+		b.Store.InsertAudit(r.Context(), uid, event, map[string]any{"tid": tid, "hash": cur.Hash})
+	}
+	if patch.Model != nil {
+		b.Store.InsertAudit(r.Context(), uid, "texture_model_update", map[string]any{
+			"tid": tid, "hash": cur.Hash, "model": *patch.Model,
+		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
@@ -240,6 +269,28 @@ func validSourceURL(raw string) bool {
 	}
 	u, err := url.Parse(raw)
 	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && u.User == nil
+}
+
+// handleTextureDeleteSelf deletes the caller's own texture. ?force=1 unbinds the
+// characters, closet entries and avatar that still point at it — the first
+// attempt without it answers 409 with that list so the user sees what it costs.
+func (b *Backend) handleTextureDeleteSelf(w http.ResponseWriter, r *http.Request) {
+	uid, err := b.currentUser(r)
+	if err != nil {
+		writeErr(w, http.StatusUnauthorized, "请先登录")
+		return
+	}
+	tid, err := strconv.ParseInt(r.PathValue("tid"), 10, 64)
+	if err != nil || tid <= 0 {
+		writeErr(w, http.StatusBadRequest, "材质编号不合法")
+		return
+	}
+	force := r.URL.Query().Get("force") == "1"
+	if aerr := b.Account.DeleteTexture(r.Context(), uid, tid, uid, force, "", account.CallMeta{IP: ygg.ClientIP(r)}); aerr != nil {
+		writeAccountErr(w, aerr)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 var reportReasons = map[string]bool{
