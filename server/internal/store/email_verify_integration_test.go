@@ -77,6 +77,40 @@ func TestIntegrationEmailVerifyLatestWins(t *testing.T) {
 	}
 }
 
+// The mail-failure path deletes the token it just minted (a link nobody
+// received must not stay live in the DB); this is that primitive.
+func TestIntegrationEmailVerifyTokenDeletedAfterSendFailure(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	uid := seedUser(t, m)
+
+	hash := strings.Repeat("9", 64)
+	if err := m.CreateEmailVerifyToken(ctx, uid, hash, time.Hour); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := m.DeleteEmailVerifyToken(ctx, hash); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := m.ConsumeEmailVerifyToken(ctx, hash); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("deleted token still consumable: %v, want ErrNotFound", err)
+	}
+	// Deleting twice is not an error (nothing to match), and it must not touch
+	// another uid's live row.
+	if err := m.DeleteEmailVerifyToken(ctx, hash); err != nil {
+		t.Fatalf("second delete: %v", err)
+	}
+	keep := strings.Repeat("8", 64)
+	if err := m.CreateEmailVerifyToken(ctx, uid, keep, time.Hour); err != nil {
+		t.Fatalf("create keep: %v", err)
+	}
+	if err := m.DeleteEmailVerifyToken(ctx, strings.Repeat("7", 64)); err != nil {
+		t.Fatalf("delete unrelated digest: %v", err)
+	}
+	if _, err := m.ConsumeEmailVerifyToken(ctx, keep); err != nil {
+		t.Fatalf("unrelated delete touched a live token: %v", err)
+	}
+}
+
 // The address is the thing being proved, so changing it must invalidate both
 // the flag and any link still in flight — otherwise a link mailed to the old
 // mailbox verifies the new address.

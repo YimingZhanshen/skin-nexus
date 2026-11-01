@@ -40,6 +40,15 @@ func (m *Mysql) InvalidateEmailVerifyTokens(ctx context.Context, uid int64) erro
 	return err
 }
 
+// DeleteEmailVerifyToken drops one token by digest. Used when the mail never
+// left the server: an outstanding link nobody received is still a live
+// credential sitting in the database.
+func (m *Mysql) DeleteEmailVerifyToken(ctx context.Context, tokenHash string) error {
+	_, err := m.db.ExecContext(ctx,
+		`DELETE FROM email_verify_tokens WHERE token_hash = ?`, tokenHash)
+	return err
+}
+
 // ConsumeEmailVerifyToken atomically claims a token. Unknown digest, expired
 // and already used all return ErrNotFound — the endpoint must not distinguish
 // them, or it becomes a state oracle.

@@ -55,9 +55,11 @@ type texDetailData struct {
 	DetailRaw     string
 	CanEdit       bool
 	LoggedIn      bool
-	Year          int
-	FooterHTML    template.HTML
-	ThemeBase     template.CSS
+	// Unread: 站内通知未读数，SSR 顶栏角标与 SPA 侧栏同一来源（2026-11-02）
+	Unread     int
+	Year       int
+	FooterHTML template.HTML
+	ThemeBase  template.CSS
 
 	HeadAnchors template.HTML
 	BodyAnchor  template.HTML
@@ -109,6 +111,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   .topnav a:hover { background: var(--hover-wash); color: var(--jade-hi); text-decoration: none; }
   .topnav a.primary { background: var(--cinnabar); color: var(--on-cinnabar); font-weight: 600; }
   .topnav a.primary:hover { background: var(--cinnabar-hi); color: var(--on-cinnabar); }
+  .unread-badge { display: inline-block; min-width: 16px; margin-left: 6px; padding: 0 5px; border-radius: 9px; background: var(--cinnabar); color: var(--on-cinnabar); font-size: 11px; line-height: 17px; text-align: center; font-weight: 600; }
   .wrap { flex: 1 0 auto; width: 100%; max-width: 940px; margin: 0 auto; padding: 32px 24px 56px; }
   .crumb { font-size: var(--fs-s); color: var(--muted); margin: 0 0 16px; }
   .crumb .sep { color: var(--muted); }
@@ -193,7 +196,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
       </a>
       <nav class="topnav" aria-label="site">
         <a href="/skinlib">皮肤库</a>
-        {{if .LoggedIn}}<a href="/user/dashboard">用户中心</a>{{else}}<a href="/login">登录</a><a class="primary" href="/register">注册</a>{{end}}
+        {{if .LoggedIn}}<a href="/user/dashboard">用户中心{{if .Unread}}<span class="unread-badge">{{.Unread}}</span>{{end}}</a>{{else}}<a href="/login">登录</a><a class="primary" href="/register">注册</a>{{end}}
       </nav>
     </div>
   </header>
@@ -386,6 +389,12 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 			DetailRaw:   row.DetailMD,
 			CanEdit:     uid != 0 && (uid == row.UID || admin),
 			LoggedIn:    uid != 0,
+		}
+		if uid != 0 {
+			// Same source as the SPA sidebar badge; a count failure just hides the badge.
+			if n, err := st.UnreadNotificationCount(r.Context(), uid); err == nil {
+				d.Unread = n
+			}
 		}
 		if d.Name == "" {
 			d.Name = "材质 #" + strconv.FormatInt(row.TID, 10)

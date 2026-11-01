@@ -67,6 +67,11 @@ func (b *Backend) sendVerificationMail(ctx context.Context, uid int64, address s
 		"你正在验证 %s 账号的邮箱。\n\n请在 24 小时内打开以下链接完成验证：\n%s\n\n若非本人操作，请忽略本邮件——你的账号不会发生任何变化。",
 		cfg.SiteName, link)
 	if err := cfg.Send(address, subject, body); err != nil {
+		// The link never left the server, so the credential must not stay
+		// behind: an unread token is still a live one for whoever dumps the DB.
+		if delErr := b.Store.DeleteEmailVerifyToken(ctx, hex.EncodeToString(digest[:])); delErr != nil {
+			log.Printf("email-verification token cleanup uid=%d: %v", uid, delErr)
+		}
 		log.Printf("email-verification mail to %s (uid %d): %v", address, uid, err)
 		return err
 	}

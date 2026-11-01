@@ -60,6 +60,8 @@ type landingData struct {
 	ThemeBase  template.CSS
 	// LoggedIn: 已登录访客不再展示登录/注册 CTA（2026-10-27 逻辑修复）
 	LoggedIn bool
+	// Unread: 站内通知未读数，SSR 与 SPA 同一来源（2026-11-02）
+	Unread int
 }
 
 const landingIntro = "Minecraft 皮肤站：上传皮肤/披风、管理角色衣柜、逛皮肤库；配合 Yggdrasil 外置登录，启动器与服务器之间直接换装。"
@@ -109,6 +111,9 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
   .cta .primary:hover { background: var(--cinnabar-hi); }
   .cta .alt { border: 1px solid var(--line); color: var(--moon); }
   .cta .alt:hover { background: var(--ink-2); border-color: var(--ochre); }
+  .unread-badge { display: inline-block; min-width: 16px; margin-left: 6px; padding: 0 5px; border-radius: 9px;
+                  background: var(--ink-3); border: 1px solid var(--cinnabar); color: var(--cinnabar);
+                  font-size: 12px; line-height: 17px; text-align: center; font-weight: 600; }
   .cta a:focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
   /* 统计卡：赭石回纹角饰（小音量），数字用赭石（朱砂只留给主按钮） */
   .stats { display: flex; gap: 16px; margin: 32px 0; }
@@ -288,7 +293,7 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
       <h1>{{.SiteName}}</h1>
       <p class="tag">Minecraft 皮肤站，支持 Yggdrasil 外置登录</p>
       <div class="cta">
-        {{if .LoggedIn}}<a class="primary" href="/user/dashboard">进入用户中心</a>
+        {{if .LoggedIn}}<a class="primary" href="/user/dashboard">进入用户中心{{if .Unread}}<span class="unread-badge">{{.Unread}}</span>{{end}}</a>
         <a class="alt" href="/skinlib">浏览皮肤库</a>{{else}}<a class="primary" href="/register">注册账号</a>
         <a class="alt" href="/login">登录</a>{{end}}
       </div>

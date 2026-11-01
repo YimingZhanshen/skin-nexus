@@ -831,8 +831,12 @@ func main() {
 		d := landingData{SiteName: cfg.SiteName, SiteURL: cfg.BaseURL}
 		// 已登录访客的 hero CTA 换成进站动作（2026-10-27 逻辑修复）
 		if c, err := r.Cookie("skin_session"); err == nil {
-			if _, err := st.SessionUser(ctx, c.Value); err == nil {
+			if id, err := st.SessionUser(ctx, c.Value); err == nil {
 				d.LoggedIn = true
+				// Same source as the SPA sidebar badge; a count failure hides the badge.
+				if n, err := st.UnreadNotificationCount(ctx, id); err == nil {
+					d.Unread = n
+				}
 			}
 		}
 		if n, err := st.CountUsers(ctx); err == nil {
