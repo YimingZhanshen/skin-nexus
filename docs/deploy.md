@@ -97,7 +97,7 @@ environment:
 
 | 变量 | 说明 |
 |---|---|
-| `SKIN_BASE_URL` | 站点公开地址，如 `https://skin.example.com`。**必须在首次 `up -d` 之前改定为最终访问地址**：纹理 URL 在启动时按它快照、yggc/OIDC 的 issuer 也只认它（`SKIN_OIDC_ISSUER` 默认跟它）——事后在管理面板改 `site_url` 无法完全修正。ALI 响应头与此无关（按请求 Host + `X-Forwarded-Proto` 现算） |
+| `SKIN_BASE_URL` | 站点公开地址，如 `https://skin.example.com`，也是面板 `site_url` 为空时的回退。**建议在首次 `up -d` 前定成最终访问地址**：签名密钥与已分发的材质地址不会随改地址而失效，但地址一变，新旧材质 URL 会同时存在。纹理 URL 与页面链接在**启动时**解析一次（option `site_url` → 本 env），改面板值要重启才全量生效；`SKIN_OIDC_ISSUER` 默认跟本 env、不跟 `site_url`。ALI 响应头与此无关（按请求 Host + `X-Forwarded-Proto` 现算） |
 | `SKIN_DATABASE_DSN` | 外部库模式必改；内置库模式保持默认。**必须带 `parseTime=true`**（缺失直接启动失败） |
 | `SKIN_ADMIN_TOKEN` | `openssl rand -hex 32` 生成；机器/API 调用管理接口的回退凭据（管理面板本身用管理员账号登录即可，无需此 token；留空 = 机器 token 通道关闭） |
 
@@ -219,10 +219,10 @@ Union 八键），但生效优先级按键区分：
 
 | 项 | 谁赢 | 备注 |
 |---|---|---|
-| `site_url` | 面板 option | 但**纹理 URL 只认启动时的 `SKIN_BASE_URL` 快照**，面板改 `site_url` 不会改纹理 URL |
+| `site_url` | 面板 option | 影响页面链接、sitemap、**纹理/预览/头像 URL**（含 ygg 签名里的那串），重启后一起变；OIDC issuer 仍只认 `SKIN_OIDC_ISSUER`/`SKIN_BASE_URL` |
 | `site_name` / `server_name` / `skin_domains` | **显式 env** | 想在面板改这三项就别在 compose 里设对应 env（compose 默认已不设） |
 | `union_enabled` / `union_api_root` / `union_member_key` | 面板，且热切换立即生效 | 其余站点设置重启生效 |
-| DSN、`SKIN_ADMIN_TOKEN`、SMTP 口令等凭据 | 只走 env | 面板不落库 |
+| DSN、`SKIN_ADMIN_TOKEN`、插件密钥加密键 | 只走 env | 面板不落库；SMTP 口令在面板可写但**只写不读**（见下） |
 
 散点变量说明：`SKIN_ADMIN_TOKEN`、`SKIN_SMTP_*`、`SKIN_MOJANG_FALLBACK`、`SKIN_LEGACY_ENV`、
 `SKIN_PLUGIN_SECRET_KEY` **不在 `config.go`**（分别在 `adminapi`、`main.go` 里直接 `os.Getenv`）——

@@ -28,6 +28,7 @@ import (
 	"skin-nexus/server/internal/jobs"
 	"skin-nexus/server/internal/migrate"
 	"skin-nexus/server/internal/oidc"
+	"skin-nexus/server/internal/siteurl"
 	"skin-nexus/server/internal/ygg"
 )
 
@@ -51,7 +52,8 @@ func openTestStore(t *testing.T) *Mysql {
 	if dsn == "" {
 		t.Skip("SKIN_TEST_DSN not set; skipping MySQL integration suite")
 	}
-	m, err := Open(dsn, "https://skin.test", nil)
+	siteurl.Set("https://skin.test") // the same call boot makes, after config is resolved
+	m, err := Open(dsn, nil)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

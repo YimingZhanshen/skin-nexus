@@ -43,6 +43,7 @@ import (
 	"skin-nexus/server/internal/ratelimit"
 	"skin-nexus/server/internal/seo"
 	"skin-nexus/server/internal/signedpkg"
+	"skin-nexus/server/internal/siteurl"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/texture"
 	"skin-nexus/server/internal/theme"
@@ -116,6 +117,10 @@ func main() {
 	// A typo'd SKIN_* variable is otherwise invisible: the site starts, uses the
 	// default, and the operator believes they configured it.
 	config.WarnUnknownEnv()
+	// Install the env-derived base first so nothing ever builds a URL against an
+	// empty address; the option override below replaces it before the listener
+	// opens. Both writes happen on the boot goroutine.
+	siteurl.Set(cfg.BaseURL)
 	startedAt := time.Now()
 
 	// Legacy verifier: built from optional legacy .env (SKIN_LEGACY_ENV).
@@ -129,7 +134,7 @@ func main() {
 		log.Printf("legacy verifier: %d methods loaded", len(lenv.PWDMethods))
 	}
 
-	st, err := store.Open(cfg.DatabaseDSN, cfg.BaseURL, legacy)
+	st, err := store.Open(cfg.DatabaseDSN, legacy)
 	if err != nil {
 		log.Fatalf("store: %v", err)
 	}
@@ -178,6 +183,11 @@ func main() {
 		v, ok, err := st.GetOption(context.Background(), key)
 		return v, err == nil && ok
 	}, cfg.BaseURL)
+	// The one authoritative write. Everything that hands out an absolute URL —
+	// the store's texture paths, the account service's views, the signed
+	// Yggdrasil profile — reads it from internal/siteurl at build time, so
+	// changing site_url in the panel and restarting moves all of them together.
+	siteurl.Set(cfg.BaseURL)
 
 	// CDN client-IP policy: option-first, hot-applied from the settings panel.
 	// Headers are only trusted when the direct peer is loopback/RFC1918.
@@ -433,7 +443,7 @@ func main() {
 	backend.PluginHostInfo = pluginHost.HostInfo
 	backend.PluginFormData = pluginHost.ValidateFormData
 	backend.Account = &account.Service{
-		Store: st, Textures: ts, MaxChars: 3, BaseURL: cfg.BaseURL, OIDCEnabled: cfg.OIDCEnabled,
+		Store: st, Textures: ts, MaxChars: 3, OIDCEnabled: cfg.OIDCEnabled,
 		CheckGuard: pluginHost.CheckGuard, EmitEvent: pluginHost.EmitEvent,
 		OnTextureUploaded: pluginHost.EmitTextureUploaded,
 		Audit: func(ctx context.Context, uid int64, action string, detail map[string]any) {

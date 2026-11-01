@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"skin-nexus/server/internal/auth"
+	"skin-nexus/server/internal/siteurl"
 	"skin-nexus/server/internal/ygg"
 
 	mysql "github.com/go-sql-driver/mysql"
@@ -44,14 +45,18 @@ func isDuplicateKey(err error) bool {
 var ErrForbidden = errors.New("store: forbidden")
 
 type Mysql struct {
-	db      *sql.DB
-	baseURL string               // for texture URLs: <base>/textures/<hash>
-	legacy  *auth.LegacyVerifier // nil = legacy logins rejected
-	now     func() time.Time
+	db     *sql.DB
+	legacy *auth.LegacyVerifier // nil = legacy logins rejected
+	now    func() time.Time
 }
 
 // Open connects and pings MySQL. legacy may be nil (no legacy corpus yet).
-func Open(dsn, baseURL string, legacy *auth.LegacyVerifier) (*Mysql, error) {
+//
+// It takes no base URL on purpose: the address is resolved from the database a
+// few steps later in boot (the `site_url` option overrides env), so a store
+// that captured it at Open time would serve the pre-override value forever.
+// Absolute URLs come from internal/siteurl, read when they are built.
+func Open(dsn string, legacy *auth.LegacyVerifier) (*Mysql, error) {
 	// DSN foot-gun guard (review C P3): without parseTime=true every
 	// time.Time scan fails at runtime while Ping still succeeds.
 	if !strings.Contains(dsn, "parseTime=true") {
@@ -82,14 +87,12 @@ func Open(dsn, baseURL string, legacy *auth.LegacyVerifier) (*Mysql, error) {
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("store: ping: %w", err)
 	}
-	return &Mysql{db: db, baseURL: baseURL, legacy: legacy, now: time.Now}, nil
+	return &Mysql{db: db, legacy: legacy, now: time.Now}, nil
 }
 
 func (m *Mysql) Close() error { return m.db.Close() }
 
-func (m *Mysql) TextureURL(hash string) string {
-	return m.baseURL + "/textures/" + hash
-}
+func (m *Mysql) TextureURL(hash string) string { return siteurl.Texture(hash) }
 
 // ---- users ----
 
@@ -189,7 +192,7 @@ func (m *Mysql) PlayersByUID(ctx context.Context, uid int64) ([]ygg.Player, erro
 		return nil, err
 	}
 	defer rows.Close()
-	return collectPlayers(rows, m.baseURL)
+	return collectPlayers(rows)
 }
 
 const playerSelect = `SELECT p.id, p.uid, p.name, COALESCE(u.uuid,''),
@@ -201,10 +204,10 @@ const playerSelect = `SELECT p.id, p.uid, p.name, COALESCE(u.uuid,''),
 
 func (m *Mysql) scanPlayer(ctx context.Context, where string, arg interface{}) (ygg.Player, error) {
 	row := m.db.QueryRowContext(ctx, playerSelect+" WHERE "+where+" LIMIT 1", arg)
-	return scanPlayerRow(row, m.baseURL)
+	return scanPlayerRow(row)
 }
 
-func scanPlayerRow(s rowScanner, baseURL string) (ygg.Player, error) {
+func scanPlayerRow(s rowScanner) (ygg.Player, error) {
 	var p ygg.Player
 	err := s.Scan(&p.ID, &p.UID, &p.Name, &p.UUID, &p.SkinURL, &p.SkinModel, &p.CapeURL)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -216,19 +219,19 @@ func scanPlayerRow(s rowScanner, baseURL string) (ygg.Player, error) {
 	// hash columns -> absolute texture URLs (hashes kept for plugin filters)
 	if p.SkinURL != "" && !strings.HasPrefix(p.SkinURL, "http") {
 		p.SkinHash = p.SkinURL
-		p.SkinURL = baseURL + "/textures/" + p.SkinURL
+		p.SkinURL = siteurl.Texture(p.SkinURL)
 	}
 	if p.CapeURL != "" && !strings.HasPrefix(p.CapeURL, "http") {
 		p.CapeHash = p.CapeURL
-		p.CapeURL = baseURL + "/textures/" + p.CapeURL
+		p.CapeURL = siteurl.Texture(p.CapeURL)
 	}
 	return p, nil
 }
 
-func collectPlayers(rows *sql.Rows, baseURL string) ([]ygg.Player, error) {
+func collectPlayers(rows *sql.Rows) ([]ygg.Player, error) {
 	var out []ygg.Player
 	for rows.Next() {
-		p, err := scanPlayerRow(rows, baseURL)
+		p, err := scanPlayerRow(rows)
 		if err != nil {
 			return nil, err
 		}

@@ -6,10 +6,10 @@ package account
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	"skin-nexus/server/internal/plugin"
+	"skin-nexus/server/internal/siteurl"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/texture"
 )
@@ -217,7 +217,6 @@ type Service struct {
 	Store             *store.Mysql
 	Textures          *texture.Store
 	MaxChars          int
-	BaseURL           string
 	OIDCEnabled       bool
 	CheckGuard        func(ctx context.Context, kind string, p plugin.EventPayload) error
 	EmitEvent         func(ctx context.Context, kind string, p plugin.EventPayload)
@@ -233,27 +232,18 @@ func (s *Service) ensure() *Error {
 	return nil
 }
 
-func (s *Service) base() string {
-	return trimRight(s.BaseURL)
-}
+// Absolute URLs come from internal/siteurl, never from a value this service
+// captured at construction: the site base is resolved from the database after
+// config load, and a Yggdrasil signature covers the exact URL that was signed.
+func (s *Service) textureURL(hash string) string { return siteurl.Texture(hash) }
 
-func trimRight(v string) string {
-	for len(v) > 0 && v[len(v)-1] == '/' {
-		v = v[:len(v)-1]
-	}
-	return v
-}
-
-func (s *Service) textureURL(hash string) string { return s.base() + "/textures/" + hash }
+// previewURL is empty for a cape: the renderer only draws skins, and a client
+// pointed at /preview/<cape> gets a 404 it cannot explain.
 func (s *Service) previewURL(tid int64, typ string) string {
 	if typ != "skin" {
 		return ""
 	}
-	return fmt.Sprintf("%s/preview/%d", s.base(), tid)
+	return siteurl.Preview(tid)
 }
-func (s *Service) avatarURL(hash string) string {
-	if hash == "" {
-		return ""
-	}
-	return s.base() + "/avatar/hash/" + hash
-}
+
+func (s *Service) avatarURL(hash string) string { return siteurl.Avatar(hash) }

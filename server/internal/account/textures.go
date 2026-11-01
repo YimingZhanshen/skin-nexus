@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
+
+	"skin-nexus/server/internal/siteurl"
 	"time"
 	"unicode/utf8"
 
@@ -270,6 +272,6 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 func (s *Service) duplicatePublic(pub store.TextureRow) *Error {
 	return errDetails(CodeDuplicatePub, "this skin is already in the public library", map[string]any{
 		"textureId": pub.ID,
-		"url":       fmt.Sprintf("%s/skinlib/%d", s.base(), pub.ID),
+		"url":       siteurl.Page("skinlib", strconv.FormatInt(pub.ID, 10)),
 	})
 }

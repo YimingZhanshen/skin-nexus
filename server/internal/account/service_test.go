@@ -1,9 +1,16 @@
 package account
 
-import "testing"
+import (
+	"testing"
+
+	"skin-nexus/server/internal/siteurl"
+)
 
 func TestPlayerViewURLs(t *testing.T) {
-	s := &Service{BaseURL: "https://skin.test/"}
+	// The base is process-wide by design (see internal/siteurl), so a test sets
+	// it rather than handing one service a private copy that could disagree.
+	siteurl.Set("https://skin.test")
+	s := &Service{}
 	v := s.PlayerViewOf(Player{
 		ID: 7, Name: "Steve", UUID: "abc",
 		SkinTID: 12, SkinHash: "deadbeef", SkinModel: "slim",

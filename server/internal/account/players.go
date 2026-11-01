@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"skin-nexus/server/internal/plugin"
+	"skin-nexus/server/internal/siteurl"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/ygg"
 )
@@ -286,7 +287,7 @@ func (s *Service) Account(ctx context.Context, uid int64) (AccountView, *Error) 
 	avatarHash, _ := s.Store.UserAvatarHash(ctx, uid)
 	avatar := s.avatarURL(avatarHash)
 	if avatar == "" {
-		avatar = s.base() + "/avatar/user/" + itoa(uid)
+		avatar = siteurl.AvatarUser(uid)
 	}
 	return AccountView{
 		ID: u.ID, Nickname: u.Nickname, Permission: perm,
@@ -321,18 +322,4 @@ func (s *Service) storageBytes(ctx context.Context, uid int64) int64 {
 		}
 	}
 	return total
-}
-
-func itoa(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[i:])
 }

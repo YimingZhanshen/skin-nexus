@@ -47,7 +47,7 @@ type settingSpec struct {
 var settingsWhitelist = []settingSpec{
 	{"site_name", true, "basic", "站点名称（页头/标题）", false},
 	{"server_name", true, "basic", "服务器名称", false},
-	{"site_url", true, "basic", "站点地址（http(s) 绝对地址；页面链接/sitemap 基址，重启后生效。注意：纹理 URL 与 OIDC issuer 由环境变量 SKIN_BASE_URL/SKIN_OIDC_ISSUER 决定，此处不改它们）", false}, // B4 (blessing 原名 — 迁移导入器原样搬运生产 options，改名会让存量值成死键)
+	{"site_url", true, "basic", "站点地址（http(s) 绝对地址；页面链接、sitemap 与纹理/预览/头像 URL 的共同基址，重启后一起生效。OIDC issuer 只认 SKIN_OIDC_ISSUER/SKIN_BASE_URL，不由此项决定）", false}, // B4 (blessing 原名 — 迁移导入器原样搬运生产 options，改名会让存量值成死键)
 	{"announcement", false, "basic", "站点公告（Markdown，支持标题/粗体/链接/列表；双层消毒渲染，留空隐藏）", false},
 	{"invite_required", false, "register", "注册强制邀请码（立即生效）", false},
 	{"require_verification", false, "register", "join 前须邮箱验证（立即生效；邮件流未上线前开了会挡住所有新号进服）", false},
