@@ -1004,6 +1004,20 @@ func hashedAsset(name string) bool {
 	return dash > 0 && len(base)-dash-1 >= 6
 }
 
+// staticPathIn resolves a request path inside the SPA directory, or "" when the
+// path escapes it. dir is configurable and usually relative ("web/dist"), so it
+// has to go through the same cleaning filepath.Join applies: on Windows a raw
+// "web/dist/" prefix never matches the backslash-joined result, which made every
+// asset 404 for a site hosted on Windows.
+func staticPathIn(dir, urlPath string) string {
+	full := filepath.Join(dir, urlPath)
+	base := filepath.Clean(dir) + string(filepath.Separator)
+	if !strings.HasPrefix(full, base) {
+		return ""
+	}
+	return full
+}
+
 // isKnownSPAPath whitelists the SPA shell routes; anything else is a true 404.
 func isKnownSPAPath(p string, uiPath func(string) bool) bool {
 	if strings.HasPrefix(p, "ext/") {
@@ -1034,7 +1048,11 @@ func spaHandler(dir string, seoEng *seo.Engine, appearEng *appearance.Engine, si
 				// Read-only probe, but an escaping path would still reveal which
 				// files exist outside dir, so contain it before statting. Join
 				// already cleans ".." segments; the prefix check catches the rest.
-				if full := filepath.Join(dir, p); strings.HasPrefix(full, dir+string(filepath.Separator)) {
+				// dir itself has to be cleaned too: with a relative config like
+				// "web/dist" on Windows, Join produces "web\dist\…" while the
+				// raw prefix is "web/dist/", so no asset ever matched and the
+				// whole SPA 404'd on a Windows-hosted site.
+				if full := staticPathIn(dir, p); full != "" {
 					if fi, err := os.Stat(full); err == nil && !fi.IsDir() && p != "index.html" {
 						inject = false // real asset file
 					}

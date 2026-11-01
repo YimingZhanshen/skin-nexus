@@ -10,7 +10,7 @@
 
 自托管的 Minecraft 皮肤站。玩家在网页上传管理皮肤与披风，用启动器免密登录直接进服；站长自己跑，账号、纹理文件和签名密钥都在自己机器上。
 
-Go 单二进制 + Vue 3 + MySQL，AGPL-3.0。协议层兼容 [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) 及其插件生态，可以从老站无损迁移：主键保留、玩家 UUID 不变、旧密码算式继续可用。已在一套真实生产环境完成迁移与切流，67 用户 / 61 纹理零丢行。
+Go 单二进制 + Vue 3，数据库可选 MySQL / MariaDB / PostgreSQL / SQLite，AGPL-3.0。协议层兼容 [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) 及其插件生态，可以从老站无损迁移：主键保留、玩家 UUID 不变、旧密码算式继续可用。已在一套真实生产环境完成迁移与切流，67 用户 / 61 纹理零丢行。
 
 当前版本 v0.5.0（2026-11-01 发布），迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)。
 
@@ -33,7 +33,7 @@ docker compose -f docker-compose.quickstart.yml up -d
 打开 `http://<主机>:8080/setup`，填站点名、管理员账号和皮肤域。以后升级就是
 `docker compose pull && docker compose up -d`，数据卷不动。
 
-已有外部 MySQL、想跑裸二进制或源码构建：见 [`docs/deploy.md`](docs/deploy.md) 与 [`docs/build.md`](docs/build.md)。
+已有外部数据库（MySQL / MariaDB / PostgreSQL）、或想跑一个文件库（SQLite）、裸二进制与源码构建：见 [`docs/deploy.md`](docs/deploy.md) 与 [`docs/build.md`](docs/build.md)。
 从老站迁数据：[`docs/migration.md`](docs/migration.md)（`preflight → dry-run → import`，小站通常 10 分钟，可回滚）。
 
 上线前有两件事必须做：
@@ -79,7 +79,7 @@ docker compose -f docker-compose.quickstart.yml up -d
 | OIDC 免密登录 | ✅ 内置 | ⚠️ 需 Janus 外挂 | ⚠️ discovery 不全 | ⚠️ 细节弱 |
 | 材质生命周期（像素定模型 / 违规禁公开 / 删除留证） | ✅ | ⚠️ 举报删文件跳过引用计数 | ❌ 删除后文件永久留盘 | ❌ 删除不计数 |
 | 错误契约（稳定 code + 构建门禁） | ✅ | ❌ 粗粒度整数 code | ⚠️ 有码无门禁 | ❌ 只有人话 |
-| CI 质量闸（覆盖率 / 双版本集成矩阵） | ⚠️ 地板 40% + MySQL 5.7/8.0 | ⚠️ 传 Codecov 不设阈值 | ✅ 硬阈值 90% | ❌ 无 CI |
+| CI 质量闸（覆盖率 / 多引擎集成矩阵） | ⚠️ 地板 40% + MySQL/MariaDB/PG/SQLite 六组合 | ⚠️ 传 Codecov 不设阈值 | ✅ 硬阈值 90% | ❌ 无 CI |
 | 部署形态 | Go 单二进制 / Docker | PHP 8.1（已 EOL）+ Laravel 10 | Go + PostgreSQL + Redis | FastAPI + SQLite |
 
 </details>

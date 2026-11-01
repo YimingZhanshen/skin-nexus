@@ -54,7 +54,21 @@ image: ghcr.io/yimingzhanshen/skin-nexus:latest   # CI 自动构建，部署机�
 - `pull_policy: always` 需要支持该字段的 Docker Compose v2（compose v1 不识别）；
   不确定时升级前手动 `docker compose pull` 即可绕过。
 
-### 2.2 选择数据库模式（同一份文件二选一）
+### 2.2 选择数据库（同一份文件二选一）
+
+`SKIN_DATABASE_DSN` 的前缀决定用哪种数据库，不另设开关：不带前缀是
+`user:pass@tcp(host)/db` 形式的 MySQL/MariaDB DSN（历史默认，老部署不用改），
+`sqlite:` 前缀是本机文件库，`postgres://` / `postgresql://` 前缀是 PostgreSQL。
+建表 DDL 按引擎分三套（`migrations/mysql|sqlite|postgres/`），启动时按连接自己
+那套走，`schema_migrations` 里记录本库由哪棵树迁移——把 SQLite 的连接指向一个
+MySQL 建好的库会直接拒绝启动，而不是半途改坏表。
+
+| 引擎 | DSN 写法 | 适合谁 | 要知道的事 |
+| --- | --- | --- | --- |
+| MySQL 5.7 / 8.0 | `skin:PASS@tcp(127.0.0.1:3306)/skin_nexus?parseTime=true&charset=utf8mb4` | 多进程、要备份与并发的站 | 必须带 `parseTime=true`（缺失直接启动失败，连接层也会强制补上） |
+| MariaDB 10.11 / 11.4 | 同上（走 MySQL 线协议与同一个 driver） | 已有 MariaDB 的宿主机 | 与 MySQL 同一条 DSN 形状，无需前缀 |
+| SQLite | `sqlite:/var/lib/skin-nexus/skin.db` | 单人小站、面板单机、想少一个容器 | 文件须落在持久卷上；库为 WAL + `busy_timeout=5000`，写者排队；一个进程持有连接池，别用第二个进程同时写 |
+| PostgreSQL 14+ | `postgres://skin:PASS@127.0.0.1:5432/skin_nexus?sslmode=disable` | 已有 PG 的站 | 时间列是 `TIMESTAMPTZ`；从老站导入后序列会自动对齐（显式 id 导入是 PG 唯一需要额外处理的地方） |
 
 **模式 1：内置 MySQL（默认，全新站点最省心；镜像为 `mysql:8.0`，需要 5.7 请走模式 2 外部库）**
 
@@ -84,8 +98,14 @@ environment:
 #   或 DSN 用宿主机内网 IP / docker 网桥网段（172.17.0.1）
 ```
 
-外部库 MySQL 5.7 / 8.0 均可（5.7.44 实测通过）；空库启动时 `SKIN_AUTO_MIGRATE=true`
+外部库 MySQL 5.7 / 8.0 均可（5.7.44 实测通过）；MariaDB、SQLite、PostgreSQL 见
+上面的引擎表，DSN 前缀即选择。空库启动时 `SKIN_AUTO_MIGRATE=true`
 自动建表，随后首访站点进 `/setup` 安装向导（建管理员 / 站点名 / 皮肤域）。
+
+用 SQLite 时没有外部数据库要装，也没有 `db` 服务：把 `SKIN_DATABASE_DSN` 写成
+`sqlite:/绝对路径/skin.db`，并让该路径落在持久卷（compose 里挂一个卷进去即可），
+注释掉 `db` 服务与 `depends_on`。数据量到几十万像素级别、或需要多个进程同时写
+时，换 MySQL/PostgreSQL。
 
 ### 2.3 环境变量
 
@@ -98,7 +118,7 @@ environment:
 | 变量 | 说明 |
 |---|---|
 | `SKIN_BASE_URL` | 站点公开地址，如 `https://skin.example.com`，也是面板 `site_url` 为空时的回退。**建议在首次 `up -d` 前定成最终访问地址**：签名密钥与已分发的材质地址不会随改地址而失效，但地址一变，新旧材质 URL 会同时存在。纹理 URL 与页面链接在**启动时**解析一次（option `site_url` → 本 env），改面板值要重启才全量生效；`SKIN_OIDC_ISSUER` 默认跟本 env、不跟 `site_url`。ALI 响应头与此无关（按请求 Host + `X-Forwarded-Proto` 现算） |
-| `SKIN_DATABASE_DSN` | 外部库模式必改；内置库模式保持默认。**必须带 `parseTime=true`**（缺失直接启动失败） |
+| `SKIN_DATABASE_DSN` | 外部库模式必改；内置库模式保持默认。前缀决定引擎（见 §2.2），MySQL/MariaDB 形式**必须带 `parseTime=true`**（缺失直接启动失败） |
 | `SKIN_ADMIN_TOKEN` | `openssl rand -hex 32` 生成；机器/API 调用管理接口的回退凭据（管理面板本身用管理员账号登录即可，无需此 token；留空 = 机器 token 通道关闭） |
 
 其余变量**默认值即可跑通**，逐项列全（46 个进程变量 + 4 个 compose 变量，与代码逐条对齐）：
@@ -183,7 +203,7 @@ environment:
 | 变量 | 默认（源码 / 镜像内） | 说明 |
 |---|---|---|
 | `SKIN_AUTO_MIGRATE` | `false` / `true` | 追踪式建表/补表：`schema_migrations` 逐文件记标，空库全量、既有库自动补新文件（当前 0001–0021） |
-| `SKIN_MIGRATIONS_DIR` | `./migrations` / `/app/migrations` | DDL 目录 |
+| `SKIN_MIGRATIONS_DIR` | `./migrations` / `/app/migrations` | 迁移树根目录，启动时按连接引擎取 `<目录>/<mysql\|sqlite\|postgres>/` |
 
 **插件市场与主题市场**（语义一致：默认值编译内置，零配置即可用）
 
@@ -403,7 +423,7 @@ WantedBy=multi-user.target
 ```
 
 要点：工作目录须能读到 `web/dist` 与 `migrations/`（或用 `SKIN_MIGRATIONS_DIR` 指定）；
-手动建表按序执行 `migrations/0001…0021`（以目录实际文件为准），或设 `SKIN_AUTO_MIGRATE=true` 让启动时自动应用。
+手动建表按序执行 `migrations/<引擎>/0001…0021`（以目录实际文件为准），或设 `SKIN_AUTO_MIGRATE=true` 让启动时自动应用。
 Nginx 反代与 §三完全相同。日志 `journalctl -u skin-nexus -f`。
 
 ## 六、运维周期检查
@@ -422,7 +442,7 @@ Nginx 反代与 §三完全相同。日志 `journalctl -u skin-nexus -f`。
 | 运行时 | `alpine:3.24` | Alpine 分支约 2 年（3.24 至 2028-06） | 维护者，分支到期前换 tag 提 PR |
 | Go 构建器 | `golang:1.26-alpine` | 1.26.x 补丁随 Go 发布 | 浮动 tag + CI `pull: true`，重建即最新补丁 |
 | Node 构建器 | `node:22-alpine` | Node 22 LTS | 同上 |
-| 数据库 | `mysql:8.0`（内置模式） | Oracle 维护窗口 | 站长自选；外部库同理 |
+| 数据库 | `mysql:8.0`（内置模式） | Oracle 维护窗口 | 站长自选；外部库（MySQL / MariaDB / PostgreSQL）与 SQLite 文件库同理，见 §2.2 |
 
 **为什么构建层浮动、运行层钉死**：构建层不进镜像，重构建一次就是补丁——`docker/build-push-action`
 里显式开了 `pull: true`，否则 buildx 缓存会拿旧 base，「重建即补丁」就不成立了。运行层是玩家实际拿到的

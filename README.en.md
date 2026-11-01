@@ -10,7 +10,7 @@
 
 A self-hosted Minecraft skin station. Players upload and manage skins and capes in the browser and join servers through launcher passwordless login; the operator runs it themselves — accounts, texture files and the signing key stay on their own machine.
 
-One Go binary + Vue 3 + MySQL, AGPL-3.0. The protocol layer is compatible with [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) and its plugin ecosystem, so a legacy site can be migrated losslessly: primary keys preserved, player UUIDs unchanged, old password hashes still verifiable. A real production site has been migrated and cut over — 67 users / 61 textures, zero rows lost.
+One Go binary + Vue 3, on MySQL, MariaDB, PostgreSQL or SQLite — AGPL-3.0. The protocol layer is compatible with [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) and its plugin ecosystem, so a legacy site can be migrated losslessly: primary keys preserved, player UUIDs unchanged, old password hashes still verifiable. A real production site has been migrated and cut over — 67 users / 61 textures, zero rows lost.
 
 Current release v0.5.0 (2026-11-01). Iteration history lives in [`docs/CHANGELOG.md`](docs/CHANGELOG.md) (Chinese).
 
@@ -33,7 +33,7 @@ docker compose -f docker-compose.quickstart.yml up -d
 Open `http://<host>:8080/setup` and fill in the site name, admin account and skin domain. Upgrades are
 `docker compose pull && docker compose up -d`; data volumes are never touched.
 
-External MySQL, a bare binary or a source build: [`docs/deploy.md`](docs/deploy.md) and [`docs/build.md`](docs/build.md).
+An external database (MySQL / MariaDB / PostgreSQL), a single-file SQLite database, a bare binary or a source build: [`docs/deploy.md`](docs/deploy.md) and [`docs/build.md`](docs/build.md).
 Migrating from a legacy site: [`docs/migration.md`](docs/migration.md) (`preflight → dry-run → import`, rollback available).
 
 Two things are required before going live:
@@ -79,7 +79,7 @@ Server-rendered SEO, shareable texture detail URLs, a closed texture lifecycle, 
 | OIDC passwordless login | ✅ built in | ⚠️ needs Janus | ⚠️ discovery under-announces | ⚠️ weak details |
 | Texture lifecycle (pixels decide model / violations block re-publish / audited delete with evidence) | ✅ | ⚠️ report delete skips the reference count | ❌ files stay forever | ❌ delete does not count |
 | Error contract (stable code + build gate) | ✅ | ❌ coarse int codes | ⚠️ codes, no gate | ❌ prose only |
-| CI gates (coverage / two-version integration matrix) | ⚠️ floor 40% + MySQL 5.7/8.0 | ⚠️ Codecov, no threshold | ✅ hard 90% | ❌ no CI |
+| CI gates (coverage / multi-engine integration matrix) | ⚠️ floor 40% + MySQL/MariaDB/PG/SQLite, six combinations | ⚠️ Codecov, no threshold | ✅ hard 90% | ❌ no CI |
 | Deployment shape | Go binary / Docker | PHP 8.1 (EOL) + Laravel 10 | Go + PostgreSQL + Redis | FastAPI + SQLite |
 
 </details>

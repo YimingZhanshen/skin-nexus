@@ -11,9 +11,9 @@
 | Node.js | ≥ 22 | 前端构建（CI 与 Dockerfile 均用 22） |
 | npm | 随 Node | `npm ci` 按 lockfile 严格安装 |
 | Docker（可选） | 20+ / Compose v2 | 路径 A 部署与镜像构建 |
-| MySQL | 5.7 或 8.0 | 5.7.44 / 8.0 均实测通过（外部库或 compose 内置） |
+| 数据库 | MySQL 5.7 / 8.0、MariaDB 10.11 / 11.4、PostgreSQL 14+、SQLite | 四家都由 CI 的 `-tags integration` 存储层往返矩阵跑通；MySQL 5.7.44 另有生产实测。构建侧不需要任何数据库服务 |
 
-不需要 CGO、不需要 MySQL 客户端库（纯 Go driver）、不需要任何云服务。
+不需要 CGO、不需要任何数据库客户端库（MySQL / PostgreSQL / SQLite 三个 driver 都是纯 Go）、不需要云服务。
 
 ## 二、源码构建（单二进制）
 
@@ -28,7 +28,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o skin-nexus ./
 go vet ./...
 go test ./...                       # 单元 + 契约测试
 SKIN_TEST_DSN='user:pass@tcp(127.0.0.1:3306)/skin_nexus_test?parseTime=true' \
-  go test -tags integration ./internal/store/   # MySQL 往返集成测试（需本地可达的 MySQL）
+  go test -tags integration ./internal/store/   # 数据库往返集成测试（DSN 前缀选引擎；不带标签时跑纯单元与 SQLite 引擎用例）
 ```
 
 产物 `skin-nexus` 是单二进制，运行时需要同级（或工作目录下）的：
@@ -71,7 +71,7 @@ docker build -t skin-nexus:latest .   # 本地源码构建（离线/内网场景
 | job | 内容 |
 |---|---|
 | server | `go build` + `go vet` + `go test ./...` |
-| integration | MySQL **8.0 + 5.7 双矩阵**各跑一遍 `-tags integration` 存储层往返（5.7 专抓版本差异 SQL 问题） |
+| integration | **六种引擎组合**各跑一遍 `-tags integration` 存储层往返：MySQL 8.0 / 5.7、MariaDB 11.4 / 10.11、PostgreSQL 16、SQLite 文件库。5.7 专抓版本差异 SQL，后几家专抓只有单一引擎能吃下的写法（大小写折叠的 LIKE、`DELETE … LIMIT`、显式 id 后的序列） |
 | web | `npm ci && npm run build` |
 | docker | 多阶段镜像推 GHCR：`ghcr.io/yimingzhanshen/skin-nexus:latest` 与 `:sha-<commit>`（GHA 缓存；仅 push main 触发推送，PR 构建不推镜像） |
 

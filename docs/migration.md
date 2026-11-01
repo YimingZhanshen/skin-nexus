@@ -14,7 +14,9 @@
 ## 〇、开始前 checklist
 
 - [ ] SkinNexus 已能启动并连上**空的目标库**。建表推荐直接 `SKIN_AUTO_MIGRATE=true`
-      启动一次（自动应用 `migrations/` 全部文件（0001…0021）并写 `schema_migrations` 记标）。
+      启动一次（自动应用 `migrations/<引擎>/` 全部文件（0001…0021）并写 `schema_migrations`
+      记标；引擎由 `SKIN_DATABASE_DSN` 前缀决定，记标里同时留下本库用的是哪棵树）。
+      目标库与老站库可以不是同一种数据库——导入器两边都按各自引擎读写。
       ⚠️ 手动执行 DDL 有两处必炸：① `0009` 的 ALTER 与 `0001`/`0005` 部分列重叠，
       直接 `mysql < 0009.sql` 会 ER1060 中止，需 `mysql --force` 逐文件执行；
       ② 手动执行不写 `schema_migrations` 标记，而 **import 实跑强查

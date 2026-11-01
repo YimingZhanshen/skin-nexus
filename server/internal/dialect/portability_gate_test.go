@@ -44,6 +44,10 @@ var bannedTokens = []struct {
 	{"CONCAT(", "Engine.Concat"},
 	{" IF(", "CASE WHEN … THEN … ELSE … END"},
 	{"FOR UPDATE", "Engine.LockSQL"},
+	{"information_schema", "Engine.TableExistsQuery"},
+	{"DATABASE()", "Engine.TableExistsQuery"},
+	{"@@session", "a Go-side value, or the engine helper"},
+	{"SHOW CREATE TABLE", "the per-engine catalogue query"},
 }
 
 var (

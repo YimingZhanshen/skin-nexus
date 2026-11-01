@@ -397,6 +397,42 @@ func TestSQLiteEngineZeroMeansUnset(t *testing.T) {
 	}
 }
 
+// TestSQLiteEngineSetupGateIsNotMySQLCatalogue pins the install wizard's gate.
+// The catalogue probe used to read `information_schema` with MySQL's
+// `DATABASE()`, which SQLite has no notion of — so the very first request a
+// fresh SQLite site makes (`GET /api/v1/setup/status`) answered
+// "no such table: information_schema.tables" and the wizard never appeared.
+// Running the binary found it; no query test had covered the handler.
+func TestSQLiteEngineSetupGateIsNotMySQLCatalogue(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+
+	if ok, err := st.TableExists(ctx, "users"); err != nil || !ok {
+		t.Fatalf("TableExists(users) = %v, %v", ok, err)
+	}
+	if ok, err := st.TableExists(ctx, "no_such_table"); err != nil || ok {
+		t.Fatalf("TableExists(missing) = %v, %v — must be a clean false", ok, err)
+	}
+	need, err := st.NeedsSetup(ctx)
+	if err != nil {
+		t.Fatalf("NeedsSetup on an empty site: %v", err)
+	}
+	if !need {
+		t.Error("a migrated schema with no users must still ask for setup")
+	}
+	if err := st.SetOption(ctx, "setup_done", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if need, err := st.NeedsSetup(ctx); err != nil || need {
+		t.Errorf("NeedsSetup after the marker = %v, %v", need, err)
+	}
+	// A table the site does not have must read as absent rather than as an
+	// error — the gate treats an error as "cannot serve".
+	if ok, err := st.TableExists(ctx, "information_schema_tables"); err != nil || ok {
+		t.Errorf("unheard-of table reported as existing: %v %v", ok, err)
+	}
+}
+
 // TestSQLiteEngineAdminSearchIsCaseInsensitive pins the search semantics that
 // MySQL's column collation gave for free. PostgreSQL and SQLite compare LIKE
 // case-sensitively, so an admin searching a player by lowercase name found

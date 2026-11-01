@@ -22,9 +22,7 @@ func (m *Mysql) DBX() *dbx.DB { return m.db }
 // TableExists reports whether a base table exists in the current schema.
 func (m *Mysql) TableExists(ctx context.Context, name string) (bool, error) {
 	var one int
-	err := m.db.QueryRowContext(ctx,
-		`SELECT 1 FROM information_schema.tables
-		 WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1`, name).Scan(&one)
+	err := m.db.QueryRowContext(ctx, m.db.Dialect().TableExistsQuery(), name).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}

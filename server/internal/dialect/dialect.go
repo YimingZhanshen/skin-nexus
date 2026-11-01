@@ -364,6 +364,22 @@ func (e Engine) SessionLock(timeoutSeconds int) (acquire, release string, suppor
 	return "", "", false
 }
 
+// TableExistsQuery asks whether one base table exists in the schema the
+// connection is sitting on. Each engine keeps its catalogue somewhere else, and
+// the MySQL spelling drags in two things the others do not have — `DATABASE()`
+// and information_schema itself is absent on SQLite — so this cannot be one
+// statement for all three. The table name is bound, not interpolated, so the
+// statement keeps one placeholder on every engine.
+func (e Engine) TableExistsQuery() string {
+	switch e {
+	case SQLite:
+		return `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1`
+	case Postgres:
+		return `SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema AND table_name = ? LIMIT 1`
+	}
+	return `SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1`
+}
+
 // LockSQL is the pessimistic row lock. SQLite is single-writer by design
 // (writers serialise on the write lock), so it gets no clause rather than a
 // statement that would not parse.

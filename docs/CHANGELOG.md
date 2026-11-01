@@ -4,6 +4,29 @@
 
 ## 2026-11-02
 
+- **数据库引擎扩到三种（MySQL/MariaDB、SQLite、PostgreSQL）**：连接层与方言层各就一位
+  （`internal/dbx` 统一占位符改写、时间参数归一与连接池设置，`internal/dialect` 收全部引擎差异），
+  建表 DDL 拆成 `migrations/mysql|sqlite|postgres/` 三套等形树（30 张表、列与索引逐棵比对由测试把关），
+  `schema_migrations` 记下本库由哪棵树迁移，跨引擎指向直接拒绝启动而不是半途改坏表。
+  存储层此前散落的 MySQL 专有写法（`NOW(3)`/`DATE_ADD`/`INSERT IGNORE`/`ON DUPLICATE KEY`/`<=>`/
+  `IF()`/`GROUP_CONCAT`/`CONCAT()`/`COLLATE utf8mb4_*`/`FOR UPDATE`/`GET_LOCK`/`DELETE … LIMIT`）
+  全部改到可移植写法或引擎助手，并由一道 AST 门禁守住：方言层之外出现这些拼写即 CI 失败，
+  门禁自身带自检用例（含"派生表里的 LIMIT 属合法写法"），不会退化成永远绿。
+  时钟统一：TTL、租约、时间戳一律绑定 Go 侧 UTC 时刻，写与比用同一只钟。
+  CI 集成矩阵从 MySQL 5.7/8.0 两条扩到六条（MariaDB 11.4/10.11、PostgreSQL 16、SQLite 文件库），
+  只在一台引擎上有意义的用例显式跳过并报出所需引擎。blessing 导入的源端与目标端各自选引擎，
+  PostgreSQL 目标在显式 id 导入后自动对齐序列。面板运行状态页改报数据库引擎与版本。
+  覆盖 42.0% → 43.7%。
+- **把二进制真跑起来才发现的两处**（SQLite 本机起站 + 浏览器走完安装/登录/上传/皮肤库/外置登录握手）：
+  ① Windows 托管的站所有 SPA 静态资源 404——包含性检查用未清理的相对目录 `web/dist/` 去比
+  反斜杠拼接出的路径，Linux 容器不受影响，本地一跑立刻白屏；② 全新 SQLite 站的第一个请求
+  `GET /api/v1/setup/status` 直接失败——安装向导的表存在性探测写着 `information_schema` 与
+  `DATABASE()`，SQLite 根本没有这两样。两处都补了用例与门禁条目（`information_schema`、
+  `DATABASE()`、`@@session` 一并进禁用清单）。
+- **搜索语义在三家对齐**：管理端按角色名/昵称、访问日志按 who/ip/detail、皮肤库按材质名的检索，
+  此前靠 MySQL 列排序规则做大小写折叠，换到 PostgreSQL 就搜不到——现在两边都 `LOWER()`。
+
+
 - **通宵计划复核后的三处补齐**（逐条对着计划查现状，发现三处说做到没做到）：
   - 发信失败**即删令牌**：邮件没出去，链接就不该留在库里当一个「没人收到的活凭据」（`DeleteEmailVerifyToken`，
     集成用例覆盖删自己不影响别人）。
