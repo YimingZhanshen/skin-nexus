@@ -12,6 +12,7 @@ import DOMPurify from 'dompurify'
 import SkinPreview from '../components/SkinPreview.vue'
 import EmptyState from '../components/EmptyState.vue'
 import { api, uploadTexture } from '../api.js'
+import { detectSkinModel } from '../skinModel.js'
 import { guard401 } from '../session.js'
 
 const { t } = useI18n()
@@ -22,7 +23,10 @@ const closetIds = ref(new Set())
 const announcement = ref('')
 
 const uploadType = ref('skin')
-const uploadModel = ref('default')
+// Read from the picked pixels, and only for the preview: the stored model is
+// decided by the server on upload (server/internal/texture/model.go).
+const previewModel = ref('default')
+const modelChecked = ref(false)
 const uploadName = ref('')
 const uploadDetail = ref('')
 const uploadSource = ref('original')
@@ -54,6 +58,8 @@ function clearPreview() {
   uploadFile.value = null
   if (fileInput.value) fileInput.value.value = ''
   glLost.value = false
+  modelChecked.value = false
+  previewModel.value = 'default'
 }
 // cape has no body render — show the flat texture instead of the 3D canvas
 const previewIsCape = computed(() => uploadType.value === 'cape')
@@ -152,6 +158,36 @@ async function addToCloset(tx) {
   } catch (e) { if (!guard401(e)) pageErr.value = e.message } // 入柜失败显示在纹理卡区（页级横幅）
 }
 
+// 删除自己的材质：先不带 force，409 会带回「谁还在用它」，用户确认后再解绑删除。
+async function removeTexture(tx) {
+  if (!window.confirm(t('dashboard.deleteConfirm', { name: tx.description || ('#' + tx.id) }))) return
+  pageErr.value = ''
+  try {
+    try {
+      await api.textureDelete(tx.id)
+    } catch (e) {
+      if (e.status !== 409 || !e.data || !Array.isArray(e.data.players)) throw e
+      const detail = t('dashboard.deleteBlocked', {
+        players: (e.data.players || []).join('、') || '—',
+        closets: e.data.closets || 0,
+        avatars: e.data.avatars || 0,
+      })
+      if (!window.confirm(`${detail}\n${t('dashboard.deleteForceConfirm')}`)) return
+      await api.textureDelete(tx.id, true)
+    }
+    await load()
+  } catch (e) { if (!guard401(e)) pageErr.value = e.message }
+}
+
+// 纠正手臂模型：只有旧式 64×32 材质判不出来，其余情况服务端已经替用户判对。
+async function setModel(tx, model) {
+  pageErr.value = ''
+  try {
+    await api.skinlibPatch(tx.id, { model })
+    tx.model = model
+  } catch (e) { if (!guard401(e)) pageErr.value = e.message }
+}
+
 async function doUpload() {
   const name = uploadName.value.trim()
   if (!uploadFile.value) { uploadErr.value = t('dashboard.pickPng'); return }
@@ -172,7 +208,6 @@ async function doUpload() {
   try {
     const d = await uploadTexture(
       uploadType.value, uploadFile.value,
-      uploadType.value === 'skin' ? uploadModel.value : '',
       name, uploadPluginData.value,
       {
         detail: uploadDetail.value, source: uploadSource.value,
@@ -204,6 +239,15 @@ function onPick(e) {
   const f = e.target.files[0] || null
   uploadFile.value = f
   setPreviewFile(f)
+  modelChecked.value = false
+  if (f) {
+    detectSkinModel(f).then((m) => {
+      // The file may have been swapped or cleared while decoding.
+      if (uploadFile.value !== f) return
+      previewModel.value = m
+      modelChecked.value = true
+    })
+  }
 }
 
 onMounted(() => { load(); loadAnnouncement() })
@@ -259,11 +303,13 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
             <option value="skin">{{ t('dashboard.typeSkin') }}</option>
             <option value="cape">{{ t('dashboard.typeCape') }}</option>
           </select>
-          <select v-model="uploadModel" style="width: 140px;" :disabled="uploadType !== 'skin'">
-            <option value="default">{{ t('dashboard.modelDefault') }}</option>
-            <option value="slim">{{ t('dashboard.modelSlim') }}</option>
-          </select>
+          <span v-if="uploadType === 'skin'" class="muted model-badge">
+            {{ modelChecked
+              ? t('dashboard.modelDetected', { model: previewModel === 'slim' ? t('dashboard.modelSlim') : t('dashboard.modelDefault') })
+              : t('dashboard.modelChecking') }}
+          </span>
         </div>
+        <p v-if="uploadType === 'skin'" class="muted model-hint">{{ t('dashboard.modelAutoHint') }}</p>
         <div class="drop-zone" :class="{ over: dragging }"
              @dragover.prevent="dragging = true" @dragleave.prevent="dragging = false"
              @drop.prevent="onDrop" @click="fileInput && fileInput.click()">
@@ -309,7 +355,7 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
       <div class="prev-box">
         <template v-if="previewURL">
           <img v-if="previewIsCape || glLost" class="cape-prev" :src="previewURL" alt="preview" />
-          <SkinPreview v-else :url="previewURL" :model-type="uploadModel"
+          <SkinPreview v-else :url="previewURL" :model-type="previewModel"
                        @gl-unavailable="glLost = true" />
         </template>
         <span v-else class="muted">{{ t('dashboard.previewEmpty') }}</span>
@@ -326,12 +372,23 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
       <tr><th>{{ t('dashboard.colType') }}</th><th>{{ t('dashboard.colModel') }}</th><th>{{ t('dashboard.colPreview') }}</th><th>{{ t('dashboard.colHash') }}</th><th></th></tr>
       <tr v-for="tx in textures" :key="tx.id">
         <td>{{ tx.type }}</td>
-        <td>{{ tx.model || '—' }}</td>
+        <td>
+          <!-- 64×32 旧格式没有可判定的像素，识别只会给出 default；这里保留纠正入口 -->
+          <select v-if="tx.type === 'skin'" class="model-fix" :value="tx.model"
+                  :aria-label="t('dashboard.colModel')" @change="setModel(tx, $event.target.value)">
+            <option value="default">{{ t('dashboard.modelDefault') }}</option>
+            <option value="slim">{{ t('dashboard.modelSlim') }}</option>
+          </select>
+          <span v-else>{{ tx.model || '—' }}</span>
+        </td>
         <td><img :src="tx.url" :alt="t('dashboard.colPreview')" style="height: 48px; image-rendering: pixelated;" /></td>
         <td class="muted">{{ tx.hash.slice(0, 12) }}…</td>
         <td>
-          <button class="secondary" v-if="!closetIds.has(tx.id)" @click="addToCloset(tx)">{{ t('dashboard.closetAdd') }}</button>
-          <span class="muted" v-else style="font-size: var(--fs-xs);">{{ t('dashboard.closetIn') }}</span>
+          <div class="row" style="gap: 6px; flex-wrap: wrap;">
+            <button class="secondary" v-if="!closetIds.has(tx.id)" @click="addToCloset(tx)">{{ t('dashboard.closetAdd') }}</button>
+            <span class="muted" v-else style="font-size: var(--fs-xs);">{{ t('dashboard.closetIn') }}</span>
+            <button class="danger-outline" @click="removeTexture(tx)">{{ t('dashboard.textureDelete') }}</button>
+          </div>
         </td>
       </tr>
     </table>
@@ -378,6 +435,9 @@ h3 { font-size: var(--fs-s); margin: 16px 0 4px; color: var(--muted); font-weigh
 .radio-row { display: flex; flex-wrap: wrap; gap: 14px; }
 .radio-row label, .check-line { display: flex; gap: 6px; align-items: center; font-size: var(--fs-s); }
 .source-hint { display: block; margin-top: 4px; font-size: var(--fs-xs); }
+.model-badge { font-size: var(--fs-xs); }
+.model-hint { margin: 0; font-size: var(--fs-xs); }
+.model-fix { width: auto; font-size: var(--fs-xs); padding: 2px 6px; }
 .detail-tabs { width: 100%; }
 .detail-tabs .char-count { margin-left: auto; font-size: var(--fs-xs); }
 .detail-editor textarea { width: 100%; resize: vertical; }

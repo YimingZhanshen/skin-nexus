@@ -6,11 +6,14 @@
 //	2. IHDR precheck     (width/height/pixels BEFORE full decode — PNG bomb gate)
 //	3. dimension rules   (skin 64x32 / 64x64 family; cape 64x32 / 22x17 family)
 //	4. strict decode     (image/png only)
-//	5. re-encode         (drops ancillary chunks / polyglot payloads)
-//	6. content address   (sha256 of the RE-ENCODED bytes = filename = cache key)
+//	5. pixel semantics   (skin model from pixels; legacy cape padded to 64x32)
+//	6. re-encode         (drops ancillary chunks / polyglot payloads)
+//	7. content address   (sha256 of the RE-ENCODED bytes = filename = cache key)
 //
 // Legacy migration files are never rewritten: they are served byte-exact and
-// only IHDR-scanned (phase-1 decision: 原样搬迁).
+// only IHDR-scanned (phase-1 decision: 原样搬迁). Step 5 therefore applies to
+// new uploads only — padding an existing 22x17 cape would move its content
+// address and break every stored reference to it.
 package texture
 
 import (
@@ -20,6 +23,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"image"
+	"image/draw"
 	"image/png"
 	"io"
 	"os"
@@ -28,10 +33,10 @@ import (
 )
 
 var (
-	ErrTooLarge      = errors.New("texture: file exceeds size limit")
-	ErrBadPNG        = errors.New("texture: not a valid PNG")
-	ErrDimensions    = errors.New("texture: dimensions not allowed")
-	ErrPixelBomb     = errors.New("texture: pixel count exceeds limit")
+	ErrTooLarge   = errors.New("texture: file exceeds size limit")
+	ErrBadPNG     = errors.New("texture: not a valid PNG")
+	ErrDimensions = errors.New("texture: dimensions not allowed")
+	ErrPixelBomb  = errors.New("texture: pixel count exceeds limit")
 )
 
 // Limits — tuned for MC textures (typical skin PNG < 100KB).
@@ -52,7 +57,7 @@ const (
 type Result struct {
 	Hash  string // sha256 hex of stored bytes
 	Type  Type
-	Model string // skin: "default" | "slim"
+	Model string // skin: read from the pixels ("default" | "slim"); cape: ""
 	Bytes []byte // re-encoded PNG
 }
 
@@ -86,7 +91,7 @@ func (s *Store) Save(r *Result) error {
 		return err
 	}
 	if _, err := os.Stat(p); err == nil {
-		return nil // already present (ref-count handled at DB layer)
+		return nil // already present; rows sharing it are counted at delete time
 	}
 	return os.WriteFile(p, r.Bytes, 0o644)
 }
@@ -102,8 +107,9 @@ func (s *Store) Open(hash string) (*os.File, error) {
 
 // ---- pipeline ----
 
-// Process runs the full pipeline for a new upload.
-func Process(r io.Reader, typ Type, model string) (*Result, error) {
+// Process runs the full pipeline for a new upload. The skin model is decided
+// here, from pixels — the uploader's own claim never reaches the database.
+func Process(r io.Reader, typ Type) (*Result, error) {
 	raw, err := io.ReadAll(io.LimitReader(r, MaxUploadBytes+1))
 	if err != nil {
 		return nil, err
@@ -125,8 +131,19 @@ func Process(r io.Reader, typ Type, model string) (*Result, error) {
 	if err != nil {
 		return nil, ErrBadPNG
 	}
+	out, model := img, ""
+	switch typ {
+	case TypeSkin:
+		model = DetectSkinModel(img)
+	case TypeCape:
+		// Gated by type on purpose: a padded cape becomes 64x64 and its fresh
+		// transparent border would read as a slim arm.
+		if tw, th, ok := padTarget(img); ok {
+			out = padTo(img, tw, th)
+		}
+	}
 	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
+	if err := png.Encode(&buf, out); err != nil {
 		return nil, err
 	}
 	sum := sha256.Sum256(buf.Bytes())
@@ -136,6 +153,39 @@ func Process(r io.Reader, typ Type, model string) (*Result, error) {
 		Model: model,
 		Bytes: buf.Bytes(),
 	}, nil
+}
+
+// padTarget returns the storage dimensions for a legacy-layout cape: the 22x17
+// family is padded with transparency up to the smallest 64x32 multiple that
+// fits it, because the game reads capes on the 64x32 grid and a raw 22x17
+// texture lands misaligned. Width and height are rounded independently —
+// forcing one common multiple would blow a 22x34 cape up to 128x64.
+func padTarget(img image.Image) (int, int, bool) {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w%22 != 0 || h%17 != 0 {
+		return 0, 0, false
+	}
+	tw := ((w + 63) / 64) * 64
+	if tw < 64 {
+		tw = 64
+	}
+	th := ((h + 31) / 32) * 32
+	if th < 32 {
+		th = 32
+	}
+	if tw == w && th == h {
+		return 0, 0, false
+	}
+	return tw, th, true
+}
+
+// padTo copies src to the top-left of a transparent canvas.
+func padTo(src image.Image, tw, th int) *image.RGBA {
+	b := src.Bounds()
+	out := image.NewRGBA(image.Rect(0, 0, tw, th))
+	draw.Draw(out, image.Rect(0, 0, b.Dx(), b.Dy()), src, b.Min, draw.Src)
+	return out
 }
 
 // ScanLegacyIHDR is the non-destructive migration scan: validates IHDR only,

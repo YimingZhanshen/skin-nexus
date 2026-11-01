@@ -266,6 +266,9 @@ type TextureMetaPatch struct {
 	Source    *string
 	SourceURL *string
 	Public    *bool
+	// Model corrects the arm width for the legacy 64x32 layout, which carries
+	// no pixels to detect from. Skin rows only.
+	Model *string
 }
 
 // UpdateTextureMeta edits display metadata and/or visibility of one texture.
@@ -296,10 +299,22 @@ func (m *Mysql) UpdateTextureMeta(ctx context.Context, tid, ownerUID int64, patc
 			sets = append(sets, "public = 0", "public_dedupe = NULL")
 		}
 	}
+	if patch.Model != nil {
+		// CASE keeps a cape row untouched: model means nothing there and the
+		// column is NULL by convention.
+		sets = append(sets, "model = CASE WHEN type = 'skin' THEN ? ELSE model END")
+		args = append(args, *patch.Model)
+	}
 	if len(sets) == 0 {
 		return nil
 	}
 	q := "UPDATE textures SET " + strings.Join(sets, ", ") + " WHERE id = ?"
+	// Republishing is the one direction a struck texture cannot take, so the
+	// verdict is part of the UPDATE's own condition — never a read-then-write.
+	republish := patch.Public != nil && *patch.Public
+	if republish {
+		q += " AND moderation = ''"
+	}
 	args = append(args, tid)
 	if ownerUID != 0 {
 		q += " AND uid = ?"
@@ -316,12 +331,16 @@ func (m *Mysql) UpdateTextureMeta(ctx context.Context, tid, ownerUID int64, patc
 		// MySQL reports changed rows, not matched rows: a no-op edit (same
 		// name/visibility) must still succeed for the authorized caller.
 		var owner int64
+		var moderation string
 		if err := m.db.QueryRowContext(ctx,
-			`SELECT uid FROM textures WHERE id = ?`, tid).Scan(&owner); errors.Is(err, sql.ErrNoRows) {
+			`SELECT uid, moderation FROM textures WHERE id = ?`, tid).Scan(&owner, &moderation); errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
 		if ownerUID != 0 && owner != ownerUID {
 			return ErrForbidden
+		}
+		if republish && moderation != "" {
+			return ErrModerationBan
 		}
 	}
 	return nil

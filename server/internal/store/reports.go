@@ -27,6 +27,7 @@ type ReportRow struct {
 	Uploader    string
 	Reporter    string
 	Public      bool
+	Moderation  string
 }
 
 type ReportOpts struct {
@@ -75,6 +76,25 @@ func (m *Mysql) CountReportsByTextureSince(ctx context.Context, tid int64, since
 	return n, err
 }
 
+// reportJoinSQL is the shared projection for the list and the detail view. The
+// texture may already have been deleted — then its tombstone is what the report
+// was about, and the history must keep rendering (an INNER JOIN would let a
+// deletion quietly destroy the moderation record).
+const reportJoinSQL = `
+	SELECT r.id, r.texture_id, r.reporter_uid, r.reason, COALESCE(r.detail,''), r.status,
+	       COALESCE(r.handled_by,0), r.created_at, r.handled_at,
+	       COALESCE(t.description, ts.description, ''),
+	       COALESCE(t.type, ts.type, ''),
+	       COALESCE(u.nickname,''),
+	       COALESCE(rep.nickname,''),
+	       COALESCE(t.public, ts.public, 0),
+	       COALESCE(t.moderation, ts.moderation, '')
+	  FROM texture_reports r
+	  LEFT JOIN textures t ON t.id = r.texture_id
+	  LEFT JOIN texture_tombstones ts ON ts.texture_id = r.texture_id
+	  LEFT JOIN users u ON u.id = COALESCE(t.uid, ts.uid)
+	  LEFT JOIN users rep ON rep.id = r.reporter_uid`
+
 func (m *Mysql) ListReports(ctx context.Context, opt ReportOpts) ([]ReportRow, int, error) {
 	opt = normalizeReportOpts(opt)
 	where, args := "1=1", []any{}
@@ -88,16 +108,7 @@ func (m *Mysql) ListReports(ctx context.Context, opt ReportOpts) ([]ReportRow, i
 		return nil, 0, err
 	}
 	args = append(args, opt.PerPage, (opt.Page-1)*opt.PerPage)
-	rows, err := m.db.QueryContext(ctx,
-		`SELECT r.id, r.texture_id, r.reporter_uid, r.reason, COALESCE(r.detail,''), r.status,
-		        COALESCE(r.handled_by,0), r.created_at, r.handled_at,
-		        COALESCE(t.description,''), t.type, COALESCE(u.nickname,''),
-		        COALESCE(rep.nickname,''), t.public
-		   FROM texture_reports r
-		   JOIN textures t ON t.id = r.texture_id
-		   LEFT JOIN users u ON u.id = t.uid
-		   LEFT JOIN users rep ON rep.id = r.reporter_uid
-		  WHERE `+where+` ORDER BY r.created_at DESC LIMIT ? OFFSET ?`, args...)
+	rows, err := m.db.QueryContext(ctx, reportJoinSQL+` WHERE `+where+` ORDER BY r.created_at DESC LIMIT ? OFFSET ?`, args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -107,7 +118,7 @@ func (m *Mysql) ListReports(ctx context.Context, opt ReportOpts) ([]ReportRow, i
 		var r ReportRow
 		if err := rows.Scan(&r.ID, &r.TextureID, &r.ReporterUID, &r.Reason, &r.Detail,
 			&r.Status, &r.HandledBy, &r.CreatedAt, &r.HandledAt,
-			&r.TextureName, &r.TextureType, &r.Uploader, &r.Reporter, &r.Public); err != nil {
+			&r.TextureName, &r.TextureType, &r.Uploader, &r.Reporter, &r.Public, &r.Moderation); err != nil {
 			return nil, 0, err
 		}
 		out = append(out, r)
@@ -117,19 +128,10 @@ func (m *Mysql) ListReports(ctx context.Context, opt ReportOpts) ([]ReportRow, i
 
 func (m *Mysql) GetReport(ctx context.Context, id int64) (ReportRow, error) {
 	var r ReportRow
-	err := m.db.QueryRowContext(ctx,
-		`SELECT r.id, r.texture_id, r.reporter_uid, r.reason, COALESCE(r.detail,''), r.status,
-		        COALESCE(r.handled_by,0), r.created_at, r.handled_at,
-		        COALESCE(t.description,''), t.type, COALESCE(u.nickname,''),
-		        COALESCE(rep.nickname,''), t.public
-		   FROM texture_reports r
-		   JOIN textures t ON t.id = r.texture_id
-		   LEFT JOIN users u ON u.id = t.uid
-		   LEFT JOIN users rep ON rep.id = r.reporter_uid
-		  WHERE r.id = ?`, id).
+	err := m.db.QueryRowContext(ctx, reportJoinSQL+` WHERE r.id = ?`, id).
 		Scan(&r.ID, &r.TextureID, &r.ReporterUID, &r.Reason, &r.Detail,
 			&r.Status, &r.HandledBy, &r.CreatedAt, &r.HandledAt,
-			&r.TextureName, &r.TextureType, &r.Uploader, &r.Reporter, &r.Public)
+			&r.TextureName, &r.TextureType, &r.Uploader, &r.Reporter, &r.Public, &r.Moderation)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ReportRow{}, ErrNotFound
 	}
@@ -153,6 +155,62 @@ func (m *Mysql) ResolveReport(ctx context.Context, id int64, status string, hand
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+// StrikeTexture pulls a texture out of the library and marks it as violating,
+// then closes the report that led to that verdict — in one transaction. The
+// two separate statements used to be issued by the HTTP layer, where a failure
+// between them left a report closed over a still-public texture.
+func (m *Mysql) StrikeTexture(ctx context.Context, tid, reportID, handledBy int64) error {
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Locking the texture first makes concurrent strikes on the same report
+	// serialize, and tells us the texture is really gone (not just unchanged).
+	var exists int64
+	err = tx.QueryRowContext(ctx, `SELECT id FROM textures WHERE id = ? FOR UPDATE`, tid).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("texture strike: %w", err)
+	}
+
+	res, err := tx.ExecContext(ctx,
+		`UPDATE texture_reports SET status='resolved', handled_by=?, handled_at=NOW(3)
+		  WHERE id=? AND status='open'`, handledBy, reportID)
+	if err != nil {
+		return fmt.Errorf("texture strike report: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound // already handled by someone else
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE textures SET public=0, public_dedupe=NULL, moderation='violation' WHERE id=?`, tid); err != nil {
+		return fmt.Errorf("texture strike moderation: %w", err)
+	}
+	return tx.Commit()
+}
+
+// LiftTextureModeration restores a struck texture's right to be published. It
+// deliberately does not publish it — the verdict is lifted, the visibility is
+// the owner's decision.
+func (m *Mysql) LiftTextureModeration(ctx context.Context, tid int64) error {
+	res, err := m.db.ExecContext(ctx,
+		`UPDATE textures SET moderation='' WHERE id=? AND moderation <> ''`, tid)
+	if err != nil {
+		return fmt.Errorf("texture moderation lift: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		var exists int64
+		if err := m.db.QueryRowContext(ctx, `SELECT id FROM textures WHERE id=?`, tid).Scan(&exists); errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
 	}
 	return nil
 }

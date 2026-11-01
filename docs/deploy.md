@@ -182,7 +182,7 @@ environment:
 
 | 变量 | 默认（源码 / 镜像内） | 说明 |
 |---|---|---|
-| `SKIN_AUTO_MIGRATE` | `false` / `true` | 追踪式建表/补表：`schema_migrations` 逐文件记标，空库全量、既有库自动补新文件（当前 0001–0017） |
+| `SKIN_AUTO_MIGRATE` | `false` / `true` | 追踪式建表/补表：`schema_migrations` 逐文件记标，空库全量、既有库自动补新文件（当前 0001–0019） |
 | `SKIN_MIGRATIONS_DIR` | `./migrations` / `/app/migrations` | DDL 目录 |
 
 **插件市场与主题市场**（语义一致：默认值编译内置，零配置即可用）
@@ -255,6 +255,18 @@ docker compose pull && docker compose up -d    # 只换容器，卷不动，数�
 
 > **回滚只换代码、不回滚 schema**：迁移引擎只进不退，新 DDL 已落库且旧镜像会继续用它
 > （加列无感，但删列/改语义的迁移会让旧代码出错）——破坏性变更前先做 §2.6 备份。
+
+> **升到「手臂模型按像素判定」的版本后补做一次存量校正**（0.5.x 起）：旧数据里的 `model`
+> 来自上传者当时的声明，可能与像素不符。先用同一套 `SKIN_*` 环境变量试运行看差异条数，
+> 确认后再写库——校正会同时改变游戏内手臂宽度、`/avatar`、`/preview` 与皮肤库 steve/alex
+> 筛选的结果，玩家可感知，所以默认不自动执行：
+>
+> ```bash
+> docker compose run --rm skin-nexus redetect-models            # 只报告，不写库
+> docker compose run --rm skin-nexus redetect-models --apply    # 按报告结果写库
+> ```
+>
+> 命令幂等，可反复执行；大库可先 `--limit 500` 试一段。文件缺失或不可解码的材质只计数、不猜测。
 
 ### 2.6 备份与恢复
 
@@ -391,7 +403,7 @@ WantedBy=multi-user.target
 ```
 
 要点：工作目录须能读到 `web/dist` 与 `migrations/`（或用 `SKIN_MIGRATIONS_DIR` 指定）；
-手动建表按序执行 `migrations/0001…0017`（以目录实际文件为准），或设 `SKIN_AUTO_MIGRATE=true` 让启动时自动应用。
+手动建表按序执行 `migrations/0001…0019`（以目录实际文件为准），或设 `SKIN_AUTO_MIGRATE=true` 让启动时自动应用。
 Nginx 反代与 §三完全相同。日志 `journalctl -u skin-nexus -f`。
 
 ## 六、运维周期检查

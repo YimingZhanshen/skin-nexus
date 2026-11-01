@@ -101,6 +101,13 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "redetect-models" {
+		if err := runRedetectModels(os.Args[2:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "redetect-models:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -524,6 +531,7 @@ func main() {
 	pub := publicapi.New(st, ts)
 	pub.TextureURL = pluginHost.TextureURL
 	admin := adminapi.New(st, yggSvc)
+	admin.Account = backend.Account // deletion runs through the same guards/events as the user path
 	admin.Jobs = jobs.New(st.DB())
 	admin.OnUserLifecycle = func(ctx context.Context, e plugin.UserLifecycleEvent) {
 		pluginHost.EmitUserLifecycle(ctx, e)

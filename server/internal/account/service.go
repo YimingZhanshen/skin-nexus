@@ -45,6 +45,8 @@ const (
 	CodeDuplicatePub  = "texture.duplicate_public"
 	CodeSourceURLReq  = "texture.source_url_required"
 	CodeSourceURLBad  = "texture.source_url_invalid"
+	CodeInUse         = "texture.in_use"
+	CodeBusy          = "texture.busy"
 	CodeInternal      = "internal"
 )
 

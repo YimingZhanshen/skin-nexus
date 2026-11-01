@@ -41,6 +41,9 @@ export const api = {
   players: () => req('GET', '/api/v1/me/players'),
   createPlayer: (name) => req('POST', '/api/v1/me/players', { name }),
   textures: () => req('GET', '/api/v1/me/textures'),
+  // 彻底删除自己的材质：不带 force 时若仍被角色/衣柜/头像引用会返回 409 并
+  // 附上引用清单，由用户在确认后带 force 重试。
+  textureDelete: (tid, force = false) => req('DELETE', `/api/v1/me/textures/${tid}${force ? '?force=1' : ''}`),
   setSkin: (pid, textureId) => req('PUT', `/api/v1/me/players/${pid}/skin`, { textureId }),
   setCape: (pid, textureId) => req('PUT', `/api/v1/me/players/${pid}/cape`, { textureId }),
   // User-center self-service (A 级批次): profile edit / account delete /
@@ -84,12 +87,13 @@ export const union = {
   remapuuid: (me, target) => req('POST', '/api/v1/union/remapuuid', { me, target }),
 }
 
-export function uploadTexture(type, file, model, description, pluginData, meta = {}) {
+// The model is not sent: the server reads it from the pixels, so the upload
+// cannot claim an arm width the file does not have.
+export function uploadTexture(type, file, description, pluginData, meta = {}) {
   return new Promise((resolve, reject) => {
     const fd = new FormData()
     fd.append('type', type)
     fd.append('file', file)
-    if (model) fd.append('model', model)
     if (description) fd.append('description', description)
     if (meta.detail) fd.append('detail', meta.detail)
     fd.append('source', meta.source || '')

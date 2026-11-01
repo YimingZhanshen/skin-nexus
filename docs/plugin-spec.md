@@ -306,7 +306,11 @@ skin.guards.on("user.registration.check", function (e) {
   guard 同步执行，必须显式 `onError: "deny"|"allow"`；超时/异常按该策略处理。
 - guard payload：注册 `{ip,data:{email,nickname,pluginData?}}`；登录 `{ip,data:{identifier}}`；
   资料修改 `{userId,ip,data:{nickname,email}}`；角色改名 `{userId,playerId,playerName,data:{oldName}}`；
-  上传 `{userId,type,ip,data:{filename,pluginData?}}`。
+  上传 `{userId,type,ip,data:{filename,pluginData?}}`；
+  删除 `{userId(操作者),type,hash,ip,data:{tid,force,reason}}`——`texture.delete.check` 在引用清点之前执行，
+  deny 时材质行与文件都不动。
+- `texture.deleted` 在事务提交且文件处置完成后才发，payload `{userId,hash,type,data:{tid}}`；
+  `userId` 是执行删除的人（站长或上传者本人），不是材质所有者。
 - guard 不接收密码/cookie；deny 返回通用 403（错误体带插件提供的 message/code）。
 - 超管可在管理面板开启 `plugin_guards_bypass` 破窗（审计 + 横幅）；仅用于插件故障救急。
 

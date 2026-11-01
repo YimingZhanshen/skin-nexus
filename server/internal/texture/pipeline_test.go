@@ -39,7 +39,7 @@ func fakeHeader(w, h uint32) []byte {
 
 func TestProcessSkinRoundTrip(t *testing.T) {
 	raw := testPNG(t, 64, 64)
-	r, err := Process(bytes.NewReader(raw), TypeSkin, "slim")
+	r, err := Process(bytes.NewReader(raw), TypeSkin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestProcessSkinRoundTrip(t *testing.T) {
 		t.Fatalf("hash = %q", r.Hash)
 	}
 	// Determinism: identical input -> identical content address.
-	r2, _ := Process(bytes.NewReader(raw), TypeSkin, "slim")
+	r2, _ := Process(bytes.NewReader(raw), TypeSkin)
 	if r.Hash != r2.Hash {
 		t.Fatal("re-encode must be deterministic within a build")
 	}
@@ -56,7 +56,7 @@ func TestProcessSkinRoundTrip(t *testing.T) {
 func TestPolyglotPayloadDropped(t *testing.T) {
 	raw := testPNG(t, 64, 32)
 	poly := append(append([]byte{}, raw...), []byte("<script>alert(1)</script>")...)
-	r, err := Process(bytes.NewReader(poly), TypeSkin, "default")
+	r, err := Process(bytes.NewReader(poly), TypeSkin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestPolyglotPayloadDropped(t *testing.T) {
 		t.Fatal("trailing polyglot payload survived re-encode")
 	}
 	// Re-encode normalizes polyglot input to clean pixels: same address.
-	rClean, _ := Process(bytes.NewReader(raw), TypeSkin, "default")
+	rClean, _ := Process(bytes.NewReader(raw), TypeSkin)
 	if r.Hash != rClean.Hash {
 		t.Fatal("re-encode should normalize polyglot to clean bytes")
 	}
@@ -72,7 +72,7 @@ func TestPolyglotPayloadDropped(t *testing.T) {
 
 func TestPNGBombGate(t *testing.T) {
 	// 65535x65535 = 4.29G pixels — must be rejected at IHDR, never decoded.
-	_, err := Process(bytes.NewReader(fakeHeader(65535, 65535)), TypeSkin, "default")
+	_, err := Process(bytes.NewReader(fakeHeader(65535, 65535)), TypeSkin)
 	if err != ErrPixelBomb {
 		t.Fatalf("want ErrPixelBomb, got %v", err)
 	}
@@ -94,7 +94,7 @@ func TestDimensionRules(t *testing.T) {
 		{TypeCape, 64, 64, false},
 	}
 	for _, c := range cases {
-		_, err := Process(bytes.NewReader(testPNG(t, c.w, c.h)), c.typ, "default")
+		_, err := Process(bytes.NewReader(testPNG(t, c.w, c.h)), c.typ)
 		if c.wantOK && err != nil {
 			t.Errorf("%s %dx%d: want ok, got %v", c.typ, c.w, c.h, err)
 		}
@@ -105,7 +105,7 @@ func TestDimensionRules(t *testing.T) {
 }
 
 func TestNonPNGRejected(t *testing.T) {
-	_, err := Process(strings.NewReader("GIF89a not a png"), TypeSkin, "default")
+	_, err := Process(strings.NewReader("GIF89a not a png"), TypeSkin)
 	if err != ErrBadPNG {
 		t.Fatalf("want ErrBadPNG, got %v", err)
 	}
@@ -113,7 +113,7 @@ func TestNonPNGRejected(t *testing.T) {
 
 func TestSizeLimit(t *testing.T) {
 	big := bytes.Repeat([]byte{0}, MaxUploadBytes+1)
-	_, err := Process(bytes.NewReader(big), TypeSkin, "default")
+	_, err := Process(bytes.NewReader(big), TypeSkin)
 	if err != ErrTooLarge {
 		t.Fatalf("want ErrTooLarge, got %v", err)
 	}
@@ -137,7 +137,7 @@ func TestPathTraversalGate(t *testing.T) {
 func TestVerifyStored(t *testing.T) {
 	dir := t.TempDir()
 	s, _ := NewStore(dir)
-	r, err := Process(bytes.NewReader(testPNG(t, 64, 64)), TypeSkin, "default")
+	r, err := Process(bytes.NewReader(testPNG(t, 64, 64)), TypeSkin)
 	if err != nil {
 		t.Fatal(err)
 	}

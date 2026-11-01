@@ -96,15 +96,11 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 	if typ != "skin" && typ != "cape" {
 		return TextureView{}, false, errf(CodeInvalid, "纹理类型必须是 skin 或 cape", nil)
 	}
-	if typ == "skin" {
-		if model == "" {
-			model = "default"
-		}
-		if model != "default" && model != "slim" {
-			return TextureView{}, false, errf(CodeInvalid, "皮肤模型必须是 default 或 slim", nil)
-		}
-	} else {
-		model = ""
+	// The uploader's model claim is advisory only: clients keep sending it
+	// (launcher-api, skin-importer, older builds) and an arm width the pixels do
+	// not have renders wrong everywhere at once. Junk is still rejected.
+	if typ == "skin" && model != "" && model != texture.ModelDefault && model != texture.ModelSlim {
+		return TextureView{}, false, errf(CodeInvalid, "皮肤模型必须是 default 或 slim", nil)
 	}
 	desc := strings.TrimSpace(um.Name)
 	if !utf8.ValidString(desc) || !utf8.ValidString(um.DetailMD) ||
@@ -157,54 +153,102 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 	}); ge != nil {
 		return TextureView{}, false, ge
 	}
-	res, err := texture.Process(bytes.NewReader(png), texture.Type(typ), model)
+	res, err := texture.Process(bytes.NewReader(png), texture.Type(typ))
 	if err != nil {
 		if errors.Is(err, texture.ErrTooLarge) {
 			return TextureView{}, false, errf(CodeTooLarge, err.Error(), err)
 		}
 		return TextureView{}, false, errf(CodeInvalid, err.Error(), err)
 	}
-	if err := s.Textures.Save(res); err != nil {
-		return TextureView{}, false, errf(CodeInternal, "保存纹理失败", err)
+	// One line per disagreement: the only way to notice that a launcher keeps
+	// declaring the wrong model is that the log says so.
+	if model != "" && model != res.Model {
+		log.Printf("texture model override: uid=%d declared=%s detected=%s", uid, model, res.Model)
 	}
-	if existing, ok, err := s.Store.TextureByOwnerHash(ctx, uid, typ, res.Hash); err == nil && ok {
+	// The file is written before its row exists, and deletion unlinks it only
+	// when no row refers to it — so both paths must hold the same content lock,
+	// or an upload racing a delete leaves a row pointing at nothing.
+	var written struct {
+		tid    int64
+		reuse  store.TextureRow
+		dup    store.TextureRow
+		reused bool
+		dupped bool
+	}
+	failMsg := ""
+	lockErr := s.Store.WithHashLock(ctx, res.Hash, func(ctx context.Context) error {
+		if err := s.Textures.Save(res); err != nil {
+			failMsg = "保存纹理失败"
+			return err
+		}
+		existing, ok, err := s.Store.TextureByOwnerHash(ctx, uid, typ, res.Hash)
+		if err != nil {
+			return err
+		}
 		// Reusing a private import for a public upload would report success
 		// while never publishing anything. Only short-circuit when the
 		// existing row's visibility matches the request.
-		if !public {
-			return s.textureRowView(ctx, existing), false, nil
+		if ok && !public {
+			written.reuse, written.reused = existing, true
+			return nil
 		}
-		if isPub, perr := s.Store.TextureIsPublic(ctx, existing.ID); perr == nil && isPub {
-			return s.textureRowView(ctx, existing), false, nil
+		if ok {
+			if isPub, perr := s.Store.TextureIsPublic(ctx, existing.ID); perr == nil && isPub {
+				written.reuse, written.reused = existing, true
+				return nil
+			}
 		}
-	}
-	if public {
-		if pub, ok, err := s.Store.PublicTextureByHash(ctx, typ, res.Hash); err == nil && ok {
-			return TextureView{}, false, s.duplicatePublic(pub)
+		if public {
+			if pub, ok, err := s.Store.PublicTextureByHash(ctx, typ, res.Hash); err != nil {
+				return err
+			} else if ok {
+				written.dup, written.dupped = pub, true
+				return nil
+			}
 		}
-	}
-	var tid int64
-	if public {
-		tid, err = s.Store.AddTexture(ctx, uid, typ, res.Hash, res.Model, store.TextureMeta{
-			Description: desc, DetailMD: detail, Source: source, SourceURL: sourceURL,
-		})
-	} else {
-		tid, err = s.Store.AddTexturePrivate(ctx, uid, typ, res.Hash, res.Model, store.TextureMeta{
-			Description: desc, DetailMD: detail, Source: source, SourceURL: sourceURL,
-		})
-	}
-	if err != nil {
-		if errors.Is(err, store.ErrDuplicatePublic) {
+		meta := store.TextureMeta{Description: desc, DetailMD: detail, Source: source, SourceURL: sourceURL}
+		var addErr error
+		if public {
+			written.tid, addErr = s.Store.AddTexture(ctx, uid, typ, res.Hash, res.Model, meta)
+		} else {
+			written.tid, addErr = s.Store.AddTexturePrivate(ctx, uid, typ, res.Hash, res.Model, meta)
+		}
+		if addErr != nil {
+			failMsg = "写入纹理失败"
+			if !errors.Is(addErr, store.ErrDuplicatePublic) {
+				return addErr
+			}
+			// Lost the race against an identical upload: hand back the winner
+			// rather than a conflict nobody can act on.
 			if existing, ok, lookupErr := s.Store.TextureByOwnerHash(ctx, uid, typ, res.Hash); lookupErr == nil && ok {
-				return s.textureRowView(ctx, existing), false, nil
+				written.reuse, written.reused = existing, true
+				return nil
 			}
 			if pub, ok, lookupErr := s.Store.PublicTextureByHash(ctx, typ, res.Hash); lookupErr == nil && ok {
-				return TextureView{}, false, s.duplicatePublic(pub)
+				written.dup, written.dupped = pub, true
+				return nil
 			}
+			return addErr
 		}
-		log.Printf("texture insert failed: %v", err)
-		return TextureView{}, false, errf(CodeInternal, "写入纹理失败", err)
+		return nil
+	})
+	if lockErr != nil {
+		if failMsg == "" {
+			failMsg = "写入纹理失败"
+		}
+		log.Printf("texture upload failed: %v", lockErr)
+		if errors.Is(lockErr, store.ErrBusy) {
+			return TextureView{}, false, errf(CodeBusy, "该材质正被其他操作占用，请稍后重试", lockErr)
+		}
+		return TextureView{}, false, errf(CodeInternal, failMsg, lockErr)
 	}
+	if written.reused {
+		return s.textureRowView(ctx, written.reuse), false, nil
+	}
+	if written.dupped {
+		return TextureView{}, false, s.duplicatePublic(written.dup)
+	}
+	tid := written.tid
 	if s.OnTextureUploaded != nil {
 		s.OnTextureUploaded(ctx, plugin.TextureUploadedEvent{UserID: uid, Hash: res.Hash, Type: typ})
 	}

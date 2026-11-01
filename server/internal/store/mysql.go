@@ -29,6 +29,10 @@ var ErrNotFound = errors.New("store: not found")
 // (type, hash) content. Private copies are intentionally not covered.
 var ErrDuplicatePublic = errors.New("store: duplicate public texture")
 
+// ErrModerationBan: the texture was struck by a moderation verdict and may
+// never re-enter the public library, only stay private or be deleted.
+var ErrModerationBan = errors.New("store: texture banned from republication")
+
 func isDuplicateKey(err error) bool {
 	var me *mysql.MySQLError
 	return errors.As(err, &me) && me.Number == 1062

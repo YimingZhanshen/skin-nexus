@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"time"
 
+	"skin-nexus/server/internal/account"
 	"skin-nexus/server/internal/jobs"
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/store"
@@ -25,9 +26,12 @@ import (
 )
 
 type Backend struct {
-	Store          *store.Mysql
-	Ygg            *ygg.Service
-	AdminTok       string
+	Store    *store.Mysql
+	Ygg      *ygg.Service
+	AdminTok string
+	// Account is the shared business layer (same service the user-facing API
+	// uses) — texture deletion needs its guards, events and file access.
+	Account        *account.Service
 	union          UnionDeps       // nil until MountUnion (module disabled = no routes)
 	sharedClientID string          // guard: shared launcher client cannot be deleted
 	appearance     *AppearanceDeps // nil until MountAppearance
@@ -94,6 +98,8 @@ func (b *Backend) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/v1/audit", b.auth(b.handleAudit))
 	mux.HandleFunc("GET /api/admin/v1/reports", b.auth(b.handleReportsList))
 	mux.HandleFunc("POST /api/admin/v1/reports/{id}/resolve", b.auth(b.handleReportResolve))
+	mux.HandleFunc("PUT /api/admin/v1/textures/{tid}/moderation", b.auth(b.handleTextureModeration))
+	mux.HandleFunc("DELETE /api/admin/v1/textures/{tid}", b.auth(b.handleTextureDelete))
 	// Access/communication logs (2026-10-26 运维观测面): web + launcher
 	// logins, ygg server traffic, union traffic — filterable/paged.
 	mux.HandleFunc("GET /api/admin/v1/access-logs", b.auth(b.handleAccessLogs))

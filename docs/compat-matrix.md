@@ -41,15 +41,15 @@ JWT access token 实测形状：`aud="2"（shared_client_id）、sub=uid、scope
 ## 4. 缺口与取舍（blessing 1:1 口径）
 
 兼容主干——Yggdrasil 全量、OIDC/yggc、CustomSkinAPI、USM、邀请码、衣柜、改密与吊销、
-找回密码、认证限流、迁移导入器、材质举报——已逐项达成，落地时间与实现细节见
+找回密码、认证限流、迁移导入器、材质举报与彻底删除——已逐项达成，落地时间与实现细节见
 [`CHANGELOG.md`](CHANGELOG.md)。本节只留**未做**与**刻意不做**，不再复述完工历史。
 
 | 项 | 状态 | 说明 |
 |---|---|---|
 | 邮箱验证流 | ⚠️ 缺口 | `SKIN_REQUIRE_VERIFICATION` 门与字段已就位，发信验证链路未实现，保持关 |
-| 纹理删除面 | ⚠️ 缺口 | 管理端可列出/下架（转私有并清公共去重键），无彻底删除端点 |
 | 正版账号绑定 | ⚠️ 未做 | Auth Source 第二实现，排期见 README 路线图 |
 | 通知/纹理广场 · OAuth 社交登录 · API PAT 面 · 积分商城 · 2FA · 验证码 · `/api` 根装饰 | ⚠️ 未做 | 均为增强面，不属兼容缺口 |
+| 删除材质后已下发的纹理 URL | 🔧 取舍 | `/textures/{hash}` 只查磁盘、不校验行与可见性，且响应是 `max-age=31536000, immutable`。删除保证**源站停止供源**并保留取证记录，不保证浏览器/中间缓存/CDN 上的旧副本失效（hash 即 URL，无法主动失效）。加每请求 DB 校验会推翻纹理分发的性能模型，故不做 |
 | 「换肤必须先入柜」 | ➖ 不复刻 | 拍板：那是老站 UI 流程而非数据约束，强加会破坏已验收的 setSkin 直连；衣柜按收藏集合上线 |
 | 认证限流返回 429 | 🔧 偏差备案 | legacy 契约从未定义限流；只追加 TooManyRequests，冻结的错误体形状不变，阈值面板可调 |
 | `api/profiles/minecraft/{name}` 别名、`minecraftservices/publickeys` | ➖ 不复刻 | 旧站自身 404，平价即可 |

@@ -40,7 +40,7 @@ var testTables = []string{
 	"ygg_join_sessions", "ygg_tokens", "uuid_map", "textures", "players", "users",
 	"invitation_codes", "user_closet", "password_reset_tokens", "access_logs", "schema_migrations",
 	"plugin_meta", "plugin_secrets", "plugin_kv", "plugin_docs", "plugin_migrations", "plugin_install_tx",
-	"host_jobs", "texture_reports",
+	"host_jobs", "texture_reports", "texture_tombstones",
 	"legacy_users", "legacy_players", "legacy_textures", "legacy_uuid",
 	"legacy_options", "legacy_user_closet", "legacy_invitation_codes",
 }
@@ -1248,5 +1248,367 @@ func TestIntegrationTextureReports(t *testing.T) {
 	}
 	if n, _ := m.CountReportsByUserSince(ctx, reporter, time.Now().Add(-time.Hour)); n != 1 {
 		t.Fatalf("count = %d", n)
+	}
+}
+
+func TestIntegrationSkinModelBackfill(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	u1, u2 := seedUser(t, m), seedUser(t, m)
+	hash := strings.Repeat("c", 64)
+
+	// One content address, three rows, three different stored models — the
+	// shape the backfill exists for. Only one row may hold the public key.
+	seed := []struct {
+		uid    int64
+		model  any
+		public int
+	}{
+		{u1, "default", 1},
+		{u1, nil, 0},
+		{u2, "slim", 0},
+	}
+	var ids []int64
+	for _, s := range seed {
+		res, err := m.db.ExecContext(ctx,
+			`INSERT INTO textures (uid,type,hash,model,description,public) VALUES (?,?,?,?,?,?)`,
+			s.uid, "skin", hash, s.model, "row", s.public)
+		if err != nil {
+			t.Fatalf("seed skin row: %v", err)
+		}
+		id, _ := res.LastInsertId()
+		ids = append(ids, id)
+	}
+	// The same bytes as a cape must stay out of reach: capes carry no model.
+	capeHash := strings.Repeat("d", 64)
+	if _, err := m.db.ExecContext(ctx,
+		`INSERT INTO textures (uid,type,hash,model,description,public) VALUES (?,?,?,?,?,1)`,
+		u1, "cape", capeHash, nil, "cape row"); err != nil {
+		t.Fatalf("seed cape row: %v", err)
+	}
+
+	groups, err := m.SkinModelGroups(ctx, 0)
+	if err != nil {
+		t.Fatalf("groups: %v", err)
+	}
+	var group *ModelGroup
+	for i := range groups {
+		switch groups[i].Hash {
+		case hash:
+			group = &groups[i]
+		case capeHash:
+			t.Fatalf("cape listed as a skin group: %+v", groups[i])
+		}
+	}
+	if group == nil {
+		t.Fatalf("hash %s missing from groups %+v", hash[:12], groups)
+	}
+	if len(group.Models) != 3 {
+		t.Fatalf("group models = %q, want three distinct values", group.Models)
+	}
+
+	changed, err := m.SetModelByHash(ctx, hash, "slim")
+	if err != nil {
+		t.Fatalf("set model: %v", err)
+	}
+	if changed != int64(len(ids)) {
+		t.Fatalf("rows changed = %d, want %d", changed, len(ids))
+	}
+	for _, id := range ids {
+		var got string
+		if err := m.db.QueryRowContext(ctx, `SELECT model FROM textures WHERE id=?`, id).Scan(&got); err != nil {
+			t.Fatalf("read row %d: %v", id, err)
+		}
+		if got != "slim" {
+			t.Fatalf("row %d model = %q, want slim", id, got)
+		}
+	}
+
+	// Idempotent: agreeing rows are not rewritten, so a second pass costs
+	// nothing and reports no work.
+	again, err := m.SetModelByHash(ctx, hash, "slim")
+	if err != nil {
+		t.Fatalf("second pass: %v", err)
+	}
+	if again != 0 {
+		t.Fatalf("second pass changed %d rows, want 0", again)
+	}
+	groups, err = m.SkinModelGroups(ctx, 0)
+	if err != nil {
+		t.Fatalf("groups after: %v", err)
+	}
+	for _, g := range groups {
+		if g.Hash == hash && (len(g.Models) != 1 || g.Models[0] != "slim") {
+			t.Fatalf("group after backfill = %+v, want one slim value", g)
+		}
+	}
+}
+
+func TestIntegrationTextureModerationStrike(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	uploader, reporter, admin := seedUser(t, m), seedUser(t, m), seedUser(t, m)
+	hash := strings.Repeat("e", 64)
+
+	tid, err := m.AddTexture(ctx, uploader, "skin", hash, "default", TextureMeta{Description: "flagged"})
+	if err != nil {
+		t.Fatalf("add texture: %v", err)
+	}
+	// A private copy of the same bytes belongs to someone else and must not be
+	// caught by the strike: the verdict is per texture row, not per content.
+	otherTID, err := m.AddTexturePrivate(ctx, reporter, "skin", hash, "default", TextureMeta{Description: "own copy"})
+	if err != nil {
+		t.Fatalf("add private copy: %v", err)
+	}
+	reportID, err := m.CreateReport(ctx, tid, reporter, "copyright", "stolen")
+	if err != nil {
+		t.Fatalf("create report: %v", err)
+	}
+
+	if err := m.StrikeTexture(ctx, tid, reportID, admin); err != nil {
+		t.Fatalf("strike: %v", err)
+	}
+	var public int
+	var dedupe, moderation sql.NullString
+	if err := m.db.QueryRowContext(ctx,
+		`SELECT public, public_dedupe, moderation FROM textures WHERE id=?`, tid).
+		Scan(&public, &dedupe, &moderation); err != nil {
+		t.Fatalf("read struck row: %v", err)
+	}
+	if public != 0 || dedupe.Valid || moderation.String != "violation" {
+		t.Fatalf("struck row = public %d, dedupe %q, moderation %q", public, dedupe.String, moderation.String)
+	}
+	var status string
+	var handledBy sql.NullInt64
+	if err := m.db.QueryRowContext(ctx,
+		`SELECT status, handled_by FROM texture_reports WHERE id=?`, reportID).Scan(&status, &handledBy); err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+	if status != "resolved" || handledBy.Int64 != admin {
+		t.Fatalf("report = %q handled_by %v, want resolved/%d", status, handledBy, admin)
+	}
+	var otherMod string
+	if err := m.db.QueryRowContext(ctx,
+		`SELECT moderation FROM textures WHERE id=?`, otherTID).Scan(&otherMod); err != nil {
+		t.Fatalf("read other copy: %v", err)
+	}
+	if otherMod != "" {
+		t.Fatalf("unrelated private copy struck as well: %q", otherMod)
+	}
+
+	// The ban is what the strike is for: republishing must fail and must not
+	// clear the verdict on the way out.
+	yes := true
+	if err := m.UpdateTextureMeta(ctx, tid, uploader, TextureMetaPatch{Public: &yes}); !errors.Is(err, ErrModerationBan) {
+		t.Fatalf("republish err = %v, want ErrModerationBan", err)
+	}
+	if err := m.db.QueryRowContext(ctx,
+		`SELECT moderation, public FROM textures WHERE id=?`, tid).Scan(&otherMod, &public); err != nil {
+		t.Fatalf("re-read: %v", err)
+	}
+	if otherMod != "violation" || public != 0 {
+		t.Fatalf("blocked republish left a mark: moderation %q public %d", otherMod, public)
+	}
+
+	// Going private stays allowed — the owner can always retreat.
+	no := false
+	if err := m.UpdateTextureMeta(ctx, tid, uploader, TextureMetaPatch{Public: &no}); err != nil {
+		t.Fatalf("make private: %v", err)
+	}
+	// A second strike on the same report is a conflict, not a partial write.
+	if err := m.StrikeTexture(ctx, tid, reportID, admin); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("second strike err = %v, want ErrNotFound", err)
+	}
+
+	// Lifting restores the right to publish, and nothing more.
+	if err := m.LiftTextureModeration(ctx, tid); err != nil {
+		t.Fatalf("lift: %v", err)
+	}
+	if err := m.db.QueryRowContext(ctx,
+		`SELECT moderation, public FROM textures WHERE id=?`, tid).Scan(&otherMod, &public); err != nil {
+		t.Fatalf("read after lift: %v", err)
+	}
+	if otherMod != "" || public != 0 {
+		t.Fatalf("lift published the texture as well: moderation %q public %d", otherMod, public)
+	}
+	if err := m.UpdateTextureMeta(ctx, tid, uploader, TextureMetaPatch{Public: &yes}); err != nil {
+		t.Fatalf("republish after lift: %v", err)
+	}
+	if err := m.LiftTextureModeration(ctx, 999999); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("lift missing texture err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestIntegrationTextureDelete(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	owner, other, admin := seedUser(t, m), seedUser(t, m), seedUser(t, m)
+	hash := strings.Repeat("f", 64)
+
+	tid, err := m.AddTexture(ctx, owner, "skin", hash, "default", TextureMeta{Description: "doomed"})
+	if err != nil {
+		t.Fatalf("add texture: %v", err)
+	}
+	// A second row sharing the content address: the file must outlive this delete.
+	sharedTID, err := m.AddTexturePrivate(ctx, other, "skin", hash, "default", TextureMeta{Description: "same bytes"})
+	if err != nil {
+		t.Fatalf("add shared copy: %v", err)
+	}
+	pid, _, err := m.CreatePlayer(ctx, owner, "doomedplayer")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+	if err := m.SetPlayerTextures(ctx, pid, tid, 0); err != nil {
+		t.Fatalf("equip: %v", err)
+	}
+	if _, err := m.AddClosetEntry(ctx, other, tid, "like"); err != nil {
+		t.Fatalf("closet: %v", err)
+	}
+	if err := m.SetUserAvatar(ctx, owner, tid); err != nil {
+		t.Fatalf("avatar: %v", err)
+	}
+	reportID, err := m.CreateReport(ctx, tid, other, "spam", "blocked content")
+	if err != nil {
+		t.Fatalf("report: %v", err)
+	}
+
+	// Without force nothing is removed, and the blockers come back named.
+	res, err := m.DeleteTexture(ctx, tid, owner, admin, false, "")
+	if !errors.Is(err, ErrTextureInUse) {
+		t.Fatalf("in-use delete err = %v, want ErrTextureInUse", err)
+	}
+	if len(res.Refs.Players) != 1 || res.Refs.Players[0] != "doomedplayer" || res.Refs.Closets != 1 || res.Refs.Avatars != 1 {
+		t.Fatalf("blockers = %+v, want the player name plus one closet and one avatar", res.Refs)
+	}
+	var still int
+	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM textures WHERE id=?`, tid).Scan(&still); err != nil || still != 1 {
+		t.Fatalf("row survived the refused delete: count=%d err=%v", still, err)
+	}
+
+	// Another user's owner scope must not reach the row.
+	if _, err := m.DeleteTexture(ctx, tid, other, admin, true, ""); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("wrong owner err = %v, want ErrForbidden", err)
+	}
+
+	res, err = m.DeleteTexture(ctx, tid, owner, admin, true, "moderation verdict")
+	if err != nil {
+		t.Fatalf("forced delete: %v", err)
+	}
+	if res.Hash != hash || res.Type != "skin" || res.ShareLeft != 1 {
+		t.Fatalf("delete result = %+v, want hash %s skin with 1 row sharing it", res, hash[:12])
+	}
+	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM textures WHERE id=?`, tid).Scan(&still); err != nil || still != 0 {
+		t.Fatalf("row still present: %d %v", still, err)
+	}
+
+	// Everything that pointed at it is cleared, not deleted alongside it.
+	var skinTid sql.NullInt64
+	if err := m.db.QueryRowContext(ctx, `SELECT tid_skin FROM players WHERE id=?`, pid).Scan(&skinTid); err != nil {
+		t.Fatalf("read player: %v", err)
+	}
+	if skinTid.Valid {
+		t.Fatalf("player still equipped: %d", skinTid.Int64)
+	}
+	var closetN, avatarN int
+	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM user_closet WHERE texture_tid=?`, tid).Scan(&closetN); err != nil {
+		t.Fatalf("count closet: %v", err)
+	}
+	if closetN != 0 {
+		t.Fatalf("closet rows survived: %d", closetN)
+	}
+	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE avatar_tid=?`, tid).Scan(&avatarN); err != nil {
+		t.Fatalf("count avatars: %v", err)
+	}
+	if avatarN != 0 {
+		t.Fatalf("avatar still points at the deleted texture: %d", avatarN)
+	}
+
+	// The tombstone is what the panel renders after the content is gone.
+	var tUID, tDeletedBy int64
+	var tType, tHash, tDesc, tReason string
+	if err := m.db.QueryRowContext(ctx,
+		`SELECT uid, type, hash, description, deleted_by, reason FROM texture_tombstones WHERE texture_id=?`, tid).
+		Scan(&tUID, &tType, &tHash, &tDesc, &tDeletedBy, &tReason); err != nil {
+		t.Fatalf("tombstone read: %v", err)
+	}
+	if tUID != owner || tType != "skin" || tHash != hash || tDesc != "doomed" || tDeletedBy != admin {
+		t.Fatalf("tombstone = %d %s %s %q by %d, want owner/skin/hash/doomed/admin", tUID, tType, tHash[:12], tDesc, tDeletedBy)
+	}
+	if tReason != "moderation verdict" {
+		t.Fatalf("tombstone reason = %q", tReason)
+	}
+
+	// The report survives its texture and still describes it.
+	row, err := m.GetReport(ctx, reportID)
+	if err != nil {
+		t.Fatalf("report after delete: %v", err)
+	}
+	if row.TextureName != "doomed" || row.TextureType != "skin" || row.Uploader == "" {
+		t.Fatalf("report projection lost the texture: %+v", row)
+	}
+	rows, total, err := m.ListReports(ctx, ReportOpts{Status: "open", Page: 1, PerPage: 20})
+	if err != nil || total != 1 || len(rows) != 1 || rows[0].TextureID != tid {
+		t.Fatalf("list after delete total=%d rows=%+v err=%v", total, rows, err)
+	}
+
+	// Deleting the last row that shares the content is the caller's cue to
+	// unlink the file.
+	res, err = m.DeleteTexture(ctx, sharedTID, other, admin, true, "")
+	if err != nil {
+		t.Fatalf("delete last share: %v", err)
+	}
+	if res.ShareLeft != 0 {
+		t.Fatalf("ShareLeft = %d, want 0 once the last row is gone", res.ShareLeft)
+	}
+	if _, err := m.DeleteTexture(ctx, sharedTID, other, admin, true, ""); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("delete twice err = %v, want ErrNotFound", err)
+	}
+}
+
+// The content lock is what keeps an upload from inserting a row for bytes a
+// concurrent delete just unlinked, so it has to actually exclude. The timeout
+// branch (ErrBusy) needs a peer holding the lock past 5s and is not exercised
+// here.
+func TestIntegrationHashLockMutualExclusion(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	hash := strings.Repeat("1", 64)
+
+	inside := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = m.WithHashLock(ctx, hash, func(context.Context) error {
+			close(inside)
+			time.Sleep(300 * time.Millisecond)
+			return nil
+		})
+	}()
+	<-inside
+
+	start := time.Now()
+	called := false
+	if err := m.WithHashLock(ctx, hash, func(context.Context) error { called = true; return nil }); err != nil {
+		t.Fatalf("second lock: %v", err)
+	}
+	if !called {
+		t.Fatal("second callback never ran")
+	}
+	if elapsed := time.Since(start); elapsed < 200*time.Millisecond {
+		t.Fatalf("second lock entered after %v — the first holder was still inside, so they are not exclusive", elapsed)
+	}
+	<-done
+
+	// Releasing must be real: the same hash locks again immediately.
+	if err := m.WithHashLock(ctx, hash, func(context.Context) error { return nil }); err != nil {
+		t.Fatalf("re-acquire after release: %v", err)
+	}
+	// An error inside the region still releases the lock (deferred, on the same
+	// connection the pool will hand to the next caller).
+	if err := m.WithHashLock(ctx, hash, func(context.Context) error { return errors.New("boom") }); err == nil {
+		t.Fatal("inner error swallowed")
+	}
+	if err := m.WithHashLock(ctx, hash, func(context.Context) error { return nil }); err != nil {
+		t.Fatalf("lock after inner error: %v", err)
 	}
 }

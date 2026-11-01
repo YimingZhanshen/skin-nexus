@@ -113,14 +113,16 @@ Measured on a 2-core / 3.5 GB production VPS: ~600 RPS landing, 5182 RPS texture
 **For players**
 - Sign up / sign in (optional invite-code gate), profile and password management
 - Upload skins and capes (drag & drop, live 3D preview, HD skins keep native resolution, optional private textures)
+- Arm model read from the texture pixels (nothing to declare); legacy 22×17 capes are padded to the standard layout on upload
 - Closet and character management, set avatar
-- Skin library with three visibility levels, filters, sorting and likes; shareable server-rendered detail pages with Markdown descriptions, source links and a report button
+- Skin library with three visibility levels, filters, sorting and likes; shareable server-rendered detail pages with Markdown descriptions, source links and a report button; delete your own textures for good
 - Authorized apps, device management, Union binding, account deletion
 
 **For operators**
 - Admin panel: stats, users / characters / textures / reports, invite codes, grouped site settings, Union operations, runtime status (build/environment/dependencies), self-diagnostics
 - Announcements (Markdown with dual sanitization), custom CSS/JS, theme packs, **signed theme market** (browse/install/update/uninstall from the official registry, hot-applied without a restart) and local theme-pack upload, configurable footer (text + friend links / ICP line, shared by SSR and SPA; the copyright line is fixed)
 - Three-layer ban enforcement, auth rate limiting and lockout, SMTP password reset
+- Report handling: take a texture down and record a violation verdict (a struck texture cannot be republished until an operator lifts the ban), or delete it outright — refused while characters, closet entries or avatars still reference it, unless unbinding is explicitly confirmed; deletions keep an evidence record
 - Login and server/federation traffic logs (90 days), audit trail
 
 **Compatibility & integrations**

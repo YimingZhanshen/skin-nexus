@@ -1,7 +1,7 @@
 <script setup>
 // Texture report moderation: list open reports, dismiss/resolve, or hide the
-// texture. Hiding calls the same visibility path as the owner toggle, so the
-// public dedupe key is cleared and the detail page becomes owner-only.
+// texture. "Hide" strikes it — private, cleared from the public dedupe key, and
+// barred from being republished by its owner until an admin lifts the verdict.
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
@@ -78,6 +78,68 @@ async function act(r, action) {
 
 function reasonText(r) { const k = reasons[r]; return k ? t(k) : r }
 
+async function lift(r) {
+  busy.value = r.id
+  error.value = ''
+  ok.value = ''
+  try {
+    await fetchJSON(`/api/admin/v1/textures/${r.textureId}/moderation`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ moderation: '' }),
+    })
+    ok.value = t('admin.reportsLifted')
+    await load()
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    busy.value = 0
+  }
+}
+
+// The delete reason comes from the report itself: the tombstone then says why
+// the texture went away, which is the whole point of keeping it.
+function reportReason(r) {
+  const text = r.detail ? `${r.reason}: ${r.detail}` : r.reason
+  return [...text].slice(0, 500).join('')
+}
+
+function removeTexture(tid, force, reason) {
+  const q = new URLSearchParams()
+  if (force) q.set('force', '1')
+  if (reason) q.set('reason', reason)
+  return fetchJSON(`/api/admin/v1/textures/${tid}?${q}`, { method: 'DELETE' })
+}
+
+async function purge(r) {
+  const name = r.textureName || ('#' + r.textureId)
+  if (!window.confirm(t('admin.reportsDeleteConfirm', { name }))) return
+  busy.value = r.id
+  error.value = ''
+  ok.value = ''
+  try {
+    try {
+      await removeTexture(r.textureId, false, reportReason(r))
+    } catch (e) {
+      // 409 answers with what still points at the texture; that list is the
+      // confirmation the admin actually needs before unbinding it.
+      if (e.status !== 409 || !e.data || !Array.isArray(e.data.players)) throw e
+      const detail = t('admin.reportsDeleteBlocked', {
+        players: (e.data.players || []).join('、') || '—',
+        closets: e.data.closets || 0,
+        avatars: e.data.avatars || 0,
+      })
+      if (!window.confirm(`${detail}\n${t('admin.reportsDeleteForceConfirm')}`)) return
+      await removeTexture(r.textureId, true, reportReason(r))
+    }
+    ok.value = t('admin.reportsDeleted')
+    await load()
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    busy.value = 0
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -114,6 +176,7 @@ onMounted(load)
               <div>
                 <div>{{ r.textureName || ('#' + r.textureId) }}</div>
                 <div class="muted">{{ t('admin.reportsUploader') }}: {{ r.uploader || '—' }} · {{ r.public ? t('admin.reportsPublic') : t('admin.reportsPrivate') }}</div>
+                <div v-if="r.moderation" class="struck">{{ t('admin.reportsStruck') }}</div>
               </div>
             </div>
           </td>
@@ -132,6 +195,8 @@ onMounted(load)
               <button class="secondary" :disabled="busy === r.id || r.status !== 'open'" @click="act(r, 'dismiss')">{{ t('admin.reportsDismiss') }}</button>
               <button class="secondary" :disabled="busy === r.id || r.status !== 'open'" @click="act(r, 'resolve')">{{ t('admin.reportsResolve') }}</button>
               <button :disabled="busy === r.id || r.status !== 'open'" @click="act(r, 'hide')">{{ t('admin.reportsHide') }}</button>
+              <button v-if="r.moderation" class="secondary" :disabled="busy === r.id" @click="lift(r)">{{ t('admin.reportsLift') }}</button>
+              <button class="danger-outline" :disabled="busy === r.id" @click="purge(r)">{{ t('admin.reportsDelete') }}</button>
             </div>
           </td>
         </tr>
@@ -146,6 +211,7 @@ onMounted(load)
 .report-tex { display: flex; gap: 10px; align-items: center; }
 .report-tex img { width: 42px; height: 42px; object-fit: contain; image-rendering: pixelated; background: var(--bg); border-radius: 4px; }
 .report-detail { margin-top: 4px; font-size: var(--fs-xs); color: var(--muted); white-space: pre-wrap; }
+.struck { margin-top: 4px; font-size: var(--fs-xs); color: var(--danger); }
 .report-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .btn-link { display: inline-flex; align-items: center; padding: 6px 12px; text-decoration: none; }
 button.active { border-color: var(--accent); color: var(--accent); }
