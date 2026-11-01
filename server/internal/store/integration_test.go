@@ -1311,8 +1311,10 @@ func TestIntegrationSkinModelBackfill(t *testing.T) {
 	if err != nil {
 		t.Fatalf("set model: %v", err)
 	}
-	if changed != int64(len(ids)) {
-		t.Fatalf("rows changed = %d, want %d", changed, len(ids))
+	// RowsAffected counts *changed* rows, not matched ones: the row that
+	// already read 'slim' is left alone, which is what makes a rerun free.
+	if changed != 2 {
+		t.Fatalf("rows changed = %d, want 2 (one row already agreed)", changed)
 	}
 	for _, id := range ids {
 		var got string
