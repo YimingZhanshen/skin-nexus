@@ -91,7 +91,6 @@ SKIN_TEST_DSN='user:pass@tcp(127.0.0.1:3306)/skin_nexus_test?parseTime=true' \
 | 写/分发主题包、主题市场 | `docs/theme-spec.md` |
 | 启动器对接（API 入口与登录流） | `docs/launcher-api.md` |
 | 竞品对照的源码证据与方法 | `docs/competitor-analysis.md` |
-| 正版账号绑定的路线、设计问题与红线 | `docs/license-binding.md` |
 | 了解每轮开发改了什么 | `docs/CHANGELOG.md` |
 | 参与贡献（翻译/主题/插件/代码） | `CONTRIBUTING.md` |
 | 报告漏洞与支持版本 | `SECURITY.md` |

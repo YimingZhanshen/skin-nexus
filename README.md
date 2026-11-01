@@ -45,7 +45,7 @@ docker compose -f docker-compose.quickstart.yml up -d
 
 **玩家**：注册登录（可开邀请码准入）、上传皮肤与披风（拖放、进度、3D 预览、高清皮保留原生分辨率）、材质名称与来源标注（原创/二创/转载，后两者必须填原始发布地址）、Markdown 描述、私密上传、衣柜与角色管理、设为头像、皮肤库筛选排序与单品详情页、点赞入柜、举报、授权应用与设备管理、账号注销。
 
-**站长**：管理面板（概览、用户/角色/材质、邀请码、站点设置、运行状态、自助诊断）、公告与自定义 CSS/JS、主题包与主题市场（Ed25519 验签，安装卸载热生效）、本地主题包上传、自定义页脚、封禁（登录 / 认证 / `hasJoined` 三层）、认证限流与失败锁定、SMTP 找回密码、登录与服务器通信日志（保留 90 天）、操作审计。邮箱验证流和站内通知中心尚未实现，记在路线图中。
+**站长**：管理面板（概览、用户/角色/材质、邀请码、站点设置、运行状态、自助诊断）、公告与自定义 CSS/JS、主题包与主题市场（Ed25519 验签，安装卸载热生效）、本地主题包上传、自定义页脚、封禁（登录 / 认证 / `hasJoined` 三层）、认证限流与失败锁定、SMTP 找回密码、登录与服务器通信日志（保留 90 天）、操作审计。
 
 **协议与集成**：Yggdrasil 全端点（authlib-injector 零改配置）、OIDC 免密登录（设备码 + refresh 轮换，不需要外挂 Janus）、MUA Union 成员站模块（默认关闭 = 零暴露面）、CustomSkinAPI / USM / legacy 裸 PNG / 公开只读 API、Mojang 正版兜底（本地未命中时回源官方，出站地址防护 + 面板热开关）、服务端头像与预览渲染、启动器 Bearer API（`launcher-api` 插件）、皮肤导入（`skin-importer` 插件，支持 Mojang 与老站单条/批量导入）。
 
@@ -91,14 +91,8 @@ docker compose -f docker-compose.quickstart.yml up -d
 - 部署运维 [`docs/deploy.md`](docs/deploy.md) · 构建与 CI [`docs/build.md`](docs/build.md) · 迁移 [`docs/migration.md`](docs/migration.md)
 - 兼容基线 [`docs/compat-matrix.md`](docs/compat-matrix.md) · 启动器 API [`docs/launcher-api.md`](docs/launcher-api.md)
 - 主题包 [`docs/theme-spec.md`](docs/theme-spec.md) · 插件 [`docs/plugin-spec.md`](docs/plugin-spec.md) · 发布与签名 [`docs/plugin-publishing.md`](docs/plugin-publishing.md)
-- 竞品取证 [`docs/competitor-analysis.md`](docs/competitor-analysis.md) · 正版绑定方案 [`docs/license-binding.md`](docs/license-binding.md) · 迭代历史 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
+- 竞品取证 [`docs/competitor-analysis.md`](docs/competitor-analysis.md) · 迭代历史 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
 - 贡献 [`CONTRIBUTING.md`](CONTRIBUTING.md) · 治理 [`GOVERNANCE.md`](GOVERNANCE.md) · 漏洞报告 [`SECURITY.md`](SECURITY.md) · 行为准则 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) · 无障碍 [`ACCESSIBILITY.md`](ACCESSIBILITY.md) · 仓库协作说明 [`AGENTS.md`](AGENTS.md)
-
-## 路线图
-
-- 已完成：v0.1–v0.5 —— Yggdrasil 全量、OIDC 免密、Union 模块、i18n / SEO / 主题包、迁移工具链、管理面板、签名插件与主题市场、持久任务队列、材质生命周期闭环、错误契约与质量闸。
-- 进行中：0.5.x 补丁窗口 —— 生产存量模型校正（`redetect-models`）、启动器真机验收（SJMCL 与社区启动器）。
-- 规划中：邮箱验证流与站内通知中心、对象存储与 CDN 失效、正版账号绑定（只有方案与红线，未排期）。
 
 ## 兼容契约
 

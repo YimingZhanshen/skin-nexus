@@ -98,7 +98,7 @@ player-notes_1.2.0.zip
 | `config` | `skin.config` |
 | `store:kv` | `skin.store.kv` |
 | `store:docs` | `skin.store.collection`、`onInstall`/`onUpgrade` |
-| `ui:page` / `ui:slot` / `ui:assets` | UI 页面 / 插槽 / 静态资源 |
+| `ui:page` / `ui:slot` / `ui:assets` | UI 页面 / 插槽 / 静态资源。实际形态由 manifest 的 `ui` 段决定并做结构校验（槽位白名单、iframe 必须配 `ui.assets`），这三个名字是 UI 面的声明位 |
 | `ui:forms` | `ui.forms`：注册/上传的宿主渲染字段 |
 | `media:avatar` | `onAvatarFilter` + `media.avatarHosts` |
 | `account:read` | `skin.account.get/limits` |
@@ -106,7 +106,7 @@ player-notes_1.2.0.zip
 | `events:subscribe` | `skin.events.on` |
 | `auth:guards` | `skin.guards.on` |
 | `net:http` | `skin.net.get`；manifest 必须声明 `net.http` |
-| `mail:send` / `cli:commands` | 合法权限名，但宿主当前不提供对应运行时面；声明它们不会多出任何能力 |
+| `mail:send` / `cli:commands` / `plugins:invoke` / `audit:write` | 合法权限名，但宿主当前不提供对应运行时面；声明它们不会多出任何能力 |
 | `schedule:jobs` | `skin.jobs.register/submit/list/status/cancel/resume`；manifest 必须声明 `jobs` |
 | `plugins:read` | `skin.host.info()` / `skin.host.hasPlugin()` 只读内省 |
 

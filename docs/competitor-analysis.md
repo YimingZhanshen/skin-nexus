@@ -81,17 +81,15 @@ URL 的插件 filter 换取 5182 RPS 的纹理分发，代价记在 `compat-matr
 | 正版资格校验（第三方生态件） | — | — | — | — | 参考 LittleSkin `premium-verification`：一次性 MSA→XBL→XSTS→entitlement，落 `premium(uid,pid,uuid)`，**不保存任何令牌**（`src/Providers/PremiumProvider.php:58-142`、`callbacks.php:16-24`）；Heimdall 侧 90 天周期性重验（`Configuration.java:32-36`） |
 | `/publickeys` + `POST /player/certificates` | ❌ 未挂（单一签名密钥 + metadata 里的 `signaturePublickey`，authlib-injector 口径） | 未取证 | 未取证 | ❌ | ✅ 整族挂载 `main.go:454-470`（实现 `services.go:171-293,546`）。**注意消费方**：authlib-injector 对这两者都用本地实现回应——`/publickeys` 取元数据里的 key（`httpd/PublickeysFilter.java:40-61`），profile key 用本地生成的假密钥对（`httpd/ProfileKeyFilter.java:48-82`），因此真正的消费者是**不挂 agent 的原生客户端**（`-Dminecraft.api.*.host`），不是老启动器 |
 
-## 3. 缺口与不做清单（含理由）
+## 3. 取舍与不做清单（含理由）
 
 | 判定 | 项 | 依据 |
 |---|---|---|
-| 真缺口·最大 | 对象存储 + CDN 刷新 | 五家全无（§2.1 首两行）→ 属生态级；我方以 `immutable` + 插件 URL 改写器换取 5182 RPS 与零依赖，取舍已记 `compat-matrix.md` §4 |
-| 真缺口 | 邮箱验证流、站内通知中心 | element-skin/blessing 两家实装且证据齐全（§2.3），我方缺；量级 2–3 天/项 |
-| 真缺口·生态向 | services / discovery / certificates 族 | 只有不挂 authlib-injector 的原生客户端需要；面向「社区启动器 + 正版混合」时才值 |
+| 取舍·生态级 | 对象存储 + CDN 刷新 | 五家全无（§2.1 首两行）→ 生态级工程；我方以 `immutable` + 插件 URL 改写器换取 5182 RPS 与零依赖，后果与边界记在 `compat-matrix.md` §4 |
+| 取舍·消费方缺失 | services / discovery / certificates 族 | 只有不挂 authlib-injector 的原生客户端需要（§2.3 最后一行）；面向「社区启动器 + 正版混合」才成立，现无此类接入方 |
 | 伪需求 | 签名密钥轮换 | authlib-injector 的 key 来自服务端元数据并本地缓存，无轮换消费路径；规范本身建议「尽量不要换 key」 |
 | 伪需求 | 像素级材质 hash | 与 blessing 迁移的字节对账冲突（`internal/migrate/scan.go:66-80` 按原文件字节哈希） |
 | 伪需求 | three.js 全景首页 / PostgreSQL·Redis 换栈 | 与 SSR SEO 优势冲突；单站规模无收益 |
-| 待核 | `launcher-api` 的 Bearer 上传端点 | 我方已实现，但本轮仍未在任何已取证消费方（启动器/agent）里看到调用者——保留但不宣传 |
 
 ## 4. 可借鉴的工程纪律
 
@@ -126,38 +124,11 @@ URL 的插件 filter 换取 5182 RPS 的纹理分发，代价记在 `compat-matr
   共享同一内容的行会被一起毁掉文件；邮箱验证链接**永不过期**（§2.3）；列表排序列名来自请求参数直进 `orderBy`。
 - **Drasl**：`/web/texture/resolved/{token}` 的 AEAD token 里没有时间戳（`common.go:52-73`）→
   名为「防缓存」的 URL 实际永久有效；`services.go:69` 的 cape 仍是 TODO。
-- **SkinNexus（自查，同一把尺子）**：
-  - `internal/auth/authsource.go` 整个文件零引用，是全仓最大的「声明但未接线」；
-  - 7 个 manifest 权限只登记不校验（`ui:page`/`ui:slot`/`ui:assets`/`plugins:invoke`/`audit:write`/`mail:send`/`cli:commands`），
-    `docs/plugin-spec.md:101` 却把它们写成授予项；
-  - 3 个错误码只有声明没有发射点（`common.not_found`、`theme.bad_id`、`setup.db_missing`），
-    闸只检查「用法 → 目录」，不检查「目录 → 用法」；
-  - 7 条管理端路由（textures/audit/jobs/market-plan）无前端消费者，只能经 `X-Admin-Token` 使用；
-  - 墓碑表从不清理，且不参与上传查重 → 违规内容可重新入库；无孤儿文件回收；
-  - `/textures/{hash}` 不查存在性与可见性（本轮明确保留的取舍）。
-
-## 6. 参考实现索引（对方仓库，动手时按图索骥）
-
-| 将来要做 | 参考实现 |
-|---|---|
-| 对象存储 + CDN 刷新 | 无现成参考（五家全无）→ 需自建 driver 抽象；先解 `compat-matrix.md` §4 记下的「行没了文件留下 / 缓存留旧图」两个后果 |
-| 通知中心 | element-skin `internal/database/schema.go:158-198` + `service/notice/user.go`；blessing `app/Notifications/SiteMessage.php` + `NotificationsController.php:13-56`（含 API scope） |
-| 邮箱验证流 | element-skin `verification.go:100-121`（TTL + 发送失败即删码）；反面教材见 blessing 的不过期链接 |
-| services / discovery / certificates 族 | Drasl `main.go:371-372,454-470`、`services.go:171-293`、`discovery.go:90-188`；消费者口径见 §2.3 最后一行 |
-| 正版资格校验（不保存令牌的一次性校验） | LittleSkin `premium-verification`：`src/Providers/PremiumProvider.php:58-142`、`callbacks.php:16-24`、Heimdall `Configuration.java:32-36`；方案与红线见 [`license-binding.md`](license-binding.md) |
-| 任务运行器加固（DLQ、投递前权限复核） | element-skin `service/webhook/worker.go` |
-| 权限模型升级（allow/deny 覆盖 + 会话×入口策略） | element-skin `internal/database/permission/effective_compute.go:28-83` |
-| 迁移前自动备份 | Drasl `db.go:273-289` + `config.go:310` |
-| 浏览器渲染缓存 | element-skin `src/storage/indexedDbCache.ts`、`renderCache.ts` |
-| 方形头像截脸（含默认 Steve 生成） | vSkin `utils/image_utils.py:114-178`（我方等价实现见 `server/internal/avatargen/`） |
-
-> 上表路径属于**对方仓库**（未随本仓库分发），行号只作定位线索；动手前重新拉取源码取证。
-> 本目录内所有结论按 §「快照口径」日期成立。
 
 ## 附录 A：2026-10-26 快照（历史，element-skin 与 vSkin 两仓）
 
 > 以下为上一轮取证正文，保留以说明结论如何随源码演进变化；其中「SEO 真空」「启动器深链真空」两项
-> 在 2026-11-01 复测中仍然成立，「正版绑定量级」一条已由 §3 与 [`license-binding.md`](license-binding.md) 接管。
+> 在 2026-11-01 复测中仍然成立，「正版绑定量级」一条已由 §3 接管。
 
 ### A.1 总判断
 
@@ -194,13 +165,6 @@ URL 的插件 filter 换取 5182 RPS 的纹理分发，代价记在 `compat-matr
 | three.js 全景首页 / 轮播背景 | JS 重、伤 LCP，与服务端渲染 landing 的 SEO 优势冲突 |
 | 像素级材质 hash（Littleskin 系） | 与 blessing 兼容迁移冲突（迁移按文件字节 hash 对账） |
 | PostgreSQL / Redis 换栈 | 单站规模 MySQL 足够，换栈无收益 |
-
-**缓行候选（附来源与量级，未排期）**：逐用户通知中心（element-skin `service/notice/`，2–3 天）·
-设备授权流后台可视化配置（vSkin `AdminOAuthApps.vue`，需先核对差量）· 农历节日彩蛋（装饰性）·
-浏览器 IDB LRU 渲染缓存（性能细节）· `/v2/capabilities` 发现面（生态向，单站收益低）·
-webhook-worker 独立进程队列（设计优秀但对当前规模过度工程）· Python SDK（生态向）·
-**Microsoft 正版账号绑定**（两家主打，本站仅 `internal/auth/authsource.go` 接口占位；量级大——
-MS OAuth 注册/回调/安全审查/角色关联，需独立拍板分段实施，已进 README 路线图）。
 
 ### A.4 竞品弱点备忘（两家，2026-10-26）
 

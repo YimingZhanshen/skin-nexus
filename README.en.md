@@ -45,7 +45,7 @@ Two things are required before going live:
 
 **Players**: registration and login (invite-code gating optional), skin and cape uploads (drag-and-drop, progress, 3D preview, HD skins keep native resolution), texture name and provenance (original / derivative / repost, the last two require the upstream URL), Markdown descriptions, private uploads, closet and character management, set-as-avatar, skin library with filters and a shareable detail page, likes that add to the closet, reports, OAuth app and device management, account deletion.
 
-**Operators**: admin panel (overview, users / characters / textures, invite codes, site settings, runtime status, self-diagnostics), announcements and custom CSS/JS, theme packs and a theme market (Ed25519-verified, install and uninstall take effect without a restart), local theme uploads, configurable footer, bans enforced at three layers (login / authenticate / `hasJoined`), authentication rate limiting with lockout, SMTP password reset, login and server communication logs (90 days), audit trail. Email verification and an in-site notification centre are not implemented yet — they are on the roadmap.
+**Operators**: admin panel (overview, users / characters / textures, invite codes, site settings, runtime status, self-diagnostics), announcements and custom CSS/JS, theme packs and a theme market (Ed25519-verified, install and uninstall take effect without a restart), local theme uploads, configurable footer, bans enforced at three layers (login / authenticate / `hasJoined`), authentication rate limiting with lockout, SMTP password reset, login and server communication logs (90 days), audit trail.
 
 **Protocols and integration**: full Yggdrasil endpoint set (authlib-injector works without configuration changes), built-in OIDC passwordless login (device code flow + refresh rotation, no Janus sidecar), MUA Union member-site module (off by default = zero surface), CustomSkinAPI / USM / legacy raw PNG / public read-only API, Mojang premium fallback (origin query when local lookup misses, with outbound address protection and a hot toggle in the panel), server-side avatar and preview rendering, a launcher Bearer API (`launcher-api` plugin), skin import (`skin-importer` plugin, single and batch from Mojang or a legacy site).
 
@@ -91,16 +91,10 @@ Measured on one 2-core / 3.5 GB production VPS: landing ~600 RPS, texture delive
 - Deployment and operations [`docs/deploy.md`](docs/deploy.md) · build and CI [`docs/build.md`](docs/build.md) · migration [`docs/migration.md`](docs/migration.md)
 - Compatibility baseline [`docs/compat-matrix.md`](docs/compat-matrix.md) · launcher API [`docs/launcher-api.md`](docs/launcher-api.md)
 - Theme packs [`docs/theme-spec.md`](docs/theme-spec.md) · plugins [`docs/plugin-spec.md`](docs/plugin-spec.md) · publishing and signing [`docs/plugin-publishing.md`](docs/plugin-publishing.md)
-- Competitor evidence [`docs/competitor-analysis.md`](docs/competitor-analysis.md) · official-account binding design [`docs/license-binding.md`](docs/license-binding.md) · iteration history [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
+- Competitor evidence [`docs/competitor-analysis.md`](docs/competitor-analysis.md) · iteration history [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
 - Contributing [`CONTRIBUTING.md`](CONTRIBUTING.md) · governance [`GOVERNANCE.md`](GOVERNANCE.md) · vulnerability reporting [`SECURITY.md`](SECURITY.md) · code of conduct [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) · accessibility [`ACCESSIBILITY.md`](ACCESSIBILITY.md) · repository collaboration notes [`AGENTS.md`](AGENTS.md)
 
 Most detailed documentation is still Chinese-first.
-
-## Roadmap
-
-- Done: v0.1–v0.5 — full Yggdrasil, OIDC passwordless, Union module, i18n / SEO / theme packs, migration toolchain, admin panel, signed plugin and theme markets, durable job queue, texture lifecycle, error contract and quality gates.
-- In progress: the 0.5.x patch window — stock model correction in production (`redetect-models`), real-device launcher acceptance (SJMCL and community launchers).
-- Planned: email verification and a notification centre, object storage with CDN invalidation, official-account binding (design and red lines only, not scheduled).
 
 ## Frozen compatibility contracts
 

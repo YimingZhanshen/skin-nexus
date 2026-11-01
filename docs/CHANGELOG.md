@@ -4,6 +4,23 @@
 
 ## 2026-11-02
 
+- **对外文档口径收敛**：仓库只写「现在是什么」与「为什么不做什么」，不再写「还没做什么」。移出仓库的内容：
+  README 中英两版 `## 路线图` 整节与站长段末的「尚未实现」句、`compat-matrix.md` §4 的「正版账号绑定」行、
+  `competitor-analysis.md` 的我方自查清单与「将来要做 · 参考实现」索引、`docs/license-binding.md` 全文
+  （纯方案零实现）。原文与判据另存于仓库外，不随本仓库分发。
+  - **保留**的是有证据的现状与取舍：对照表里对手占优的格子（element-skin 覆盖率硬阈值 90% vs 我方地板 40%、
+    我方前端无 lint 闸）、`ACCESSIBILITY.md` 的「尚未完成独立无障碍审计」（删掉它等于暗示已达标）、
+    `compat-matrix.md` §4 的取舍与偏差行、`competitor-analysis.md` §3 的取舍与「伪需求」判定。
+  - 顺带修两处「文档说的和机器做的不一致」：`plugin-spec.md` §4 把 `ui:page`/`ui:slot`/`ui:assets` 写成权限位，
+    实际宿主按 manifest 的 `ui` 段做结构校验（槽位白名单、iframe 必须配 `ui.assets`）；`plugins:invoke`/`audit:write`
+    与 `mail:send`/`cli:commands` 一样是「合法权限名、宿主无对应运行时面」，并入同一行说明。
+    `deploy.md` 的 `SKIN_REQUIRE_VERIFICATION` 从「尚未实现，保持关」改为实际后果：开启后未验证账号一律拒绝进服，
+    迁移站要先核对存量 `email_verified` 标志位。
+  - 删死代码：`server/internal/auth/authsource.go` 整文件零引用（`AuthSource` / `Registry` / `Identity` 全仓无调用点）。
+  - 闸实测：`node scripts/check-docs.mjs` → `ok (18 files, 45 env vars documented both ways)`，无死链；
+    `go build ./...` 与 `go vet ./...` 干净；`go test ./...` 全绿，total coverage **42.0%**（删掉不可达语句后由 41.8 上移），
+    0% 包集合仍是 `internal/errorgate` + `internal/jobs` 两条、与 `testdata/coverage-floor.txt` 钉死值一致。
+
 - **前端工具链三条大版本全部落地**（#6 plugin-vue 5→6、#4 vite 6→8、#5 vue-i18n 9→11，顺序有讲究：单升 vite 会在
   `npm ci` 就 ERESOLVE）+ `vite.config.js` 改用 `import.meta.dirname`（vite 8 明确警告原生 config loader 不提供 `__dirname`）。
   - 构建契约实测保持：`dist` 仍是**单份 CSS**（`cssCodeSplit:false`，主题覆盖顺序依赖它）与**固定名 `assets/viewer.js`**
