@@ -45,7 +45,7 @@ func (b *Backend) handleSkinlibList(w http.ResponseWriter, r *http.Request) {
 		Page:        page,
 	})
 	if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "list failed", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	items := make([]map[string]any, 0, len(rows))
@@ -102,7 +102,7 @@ func (b *Backend) handleSkinlibLike(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "like failed", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	likes, _ := b.Store.ClosetLikes(r.Context(), tid)
@@ -125,7 +125,7 @@ func (b *Backend) handleSkinlibUnlike(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusNotFound, "not favourited yet", i18n.MsgLikeMissing)
 		return
 	} else if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "unlike failed", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	likes, _ := b.Store.ClosetLikes(r.Context(), tid)
@@ -242,7 +242,7 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusForbidden, "this texture was ruled a violation and may not be made public", i18n.MsgTextureModeration)
 		return
 	} else if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	// Visibility and arm model are moderation-relevant changes: without this
@@ -355,7 +355,7 @@ func (b *Backend) handleTextureReport(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusConflict, "you already reported this texture", i18n.MsgReportDuplicate)
 		return
 	} else if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "could not submit the report", i18n.MsgReportFailed)
+		writeLogged(r, w, http.StatusInternalServerError, i18n.MsgReportFailed, "could not submit the report", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true})

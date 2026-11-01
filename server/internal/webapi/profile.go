@@ -80,7 +80,7 @@ func (b *Backend) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 				writeErrCode(w, http.StatusConflict, "nickname already taken", i18n.MsgNicknameTaken)
 				return
 			}
-			writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
+			writeInternal(r, w, err)
 			return
 		}
 	}
@@ -90,7 +90,7 @@ func (b *Backend) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 				writeErrCode(w, http.StatusConflict, "email already taken", i18n.MsgEmailTaken)
 				return
 			}
-			writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
+			writeInternal(r, w, err)
 			return
 		}
 		// New address = unverified (blessing parity).
@@ -129,7 +129,7 @@ func (b *Backend) handleAccountDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	perm, err := b.Store.UserPermission(r.Context(), uid)
 	if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "db error", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	if perm > 0 {
@@ -142,7 +142,7 @@ func (b *Backend) handleAccountDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := b.Store.DeleteUser(r.Context(), uid); err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "delete failed", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	if b.OnUserLifecycle != nil {
@@ -190,7 +190,7 @@ func (b *Backend) handleAvatarSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := b.Store.SetUserAvatar(r.Context(), uid, req.TextureID); err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
@@ -203,7 +203,7 @@ func (b *Backend) handleAvatarReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := b.Store.SetUserAvatar(r.Context(), uid, 0); err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
@@ -221,7 +221,7 @@ func (b *Backend) ownPlayer(w http.ResponseWriter, r *http.Request, uid int64) (
 	}
 	players, err := b.Store.PlayersByUID(r.Context(), uid)
 	if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "db error", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return 0, false
 	}
 	for _, p := range players {

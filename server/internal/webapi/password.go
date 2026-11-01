@@ -66,7 +66,7 @@ func (b *Backend) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 	}
 	hash, err := auth.HashArgon2id(req.NewPassword)
 	if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "hash error", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	// SetPasswordHash writes UNCONDITIONALLY (chain-trace P0: the legacy-
@@ -74,7 +74,7 @@ func (b *Backend) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 	// the change a silent no-op for argon2id users while tokens were still
 	// revoked, turning "change password to stop a leak" into an amplifier).
 	if err := b.Store.SetPasswordHash(r.Context(), uid, hash); err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	// Kill every yggdrasil token this user holds (join/validate credentials).
@@ -193,7 +193,7 @@ func (b *Backend) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	uid, err := b.Store.UserByEmail(r.Context(), req.Email)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
-		writeErrCode(w, http.StatusInternalServerError, "service temporarily unavailable, try again later", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	if errors.Is(err, store.ErrNotFound) {
@@ -203,13 +203,13 @@ func (b *Backend) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	var raw [32]byte
 	if _, err := rand.Read(raw[:]); err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "service temporarily unavailable, try again later", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	token := hex.EncodeToString(raw[:])
 	digest := sha256.Sum256([]byte(token))
 	if err := b.Store.CreatePasswordResetToken(r.Context(), uid, hex.EncodeToString(digest[:]), resetTokenTTL); err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "service temporarily unavailable, try again later", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	link := strings.TrimRight(b.BaseURL, "/") + "/reset-password?token=" + url.QueryEscape(token)
@@ -264,17 +264,17 @@ func (b *Backend) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 			writeErrCode(w, http.StatusBadRequest, badLink, i18n.MsgResetLink)
 			return
 		}
-		writeErrCode(w, http.StatusInternalServerError, "service temporarily unavailable, try again later", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	hash, err := auth.HashArgon2id(req.Password)
 	if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "hash error", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	// SetPasswordHash writes UNCONDITIONALLY (same P0 guard as change).
 	if err := b.Store.SetPasswordHash(r.Context(), uid, hash); err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	// Revocation mirrors handlePasswordChange, minus "keep my session": the

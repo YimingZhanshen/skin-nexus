@@ -22,7 +22,7 @@ type SetupState struct {
 func (b *Backend) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	need, err := b.Store.NeedsSetup(r.Context())
 	if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "setup state unavailable", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"needs_setup": need})
@@ -33,7 +33,7 @@ func (b *Backend) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 	need, err := b.Store.NeedsSetup(r.Context())
 	if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "setup state unavailable", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	if !need {
@@ -69,7 +69,7 @@ func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	hash, err := auth.HashArgon2id(req.Password)
 	if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "hash failed", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	// The wizard's bootstrap account is the site SUPER_ADMIN (permission=2):

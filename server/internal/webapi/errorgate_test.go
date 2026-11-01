@@ -22,11 +22,13 @@ var governed = []errorgate.Scope{
 	{
 		Name: "webapi",
 		Dir:  ".",
-		Impl: []string{"writeJSON", "writeErrCode", "writeErrBody", "writeDomain", "writeAccountErr"},
+		Impl: []string{"writeJSON", "writeErrCode", "writeErrBody", "writeDomain", "writeAccountErr",
+			"writeLogged", "writeInternal"},
 		Coded: []errorgate.Emitter{
 			{Name: "writeErrCode", Prose: 2, Code: 3},
 			{Name: "writeDomain", Prose: 2, Code: 3},
 			{Name: "writeErrBody", Prose: 3, Code: 2},
+			{Name: "writeLogged", Prose: 4, Code: 3},
 			{Name: "writeAccountErr", Prose: 1, Code: -1},
 		},
 		Body:       "writeJSON",

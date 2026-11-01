@@ -20,7 +20,7 @@ func (b *Backend) handleClosetList(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := b.Store.ListCloset(r.Context(), uid)
 	if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "query failed", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))
@@ -67,7 +67,7 @@ func (b *Backend) handleClosetAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "insert failed", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "created": created})
@@ -97,7 +97,7 @@ func (b *Backend) handleClosetRename(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusNotFound, "closet entry not found", i18n.MsgClosetNotFound)
 		return
 	} else if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -119,7 +119,7 @@ func (b *Backend) handleClosetRemove(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusNotFound, "closet entry not found", i18n.MsgClosetNotFound)
 		return
 	} else if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "delete failed", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})

@@ -75,6 +75,13 @@ func TestErrorEnvelopeShape(t *testing.T) {
 			if env.Error == "" {
 				t.Error("`error` is empty: clients key their fallback message off it")
 			}
+			// The envelope promises one identifier, not two: docs/launcher-api.md
+			// writes `{"error":"stable.code"}`. This is what slipped past the
+			// static gate — `error` was http.StatusText on this surface while the
+			// management surface already sent the code.
+			if env.Error != env.Code {
+				t.Errorf("`error` = %q but `code` = %q; they must be the same string", env.Error, env.Code)
+			}
 			if env.Message == "" {
 				t.Error("`message` is empty: an unknown code would render as nothing")
 			}

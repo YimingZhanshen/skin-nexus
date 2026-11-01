@@ -334,16 +334,30 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 // machine-readable `code` that a language pack can translate, plus the `message`
 // a client shows when it does not know the code. errorgate_test.go keeps both
 // honest — no call site without a code, no code that is not in the catalogue.
-// Once the Chinese budget reaches zero, `error` becomes the code as well, so the
-// whole surface answers with one envelope (account errors already do).
+// `error` carries the code too, so every non-2xx on this host — player-facing and
+// admin alike — answers one envelope, as docs/launcher-api.md promises.
 func writeDomain(w http.ResponseWriter, status int, err error, code string) {
 	writeErrCode(w, status, err.Error(), code)
 }
 
 func writeErrCode(w http.ResponseWriter, status int, msg, code string) {
 	writeJSON(w, status, map[string]string{
-		"error": http.StatusText(status), "message": msg, "code": code,
+		"error": code, "message": msg, "code": code,
 	})
+}
+
+// writeLogged answers a failure the caller is not supposed to see and puts the
+// reason in the log. Without this half, `message` would have to carry the Go
+// error to keep the site debuggable — which is how credentials reach a client.
+func writeLogged(r *http.Request, w http.ResponseWriter, status int, code, msg string, err error) {
+	if err != nil {
+		log.Printf("webapi %s %s: %v (%s)", r.Method, r.URL.Path, err, code)
+	}
+	writeErrCode(w, status, msg, code)
+}
+
+func writeInternal(r *http.Request, w http.ResponseWriter, err error) {
+	writeLogged(r, w, http.StatusInternalServerError, i18n.MsgInternal, "operation failed", err)
 }
 
 // writeErrBody answers a domain error plus the extra keys a client needs. The
@@ -490,7 +504,7 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	hash, err := auth.HashArgon2id(req.Password)
 	if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "hash error", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	code := strings.TrimSpace(req.InvitationCode)
@@ -518,7 +532,7 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := b.issueSession(w, r, uid); err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "session could not be created, try again", i18n.MsgSessionFailed)
+		writeLogged(r, w, http.StatusInternalServerError, i18n.MsgSessionFailed, "session could not be created, try again", err)
 		return
 	}
 	b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebRegister,
@@ -582,7 +596,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 			Outcome: accesslog.OutcomeError, UID: u.ID, Who: req.Identifier, Detail: "verify_error"})
-		writeErrCode(w, http.StatusInternalServerError, "login check failed, try again later", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	if !ok {
@@ -616,7 +630,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err := b.issueSession(w, r, u.ID); err != nil {
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 			Outcome: accesslog.OutcomeError, UID: u.ID, Who: u.Nickname, Detail: "session_error"})
-		writeErrCode(w, http.StatusInternalServerError, "session could not be created, try again", i18n.MsgSessionFailed)
+		writeLogged(r, w, http.StatusInternalServerError, i18n.MsgSessionFailed, "session could not be created, try again", err)
 		return
 	}
 	b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
@@ -728,7 +742,7 @@ func (b *Backend) handleListTextures(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := b.Store.ListTextures(r.Context(), uid)
 	if err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "db error", i18n.MsgInternal)
+		writeInternal(r, w, err)
 		return
 	}
 	type item struct {

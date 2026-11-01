@@ -276,7 +276,7 @@ func (b *Backend) handleUnionRemapUUID(w http.ResponseWriter, r *http.Request) {
 			writeErrCode(w, http.StatusConflict, "the hub accepted it, but that UUID is taken locally and must be merged by an operator", i18n.MsgUnionUUIDConflict)
 			return
 		}
-		writeErrCode(w, http.StatusInternalServerError, "the hub accepted it but local convergence failed, retry", i18n.MsgUnionConvergeFailed)
+		writeLogged(r, w, http.StatusInternalServerError, i18n.MsgUnionConvergeFailed, "the hub accepted it but local convergence failed, retry", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
