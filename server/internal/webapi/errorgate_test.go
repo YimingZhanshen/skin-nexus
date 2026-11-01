@@ -109,6 +109,11 @@ func (sc scope) classify(call *ast.CallExpr) (site, bool) {
 	// different shape, so it is counted the same way. Only bodies that carry an
 	// "error" key are error responses.
 	if fn.Name == "writeJSON" && hasErrorKey(call) {
+		if code := valueForKey(call, "code"); code != nil {
+			// A body that names its own code is coded — it just bypasses the
+			// helper, which is legal when it carries extra keys (plugin, field).
+			return site{kind: kindCoded, msg: valueForKey(call, "message"), code: code}, true
+		}
 		return site{kind: kindUncoded, msg: payloadLiteral(call)}, true
 	}
 	return site{}, false
@@ -148,6 +153,25 @@ func payloadLiteral(call *ast.CallExpr) ast.Expr {
 	for _, arg := range call.Args {
 		if _, ok := arg.(*ast.CompositeLit); ok {
 			return arg
+		}
+	}
+	return nil
+}
+
+// valueForKey returns the expression bound to a key in the payload literal, so
+// a hand-rolled body's own `code`/`message` is reachable.
+func valueForKey(call *ast.CallExpr, key string) ast.Expr {
+	lit, ok := payloadLiteral(call).(*ast.CompositeLit)
+	if !ok {
+		return nil
+	}
+	for _, el := range lit.Elts {
+		kv, ok := el.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		if s, ok := stringLit(kv.Key); ok && s == key {
+			return kv.Value
 		}
 	}
 	return nil

@@ -109,7 +109,8 @@ const (
 	MsgPluginNotFound   = "plugin.not_found"
 	MsgPluginNoConfig   = "plugin.no_config"
 	MsgPluginNoRollback = "plugin.no_rollback"
-	MsgGuardDenied      = "plugin.guard_denied" // a plugin refused the write; its reason is the message
+	MsgGuardDenied      = "plugin.guard_denied"  // a plugin refused the write; its reason is the message
+	MsgPluginForm       = "plugin.form_rejected" // the plugin's own field validator threw
 
 	// setup / install
 	MsgSetupDone      = "setup.already_done"

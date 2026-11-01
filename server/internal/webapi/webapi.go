@@ -25,6 +25,7 @@ import (
 	"skin-nexus/server/internal/announce"
 	"skin-nexus/server/internal/appearance"
 	"skin-nexus/server/internal/auth"
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/ratelimit"
 	"skin-nexus/server/internal/store"
@@ -144,11 +145,15 @@ func writePluginFormError(w http.ResponseWriter, err error) {
 	var fe *plugin.FormFieldError
 	if errors.As(err, &fe) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
-			"error": fe.Error(), "plugin": fe.Plugin, "field": fe.Field,
+			"error": fe.Error(), "message": fe.Error(), "code": i18n.MsgPluginForm,
+			"plugin": fe.Plugin, "field": fe.Field,
 		})
 		return
 	}
-	writeErr(w, http.StatusBadRequest, err.Error())
+	// Not a field error: the plugin runtime itself failed. Its text is a Go
+	// error for the log, not a sentence for the user.
+	log.Printf("plugin form check failed: %v", err)
+	writeErrCode(w, http.StatusBadRequest, "plugin data rejected", i18n.MsgPluginForm)
 }
 
 // writeAccountErr maps the shared service's stable codes to the legacy web
@@ -452,24 +457,24 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 		PluginData map[string]json.RawMessage `json:"pluginData"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	if b.Limiter != nil && !b.Limiter.Allow("ip:"+ygg.ClientIP(r)) {
-		writeErr(w, http.StatusTooManyRequests, "请求过于频繁，请稍后再试")
+		writeErrCode(w, http.StatusTooManyRequests, "请求过于频繁，请稍后再试", i18n.MsgRateLimited)
 		return
 	}
 	req.Nickname = strings.TrimSpace(req.Nickname)
 	if !nickRe.MatchString(req.Nickname) {
-		writeErr(w, http.StatusBadRequest, "昵称需 2-24 位字母/数字/下划线/中文")
+		writeErrCode(w, http.StatusBadRequest, "昵称需 2-24 位字母/数字/下划线/中文", i18n.MsgNicknameInvalid)
 		return
 	}
 	if req.Email != "" && !mailRe.MatchString(req.Email) {
-		writeErr(w, http.StatusBadRequest, "邮箱格式不正确")
+		writeErrCode(w, http.StatusBadRequest, "邮箱格式不正确", i18n.MsgEmailInvalid)
 		return
 	}
 	if len(req.Password) < 8 {
-		writeErr(w, http.StatusBadRequest, "密码至少 8 位")
+		writeErrCode(w, http.StatusBadRequest, "密码至少 8 位", i18n.MsgPasswordTooShort)
 		return
 	}
 	// Per-IP registration cap (blessing AuthController: count >= regs_per_ip
@@ -478,7 +483,7 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 		if n, err := b.Store.CountUsersByIP(r.Context(), ygg.ClientIP(r)); err == nil && n >= limit {
 			b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebRegister,
 				Outcome: accesslog.OutcomeDenied, Who: req.Nickname, Detail: "ip_cap"})
-			writeErr(w, http.StatusForbidden, "该 IP 注册数已达上限")
+			writeErrCode(w, http.StatusForbidden, "该 IP 注册数已达上限", i18n.MsgIPLimit)
 			return
 		}
 	}
@@ -496,17 +501,17 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebRegister,
 			Outcome: accesslog.OutcomeDenied, Who: req.Nickname, Detail: "plugin_guard"})
-		writeErr(w, http.StatusForbidden, err.Error())
+		writeErrCode(w, http.StatusForbidden, err.Error(), i18n.MsgGuardDenied)
 		return
 	}
 	hash, err := auth.HashArgon2id(req.Password)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "hash error")
+		writeErrCode(w, http.StatusInternalServerError, "hash error", i18n.MsgInternal)
 		return
 	}
 	code := strings.TrimSpace(req.InvitationCode)
 	if code == "" && b.inviteRequired(r.Context()) {
-		writeErr(w, http.StatusBadRequest, "邀请码不能为空")
+		writeErrCode(w, http.StatusBadRequest, "邀请码不能为空", i18n.MsgInviteRequired)
 		return
 	}
 	var uid int64
@@ -515,7 +520,7 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, store.ErrNotFound) {
 			b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebRegister,
 				Outcome: accesslog.OutcomeFail, Who: req.Nickname, Detail: "bad_invite"})
-			writeErr(w, http.StatusBadRequest, "邀请码无效")
+			writeErrCode(w, http.StatusBadRequest, "邀请码无效", i18n.MsgInviteInvalid)
 			return
 		}
 	} else {
@@ -525,11 +530,11 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 		// unique constraint violation -> nickname/email taken
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebRegister,
 			Outcome: accesslog.OutcomeFail, Who: req.Nickname, Detail: "taken"})
-		writeErr(w, http.StatusConflict, "昵称或邮箱已被占用")
+		writeErrCode(w, http.StatusConflict, "昵称或邮箱已被占用", i18n.MsgIdentifierTaken)
 		return
 	}
 	if err := b.issueSession(w, r, uid); err != nil {
-		writeErr(w, http.StatusInternalServerError, "会话创建失败，请重试")
+		writeErrCode(w, http.StatusInternalServerError, "会话创建失败，请重试", i18n.MsgSessionFailed)
 		return
 	}
 	b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebRegister,
@@ -555,7 +560,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Password   string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	idKey := "id:" + strings.ToLower(strings.TrimSpace(req.Identifier))
@@ -566,13 +571,13 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Retry-After", strconv.Itoa(ra))
 			b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 				Outcome: accesslog.OutcomeDenied, Who: req.Identifier, Detail: "locked"})
-			writeErr(w, http.StatusTooManyRequests, "尝试次数过多，请稍后再试")
+			writeErrCode(w, http.StatusTooManyRequests, "尝试次数过多，请稍后再试", i18n.MsgRateLimited)
 			return
 		}
 		if !b.Limiter.Allow(ipKey) {
 			b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 				Outcome: accesslog.OutcomeDenied, Who: req.Identifier, Detail: "rate_limited"})
-			writeErr(w, http.StatusTooManyRequests, "请求过于频繁，请稍后再试")
+			writeErrCode(w, http.StatusTooManyRequests, "请求过于频繁，请稍后再试", i18n.MsgRateLimited)
 			return
 		}
 	}
@@ -583,7 +588,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 			Outcome: accesslog.OutcomeFail, Who: req.Identifier, Detail: "unknown_account"})
-		writeErr(w, http.StatusUnauthorized, "账号或密码错误")
+		writeErrCode(w, http.StatusUnauthorized, "账号或密码错误", i18n.MsgCredentials)
 		return
 	}
 	// Verify errors (DB/schema problems) must NOT masquerade as a wrong
@@ -593,7 +598,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 			Outcome: accesslog.OutcomeError, UID: u.ID, Who: req.Identifier, Detail: "verify_error"})
-		writeErr(w, http.StatusInternalServerError, "登录校验失败，请稍后重试")
+		writeErrCode(w, http.StatusInternalServerError, "登录校验失败，请稍后重试", i18n.MsgInternal)
 		return
 	}
 	if !ok {
@@ -602,7 +607,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 			Outcome: accesslog.OutcomeFail, UID: u.ID, Who: req.Identifier, Detail: "bad_password"})
-		writeErr(w, http.StatusUnauthorized, "账号或密码错误")
+		writeErrCode(w, http.StatusUnauthorized, "账号或密码错误", i18n.MsgCredentials)
 		return
 	}
 	if b.Limiter != nil {
@@ -614,7 +619,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 			Outcome: accesslog.OutcomeDenied, UID: u.ID, Who: u.Nickname, Detail: "plugin_guard"})
-		writeErr(w, http.StatusForbidden, err.Error())
+		writeErrCode(w, http.StatusForbidden, err.Error(), i18n.MsgGuardDenied)
 		return
 	}
 	// Lazy rehash: legacy digest verified -> upgrade in place (official
@@ -627,7 +632,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err := b.issueSession(w, r, u.ID); err != nil {
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 			Outcome: accesslog.OutcomeError, UID: u.ID, Who: u.Nickname, Detail: "session_error"})
-		writeErr(w, http.StatusInternalServerError, "会话创建失败，请重试")
+		writeErrCode(w, http.StatusInternalServerError, "会话创建失败，请重试", i18n.MsgSessionFailed)
 		return
 	}
 	b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
@@ -680,12 +685,12 @@ func (b *Backend) handleLogout(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleMe(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "not logged in")
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	u, err := b.Store.UserByID(r.Context(), uid)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "not logged in")
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	limit := b.MaxChars
@@ -734,12 +739,12 @@ func (b *Backend) handleMe(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleListTextures(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "not logged in")
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	rows, err := b.Store.ListTextures(r.Context(), uid)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "db error")
+		writeErrCode(w, http.StatusInternalServerError, "db error", i18n.MsgInternal)
 		return
 	}
 	type item struct {
@@ -770,27 +775,27 @@ func (b *Backend) handleListTextures(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleUploadTexture(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "not logged in")
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	if err := r.ParseMultipartForm(4 << 20); err != nil {
-		writeErr(w, http.StatusBadRequest, "multipart parse failed")
+		writeErrCode(w, http.StatusBadRequest, "multipart parse failed", i18n.MsgBadBody)
 		return
 	}
 	typ := texture.Type(r.FormValue("type"))
 	if typ != texture.TypeSkin && typ != texture.TypeCape {
-		writeErr(w, http.StatusBadRequest, "type must be skin|cape")
+		writeErrCode(w, http.StatusBadRequest, "type must be skin|cape", i18n.MsgInvalidValue)
 		return
 	}
 	file, hdr, err := r.FormFile("file")
 	if err != nil {
-		writeErr(w, http.StatusBadRequest, "file required")
+		writeErrCode(w, http.StatusBadRequest, "file required", i18n.MsgMissingField)
 		return
 	}
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, texture.MaxUploadBytes+1))
 	if err != nil {
-		writeErr(w, http.StatusBadRequest, "read upload failed")
+		writeErrCode(w, http.StatusBadRequest, "read upload failed", i18n.MsgBadBody)
 		return
 	}
 	detail := strings.TrimSpace(r.FormValue("detail"))
@@ -839,7 +844,7 @@ func (b *Backend) textureURL(ctx context.Context, hash, typ string) string {
 func (b *Backend) handleListPlayers(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "not logged in")
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	rows, aerr := b.Account.ListPlayers(r.Context(), uid)
@@ -888,14 +893,14 @@ func (b *Backend) handleListPlayers(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleCreatePlayer(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "not logged in")
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	var req struct {
 		Name string `json:"name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	v, created, aerr := b.Account.CreatePlayer(r.Context(), uid, req.Name, account.CallMeta{IP: ygg.ClientIP(r)})
@@ -921,7 +926,7 @@ func (b *Backend) handleSetCape(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) setPlayerTexture(w http.ResponseWriter, r *http.Request, kind string) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "not logged in")
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	pid, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -929,7 +934,7 @@ func (b *Backend) setPlayerTexture(w http.ResponseWriter, r *http.Request, kind 
 		TextureID int64 `json:"textureId"` // 0 = unset
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	if _, aerr := b.Account.SetTexture(r.Context(), uid, pid, kind, req.TextureID, account.CallMeta{IP: ygg.ClientIP(r)}); aerr != nil {
@@ -942,7 +947,7 @@ func (b *Backend) setPlayerTexture(w http.ResponseWriter, r *http.Request, kind 
 func (b *Backend) handleStats(w http.ResponseWriter, r *http.Request) {
 	// Session-gated (review P3: the weak-hash count was public).
 	if _, err := b.currentUser(r); err != nil {
-		writeErr(w, http.StatusUnauthorized, "not logged in")
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	weak, _ := b.Store.WeakHashCount(r.Context())

@@ -16,6 +16,8 @@ import (
 	"sync"
 	"time"
 
+	"skin-nexus/server/internal/account"
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/union"
 )
@@ -74,17 +76,20 @@ var (
 	errUnionNotOwned = errors.New("player not owned")
 )
 
-// unionUpstreamStatus maps outbound failures to the user API: hub errors are
-// 502 (the UI tells the user "联盟服务暂不可用"), ownership 403, input 400.
-func unionUpstreamStatus(err error) (int, string) {
+// writeUnionUpstreamErr answers an outbound Union failure: hub errors are 502
+// (the UI says "联盟服务暂不可用"), a disabled module 404. One writer rather
+// than a status/message/code triple each handler forwards, because a code that
+// travels through three variables is a code no gate can check.
+func writeUnionUpstreamErr(w http.ResponseWriter, err error) {
 	var ae *union.APIError
 	switch {
 	case errors.Is(err, union.ErrDisabled):
-		return http.StatusNotFound, "Union 未启用"
+		// Reachable only in the window between the hot gate and the call.
+		writeErrCode(w, http.StatusNotFound, "Union 未启用", i18n.MsgUnavailable)
 	case errors.As(err, &ae):
-		return http.StatusBadGateway, "联盟服务暂不可用"
+		writeErrCode(w, http.StatusBadGateway, "联盟服务暂不可用", i18n.MsgUnionUpstream)
 	default:
-		return http.StatusBadGateway, "联盟服务暂不可用"
+		writeErrCode(w, http.StatusBadGateway, "联盟服务暂不可用", i18n.MsgUnionUpstream)
 	}
 }
 
@@ -97,7 +102,7 @@ func (b *Backend) unionUser(w http.ResponseWriter, r *http.Request) (int64, bool
 	}
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "请先登录")
+		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
 		return 0, false
 	}
 	return uid, true
@@ -110,8 +115,7 @@ func (b *Backend) handleUnionServers(w http.ResponseWriter, r *http.Request) {
 	}
 	doc, err := b.unionSrv.get(r.Context(), b.union)
 	if err != nil {
-		st, msg := unionUpstreamStatus(err)
-		writeErr(w, st, msg)
+		writeUnionUpstreamErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"servers": doc.Servers, "version": doc.Version})
@@ -130,8 +134,7 @@ func (b *Backend) handleUnionDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	doc, err := b.union.DetailByUUID(r.Context(), canon)
 	if err != nil {
-		st, msg := unionUpstreamStatus(err)
-		writeErr(w, st, msg)
+		writeUnionUpstreamErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, doc)
@@ -144,13 +147,12 @@ func (b *Backend) handleUnionUnmapped(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.URL.Query().Get("name")
 	if name == "" {
-		writeErr(w, http.StatusBadRequest, "missing name")
+		writeErrCode(w, http.StatusBadRequest, "missing name", i18n.MsgMissingField)
 		return
 	}
 	list, err := b.union.UnmappedByName(r.Context(), name)
 	if err != nil {
-		st, msg := unionUpstreamStatus(err)
-		writeErr(w, st, msg)
+		writeUnionUpstreamErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"profiles": list})
@@ -166,7 +168,7 @@ func (b *Backend) handleUnionBind(w http.ResponseWriter, r *http.Request) {
 		UUID string `json:"uuid"`
 	}
 	if err := jsonDecode(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad body")
+		writeErrCode(w, http.StatusBadRequest, "bad body", i18n.MsgBadBody)
 		return
 	}
 	canon, err := b.ownedPlayer(r.Context(), uid, body.UUID)
@@ -176,8 +178,7 @@ func (b *Backend) handleUnionBind(w http.ResponseWriter, r *http.Request) {
 	}
 	tok, err := b.union.Bind(r.Context(), canon)
 	if err != nil {
-		st, msg := unionUpstreamStatus(err)
-		writeErr(w, st, msg)
+		writeUnionUpstreamErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"token": tok.Token})
@@ -194,7 +195,7 @@ func (b *Backend) handleUnionBindTo(w http.ResponseWriter, r *http.Request) {
 		Token string `json:"token"`
 	}
 	if err := jsonDecode(r, &body); err != nil || body.Token == "" {
-		writeErr(w, http.StatusBadRequest, "bad body")
+		writeErrCode(w, http.StatusBadRequest, "bad body", i18n.MsgBadBody)
 		return
 	}
 	canon, err := b.ownedPlayer(r.Context(), uid, body.UUID)
@@ -203,8 +204,7 @@ func (b *Backend) handleUnionBindTo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := b.union.BindTo(r.Context(), canon, body.Token); err != nil {
-		st, msg := unionUpstreamStatus(err)
-		writeErr(w, st, msg)
+		writeUnionUpstreamErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -220,7 +220,7 @@ func (b *Backend) handleUnionUnbind(w http.ResponseWriter, r *http.Request) {
 		UUID string `json:"uuid"`
 	}
 	if err := jsonDecode(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad body")
+		writeErrCode(w, http.StatusBadRequest, "bad body", i18n.MsgBadBody)
 		return
 	}
 	canon, err := b.ownedPlayer(r.Context(), uid, body.UUID)
@@ -229,8 +229,7 @@ func (b *Backend) handleUnionUnbind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := b.union.Unbind(r.Context(), canon); err != nil {
-		st, msg := unionUpstreamStatus(err)
-		writeErr(w, st, msg)
+		writeUnionUpstreamErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -247,7 +246,7 @@ func (b *Backend) handleUnionRemapUUID(w http.ResponseWriter, r *http.Request) {
 		Target string `json:"target"`
 	}
 	if err := jsonDecode(r, &body); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad body")
+		writeErrCode(w, http.StatusBadRequest, "bad body", i18n.MsgBadBody)
 		return
 	}
 	me, err := b.ownedPlayer(r.Context(), uid, body.Me)
@@ -260,12 +259,11 @@ func (b *Backend) handleUnionRemapUUID(w http.ResponseWriter, r *http.Request) {
 	// cross-site 1.19+ remap impossible). Only shape is validated here.
 	target := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(body.Target), "-", ""))
 	if !isHex32(target) {
-		writeErr(w, http.StatusBadRequest, "目标 UUID 不合法")
+		writeErrCode(w, http.StatusBadRequest, "目标 UUID 不合法", i18n.MsgPlayerUUIDBad)
 		return
 	}
 	if err := b.union.RemapUUID(r.Context(), me, target); err != nil {
-		st, msg := unionUpstreamStatus(err)
-		writeErr(w, st, msg)
+		writeUnionUpstreamErr(w, err)
 		return
 	}
 	// Converge our own row BEFORE saying ok (MUA review P1: returning ok
@@ -275,10 +273,10 @@ func (b *Backend) handleUnionRemapUUID(w http.ResponseWriter, r *http.Request) {
 		b.Store.InsertAudit(r.Context(), uid, "union_remapuuid_local_conflict",
 			map[string]any{"me": me, "target": target, "error": err.Error()})
 		if errors.Is(err, store.ErrUUIDConflict) {
-			writeErr(w, http.StatusConflict, "联盟已受理，但本地目标 UUID 已被占用，请人工合并")
+			writeErrCode(w, http.StatusConflict, "联盟已受理，但本地目标 UUID 已被占用，请人工合并", i18n.MsgUnionUUIDConflict)
 			return
 		}
-		writeErr(w, http.StatusInternalServerError, "联盟已受理，本地收敛失败，请重试")
+		writeErrCode(w, http.StatusInternalServerError, "联盟已受理，本地收敛失败，请重试", i18n.MsgUnionConvergeFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -300,11 +298,11 @@ func isHex32(s string) bool {
 func (b *Backend) unionOwnErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, errUnionNotOwned):
-		writeErr(w, http.StatusForbidden, "该角色不属于当前账号")
+		writeErrCode(w, http.StatusForbidden, "该角色不属于当前账号", i18n.MsgPlayerNotOwner)
 	case errors.Is(err, errUnionBadInput):
-		writeErr(w, http.StatusBadRequest, "bad uuid")
+		writeErrCode(w, http.StatusBadRequest, "bad uuid", i18n.MsgPlayerUUIDBad)
 	default:
-		writeErr(w, http.StatusNotFound, "未找到该角色")
+		writeErrCode(w, http.StatusNotFound, "未找到该角色", account.CodeNotFound)
 	}
 }
 
