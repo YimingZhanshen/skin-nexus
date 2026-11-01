@@ -156,9 +156,9 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 	res, err := texture.Process(bytes.NewReader(png), texture.Type(typ))
 	if err != nil {
 		if errors.Is(err, texture.ErrTooLarge) {
-			return TextureView{}, false, errf(CodeTooLarge, err.Error(), err)
+			return TextureView{}, false, errDomain(CodeTooLarge, err)
 		}
-		return TextureView{}, false, errf(CodeInvalid, err.Error(), err)
+		return TextureView{}, false, errDomain(CodeInvalid, err)
 	}
 	// One line per disagreement: the only way to notice that a launcher keeps
 	// declaring the wrong model is that the log says so.

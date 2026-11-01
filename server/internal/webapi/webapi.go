@@ -144,10 +144,10 @@ func (b *Backend) pluginFormDataJSON(formID, rawJSON string) (map[string]any, er
 func writePluginFormError(w http.ResponseWriter, err error) {
 	var fe *plugin.FormFieldError
 	if errors.As(err, &fe) {
-		writeJSON(w, http.StatusBadRequest, map[string]any{
-			"error": fe.Error(), "message": fe.Error(), "code": i18n.MsgPluginForm,
-			"plugin": fe.Plugin, "field": fe.Field,
-		})
+		// `plugin` and `field` are the contract the register form reads to put
+		// the message next to the right input.
+		writeErrBody(w, http.StatusBadRequest, i18n.MsgPluginForm, fe,
+			map[string]any{"plugin": fe.Plugin, "field": fe.Field})
 		return
 	}
 	// Not a field error: the plugin runtime itself failed. Its text is a Go
@@ -156,45 +156,11 @@ func writePluginFormError(w http.ResponseWriter, err error) {
 	writeErrCode(w, http.StatusBadRequest, "plugin data rejected", i18n.MsgPluginForm)
 }
 
-// writeAccountErr maps the shared service's stable codes to the legacy web
-// status codes so existing clients see the same behavior.
+// writeAccountErr answers with the status and envelope the service itself
+// defines. The mapping lives on account.Error so the management surface cannot
+// drift away from this one.
 func writeAccountErr(w http.ResponseWriter, err *account.Error) {
-	writeJSON(w, accountErrStatus(err.Code), accountErrBody(err))
-}
-
-// accountErrStatus is the code→HTTP half of the mapping, kept apart from the
-// body so a test can assert every code has a status without a database.
-// Unrecognised codes fall back to 500: silently answering 400 for a code we do
-// not know would tell the client its request was at fault when it was not.
-func accountErrStatus(code string) int {
-	switch code {
-	case account.CodeNotFound, account.CodeLibraryNotFnd:
-		return http.StatusNotFound
-	case account.CodeLimit, account.CodeNotOwned, account.CodeForbidden:
-		return http.StatusForbidden
-	case account.CodeNameTaken, account.CodeDuplicatePub, account.CodeInUse, account.CodeBusy:
-		return http.StatusConflict
-	case account.CodeInvalidName, account.CodeInvalid, account.CodeTypeMismatch,
-		account.CodeSourceURLReq, account.CodeSourceURLBad:
-		return http.StatusBadRequest
-	case account.CodeTooLarge:
-		return http.StatusRequestEntityTooLarge
-	}
-	return http.StatusInternalServerError
-}
-
-// accountErrBody always carries `code`. Two codes also flatten their details:
-// the duplicate points at the page the user should use instead, the in-use
-// answer names what still blocks a deletion — either is unactionable as prose.
-func accountErrBody(err *account.Error) map[string]any {
-	body := map[string]any{"error": err.Code, "code": err.Code, "message": err.Message}
-	switch err.Code {
-	case account.CodeDuplicatePub, account.CodeInUse:
-		for k, v := range err.Details {
-			body[k] = v
-		}
-	}
-	return body
+	writeJSON(w, err.Status(), err.Body())
 }
 
 // SyncProfileCreate announces a new profile to the Union hub, async and
@@ -362,22 +328,38 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// writeErr is the legacy shape, still used by call sites that have no code yet:
-// `error` holds the status text, `message` the human string. Error-code
-// coverage is tracked by testdata/error-budget.txt and only ever goes down.
-func writeErr(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": http.StatusText(status), "message": msg})
+// writeErrCode is the only way this surface answers a failure: a stable
+// machine-readable `code` that a language pack can translate, plus the `message`
+// a client shows when it does not know the code. errorgate_test.go keeps both
+// honest — no call site without a code, no code that is not in the catalogue.
+// Once the Chinese budget reaches zero, `error` becomes the code as well, so the
+// whole surface answers with one envelope (account errors already do).
+func writeDomain(w http.ResponseWriter, status int, err error, code string) {
+	writeErrCode(w, status, err.Error(), code)
 }
 
-// writeErrCode adds a stable machine-readable code on top of the legacy
-// message shape (frontends translate `code`, fall back to `message`). Once the
-// budget reaches zero, `error` becomes the code here as well so the whole
-// surface answers with one envelope — account errors already do.
 func writeErrCode(w http.ResponseWriter, status int, msg, code string) {
 	writeJSON(w, status, map[string]string{
 		"error": http.StatusText(status), "message": msg, "code": code,
 	})
 }
+
+// writeErrBody answers a domain error plus the extra keys a client needs. The
+// code is still mandatory; the extras are not an excuse to drop the envelope.
+func writeErrBody(w http.ResponseWriter, status int, code string, err error, extra map[string]any) {
+	body := map[string]any{
+		"error": http.StatusText(status), "message": err.Error(), "code": code,
+	}
+	for k, v := range extra {
+		body[k] = v
+	}
+	writeJSON(w, status, body)
+}
+
+// writeDomain answers with a message that was written for the caller: a plugin
+// guard's denial reason, a name-rule violation. Anything else carrying an error
+// value is an internal failure and belongs in the log, not the body — the gate
+// in errorgate_test.go draws that line.
 
 // decodeJSON is a one-shot JSON body decoder.
 func decodeJSON(r *http.Request, v interface{}) error {
@@ -501,7 +483,7 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebRegister,
 			Outcome: accesslog.OutcomeDenied, Who: req.Nickname, Detail: "plugin_guard"})
-		writeErrCode(w, http.StatusForbidden, err.Error(), i18n.MsgGuardDenied)
+		writeDomain(w, http.StatusForbidden, err, i18n.MsgGuardDenied)
 		return
 	}
 	hash, err := auth.HashArgon2id(req.Password)
@@ -619,7 +601,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 			Outcome: accesslog.OutcomeDenied, UID: u.ID, Who: u.Nickname, Detail: "plugin_guard"})
-		writeErrCode(w, http.StatusForbidden, err.Error(), i18n.MsgGuardDenied)
+		writeDomain(w, http.StatusForbidden, err, i18n.MsgGuardDenied)
 		return
 	}
 	// Lazy rehash: legacy digest verified -> upgrade in place (official

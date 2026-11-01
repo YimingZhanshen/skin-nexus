@@ -7,6 +7,7 @@ package account
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/store"
@@ -30,6 +31,42 @@ func (e *Error) Error() string {
 }
 
 func (e *Error) Unwrap() error { return e.Err }
+
+// Status is the HTTP code a transport should answer with. The player API and
+// the management API both go through it, so one code cannot mean 409 on one
+// surface and 500 on the other. Unrecognised codes fall back to 500: silently
+// answering 400 for a code we do not know would blame the client for our gap.
+func (e *Error) Status() int {
+	switch e.Code {
+	case CodeNotFound, CodeLibraryNotFnd:
+		return http.StatusNotFound
+	case CodeLimit, CodeNotOwned, CodeForbidden:
+		return http.StatusForbidden
+	case CodeNameTaken, CodeDuplicatePub, CodeInUse, CodeBusy:
+		return http.StatusConflict
+	case CodeInvalidName, CodeInvalid, CodeTypeMismatch,
+		CodeSourceURLReq, CodeSourceURLBad:
+		return http.StatusBadRequest
+	case CodeTooLarge:
+		return http.StatusRequestEntityTooLarge
+	}
+	return http.StatusInternalServerError
+}
+
+// Body is the wire envelope `{error, code, message}`. Two codes also flatten
+// their details: the duplicate points at the page the user should use instead,
+// the in-use answer names what still blocks a deletion — either is unactionable
+// as prose alone.
+func (e *Error) Body() map[string]any {
+	body := map[string]any{"error": e.Code, "code": e.Code, "message": e.Message}
+	switch e.Code {
+	case CodeDuplicatePub, CodeInUse:
+		for k, v := range e.Details {
+			body[k] = v
+		}
+	}
+	return body
+}
 
 const (
 	CodeNotFound      = "player.not_found"
@@ -56,6 +93,14 @@ func errf(code, msg string, err error) *Error {
 
 func errDetails(code, msg string, details map[string]any) *Error {
 	return &Error{Code: code, Message: msg, Details: details}
+}
+
+// errDomain builds an error whose message IS the given error's text, for the
+// failures whose reason was written for the person who hit it: a plugin guard's
+// denial, a player-name rule, a rejected upload. Every other error keeps its own
+// prose and carries the cause in Err, so a driver string stays in the log.
+func errDomain(code string, err error) *Error {
+	return &Error{Code: code, Message: err.Error(), Err: err}
 }
 
 // CallMeta carries request context that must not come from plugin JavaScript.

@@ -31,7 +31,7 @@ func (s *Service) guard(ctx context.Context, kind string, p plugin.EventPayload)
 		return nil
 	}
 	if err := s.CheckGuard(ctx, kind, p); err != nil {
-		return errf(CodeForbidden, err.Error(), err)
+		return errDomain(CodeForbidden, err)
 	}
 	return nil
 }
@@ -132,7 +132,7 @@ func (s *Service) CreatePlayer(ctx context.Context, uid int64, name string, meta
 	}
 	name = strings.TrimSpace(name)
 	if err := s.Store.ValidatePlayerName(ctx, name); err != nil {
-		return PlayerView{}, false, errf(CodeInvalidName, err.Error(), err)
+		return PlayerView{}, false, errDomain(CodeInvalidName, err)
 	}
 	existing, err := s.Store.PlayersByUID(ctx, uid)
 	if err != nil {
@@ -171,7 +171,7 @@ func (s *Service) RenamePlayer(ctx context.Context, uid, pid int64, name string,
 	}
 	name = strings.TrimSpace(name)
 	if err := s.Store.ValidatePlayerName(ctx, name); err != nil {
-		return PlayerView{}, false, errf(CodeInvalidName, err.Error(), err)
+		return PlayerView{}, false, errDomain(CodeInvalidName, err)
 	}
 	p, e := s.GetPlayer(ctx, uid, pid)
 	if e != nil {

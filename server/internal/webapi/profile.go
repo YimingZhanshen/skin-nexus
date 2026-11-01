@@ -71,7 +71,7 @@ func (b *Backend) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 		UserID: uid, IP: ygg.ClientIP(r),
 		Data: map[string]any{"nickname": req.Nickname, "email": req.Email},
 	}); err != nil {
-		writeErrCode(w, http.StatusForbidden, err.Error(), i18n.MsgGuardDenied)
+		writeDomain(w, http.StatusForbidden, err, i18n.MsgGuardDenied)
 		return
 	}
 	if req.Nickname != "" {
@@ -256,7 +256,7 @@ func (b *Backend) handlePlayerRename(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	if err := b.Store.ValidatePlayerName(r.Context(), req.Name); err != nil {
-		writeErrCode(w, http.StatusBadRequest, err.Error(), i18n.MsgPlayerNameRuleBad)
+		writeDomain(w, http.StatusBadRequest, err, i18n.MsgPlayerNameRuleBad)
 		return
 	}
 	_, invalidated, aerr := b.Account.RenamePlayer(r.Context(), uid, pid, req.Name, account.CallMeta{IP: ygg.ClientIP(r)})
