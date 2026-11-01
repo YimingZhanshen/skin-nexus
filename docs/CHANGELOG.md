@@ -4,6 +4,18 @@
 
 ## 2026-11-02
 
+- **前端工具链三条大版本全部落地**（#6 plugin-vue 5→6、#4 vite 6→8、#5 vue-i18n 9→11，顺序有讲究：单升 vite 会在
+  `npm ci` 就 ERESOLVE）+ `vite.config.js` 改用 `import.meta.dirname`（vite 8 明确警告原生 config loader 不提供 `__dirname`）。
+  - 构建契约实测保持：`dist` 仍是**单份 CSS**（`cssCodeSplit:false`，主题覆盖顺序依赖它）与**固定名 `assets/viewer.js`**
+    （SSR 材质详情页硬引用它，哈希名会破契约）；skinview3d 仍单独分包。
+  - 浏览器实测（vite 8 dev + 桩 API，vue-i18n 11.4.16）：中英切换正常（Sign in / Sign up / Skin library），
+    `errors.*` 词典全部命中——`errors.auth.credentials` → "Wrong account or password"、`errors.common.internal`、
+    带参的 `errors.texture.in_use`、`errors.player.name_invalid`、`errors.network`。
+  - 副带收益：`npm ci` 现在 **0 vulnerabilities**（此前 4 个 high 全在 vue-i18n 9 的传递依赖里），
+    CI 的 `npm audit` 与 `deploy.md` §6.1 挂的 high 待办一并清掉。
+  - 记一次误判免得下次重犯：我先用**不存在的码** `auth.bad_credentials` 打桩，看到界面回退成后端中文 message，
+    一度判成「v11 破坏词典」。真实键是 `errors.auth.credentials`，回退本来就是正确行为。教训是断言必须用码目录里真存在的键。
+
 - **CodeQL 首轮清零**：15 条全部处置完——**4 条改代码后由扫描自动关闭**（zip 落点两处、SPA 资源探测、`?next=` 跳转），
   **11 条按误报关闭**，每条在告警上留了 `文件:line` 的判定说明。前端那条第二版改用 `new URL(next, location.origin)`
   比 origin，而不是手写前缀正则——扫描器认这个形状，而且浏览器怎么解析就怎么判，`javascript:`/`data:` 也因
