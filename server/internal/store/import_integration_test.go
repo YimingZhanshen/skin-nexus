@@ -88,11 +88,11 @@ func TestIntegrationImport(t *testing.T) {
 		(1,'aaaabbbbccccddddeeeeffff00001111','2025-09-01',0,NULL,'张三 20210001'),
 		(2,'11112222333344445555666677778888','2025-09-02',1,'2025-09-03','李四 20210002')`)
 
-	opt := migrate.ImportOptions{Source: m.db, Target: m.db, SourcePrefix: "legacy_"}
+	opt := migrate.ImportOptions{Source: m.DB(), Target: m.DB(), SourcePrefix: "legacy_"}
 
 	// dry-run: counts only, nothing written
 	dry, err := migrate.RunImport(ctx, migrate.ImportOptions{
-		Source: m.db, Target: m.db, SourcePrefix: "legacy_", DryRun: true,
+		Source: m.DB(), Target: m.DB(), SourcePrefix: "legacy_", DryRun: true,
 	})
 	if err != nil {
 		t.Fatalf("dry-run: %v", err)

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // ErrUUIDConflict: the requested uuid is already mapped to another local row
@@ -19,11 +20,21 @@ func isDupKey(err error) bool {
 	if err == nil {
 		return false // nil is not an error (callers may probe unconditionally)
 	}
+	// Each engine reports a unique-key collision its own way. Only one of them
+	// can occur at runtime, so recognising all three costs nothing and keeps
+	// the 11 call sites (and their ErrDuplicate contract) engine-agnostic.
 	var me *mysql.MySQLError
 	if errors.As(err, &me) {
 		return me.Number == 1062
 	}
-	return strings.Contains(err.Error(), "Error 1062")
+	var pe *pgconn.PgError
+	if errors.As(err, &pe) {
+		return pe.Code == "23505" // unique_violation
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "Error 1062") || // MariaDB / text protocol
+		strings.Contains(msg, "UNIQUE constraint failed") || // SQLite
+		strings.Contains(msg, "duplicate key value violates unique constraint") // PostgreSQL
 }
 
 // ProfileNameByUUID returns {uuid: name} for every mapped player — backs

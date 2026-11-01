@@ -54,7 +54,7 @@ func openTestStore(t *testing.T) *Mysql {
 		t.Skip("SKIN_TEST_DSN not set; skipping MySQL integration suite")
 	}
 	siteurl.Set("https://skin.test") // the same call boot makes, after config is resolved
-	m, err := Open(dsn, nil)
+	m, err := Open("", dsn, nil)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -75,7 +75,7 @@ func openTestStore(t *testing.T) *Mysql {
 func applyMigrations(t *testing.T, m *Mysql) {
 	t.Helper()
 	dir := filepath.Join("..", "..", "migrations")
-	if err := migrate.ApplySQLDirTracked(m.db, dir); err != nil {
+	if err := migrate.ApplySQLDirTracked(m.DB(), dir); err != nil {
 		t.Fatalf("apply migrations: %v", err)
 	}
 }

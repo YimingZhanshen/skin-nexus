@@ -3,8 +3,10 @@ package store
 import (
 	"context"
 	"database/sql"
+
 	"errors"
 	"fmt"
+	"skin-nexus/server/internal/dbx"
 	"time"
 )
 
@@ -156,7 +158,7 @@ func (m *Mysql) DeleteTexture(ctx context.Context, tid, ownerUID, actorUID int64
 	return out, tx.Commit()
 }
 
-func textureRefs(ctx context.Context, tx *sql.Tx, tid int64) (TextureRefs, error) {
+func textureRefs(ctx context.Context, tx *dbx.Tx, tid int64) (TextureRefs, error) {
 	var refs TextureRefs
 	rows, err := tx.QueryContext(ctx,
 		`SELECT name FROM players WHERE tid_skin = ? OR tid_cape = ? ORDER BY id LIMIT 10`, tid, tid)
@@ -190,7 +192,7 @@ func textureRefs(ctx context.Context, tx *sql.Tx, tid int64) (TextureRefs, error
 
 // unbindTexture clears every reference to a texture. Characters fall back to
 // the built-in skin, which is what a NULL tid already means everywhere else.
-func unbindTexture(ctx context.Context, tx *sql.Tx, tid int64) error {
+func unbindTexture(ctx context.Context, tx *dbx.Tx, tid int64) error {
 	stmts := []string{
 		`UPDATE players SET tid_skin = NULL WHERE tid_skin = ?`,
 		`UPDATE players SET tid_cape = NULL WHERE tid_cape = ?`,

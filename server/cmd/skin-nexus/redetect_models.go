@@ -44,7 +44,7 @@ func runRedetectModels(args []string, out io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
 	}
-	st, err := store.Open(cfg.DatabaseDSN, nil)
+	st, err := store.Open("", cfg.DatabaseDSN, nil)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}

@@ -10,7 +10,7 @@ import (
 
 // DB exposes the raw handle for the migrate package (schema bootstrap only;
 // regular queries stay behind typed methods).
-func (m *Mysql) DB() *sql.DB { return m.db }
+func (m *Mysql) DB() *sql.DB { return m.db.Underlying() }
 
 // TableExists reports whether a base table exists in the current schema.
 func (m *Mysql) TableExists(ctx context.Context, name string) (bool, error) {

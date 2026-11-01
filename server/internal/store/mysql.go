@@ -12,15 +12,16 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
 	"skin-nexus/server/internal/auth"
+	"skin-nexus/server/internal/dbx"
+	"skin-nexus/server/internal/dialect"
 	"skin-nexus/server/internal/siteurl"
 	"skin-nexus/server/internal/ygg"
 
-	mysql "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 )
 
 // ErrNotFound is the canonical "no such row" signal.
@@ -45,50 +46,33 @@ func isDuplicateKey(err error) bool {
 var ErrForbidden = errors.New("store: forbidden")
 
 type Mysql struct {
-	db     *sql.DB
+	db     *dbx.DB
 	legacy *auth.LegacyVerifier // nil = legacy logins rejected
 	now    func() time.Time
 }
 
-// Open connects and pings MySQL. legacy may be nil (no legacy corpus yet).
+// Open connects and pings the database, then hands the pool to the store.
+// legacy may be nil (no legacy corpus yet). engine is "" (infer from the DSN
+// scheme, else MySQL — what every deployment ran on before this existed),
+// "mysql", "sqlite" or "postgres".
 //
 // It takes no base URL on purpose: the address is resolved from the database a
 // few steps later in boot (the `site_url` option overrides env), so a store
 // that captured it at Open time would serve the pre-override value forever.
 // Absolute URLs come from internal/siteurl, read when they are built.
-func Open(dsn string, legacy *auth.LegacyVerifier) (*Mysql, error) {
-	// DSN foot-gun guard (review C P3): without parseTime=true every
-	// time.Time scan fails at runtime while Ping still succeeds.
-	if !strings.Contains(dsn, "parseTime=true") {
-		return nil, fmt.Errorf("store: DSN must carry parseTime=true")
-	}
-	// Normalize the session to UTC: Go writes time.Time values as UTC, while
-	// SQL NOW(3) follows the server session zone. On a +08 MySQL that made
-	// expiry checks (sessions, TTLs, job schedules) off by eight hours.
-	cfg, err := mysql.ParseDSN(dsn)
-	if err != nil {
-		return nil, fmt.Errorf("store: parse DSN: %w", err)
-	}
-	cfg.ParseTime = true
-	cfg.Loc = time.UTC
-	if cfg.Params == nil {
-		cfg.Params = map[string]string{}
-	}
-	// Force the session to UTC: the Go layer writes UTC time.Time values, so
-	// a user-supplied +08 session zone would reintroduce the mismatch.
-	cfg.Params["time_zone"] = "'+00:00'"
-	db, err := sql.Open("mysql", cfg.FormatDSN())
+func Open(engine, dsn string, legacy *auth.LegacyVerifier) (*Mysql, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	db, err := dbx.Open(ctx, engine, dsn)
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(20)
-	db.SetMaxIdleConns(10)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("store: ping: %w", err)
-	}
 	return &Mysql{db: db, legacy: legacy, now: time.Now}, nil
 }
+
+// Engine reports which SQL dialect this store speaks (tests and the migrate
+// CLI use it to pick the schema tree).
+func (m *Mysql) Engine() dialect.Engine { return m.db.Engine() }
 
 func (m *Mysql) Close() error { return m.db.Close() }
 

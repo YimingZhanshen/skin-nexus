@@ -134,7 +134,9 @@ func main() {
 		log.Printf("legacy verifier: %d methods loaded", len(lenv.PWDMethods))
 	}
 
-	st, err := store.Open(cfg.DatabaseDSN, legacy)
+	// The engine comes from the DSN (a `sqlite:` or `postgres://` prefix); a bare
+	// MySQL DSN stays MySQL, which is what every existing deployment runs on.
+	st, err := store.Open("", cfg.DatabaseDSN, legacy)
 	if err != nil {
 		log.Fatalf("store: %v", err)
 	}
