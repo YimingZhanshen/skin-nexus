@@ -148,6 +148,20 @@ jobs:
       - uses: github/codeql-action/autobuild@v3
       - uses: github/codeql-action/analyze@v3
 
+  # Docs are operational promises: an env table an operator copy-pastes from, a
+  # compatibility matrix that says what works. Cheap enough to run on its own so
+  # a prose-only branch still gets the signal.
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Links, tables, snapshot dating, env truth
+        run: node scripts/check-docs.mjs
+
   # Workflow hygiene: this repo's actions push images with GITHUB_TOKEN and gate
   # market signing behind environments, so template injection into an action input
   # and unpinned third-party actions are worth a standing report. Non-blocking

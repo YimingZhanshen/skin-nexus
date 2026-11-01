@@ -4,6 +4,15 @@
 
 ## 2026-11-01
 
+- **发版前门禁与五项实测修正**：
+  - **CI 门禁**：覆盖率进入 server job——`go test ./...` 与阈值一次跑完，`total 40.0%` 记在 `server/testdata/coverage-floor.txt`（实测 41.8%，留 1.8 点余量），并列出**允许为 0% 的包**（`internal/errorgate` 是测试引擎、`internal/jobs` 仍缺单测），集合一变即失败，避免"删掉最后一个测试文件"这种隐形倒退；`npm audit --audit-level=critical` 作为阻塞线（当前 0 critical，4 个 high 需要 vue-i18n 9→11 大版本升级，先写进 step summary 不混进本轮）；新增 CodeQL（go + js，告警进 security 面板、不进分支保护，基线未审前不当闸）与 zizmor（工作流自检，non-blocking，版本钉死）；新增 `scripts/check-docs.mjs` 并配独立 docs job：相对链接零断链、GFM 表列数一致（`\|` 是数据不是分列）、竞品对照表必须在首张表之前声明 `快照口径：YYYY-MM-DD`、`deploy.md` 的变量表与 `config.KnownEnv`/`ComposeEnv` **双向**对齐。
+  - **面板密钥只写不读**：`GET /api/admin/v1/settings` 原先原样返回 `smtp_pass`/`union_member_key`/`OAuth2 签名私钥` 明文（只有前端做了掩码），现读侧一律空值 + `secret`/`set` 两个布尔，写侧空值=保持原值、清除是显式 `clear`；审计脱敏改由 `secret` 标志驱动，PUT 不再回显 value。前端删掉硬编码的 secret 键清单，改吃接口字段。
+  - **纹理 URL 基址只有一处**：`store.Open` 在面板 `site_url` 覆盖 env **之前**就把基址烘进了连接池，于是 `store.TextureURL` 一路给旧值、`webapi`/`publicapi` 给新值——而 Yggdrasil 签的正是最终那串。新增 `internal/siteurl`（原子基址 + `Texture/Avatar/Preview/AvatarUser/Page`），启动时装 env 值、option 解析完再覆盖一次，监听器打开前完成；`store.Open` 少一个参数。两道闸兜底：源码里除该包外不得把基址与 `/textures`、`/preview`、`/avatar` 拼接（当场抓到 `/avatar/user`），三层输出同 hash 必须逐字节相等。`deploy.md` 两处把该缺陷写成契约的话（"面板改 site_url 不影响纹理 URL"）已按实际语义更正，SMTP 口令"只走 env"一行也与面板可写的事实矛盾，一并改。
+  - **未知 SKIN_\* 变量启动即警告**：`internal/config/env.go` 成为唯一清单（`KnownEnv` / `ComposeEnv` 逐条注明消费者 / `TestOnlyEnv`），拼错一个字母的变量过去只会让站点安静地用默认值跑下去。三条闸钉住：源码 AST 扫到的 env 读取必须登记、登记项必须真有人读、compose 模板插值的 `${SKIN_*}` 必须有人消费。
+  - **SMTP 五键只读一次**：此前重置邮件器与面板占位在 `main.go` 里各读一遍，两份可以漂移；现归 `config.SMTP`，面板用 `PanelMap()`（少一个密码字段）。
+  - **无 WebGL 时预览组件自己降级**：`SkinPreview` 原先只发事件、留一块空白画布，接了事件的 Dashboard 会换布局、没接的 players 页就只剩看不出原因的空框；探测结果改由组件持有并直接渲染扁平皮肤图。
+  - 验证：`go build`/`go vet`（含 `-tags integration`）/`go test ./...`/`gofmt` 全绿，覆盖率实测 41.8%；`npm run build`、`check-locales`、`check-docs` 通过；新增单测覆盖密钥掩码读写两侧、SMTP 两份 map 的键集、env 清单三向、siteurl 时序与逐字节一致。浏览器实测已做：英文界面登录失败显示词典文本、页面无中文泄漏、`texture.in_use` 插值渲染成句子。**待实测**：面板改 `site_url` 后三处绝对 URL 一致（需可达后端）、禁用 WebGL 后 players 页出 `<img>`、密钥保存后 DB 值不变——并入 0.5.0 发版前验收清单。
+
 - **错误契约与本地化（本轮口径变更，两条不可逆）**：
   - **每个非 2xx 响应都带 `code`**。此前 `internal/webapi` 167 处、`internal/adminapi` 184 处错误只有人话没有码，前端无法取词，英文界面只能显示中文。现在两面归零，并由 `internal/errorgate` 的 AST 闸钉住：错误调用必须带 code、code 必须是 `internal/i18n` 或 `internal/account` 的常量、message 字面量禁止出现中文。闸最初是「预算文件只许降」的形式（167/87/0/44 与 184/49/0），两面都归零后预算文件删除、转为硬失败。
   - **`message` 改为英文，`error` 改为等于 `code`**。中文文案自此由 `web/src/locales/{zh-CN,en}.json` 的 `errors.<code>` 承担（103 个码 × 2 语言，`scripts/check-locales.mjs` 同时钉住中英叶键相等、码全覆盖、且不允许留下后端已不存在的词条；该脚本已进 web job）。这是对 `curl` 与日志读者的口径变更：状态文本不再出现在 body 里，`launcher-api` 文档早就写作 `{"error":"stable.code"}`，本次把玩家面与管理面对齐到同一约定。前端 `describe()` 在三个传输出口（`api.js` 的 fetch 与 XHR 上传、`adminApi.js`）收口，词典命中优先、未命中回退 `message`，因此后端可以先加码、前端后补词，不会出现空白界面；94 处 `err.message` 调用点零改动。
