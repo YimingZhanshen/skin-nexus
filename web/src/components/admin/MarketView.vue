@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { api } from '../../api.js'
 import { loadPluginUI } from '../../pluginUI.js'
+import { describe } from '../../errors.js'
 import Pager from '../Pager.vue'
 import EmptyState from '../EmptyState.vue'
 
@@ -96,7 +97,7 @@ async function uploadBundle() {
     fd.append('inspect', '1')
     const r = await fetch('/api/admin/v1/market/upload', { method: 'POST', body: fd, credentials: 'same-origin' })
     const d = await r.json().catch(() => ({}))
-    if (!r.ok) throw new Error(d.error || 'inspect failed')
+    if (!r.ok) throw new Error(describe(d, r.status))
     inspection.value = d
     riskAck.value = false
   } catch (e) {
@@ -125,7 +126,7 @@ async function installInspected() {
     fd.append('expectDigest', inspection.value.zipSha || '')
     const r = await fetch('/api/admin/v1/market/upload', { method: 'POST', body: fd, credentials: 'same-origin' })
     const d = await r.json().catch(() => ({}))
-    if (!r.ok) throw new Error(d.error || 'install failed')
+    if (!r.ok) throw new Error(describe(d, r.status))
     cancelInspection()
     await load()
   } catch (e) {

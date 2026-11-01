@@ -1,4 +1,153 @@
 {
+  "errors": {
+    "network": "Network problem, please try again",
+    "networkTimeout": "Upload timed out, please retry",
+    "internal": "Internal server error, see the site log",
+    "account": {
+      "forbidden": "This operation is not allowed"
+    },
+    "admin": {
+      "origin_mismatch": "Origin check failed; make this request from the admin panel",
+      "rank_required": "You may only manage accounts with a strictly lower permission",
+      "self_edit_forbidden": "You cannot edit your own admin entry",
+      "super_admin_required": "A super admin account is required",
+      "token_invalid": "Admin token invalid or not signed in",
+      "web_session_required": "This action needs an admin web session, not a token call"
+    },
+    "auth": {
+      "credentials": "Wrong account or password",
+      "current_password": "Current password is incorrect",
+      "email_invalid": "Email address is not valid",
+      "email_taken": "This email is already taken",
+      "identifier_taken": "Nickname or email is already taken",
+      "ip_limit": "This IP reached the registration limit",
+      "nickname_invalid": "Nickname must be 2-24 letters, digits, underscores or Chinese characters",
+      "nickname_taken": "Nickname is already taken",
+      "password_too_short": "Password must be at least 8 characters",
+      "password_unchanged": "New password must differ from the current one",
+      "register_failed": "Sign-up failed, please try again",
+      "reset_link_invalid": "Reset link is invalid or expired, request a new one",
+      "self_delete_forbidden": "Admin accounts cannot delete themselves"
+    },
+    "closet": {
+      "bad_id": "Closet entry id is not valid",
+      "not_found": "Closet entry not found"
+    },
+    "common": {
+      "already_handled": "This record was already handled",
+      "bad_body": "The request could not be parsed",
+      "bad_id": "Id is not valid",
+      "conflict": "Conflict, refresh and try again",
+      "forbidden": "You are not allowed to do this",
+      "internal": "Server busy, please try again later",
+      "invalid_value": "Value is not in the allowed range",
+      "missing_field": "A required field is missing",
+      "no_fields": "Nothing to update",
+      "not_found": "Not found",
+      "rate_limited": "Too many requests, please slow down",
+      "session_failed": "Session could not be created, sign in again",
+      "too_long": "Content exceeds the length limit",
+      "unauthorized": "Please sign in first",
+      "unavailable": "This feature is currently unavailable",
+      "unknown_action": "Unknown action"
+    },
+    "invite": {
+      "code_not_found": "Invitation code not found",
+      "invalid": "Invitation code is not valid",
+      "required": "An invitation code is required"
+    },
+    "job": {
+      "not_found": "Job not found",
+      "not_resumable": "This job is past its replay window and cannot be resumed"
+    },
+    "library": {
+      "not_found": "Skin library entry not found"
+    },
+    "mail": {
+      "not_configured": "Mail is not configured, contact the site owner"
+    },
+    "market": {
+      "upstream_error": "The market is unavailable right now, try again later"
+    },
+    "oidc": {
+      "shared_client": "The shared launcher client cannot be deleted"
+    },
+    "option": {
+      "save_failed": "Could not save the setting",
+      "unknown_key": "Unknown setting"
+    },
+    "player": {
+      "bad_id": "Player id is not valid",
+      "limit": "Player limit reached",
+      "name_invalid": "Player name is not valid",
+      "name_rule_invalid": "Player name breaks this site's naming rule",
+      "name_taken": "Player name is already taken",
+      "not_found": "Player not found",
+      "not_owner": "This character belongs to another account",
+      "uuid_drift": "That name maps to a UUID on another account; the site owner must resolve it",
+      "uuid_invalid": "Player UUID is not valid"
+    },
+    "plugin": {
+      "consent_required": "This plugin asks for new permissions and needs your consent",
+      "digest_mismatch": "The package digest does not match what was expected",
+      "form_rejected": "The plugin rejected the submitted data",
+      "guard_denied": "A plugin rule refused this operation",
+      "install_blocked": "A dependency or conflict blocked the install",
+      "no_config": "This plugin has no settings",
+      "no_rollback": "There is no version to roll back to",
+      "not_found": "Plugin not found",
+      "operation_failed": "Plugin operation failed, see the site log",
+      "unverified": "The package is not signed by a trusted key"
+    },
+    "report": {
+      "duplicate": "You already reported this texture",
+      "not_found": "Report not found",
+      "quota_exceeded": "Too many reports today, try again later",
+      "save_failed": "Could not submit the report",
+      "self_report": "You cannot report your own texture"
+    },
+    "setup": {
+      "already_done": "This site is already initialised",
+      "bad_input": "Setup information is incomplete or invalid",
+      "db_missing": "The database schema is missing, run the migration first"
+    },
+    "skinlib": {
+      "like_missing": "You have not favourited this texture"
+    },
+    "texture": {
+      "avatar_skin_only": "Only a skin can be used as the avatar",
+      "bad_id": "Texture id is not valid",
+      "busy": "This texture is locked by another operation, try again shortly",
+      "duplicate_public": "This skin is already public: {url}",
+      "in_use": "Still in use: {playerCount} players ({players}), {closets} favourites, {avatars} avatars",
+      "invalid": "The texture could not be read",
+      "model_invalid": "Arm model must be default or slim",
+      "moderation_ban": "This texture was ruled a violation and may not be made public",
+      "not_found": "Texture not found",
+      "not_owned": "You may not change this texture",
+      "not_owner": "Only the uploader can change this",
+      "not_visible": "Texture does not exist or is private",
+      "source_invalid": "Texture source is not one of the allowed values",
+      "source_url_invalid": "The original URL must be an http(s) link",
+      "source_url_required": "Reposts and derivative works need the original URL",
+      "too_large": "The file exceeds the size limit",
+      "type_mismatch": "Texture type does not match this operation"
+    },
+    "theme": {
+      "active": "The active theme cannot be uninstalled",
+      "bad_id": "Theme id is not valid",
+      "not_found": "Theme not found"
+    },
+    "union": {
+      "converge_failed": "The hub accepted the change but local convergence failed, retry",
+      "upstream_error": "Union service is unavailable",
+      "uuid_conflict": "That UUID is already taken; the site owner must merge it"
+    },
+    "user": {
+      "admin_protected": "This account is protected and cannot be deleted",
+      "not_found": "User not found"
+    }
+  },
   "common": {
     "back": "Back",
     "login": "Sign in",
@@ -88,7 +237,10 @@
     "resetSubmit": "Reset password",
     "resetDone": "Password reset — all launcher authorizations were revoked; sign in with the new password.",
     "resetInvalid": "This reset link is invalid or expired — request a new one.",
-    "resetMismatch": "The two passwords do not match"
+    "resetMismatch": "The two passwords do not match",
+    "invitationCodeRequired": "Invitation code (required)",
+    "inviteRequiredErr": "Please enter the invitation code",
+    "mailDisabled": "This site has no mail service configured, so password recovery is unavailable; contact the site owner."
   },
   "dashboard": {
     "uploadTitle": "Upload texture",

@@ -85,6 +85,11 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Install
         run: npm ci
+      - name: Locale and error-code parity
+        # From the repo root: the gate reads web/src/locales and the Go code
+        # catalogue together, so a backend code cannot gain a caller before the
+        # dictionaries know it.
+        run: node ../scripts/check-locales.mjs
       - name: Build
         run: npm run build
 

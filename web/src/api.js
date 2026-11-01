@@ -1,5 +1,6 @@
 // Thin fetch wrapper: same-origin cookies, JSON in/out.
 import { fetchWithTimeout } from './net.js'
+import { describe, transportError } from './errors.js'
 
 async function req(method, path, body, timeoutMS = 15000) {
   const opts = { method, headers: {} }
@@ -13,7 +14,7 @@ async function req(method, path, body, timeoutMS = 15000) {
   if (!res.ok) {
     // OIDC errors are {error}-only and some 401s are empty-bodied (review UI
     // P1): surface every message variant and carry the status for callers.
-    const err = new Error(data.message || data.error || `HTTP ${res.status}`)
+    const err = new Error(describe(data, res.status))
     err.status = res.status
     err.data = data
     throw err
@@ -117,13 +118,13 @@ export function uploadTexture(type, file, description, pluginData, meta = {}) {
         resolve(data)
         return
       }
-      const err = new Error(data.message || data.error || `HTTP ${xhr.status}`)
+      const err = new Error(describe(data, xhr.status))
       err.status = xhr.status
       err.data = data
       reject(err)
     }
-    xhr.onerror = () => reject(new Error('网络异常，请稍后重试'))
-    xhr.ontimeout = () => reject(new Error('上传超时，请重试'))
+    xhr.onerror = () => reject(new Error(transportError('network')))
+    xhr.ontimeout = () => reject(new Error(transportError('networkTimeout')))
     xhr.send(fd)
   })
 }

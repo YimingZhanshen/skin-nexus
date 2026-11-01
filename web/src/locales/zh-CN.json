@@ -1,4 +1,153 @@
 {
+  "errors": {
+    "network": "网络异常，请稍后重试",
+    "networkTimeout": "上传超时，请重试",
+    "internal": "服务器内部错误，请查看站点日志",
+    "account": {
+      "forbidden": "该操作不被允许"
+    },
+    "admin": {
+      "origin_mismatch": "请求来源校验失败，请在本站管理面板内操作",
+      "rank_required": "只能操作权限严格低于自己的账号",
+      "self_edit_forbidden": "不能修改自己的管理项",
+      "super_admin_required": "需要超级管理员账号",
+      "token_invalid": "管理员令牌无效或未登录",
+      "web_session_required": "该操作需要管理员网页会话，不接受令牌调用"
+    },
+    "auth": {
+      "credentials": "账号或密码错误",
+      "current_password": "当前密码不正确",
+      "email_invalid": "邮箱格式不正确",
+      "email_taken": "该邮箱已被占用",
+      "identifier_taken": "昵称或邮箱已被占用",
+      "ip_limit": "该 IP 的注册数量已达上限",
+      "nickname_invalid": "昵称需为 2-24 位字母、数字、下划线或中文",
+      "nickname_taken": "昵称已被占用",
+      "password_too_short": "密码至少 8 位",
+      "password_unchanged": "新密码不能与当前密码相同",
+      "register_failed": "注册失败，请稍后重试",
+      "reset_link_invalid": "重置链接无效或已过期，请重新申请",
+      "self_delete_forbidden": "管理员账号不可自助删除"
+    },
+    "closet": {
+      "bad_id": "收藏条目编号不合法",
+      "not_found": "收藏条目不存在"
+    },
+    "common": {
+      "already_handled": "该记录已被处理",
+      "bad_body": "请求内容无法解析",
+      "bad_id": "编号不合法",
+      "conflict": "操作冲突，请刷新后重试",
+      "forbidden": "没有权限执行该操作",
+      "internal": "服务器繁忙，请稍后重试",
+      "invalid_value": "取值不在允许范围内",
+      "missing_field": "缺少必填字段",
+      "no_fields": "没有需要更新的字段",
+      "not_found": "内容不存在",
+      "rate_limited": "请求过于频繁，请稍后再试",
+      "session_failed": "会话创建失败，请重新登录",
+      "too_long": "内容超出长度限制",
+      "unauthorized": "请先登录",
+      "unavailable": "该功能当前不可用",
+      "unknown_action": "未知的操作"
+    },
+    "invite": {
+      "code_not_found": "邀请码不存在",
+      "invalid": "邀请码无效",
+      "required": "需要邀请码"
+    },
+    "job": {
+      "not_found": "任务不存在",
+      "not_resumable": "该任务已超出可续跑范围，无法继续"
+    },
+    "library": {
+      "not_found": "皮肤库条目不存在"
+    },
+    "mail": {
+      "not_configured": "站点未配置邮件服务，请联系管理员"
+    },
+    "market": {
+      "upstream_error": "市场暂时不可用，请稍后重试"
+    },
+    "oidc": {
+      "shared_client": "共享启动器客户端不可删除"
+    },
+    "option": {
+      "save_failed": "设置保存失败",
+      "unknown_key": "未知的设置项"
+    },
+    "player": {
+      "bad_id": "角色编号不合法",
+      "limit": "角色数量已达上限",
+      "name_invalid": "角色名不合法",
+      "name_rule_invalid": "角色名不符合本站的命名规则",
+      "name_taken": "角色名已被占用",
+      "not_found": "角色不存在",
+      "not_owner": "该角色不属于当前账号",
+      "uuid_drift": "该角色名对应到其他账号的 UUID，需要站长处理",
+      "uuid_invalid": "角色 UUID 不合法"
+    },
+    "plugin": {
+      "consent_required": "该插件申请了新的权限，需要你确认后才能安装",
+      "digest_mismatch": "安装包摘要与预期不一致",
+      "form_rejected": "插件拒绝了提交的数据",
+      "guard_denied": "该操作被插件规则拒绝",
+      "install_blocked": "依赖或冲突阻止了安装",
+      "no_config": "该插件没有可配置项",
+      "no_rollback": "没有可回滚的版本",
+      "not_found": "插件不存在",
+      "operation_failed": "插件操作失败，详情见站点日志",
+      "unverified": "安装包未经官方密钥签名"
+    },
+    "report": {
+      "duplicate": "你已经举报过该材质",
+      "not_found": "举报不存在",
+      "quota_exceeded": "今日举报次数过多，请稍后再试",
+      "save_failed": "提交举报失败",
+      "self_report": "不能举报自己的材质"
+    },
+    "setup": {
+      "already_done": "站点已完成初始化",
+      "bad_input": "初始化信息不完整或格式不正确",
+      "db_missing": "数据库尚未建表，请先执行迁移"
+    },
+    "skinlib": {
+      "like_missing": "你还没有收藏该材质"
+    },
+    "texture": {
+      "avatar_skin_only": "只有皮肤可以设为头像",
+      "bad_id": "材质编号不合法",
+      "busy": "该材质正被其他操作占用，请稍后重试",
+      "duplicate_public": "该皮肤已在公共皮肤库：{url}",
+      "in_use": "材质仍被使用：{playerCount} 个角色（{players}）、{closets} 个收藏、{avatars} 个头像",
+      "invalid": "材质文件无法解析",
+      "model_invalid": "手臂模型只能是 default 或 slim",
+      "moderation_ban": "该材质已被判定违规，不能再次公开",
+      "not_found": "材质不存在",
+      "not_owned": "你不能修改这个材质",
+      "not_owner": "只有上传者可以修改",
+      "not_visible": "材质不存在或未公开",
+      "source_invalid": "材质来源不合法",
+      "source_url_invalid": "原始发布地址必须是 http(s) 链接",
+      "source_url_required": "二创或转载必须填写原始发布地址",
+      "too_large": "文件超出大小限制",
+      "type_mismatch": "材质类型与该操作不匹配"
+    },
+    "theme": {
+      "active": "正在使用的主题不能卸载",
+      "bad_id": "主题编号不合法",
+      "not_found": "主题不存在"
+    },
+    "union": {
+      "converge_failed": "联盟已受理，但本地数据收敛失败，请重试",
+      "upstream_error": "联盟服务暂不可用",
+      "uuid_conflict": "目标 UUID 已被占用，需要站长合并"
+    },
+    "user": {
+      "admin_protected": "该账号受保护，不能删除",
+      "not_found": "用户不存在"
+    }
+  },
   "common": {
     "back": "返回",
     "login": "登录",

@@ -4,6 +4,7 @@
 // completion the API returns 404 and this page redirects to login.
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { describe } from '../errors.js'
 
 const { t } = useI18n()
 
@@ -60,7 +61,7 @@ async function finish() {
       }),
     })
     const d = await r.json()
-    if (!r.ok) { error.value = d.message || `HTTP ${r.status}`; return }
+    if (!r.ok) { error.value = describe(d, r.status); return }
     done.value = true
     step.value = 4
   } catch (e) {

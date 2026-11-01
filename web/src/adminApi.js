@@ -7,6 +7,7 @@
 // shell surfaces the token card.
 import { ref } from 'vue'
 import { fetchWithTimeout } from './net.js'
+import { describe } from './errors.js'
 
 export const token = ref(localStorage.getItem('admin_token') || '')
 export const needToken = ref(true)
@@ -18,7 +19,7 @@ export async function fetchJSON(path, opts) {
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) needToken.value = true
-    const err = new Error(data.message || data.error || `HTTP ${res.status}`)
+    const err = new Error(describe(data, res.status))
     err.status = res.status // 404=模块关闭/未找到，401=会话失效：调用方按 status 分流
     err.data = data // 409 的结构化细节（如删除被谁挡住）随错误一起交给调用方
     throw err
