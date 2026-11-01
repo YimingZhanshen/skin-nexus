@@ -4,6 +4,13 @@
 
 ## 2026-11-01
 
+- **v0.5.0 发布**：tag `v0.5.0`，镜像 `ghcr.io/yimingzhanshen/skin-nexus:sha-<发版提交>`（CI 只在 main 的 push 上出镜像，
+  tag 本身不触发构建；`:latest` 只是便利标签，生产建议钉 `sha-`）。本轮范围=公共纹理哈希去重、受控出站、持久任务队列与
+  `skin-importer`、主题市场、材质生命周期闭环、错误契约与质量闸（P0–P9）。**口径变更两条不可逆**：每个非 2xx 都带
+  `code` 且 `error == code`；`message` 改英文、界面文案由 `errors.<code>` 词典承担。主仓 `version` 常量仍为 `0.5.0`，
+  下一轮功能开发开始时再一起升 `0.6.0`（四处：`server/cmd/skin-nexus/main.go`、`Dockerfile`、`.github/workflows/ci.yml`、
+  README 状态行与徽章）。
+
 - **真机验收（生产 `bd9dbf2`）当场抓出四项，均已修**：
   - **管理员无筛选的材质库查询直接 500**：`store.SkinlibOpts.where()` 在「查看者是管理员 + 没有 filter/keyword/uploader」时返回空串，调用方拼成 `... textures t WHERE ORDER BY` 被 MySQL 拒绝。SPA 四个 tab 恒带类型筛选，所以浏览器里永远看不出来；任何按文档省略 `filter` 的 API 客户端（或将来加「全部」tab）都会踩爆。生产实测矩阵确认边界：`?filter=skin`/`?keyword=a`/`?uploader=8` 全 200，无 filter 与 `?page=2`（跨类型翻页）全 500。修法是补一个 `1=1` 兜底，并加免库单测把「WHERE 不得为空」钉住（同类的 `jobs.List`/`ListReports` 本来就写死 `1=1`，只有这处漏了）。
   - **`error` 与 `code` 在玩家面不一致**：`webapi.writeErrCode` 发的是 `http.StatusText(status)`，而 `docs/launcher-api.md` 与本仓库注释都写作 `{"error":"stable.code"}`，`adminapi` 与 `account` 信封也早就是 code——同一个约定两种实现。形状测试当时只断言「`error` 非空」，所以字面量闸和形状闸双双放行。现两面统一为 `error == code`，并把该断言补进测试（`error != code` 即失败）。

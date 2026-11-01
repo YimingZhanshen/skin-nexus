@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml"><img src="https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/YimingZhanshen/skin-nexus/releases/tag/v0.4.0"><img src="https://img.shields.io/badge/release-v0.4.0-blue" alt="v0.4.0"></a>
+  <a href="https://github.com/YimingZhanshen/skin-nexus/releases/tag/v0.5.0"><img src="https://img.shields.io/badge/release-v0.5.0-blue" alt="v0.5.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-green" alt="AGPL-3.0"></a>
 </p>
 
@@ -16,7 +16,7 @@
 
 It is a modern rewrite of [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) in **Go + Vue 3**, already proven in a real production migration: **67 users / 61 textures with zero row loss and zero player-UUID drift**.
 
-- **Release**: v0.5.0 (in development, unreleased) · iteration history in [`docs/CHANGELOG.md`](docs/CHANGELOG.md) (Chinese)
+- **Release**: v0.5.0 (released 2026-11-01) · iteration history in [`docs/CHANGELOG.md`](docs/CHANGELOG.md) (Chinese)
 - **License**: AGPL-3.0 · **Author / copyright holder**: YMZS
 
 ## Deploy in 10 minutes (Docker Compose)
@@ -198,9 +198,9 @@ Most detailed docs are currently in Chinese.
 
 | Status | Item |
 |---|---|
-| ✅ Done | Phases 1–3: full Yggdrasil, OIDC passwordless, Union module, i18n / SEO / theme packs, migration toolchain, admin panel; production migration and cutover; v0.2.0 (password reset / Mojang fallback / ops logs / SEO); v0.3.0 (signed plugin install/market/rollback + publishing CLI); v0.4.0 (all slots wired, plugin form fields, avatar CDN, profile/rename guards, capability introspection, local bundle trust levels) |
-| 🔶 In progress | v0.5.0: public texture hash dedupe, scoped outbound HTTP, durable jobs and `skin-importer`, **theme market** (signed registry + local upload + hot install); real-device launcher acceptance (SJMCL and community launchers: OAuth → character select → join) |
-| ⬜ Planned | Official-account binding (design and red lines in [`docs/license-binding.md`](docs/license-binding.md), not scheduled), email verification, plugin marketplace operations / sidecar isolation / first-party native plugins |
+| ✅ Done | Phases 1–3: full Yggdrasil, OIDC passwordless, Union module, i18n / SEO / theme packs, migration toolchain, admin panel; production migration and cutover; v0.2.0 (password reset / Mojang fallback / ops logs / SEO); v0.3.0 (signed plugin install/market/rollback + publishing CLI); v0.4.0 (all slots wired, plugin form fields, avatar CDN, profile/rename guards, capability introspection, local bundle trust levels); v0.5.0 (public texture dedupe, scoped outbound HTTP, durable jobs + `skin-importer`, theme market, texture lifecycle, error contract + quality gates) |
+| 🔶 In progress | 0.5.x patch window: production rollout with the stock correction (`skin-nexus redetect-models`) and post-release field feedback; launcher acceptance on real devices (SJMCL and community launchers: OAuth → character select → join); the absolute-URL parity check when the panel `site_url` differs from the environment variable still needs an instance where the base can be changed |
+| ⬜ Planned | Official-account binding (design and red lines in [`docs/license-binding.md`](docs/license-binding.md), not scheduled), email verification + notification centre, object storage and CDN invalidation, plugin marketplace operations / sidecar isolation / first-party native plugins |
 
 ## Frozen compatibility contracts
 

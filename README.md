@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml"><img src="https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/YimingZhanshen/skin-nexus/releases/tag/v0.4.0"><img src="https://img.shields.io/badge/release-v0.4.0-blue" alt="v0.4.0"></a>
+  <a href="https://github.com/YimingZhanshen/skin-nexus/releases/tag/v0.5.0"><img src="https://img.shields.io/badge/release-v0.5.0-blue" alt="v0.5.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-green" alt="AGPL-3.0"></a>
 </p>
 
@@ -14,7 +14,7 @@
 
 它是 [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) 的现代化重写（Go + Vue 3），已在一套真实生产环境完成全量迁移与切流：**67 用户 / 61 纹理零丢行、玩家 UUID 零漂移**。
 
-- **当前版本**：v0.5.0（开发中，未发布）· 迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
+- **当前版本**：v0.5.0（2026-11-01 发布）· 迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
 - **许可**：AGPL-3.0 · **发起人 / 著作权人**：YMZS
 
 ## 10 分钟部署（Docker Compose）
@@ -194,9 +194,9 @@ docker compose up -d
 
 | 状态 | 内容 |
 |---|---|
-| ✅ 已完成 | 一期–三期：Yggdrasil 全量、OIDC 免密、Union 模块、i18n / SEO / 主题包、迁移工具链、管理面板；生产全量迁移与切流；v0.2.0（自助找回 / 官方兜底 / 运维日志 / SEO）；v0.3.0（签名插件安装/市场/回滚 + 发布工具链）；v0.4.0（slot 全接线、注册/上传插件字段、头像 CDN、资料/改名 guard、能力内省、本地包信任分级） |
-| 🔶 进行中 | v0.5.0：公共纹理哈希去重、受控出站、持久任务队列与 `skin-importer` 导入插件、主题市场（验签注册表 + 本地上传 + 热装） |
-| ⬜ 规划中 | 正版账号绑定（方案与红线见 [`docs/license-binding.md`](docs/license-binding.md)，未排期）、邮箱验证流、插件市场运营 / sidecar 隔离 / 第一方原生插件 |
+| ✅ 已完成 | 一期–三期：Yggdrasil 全量、OIDC 免密、Union 模块、i18n / SEO / 主题包、迁移工具链、管理面板；生产全量迁移与切流；v0.2.0（自助找回 / 官方兜底 / 运维日志 / SEO）；v0.3.0（签名插件安装/市场/回滚 + 发布工具链）；v0.4.0（slot 全接线、注册/上传插件字段、头像 CDN、资料/改名 guard、能力内省、本地包信任分级）；v0.5.0（公共纹理哈希去重、受控出站、持久任务队列与 `skin-importer`、主题市场、材质生命周期闭环、错误契约与质量闸） |
+| 🔶 进行中 | 0.5.x 补丁窗口：生产升级与存量校正（`skin-nexus redetect-models`）、发版后实测反馈的修复、启动器真机验收（SJMCL 与社区启动器：OAuth → 选角 → 进服）；面板基址与 env 不一致时的绝对 URL 一致性仍待可改基址的实例复验 |
+| ⬜ 规划中 | 正版账号绑定（方案与红线见 [`docs/license-binding.md`](docs/license-binding.md)，未排期）、邮箱验证流与站内通知中心、对象存储与 CDN 失效、插件市场运营 / sidecar 隔离 / 第一方原生插件 |
 
 ## 兼容契约（不可破坏）
 
