@@ -301,3 +301,28 @@ func TestFilePoolKeepsReadersRunning(t *testing.T) {
 		t.Errorf("count = %d, want 5", n)
 	}
 }
+
+// TestArityGuardCatchesMisbind is the boundary check that would have caught the
+// double-bind bug behind the PostgreSQL failures: a statement whose
+// placeholders and arguments disagree must fail loudly instead of being bound
+// by index with the extras dropped.
+func TestArityGuardCatchesMisbind(t *testing.T) {
+	for _, eng := range []dialect.Engine{dialect.MySQL, dialect.SQLite, dialect.Postgres} {
+		d := &DB{eng: eng}
+		if err := d.check(`UPDATE t SET a = ? WHERE id = ?`, []any{1, 2}); err != nil {
+			t.Errorf("%s: correct arity rejected: %v", eng, err)
+		}
+		err := d.check(`UPDATE t SET a = ? WHERE id = ?`, []any{1, 2, 3})
+		if err == nil || !strings.Contains(err.Error(), "2 placeholder(s) but got 3") {
+			t.Errorf("%s: extra argument accepted, got %v", eng, err)
+		}
+		// Already-numbered statements are the norm on PostgreSQL after Bind.
+		if err := d.check(`UPDATE t SET a = $1 WHERE id = $2`, []any{1, 2}); err != nil {
+			t.Errorf("%s: numbered statement rejected: %v", eng, err)
+		}
+		// A `?` inside a literal is data.
+		if err := d.check(`SELECT 'why?' , ?`, []any{1}); err != nil {
+			t.Errorf("%s: literal question mark counted: %v", eng, err)
+		}
+	}
+}

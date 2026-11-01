@@ -113,7 +113,7 @@ func (d *DB) QueryRowContext(ctx context.Context, query string, args ...any) *sq
 		// reach the caller as ErrNoRows — indistinguishable from "no such row".
 		// Report it and hand back an empty result instead of a wrong one.
 		log.Printf("dbx: %v", err)
-		return d.DB.QueryRowContext(ctx, `SELECT NULL WHERE 0`)
+		return d.DB.QueryRowContext(ctx, `SELECT NULL WHERE 1 = 0`)
 	}
 	return d.DB.QueryRowContext(ctx, d.Bind(query), d.args(args)...)
 }
@@ -160,7 +160,7 @@ func (t *Tx) QueryContext(ctx context.Context, query string, args ...any) (*sql.
 func (t *Tx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
 	if err := t.db.check(query, args); err != nil {
 		log.Printf("dbx: %v", err)
-		return t.Tx.QueryRowContext(ctx, `SELECT NULL WHERE 0`)
+		return t.Tx.QueryRowContext(ctx, `SELECT NULL WHERE 1 = 0`)
 	}
 	return t.Tx.QueryRowContext(ctx, t.Bind(query), t.db.args(args)...)
 }
@@ -394,7 +394,10 @@ func (t *Tx) InsertReturningID(ctx context.Context, query string, args ...any) (
 		}
 		return res.LastInsertId()
 	}
+	// The query goes in `?`-shaped: Tx.QueryRowContext does the rewriting, and
+	// pre-binding here would make it bind twice — a statement already in `$n`
+	// form has no `?` left for the arity check to find.
 	var id int64
-	err := t.QueryRowContext(ctx, t.Bind(query)+returningID, args...).Scan(&id)
+	err := t.QueryRowContext(ctx, query+returningID, args...).Scan(&id)
 	return id, err
 }

@@ -1,6 +1,9 @@
 package dialect
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestCountParamsShareScanWithBind pins the arity contract the dbx boundary
 // checks against: a placeholder is anything outside a literal, a quoted
@@ -29,6 +32,29 @@ func TestCountParamsShareScanWithBind(t *testing.T) {
 		if got := Postgres.Bind(c.q); got != c.bindWant {
 			t.Errorf("Bind(%q) = %q, want %q", c.q, got, c.bindWant)
 		}
+	}
+}
+
+// TestCountParamsAcceptsNumberedStatements is why the counter understands `$n`
+// too: a statement may reach the check already rewritten, and reading that as
+// "zero placeholders" would reject every PostgreSQL call.
+func TestCountParamsAcceptsNumberedStatements(t *testing.T) {
+	for _, q := range []string{
+		`SELECT a FROM t WHERE b = $1 AND c = $2`,
+		`UPDATE t SET v = $1 WHERE id = $2 AND other = $3`,
+	} {
+		n := CountParams(q)
+		want := strings.Count(q, "$")
+		if n != want {
+			t.Errorf("CountParams(%q) = %d, want %d", q, n, want)
+		}
+		if got := Postgres.Bind(q); got != q {
+			t.Errorf("Bind must leave an already numbered statement alone, got %q", got)
+		}
+	}
+	// A literal `$5` inside quotes is data, not a placeholder.
+	if n := CountParams(`SELECT '$5 $5' , $1`); n != 1 {
+		t.Errorf("quoted dollar sign counted: %d, want 1", n)
 	}
 }
 

@@ -102,21 +102,44 @@ func (e Engine) Bind(query string) string {
 	return b.String()
 }
 
-// CountParams reports how many `?` placeholders a statement carries, using the
-// same scan Bind uses. The store layer checks it against its argument list
-// before the driver sees the statement: SQLite's driver accepts extra
-// arguments and ignores them, so an off-by-one binding silently reads the
-// wrong column instead of failing.
+// CountParams reports how many placeholders a statement carries, using the same
+// scan Bind uses. The store layer checks it against its argument list before
+// the driver sees the statement: SQLite's driver accepts extra arguments and
+// ignores them, so an off-by-one binding silently reads the wrong column
+// instead of failing.
+//
+// Both spellings count, because a statement may legitimately arrive already
+// numbered — `?` when it is written the project way, `$n` after Bind.
 func CountParams(query string) int {
-	n := 0
+	q := 0
+	dollar := 0
 	for i := 0; i < len(query); {
-		_, kind, past := nextSpecial(query, i)
-		if kind == '?' {
-			n++
+		at, kind, past := nextSpecial(query, i)
+		switch kind {
+		case '?':
+			q++
+		case '$':
+			n := 0
+			j := at + 1
+			for j < len(query) && query[j] >= '0' && query[j] <= '9' {
+				n = n*10 + int(query[j]-'0')
+				j++
+			}
+			if j > at+1 {
+				if n > dollar {
+					dollar = n
+				}
+				i = j
+				continue
+			}
+		case 0:
 		}
 		i = past
 	}
-	return n
+	if q > 0 {
+		return q
+	}
+	return dollar
 }
 
 // nextSpecial finds the next structurally interesting position from i and
@@ -148,6 +171,8 @@ func nextSpecial(s string, i int) (at int, kind byte, past int) {
 			}
 		case '?':
 			return i, '?', i + 1
+		case '$':
+			return i, '$', i + 1
 		}
 	}
 	return len(s), 0, len(s)
