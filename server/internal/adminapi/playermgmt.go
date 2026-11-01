@@ -66,14 +66,14 @@ func (b *Backend) handleAdminPlayerRename(w http.ResponseWriter, r *http.Request
 	}
 	before, err := b.Store.PlayerByID(r.Context(), pid)
 	if errors.Is(err, store.ErrNotFound) {
-		writeErrCode(w, http.StatusNotFound, "角色不存在", account.CodeNotFound)
+		writeErrCode(w, http.StatusNotFound, "player not found", account.CodeNotFound)
 		return
 	} else if err != nil {
 		writeErrCode(w, http.StatusInternalServerError, "db error", i18n.MsgInternal)
 		return
 	}
 	if err := b.Store.AdminRenamePlayer(r.Context(), pid, req.Name); errors.Is(err, store.ErrDuplicate) {
-		writeErrCode(w, http.StatusConflict, "角色名已被占用", account.CodeNameTaken)
+		writeErrCode(w, http.StatusConflict, "player name already taken", account.CodeNameTaken)
 		return
 	} else if err != nil {
 		writeErrCode(w, http.StatusInternalServerError, "rename failed", i18n.MsgInternal)
@@ -83,7 +83,7 @@ func (b *Backend) handleAdminPlayerRename(w http.ResponseWriter, r *http.Request
 	// here silently breaks every migrated account's identity).
 	after, err := b.Store.PlayerByID(r.Context(), pid)
 	if err != nil || after.UUID != before.UUID {
-		writeErrCode(w, http.StatusInternalServerError, "UUID 漂移防护触发：改名未通过零漂移校验", i18n.MsgPlayerUUIDDrift)
+		writeErrCode(w, http.StatusInternalServerError, "UUID drift guard: the rename failed the zero-drift check", i18n.MsgPlayerUUIDDrift)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_player_rename",
@@ -108,12 +108,12 @@ func (b *Backend) handleAdminPlayerOwner(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if !b.uidExists(r, req.UID) {
-		writeErrCode(w, http.StatusNotFound, "目标用户不存在", i18n.MsgUserNotFound)
+		writeErrCode(w, http.StatusNotFound, "target user not found", i18n.MsgUserNotFound)
 		return
 	}
 	before, err := b.Store.PlayerByID(r.Context(), pid)
 	if errors.Is(err, store.ErrNotFound) {
-		writeErrCode(w, http.StatusNotFound, "角色不存在", account.CodeNotFound)
+		writeErrCode(w, http.StatusNotFound, "player not found", account.CodeNotFound)
 		return
 	} else if err != nil {
 		writeErrCode(w, http.StatusInternalServerError, "db error", i18n.MsgInternal)
@@ -153,12 +153,12 @@ func (b *Backend) handleAdminPlayerTextures(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if req.Type != "skin" && req.Type != "cape" {
-		writeErrCode(w, http.StatusBadRequest, "type 需为 skin 或 cape", i18n.MsgInvalidValue)
+		writeErrCode(w, http.StatusBadRequest, "type must be skin or cape", i18n.MsgInvalidValue)
 		return
 	}
 	if req.TextureID != 0 {
 		if _, err := b.Store.TextureOwner(r.Context(), req.TextureID); errors.Is(err, store.ErrNotFound) {
-			writeErrCode(w, http.StatusNotFound, "材质不存在", i18n.MsgTextureNotFound)
+			writeErrCode(w, http.StatusNotFound, "texture not found", i18n.MsgTextureNotFound)
 			return
 		} else if err != nil {
 			writeErrCode(w, http.StatusInternalServerError, "db error", i18n.MsgInternal)
@@ -166,7 +166,7 @@ func (b *Backend) handleAdminPlayerTextures(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	if _, err := b.Store.PlayerByID(r.Context(), pid); errors.Is(err, store.ErrNotFound) {
-		writeErrCode(w, http.StatusNotFound, "角色不存在", account.CodeNotFound)
+		writeErrCode(w, http.StatusNotFound, "player not found", account.CodeNotFound)
 		return
 	} else if err != nil {
 		writeErrCode(w, http.StatusInternalServerError, "db error", i18n.MsgInternal)
@@ -203,7 +203,7 @@ func (b *Backend) handleAdminPlayerDelete(w http.ResponseWriter, r *http.Request
 	}
 	uuid, name, err := b.Store.AdminDeletePlayer(r.Context(), pid)
 	if errors.Is(err, store.ErrNotFound) {
-		writeErrCode(w, http.StatusNotFound, "角色不存在", account.CodeNotFound)
+		writeErrCode(w, http.StatusNotFound, "player not found", account.CodeNotFound)
 		return
 	} else if err != nil {
 		writeErrCode(w, http.StatusInternalServerError, "delete failed", i18n.MsgInternal)

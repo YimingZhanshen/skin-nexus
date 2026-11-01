@@ -4,6 +4,14 @@
 
 ## 2026-11-01
 
+- **错误契约与本地化（本轮口径变更，两条不可逆）**：
+  - **每个非 2xx 响应都带 `code`**。此前 `internal/webapi` 167 处、`internal/adminapi` 184 处错误只有人话没有码，前端无法取词，英文界面只能显示中文。现在两面归零，并由 `internal/errorgate` 的 AST 闸钉住：错误调用必须带 code、code 必须是 `internal/i18n` 或 `internal/account` 的常量、message 字面量禁止出现中文。闸最初是「预算文件只许降」的形式（167/87/0/44 与 184/49/0），两面都归零后预算文件删除、转为硬失败。
+  - **`message` 改为英文，`error` 改为等于 `code`**。中文文案自此由 `web/src/locales/{zh-CN,en}.json` 的 `errors.<code>` 承担（103 个码 × 2 语言，`scripts/check-locales.mjs` 同时钉住中英叶键相等、码全覆盖、且不允许留下后端已不存在的词条；该脚本已进 web job）。这是对 `curl` 与日志读者的口径变更：状态文本不再出现在 body 里，`launcher-api` 文档早就写作 `{"error":"stable.code"}`，本次把玩家面与管理面对齐到同一约定。前端 `describe()` 在三个传输出口（`api.js` 的 fetch 与 XHR 上传、`adminApi.js`）收口，词典命中优先、未命中回退 `message`，因此后端可以先加码、前端后补词，不会出现空白界面；94 处 `err.message` 调用点零改动。
+  - **凭据类错误文本只进日志**。34 处 `err.Error()` 直回客户端按归属分流：存储/驱动/出站失败改 `writeInternal`/`writeLogged`（日志带方法+路径），而安装计划原因、插件 guard 拒绝语、主题包校验失败这类**本仓库写给调用方的话**经 `writeDomain`/`errDomain` 显式声明并保留。`adminapi` 中间件里手写的 JSON 响应收进 helper——`w.Write` 出去的 body 闸看不见。
+  - **`account` 的 code→status/信封映射回到归属地**（`Error.Status()`/`Error.Body()`）。此前玩家面与自己的 `writeAccountErr` 各写一张表，管理面又手写第三张：同一个「材质被占用」在玩家面答 `texture.not_found`、在管理面答 `player.not_found`，且新增码会静默落 500。现在两面共用一套映射，表与测试（覆盖 16 个码 + 未知码必 500）随 `internal/account/errorhttp_test.go` 一起归位。
+  - 附带修正 Yggdrasil 四处中文错误文本为英文协议短语（`error` 值与 `{error,errorMessage,cause}` 形状不动，那是被测试锁死的协议契约）与 `thememkt` 六条包校验原因。
+  - 验证：`go build`/`go vet`（含 `-tags integration`）/`go test ./...` 全绿；`internal/webapi` 从无测试到 19 条免库信封形状用例；`npm run build` + `check-locales` 通过；浏览器实测（Vite dev + 桩 API）：英文界面登录失败显示 "Wrong account or password"（服务端 message 仍是中文，词典命中在前），页面无中文泄漏，`texture.in_use` 插值渲染为 "Still in use: 2 players (Steve, Alex), 1 favourites, 0 avatars"。
+
 - **材质闭环三件套**：
   - **手臂模型改为按像素判定**。此前 `model` 完全采信上传者声明（`webapi` 直接取表单字段），声明与像素不符时游戏内手臂宽度、`/avatar`、`/preview`、皮肤库 steve/alex 筛选四处一起错。现由 `internal/texture/model.go` 采用 Mojang `HttpTexture#isSlimSkin` 规则判定：64×64 逻辑坐标下右臂第一层两块 slim 空白区 `(50,16,2,4)`、`(54,20,2,12)` 出现任一透明像素即 slim，仅方形且边长为 64 倍数的图参与（按 `scale` 平移，高清皮同样适用），64×32 恒判经典。刻意不采纳 skinview3d 的左臂区与纯黑/纯白启发式——单色经典皮肤那些区域本来就是真实贴图，采纳会把它们误判。上传仍接受 `model` 但只作建议值（非法值仍 400，与像素不一致时留一行日志，这是发现某启动器恒传错值的唯一途径）；64×32 判不出来属于已知盲区，故保留 owner/管理员的 `PATCH {model}` 纠正通路并写审计。前端不再提供下拉，改为按像素显示识别结果，材质列表内可纠正。
   - **旧 22×17 族披风入库前补边**。该族此前原样入库，游戏内显示错位。现在解码后按「宽取 `max(64, ⌈w/64⌉·64)`、高取 `max(32, ⌈h/32⌉·32)`」补透明边到 64×32 的整数倍（两边各自取，同倍会把 22×34 无谓放大到 128×64），图像贴左上。**只作用新上传**——改写存量文件会移动内容地址、打断所有引用，与 legacy byte-exact 策略冲突。补边按类型门控：披风补完可能正好 64×64，透明补边区会被模型判定读成 slim。

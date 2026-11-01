@@ -58,7 +58,7 @@ func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 	req.Nickname = strings.TrimSpace(req.Nickname)
 	req.Email = strings.TrimSpace(req.Email)
 	if req.Nickname == "" || len(req.Password) < 8 {
-		writeErrCode(w, http.StatusBadRequest, "昵称必填、密码至少 8 位", i18n.MsgSetupBadInput)
+		writeErrCode(w, http.StatusBadRequest, "nickname is required and the password needs 8+ characters", i18n.MsgSetupBadInput)
 		return
 	}
 	if req.Email == "" {
@@ -76,7 +76,7 @@ func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 	// plugin install/market operations require exactly 2, not merely >0.
 	uid, err := b.Store.CreateUserAdmin(r.Context(), req.Email, req.Nickname, hash, req.PlayerLimit)
 	if err != nil {
-		writeErrCode(w, http.StatusConflict, "账号创建失败（昵称或邮箱可能已存在）", i18n.MsgRegisterFailed)
+		writeErrCode(w, http.StatusConflict, "could not create the account (nickname or email may already exist)", i18n.MsgRegisterFailed)
 		return
 	}
 	// site identity + SEO defaults

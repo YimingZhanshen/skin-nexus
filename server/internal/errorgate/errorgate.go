@@ -23,7 +23,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -324,77 +323,19 @@ func Measure(sites []Site) (Counts, []Site) {
 	return c, bad
 }
 
-// BudgetFile is `<scope> <counter> <n>` per line, `#` for comments.
-type BudgetFile map[string]Counts
-
-func readBudgetFile(t *testing.T, file string, scopes []Scope) BudgetFile {
+// AssertClean is the end state of the envelope migration: every error response
+// in these scopes carries a stable code, and no prose is hard-coded in Chinese.
+//
+// It used to be a budget file that only allowed the two counters to shrink,
+// because a package with 184 legacy call sites cannot be fixed in one commit.
+// Both counters reached zero, so the file is gone and the rule is absolute —
+// a new uncoded response or Chinese literal fails the build outright.
+func AssertClean(t *testing.T, scopes ...Scope) {
 	t.Helper()
-	raw, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatalf("read %s: %v (run the test and write the measured numbers into it)", file, err)
-	}
-	out := BudgetFile{}
-	for _, line := range strings.Split(string(raw), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.Fields(line)
-		if len(parts) != 3 {
-			t.Fatalf("%s: expected `<scope> <counter> <n>`, got %q", file, line)
-		}
-		n, err := strconv.Atoi(parts[2])
-		if err != nil {
-			t.Fatalf("%s: %q is not a number", file, parts[2])
-		}
-		c := out[parts[0]]
-		switch parts[1] {
-		case "uncoded":
-			c.Uncoded = n
-		case "chinese":
-			c.Chinese = n
-		default:
-			t.Fatalf("%s: unknown counter %q", file, parts[1])
-		}
-		out[parts[0]] = c
-	}
 	for _, sc := range scopes {
-		if _, ok := out[sc.Name]; !ok {
-			t.Fatalf("%s: no lines for scope %q — a renamed scope must not quietly leave the gate", file, sc.Name)
-		}
-	}
-	return out
-}
-
-// Budget measures every scope and compares it with the budget file. It fails on
-// growth *and* on shrinkage-without-an-update: a budget that overstates the debt
-// hides the next regression just as well as one that was never written.
-func Budget(t *testing.T, file string, scopes ...Scope) {
-	t.Helper()
-	want := readBudgetFile(t, file, scopes)
-	for _, sc := range scopes {
-		sites := Sites(t, sc)
-		got, bad := Measure(sites)
-		b := want[sc.Name]
-
-		if got.Uncoded != b.Uncoded {
-			if got.Uncoded > b.Uncoded {
-				t.Errorf("%s: uncoded error responses grew to %d (budget %d) — emit a code so a language pack can name this failure", sc.Name, got.Uncoded, b.Uncoded)
-			} else {
-				t.Errorf("%s: budget stale: write `%s uncoded %d` in %s", sc.Name, sc.Name, got.Uncoded, file)
-			}
-		}
-		if got.Chinese != b.Chinese {
-			if got.Chinese > b.Chinese {
-				t.Errorf("%s: hard-coded Chinese error prose grew to %d (budget %d) — the code carries the meaning, the message is for a client with no dictionary", sc.Name, got.Chinese, b.Chinese)
-			} else {
-				t.Errorf("%s: budget stale: write `%s chinese %d` in %s", sc.Name, sc.Name, got.Chinese, file)
-			}
-		}
-		if got.Uncoded != b.Uncoded || got.Chinese != b.Chinese {
-			for _, s := range bad {
-				t.Logf("%s %s", s.Pos, siteWhy(s))
-			}
+		_, bad := Measure(Sites(t, sc))
+		for _, s := range bad {
+			t.Errorf("%s: %s — %s", s.Pos, sc.Name, siteWhy(s))
 		}
 	}
 }

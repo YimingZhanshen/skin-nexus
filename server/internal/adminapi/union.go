@@ -169,7 +169,7 @@ func (b *Backend) handleUnionBlacklistAdd(w http.ResponseWriter, r *http.Request
 		Reason string `json:"reason"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Email) == "" {
-		writeErrCode(w, http.StatusBadRequest, "email 必填", i18n.MsgMissingField)
+		writeErrCode(w, http.StatusBadRequest, "email is required", i18n.MsgMissingField)
 		return
 	}
 	payload, _ := json.Marshal(map[string]string{
@@ -191,7 +191,7 @@ func (b *Backend) handleUnionBlacklistAdd(w http.ResponseWriter, r *http.Request
 func (b *Backend) handleUnionBlacklistRelease(w http.ResponseWriter, r *http.Request) {
 	id := blacklistIDParam(r)
 	if id == "" {
-		writeErrCode(w, http.StatusBadRequest, "id 必填", i18n.MsgMissingField)
+		writeErrCode(w, http.StatusBadRequest, "id is required", i18n.MsgMissingField)
 		return
 	}
 	status, resp, err := b.union.BlacklistRelease(r.Context(), id)
@@ -209,7 +209,7 @@ func (b *Backend) handleUnionBlacklistRelease(w http.ResponseWriter, r *http.Req
 func (b *Backend) handleUnionBlacklistDelete(w http.ResponseWriter, r *http.Request) {
 	id := blacklistIDParam(r)
 	if id == "" {
-		writeErrCode(w, http.StatusBadRequest, "id 必填", i18n.MsgMissingField)
+		writeErrCode(w, http.StatusBadRequest, "id is required", i18n.MsgMissingField)
 		return
 	}
 	status, resp, err := b.union.BlacklistDelete(r.Context(), id)

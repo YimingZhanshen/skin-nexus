@@ -44,12 +44,12 @@ func (b *Backend) handlePluginsList(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handlePluginAction(w http.ResponseWriter, r *http.Request) {
 	actor := actorUID(r)
 	if actor == 0 {
-		writeErrCode(w, http.StatusForbidden, "插件操作需管理员会话（不支持 X-Admin-Token）", i18n.MsgWebSessionRequired)
+		writeErrCode(w, http.StatusForbidden, "plugin actions need an admin web session, not X-Admin-Token", i18n.MsgWebSessionRequired)
 		return
 	}
 	perm, err := actorPermission(r.Context(), b, actor)
 	if err != nil || perm != 2 {
-		writeErrCode(w, http.StatusForbidden, "插件操作需要超级管理员（permission=2）账号", i18n.MsgSuperAdminRequired)
+		writeErrCode(w, http.StatusForbidden, "plugin actions need a super admin account (permission=2)", i18n.MsgSuperAdminRequired)
 		return
 	}
 	name := r.PathValue("name")
@@ -101,12 +101,12 @@ type pluginConfigBody struct {
 func (b *Backend) handlePluginConfigSave(w http.ResponseWriter, r *http.Request) {
 	actor := actorUID(r)
 	if actor == 0 {
-		writeErrCode(w, http.StatusForbidden, "配置修改需超级管理员会话（不支持 X-Admin-Token）", i18n.MsgWebSessionRequired)
+		writeErrCode(w, http.StatusForbidden, "config changes need a super admin web session, not X-Admin-Token", i18n.MsgWebSessionRequired)
 		return
 	}
 	perm, err := actorPermission(r.Context(), b, actor)
 	if err != nil || perm != 2 {
-		writeErrCode(w, http.StatusForbidden, "配置修改需要超级管理员（permission=2）账号", i18n.MsgSuperAdminRequired)
+		writeErrCode(w, http.StatusForbidden, "config changes need a super admin account (permission=2)", i18n.MsgSuperAdminRequired)
 		return
 	}
 	var body pluginConfigBody
@@ -142,12 +142,12 @@ func (b *Backend) handlePluginConfigSave(w http.ResponseWriter, r *http.Request)
 func (b *Backend) handlePluginGuardBypass(w http.ResponseWriter, r *http.Request) {
 	actor := actorUID(r)
 	if actor == 0 {
-		writeErrCode(w, http.StatusForbidden, "破窗操作需超级管理员会话", i18n.MsgWebSessionRequired)
+		writeErrCode(w, http.StatusForbidden, "guard bypass needs a super admin web session", i18n.MsgWebSessionRequired)
 		return
 	}
 	perm, err := actorPermission(r.Context(), b, actor)
 	if err != nil || perm != 2 {
-		writeErrCode(w, http.StatusForbidden, "破窗操作需要超级管理员（permission=2）账号", i18n.MsgSuperAdminRequired)
+		writeErrCode(w, http.StatusForbidden, "guard bypass needs a super admin account (permission=2)", i18n.MsgSuperAdminRequired)
 		return
 	}
 	var body struct {

@@ -77,7 +77,7 @@ var (
 )
 
 // writeUnionUpstreamErr answers an outbound Union failure: hub errors are 502
-// (the UI says "联盟服务暂不可用"), a disabled module 404. One writer rather
+// (the UI says "Union service is unavailable"), a disabled module 404. One writer rather
 // than a status/message/code triple each handler forwards, because a code that
 // travels through three variables is a code no gate can check.
 func writeUnionUpstreamErr(w http.ResponseWriter, err error) {
@@ -85,11 +85,11 @@ func writeUnionUpstreamErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, union.ErrDisabled):
 		// Reachable only in the window between the hot gate and the call.
-		writeErrCode(w, http.StatusNotFound, "Union 未启用", i18n.MsgUnavailable)
+		writeErrCode(w, http.StatusNotFound, "Union is not enabled", i18n.MsgUnavailable)
 	case errors.As(err, &ae):
-		writeErrCode(w, http.StatusBadGateway, "联盟服务暂不可用", i18n.MsgUnionUpstream)
+		writeErrCode(w, http.StatusBadGateway, "Union service is unavailable", i18n.MsgUnionUpstream)
 	default:
-		writeErrCode(w, http.StatusBadGateway, "联盟服务暂不可用", i18n.MsgUnionUpstream)
+		writeErrCode(w, http.StatusBadGateway, "Union service is unavailable", i18n.MsgUnionUpstream)
 	}
 }
 
@@ -102,7 +102,7 @@ func (b *Backend) unionUser(w http.ResponseWriter, r *http.Request) (int64, bool
 	}
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return 0, false
 	}
 	return uid, true
@@ -259,7 +259,7 @@ func (b *Backend) handleUnionRemapUUID(w http.ResponseWriter, r *http.Request) {
 	// cross-site 1.19+ remap impossible). Only shape is validated here.
 	target := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(body.Target), "-", ""))
 	if !isHex32(target) {
-		writeErrCode(w, http.StatusBadRequest, "目标 UUID 不合法", i18n.MsgPlayerUUIDBad)
+		writeErrCode(w, http.StatusBadRequest, "target UUID is not valid", i18n.MsgPlayerUUIDBad)
 		return
 	}
 	if err := b.union.RemapUUID(r.Context(), me, target); err != nil {
@@ -273,10 +273,10 @@ func (b *Backend) handleUnionRemapUUID(w http.ResponseWriter, r *http.Request) {
 		b.Store.InsertAudit(r.Context(), uid, "union_remapuuid_local_conflict",
 			map[string]any{"me": me, "target": target, "error": err.Error()})
 		if errors.Is(err, store.ErrUUIDConflict) {
-			writeErrCode(w, http.StatusConflict, "联盟已受理，但本地目标 UUID 已被占用，请人工合并", i18n.MsgUnionUUIDConflict)
+			writeErrCode(w, http.StatusConflict, "the hub accepted it, but that UUID is taken locally and must be merged by an operator", i18n.MsgUnionUUIDConflict)
 			return
 		}
-		writeErrCode(w, http.StatusInternalServerError, "联盟已受理，本地收敛失败，请重试", i18n.MsgUnionConvergeFailed)
+		writeErrCode(w, http.StatusInternalServerError, "the hub accepted it but local convergence failed, retry", i18n.MsgUnionConvergeFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -298,11 +298,11 @@ func isHex32(s string) bool {
 func (b *Backend) unionOwnErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, errUnionNotOwned):
-		writeErrCode(w, http.StatusForbidden, "该角色不属于当前账号", i18n.MsgPlayerNotOwner)
+		writeErrCode(w, http.StatusForbidden, "this character belongs to another account", i18n.MsgPlayerNotOwner)
 	case errors.Is(err, errUnionBadInput):
 		writeErrCode(w, http.StatusBadRequest, "bad uuid", i18n.MsgPlayerUUIDBad)
 	default:
-		writeErrCode(w, http.StatusNotFound, "未找到该角色", account.CodeNotFound)
+		writeErrCode(w, http.StatusNotFound, "player not found", account.CodeNotFound)
 	}
 }
 

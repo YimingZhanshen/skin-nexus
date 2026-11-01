@@ -2,8 +2,10 @@
 // (web session cookie), profile, texture upload, player management.
 //
 // All responses are JSON except texture file serving. Errors use
-// {"error": "...", "message": "..."} — distinct from the Yggdrasil legacy
-// shape (which stays frozen in the ygg package).
+// {"error": "<code>", "message": "<english sentence>", "code": "<code>"} —
+// internal/i18n owns the code namespace, internal/errorgate keeps every call
+// site honest, and web/src/errors.js translates the code through the language
+// packs. Distinct from the Yggdrasil legacy shape (frozen in the ygg package).
 package webapi
 
 import (
@@ -45,7 +47,7 @@ type Backend struct {
 	Textures *texture.Store
 	// RequireInvite forces invitationCode at registration
 	// (SKIN_INVITE_REQUIRED). Default off = optional code, validated and
-	// burned when supplied (legacy live semantics: required + "邀请码不能为空").
+	// burned when supplied (legacy live semantics: required + "invitation code is required").
 	RequireInvite bool
 	// OnPasswordChange fires after a successful password change (main wires
 	// OIDC grant revocation — legacy RevokeUserTokens semantics).
@@ -348,7 +350,7 @@ func writeErrCode(w http.ResponseWriter, status int, msg, code string) {
 // code is still mandatory; the extras are not an excuse to drop the envelope.
 func writeErrBody(w http.ResponseWriter, status int, code string, err error, extra map[string]any) {
 	body := map[string]any{
-		"error": http.StatusText(status), "message": err.Error(), "code": code,
+		"error": code, "message": err.Error(), "code": code,
 	}
 	for k, v := range extra {
 		body[k] = v
@@ -443,20 +445,20 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if b.Limiter != nil && !b.Limiter.Allow("ip:"+ygg.ClientIP(r)) {
-		writeErrCode(w, http.StatusTooManyRequests, "请求过于频繁，请稍后再试", i18n.MsgRateLimited)
+		writeErrCode(w, http.StatusTooManyRequests, "too many requests, please slow down", i18n.MsgRateLimited)
 		return
 	}
 	req.Nickname = strings.TrimSpace(req.Nickname)
 	if !nickRe.MatchString(req.Nickname) {
-		writeErrCode(w, http.StatusBadRequest, "昵称需 2-24 位字母/数字/下划线/中文", i18n.MsgNicknameInvalid)
+		writeErrCode(w, http.StatusBadRequest, "nickname must be 2-24 letters, digits, underscores or Chinese characters", i18n.MsgNicknameInvalid)
 		return
 	}
 	if req.Email != "" && !mailRe.MatchString(req.Email) {
-		writeErrCode(w, http.StatusBadRequest, "邮箱格式不正确", i18n.MsgEmailInvalid)
+		writeErrCode(w, http.StatusBadRequest, "email address is not valid", i18n.MsgEmailInvalid)
 		return
 	}
 	if len(req.Password) < 8 {
-		writeErrCode(w, http.StatusBadRequest, "密码至少 8 位", i18n.MsgPasswordTooShort)
+		writeErrCode(w, http.StatusBadRequest, "password must be at least 8 characters", i18n.MsgPasswordTooShort)
 		return
 	}
 	// Per-IP registration cap (blessing AuthController: count >= regs_per_ip
@@ -465,7 +467,7 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 		if n, err := b.Store.CountUsersByIP(r.Context(), ygg.ClientIP(r)); err == nil && n >= limit {
 			b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebRegister,
 				Outcome: accesslog.OutcomeDenied, Who: req.Nickname, Detail: "ip_cap"})
-			writeErrCode(w, http.StatusForbidden, "该 IP 注册数已达上限", i18n.MsgIPLimit)
+			writeErrCode(w, http.StatusForbidden, "this IP reached the registration limit", i18n.MsgIPLimit)
 			return
 		}
 	}
@@ -493,7 +495,7 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	code := strings.TrimSpace(req.InvitationCode)
 	if code == "" && b.inviteRequired(r.Context()) {
-		writeErrCode(w, http.StatusBadRequest, "邀请码不能为空", i18n.MsgInviteRequired)
+		writeErrCode(w, http.StatusBadRequest, "invitation code is required", i18n.MsgInviteRequired)
 		return
 	}
 	var uid int64
@@ -502,7 +504,7 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, store.ErrNotFound) {
 			b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebRegister,
 				Outcome: accesslog.OutcomeFail, Who: req.Nickname, Detail: "bad_invite"})
-			writeErrCode(w, http.StatusBadRequest, "邀请码无效", i18n.MsgInviteInvalid)
+			writeErrCode(w, http.StatusBadRequest, "invitation code is not valid", i18n.MsgInviteInvalid)
 			return
 		}
 	} else {
@@ -512,11 +514,11 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 		// unique constraint violation -> nickname/email taken
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebRegister,
 			Outcome: accesslog.OutcomeFail, Who: req.Nickname, Detail: "taken"})
-		writeErrCode(w, http.StatusConflict, "昵称或邮箱已被占用", i18n.MsgIdentifierTaken)
+		writeErrCode(w, http.StatusConflict, "nickname or email already taken", i18n.MsgIdentifierTaken)
 		return
 	}
 	if err := b.issueSession(w, r, uid); err != nil {
-		writeErrCode(w, http.StatusInternalServerError, "会话创建失败，请重试", i18n.MsgSessionFailed)
+		writeErrCode(w, http.StatusInternalServerError, "session could not be created, try again", i18n.MsgSessionFailed)
 		return
 	}
 	b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebRegister,
@@ -553,13 +555,13 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Retry-After", strconv.Itoa(ra))
 			b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 				Outcome: accesslog.OutcomeDenied, Who: req.Identifier, Detail: "locked"})
-			writeErrCode(w, http.StatusTooManyRequests, "尝试次数过多，请稍后再试", i18n.MsgRateLimited)
+			writeErrCode(w, http.StatusTooManyRequests, "too many attempts, try again later", i18n.MsgRateLimited)
 			return
 		}
 		if !b.Limiter.Allow(ipKey) {
 			b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 				Outcome: accesslog.OutcomeDenied, Who: req.Identifier, Detail: "rate_limited"})
-			writeErrCode(w, http.StatusTooManyRequests, "请求过于频繁，请稍后再试", i18n.MsgRateLimited)
+			writeErrCode(w, http.StatusTooManyRequests, "too many requests, please slow down", i18n.MsgRateLimited)
 			return
 		}
 	}
@@ -570,7 +572,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 			Outcome: accesslog.OutcomeFail, Who: req.Identifier, Detail: "unknown_account"})
-		writeErrCode(w, http.StatusUnauthorized, "账号或密码错误", i18n.MsgCredentials)
+		writeErrCode(w, http.StatusUnauthorized, "wrong account or password", i18n.MsgCredentials)
 		return
 	}
 	// Verify errors (DB/schema problems) must NOT masquerade as a wrong
@@ -580,7 +582,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 			Outcome: accesslog.OutcomeError, UID: u.ID, Who: req.Identifier, Detail: "verify_error"})
-		writeErrCode(w, http.StatusInternalServerError, "登录校验失败，请稍后重试", i18n.MsgInternal)
+		writeErrCode(w, http.StatusInternalServerError, "login check failed, try again later", i18n.MsgInternal)
 		return
 	}
 	if !ok {
@@ -589,7 +591,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 			Outcome: accesslog.OutcomeFail, UID: u.ID, Who: req.Identifier, Detail: "bad_password"})
-		writeErrCode(w, http.StatusUnauthorized, "账号或密码错误", i18n.MsgCredentials)
+		writeErrCode(w, http.StatusUnauthorized, "wrong account or password", i18n.MsgCredentials)
 		return
 	}
 	if b.Limiter != nil {
@@ -614,7 +616,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err := b.issueSession(w, r, u.ID); err != nil {
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 			Outcome: accesslog.OutcomeError, UID: u.ID, Who: u.Nickname, Detail: "session_error"})
-		writeErrCode(w, http.StatusInternalServerError, "会话创建失败，请重试", i18n.MsgSessionFailed)
+		writeErrCode(w, http.StatusInternalServerError, "session could not be created, try again", i18n.MsgSessionFailed)
 		return
 	}
 	b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,

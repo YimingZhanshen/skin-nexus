@@ -3,10 +3,10 @@ package adminapi
 // errors.go is the one place the management surface writes a failure.
 //
 // The envelope is `{error, code, message}`, identical to the player API so a
-// frontend has one translator for both: `code` is stable API surface a language
-// pack can render, `message` is the fallback for a client that does not know the
-// code, and `error` stays the HTTP status text until every call site carries a
-// code (testdata/error-budget.txt), after which it becomes the code.
+// frontend has one translator for both: `code` is the stable API surface a
+// language pack renders, `message` is the English fallback for a client that
+// does not know the code, and `error` repeats the code — one contract across
+// every surface, matching docs/launcher-api.md.
 //
 // Two helpers answer with an error value, and which one is used is the review
 // question this file exists to ask:
@@ -30,7 +30,7 @@ import (
 // every dictionary.
 func writeErrCode(w http.ResponseWriter, status int, msg, code string) {
 	writeJSON(w, status, map[string]string{
-		"error": http.StatusText(status), "message": msg, "code": code,
+		"error": code, "message": msg, "code": code,
 	})
 }
 
@@ -40,7 +40,7 @@ func writeErrCode(w http.ResponseWriter, status int, msg, code string) {
 // stays visible while a raw one still has to go through the log.
 func writeErrBody(w http.ResponseWriter, status int, code string, err error, extra map[string]any) {
 	body := map[string]any{
-		"error": http.StatusText(status), "message": err.Error(), "code": code,
+		"error": code, "message": err.Error(), "code": code,
 	}
 	for k, v := range extra {
 		body[k] = v

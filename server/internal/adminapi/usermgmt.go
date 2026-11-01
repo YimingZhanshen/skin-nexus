@@ -35,7 +35,7 @@ func idParam(r *http.Request) (int64, bool) {
 func writeStoreErr(w http.ResponseWriter, err error, dupCode, dupMsg string) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		writeErrCode(w, http.StatusNotFound, "用户不存在", i18n.MsgUserNotFound)
+		writeErrCode(w, http.StatusNotFound, "user not found", i18n.MsgUserNotFound)
 	case errors.Is(err, store.ErrDuplicate):
 		writeErrCode(w, http.StatusConflict, dupMsg, dupCode)
 	default:
@@ -95,13 +95,13 @@ func (b *Backend) inlineGuard(r *http.Request, target int64) guardReason {
 func writeGuard(w http.ResponseWriter, reason guardReason) {
 	switch reason {
 	case guardSelfEdit:
-		writeErrCode(w, http.StatusForbidden, "不能修改自己的管理项", i18n.MsgAdminSelfEdit)
+		writeErrCode(w, http.StatusForbidden, "you cannot edit your own admin entry", i18n.MsgAdminSelfEdit)
 	case guardRank:
-		writeErrCode(w, http.StatusForbidden, "只能操作权限严格低于自己的账号", i18n.MsgAdminRank)
+		writeErrCode(w, http.StatusForbidden, "you may only manage strictly lower-ranked accounts", i18n.MsgAdminRank)
 	case guardNoUser:
-		writeErrCode(w, http.StatusForbidden, "用户不存在", i18n.MsgUserNotFound)
+		writeErrCode(w, http.StatusForbidden, "user not found", i18n.MsgUserNotFound)
 	case guardCheckFailed:
-		writeErrCode(w, http.StatusForbidden, "权限校验失败", i18n.MsgForbidden)
+		writeErrCode(w, http.StatusForbidden, "permission check failed", i18n.MsgForbidden)
 	}
 }
 
@@ -130,7 +130,7 @@ func (b *Backend) handleUserSetPassword(w http.ResponseWriter, r *http.Request) 
 	}
 	req.Password = strings.TrimSpace(req.Password)
 	if len(req.Password) < 8 {
-		writeErrCode(w, http.StatusBadRequest, "密码至少 8 位", i18n.MsgPasswordTooShort)
+		writeErrCode(w, http.StatusBadRequest, "password must be at least 8 characters", i18n.MsgPasswordTooShort)
 		return
 	}
 	hash, err := auth.HashArgon2id(req.Password)
@@ -139,7 +139,7 @@ func (b *Backend) handleUserSetPassword(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := b.Store.AdminSetPassword(r.Context(), id, hash); errors.Is(err, store.ErrNotFound) {
-		writeErrCode(w, http.StatusNotFound, "用户不存在", i18n.MsgUserNotFound)
+		writeErrCode(w, http.StatusNotFound, "user not found", i18n.MsgUserNotFound)
 		return
 	} else if err != nil {
 		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
@@ -168,18 +168,18 @@ func (b *Backend) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if id == 1 {
-		writeErrCode(w, http.StatusBadRequest, "uid 1（管理员账号）不可删除", i18n.MsgUserAdminProtected)
+		writeErrCode(w, http.StatusBadRequest, "uid 1 (the bootstrap admin) cannot be deleted", i18n.MsgUserAdminProtected)
 		return
 	}
 	if targetPerm, err := b.Store.UserPermission(r.Context(), id); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			writeErrCode(w, http.StatusNotFound, "用户不存在", i18n.MsgUserNotFound)
+			writeErrCode(w, http.StatusNotFound, "user not found", i18n.MsgUserNotFound)
 			return
 		}
-		writeErrCode(w, http.StatusInternalServerError, "权限校验失败", i18n.MsgInternal)
+		writeErrCode(w, http.StatusInternalServerError, "permission check failed", i18n.MsgInternal)
 		return
 	} else if targetPerm >= 2 {
-		writeErrCode(w, http.StatusBadRequest, "超级管理员账号不可删除", i18n.MsgUserAdminProtected)
+		writeErrCode(w, http.StatusBadRequest, "super admin accounts cannot be deleted", i18n.MsgUserAdminProtected)
 		return
 	}
 	if reason := b.inlineGuard(r, id); reason != guardOK {
@@ -201,7 +201,7 @@ func (b *Backend) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := b.Store.DeleteUser(r.Context(), id); errors.Is(err, store.ErrNotFound) {
-		writeErrCode(w, http.StatusNotFound, "用户不存在", i18n.MsgUserNotFound)
+		writeErrCode(w, http.StatusNotFound, "user not found", i18n.MsgUserNotFound)
 		return
 	} else if err != nil {
 		writeErrCode(w, http.StatusInternalServerError, "delete failed", i18n.MsgInternal)
@@ -237,7 +237,7 @@ func (b *Backend) handleUserSetEmail(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Email = strings.TrimSpace(req.Email)
 	if req.Email != "" && !adminMailRe.MatchString(req.Email) {
-		writeErrCode(w, http.StatusBadRequest, "邮箱格式不正确", i18n.MsgEmailInvalid)
+		writeErrCode(w, http.StatusBadRequest, "email address is not valid", i18n.MsgEmailInvalid)
 		return
 	}
 	if reason := b.inlineGuard(r, id); reason != guardOK {
@@ -245,7 +245,7 @@ func (b *Backend) handleUserSetEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := b.Store.UpdateUserEmail(r.Context(), id, req.Email); err != nil {
-		writeStoreErr(w, err, i18n.MsgEmailTaken, "该邮箱已被其他账号使用")
+		writeStoreErr(w, err, i18n.MsgEmailTaken, "that email is already used by another account")
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_user_email_update", map[string]any{"target": id, "email": req.Email})
@@ -269,7 +269,7 @@ func (b *Backend) handleUserSetNickname(w http.ResponseWriter, r *http.Request) 
 	}
 	req.Nickname = strings.TrimSpace(req.Nickname)
 	if !adminNickRe.MatchString(req.Nickname) {
-		writeErrCode(w, http.StatusBadRequest, "昵称需 2-24 位字母/数字/下划线/中文", i18n.MsgNicknameInvalid)
+		writeErrCode(w, http.StatusBadRequest, "nickname must be 2-24 letters, digits, underscores or Chinese characters", i18n.MsgNicknameInvalid)
 		return
 	}
 	if reason := b.inlineGuard(r, id); reason != guardOK {
@@ -277,7 +277,7 @@ func (b *Backend) handleUserSetNickname(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := b.Store.UpdateUserNickname(r.Context(), id, req.Nickname); err != nil {
-		writeStoreErr(w, err, i18n.MsgNicknameTaken, "该昵称已被其他账号使用")
+		writeStoreErr(w, err, i18n.MsgNicknameTaken, "that nickname is already used by another account")
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_user_nickname_update", map[string]any{"target": id, "nickname": req.Nickname})
@@ -304,7 +304,7 @@ func (b *Backend) handleUserSetVerification(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if err := b.Store.SetEmailVerified(r.Context(), id, req.Verified); err != nil {
-		writeStoreErr(w, err, i18n.MsgEmailTaken, "该邮箱已被其他账号使用")
+		writeStoreErr(w, err, i18n.MsgEmailTaken, "that email is already used by another account")
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_user_verification_update", map[string]any{"target": id, "verified": req.Verified})
@@ -336,12 +336,12 @@ func (b *Backend) handleUserSetPermission(w http.ResponseWriter, r *http.Request
 	}
 	perm := *req.Permission
 	if perm < -1 || perm > 1 {
-		writeErrCode(w, http.StatusBadRequest, "permission 仅支持 -1（封禁）/0（正常）/1（管理员）", i18n.MsgInvalidValue)
+		writeErrCode(w, http.StatusBadRequest, "permission must be -1 (banned), 0 (normal) or 1 (admin)", i18n.MsgInvalidValue)
 		return
 	}
 	actor := actorUID(r)
 	if actor == 0 {
-		writeErrCode(w, http.StatusForbidden, "权限变更需管理员会话（不支持 X-Admin-Token）", i18n.MsgWebSessionRequired)
+		writeErrCode(w, http.StatusForbidden, "permission changes need an admin web session, not X-Admin-Token", i18n.MsgWebSessionRequired)
 		return
 	}
 	if reason := b.inlineGuard(r, id); reason != guardOK {
@@ -352,12 +352,12 @@ func (b *Backend) handleUserSetPermission(w http.ResponseWriter, r *http.Request
 	if perm == 1 {
 		actorPerm, err := b.Store.UserPermission(r.Context(), actor)
 		if err != nil || actorPerm != 2 {
-			writeErrCode(w, http.StatusForbidden, "授予管理员权限需要超级管理员（permission=2）账号操作", i18n.MsgSuperAdminRequired)
+			writeErrCode(w, http.StatusForbidden, "granting admin needs a super admin account (permission=2)", i18n.MsgSuperAdminRequired)
 			return
 		}
 	}
 	if err := b.Store.SetUserPermission(r.Context(), id, perm); err != nil {
-		writeStoreErr(w, err, i18n.MsgEmailTaken, "该邮箱已被其他账号使用")
+		writeStoreErr(w, err, i18n.MsgEmailTaken, "that email is already used by another account")
 		return
 	}
 	// A demoted/banned admin's session must die now — the session gate

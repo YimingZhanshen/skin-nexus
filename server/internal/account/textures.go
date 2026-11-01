@@ -63,7 +63,7 @@ func (s *Service) ListTextures(ctx context.Context, uid int64) ([]TextureView, *
 	}
 	rows, err := s.Store.ListTextures(ctx, uid)
 	if err != nil {
-		return nil, errf(CodeInternal, "读取纹理失败", err)
+		return nil, errf(CodeInternal, "could not read the texture", err)
 	}
 	out := make([]TextureView, 0, len(rows))
 	for _, row := range rows {
@@ -94,25 +94,25 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 		return TextureView{}, false, e
 	}
 	if typ != "skin" && typ != "cape" {
-		return TextureView{}, false, errf(CodeInvalid, "纹理类型必须是 skin 或 cape", nil)
+		return TextureView{}, false, errf(CodeInvalid, "texture type must be skin or cape", nil)
 	}
 	// The uploader's model claim is advisory only: clients keep sending it
 	// (launcher-api, skin-importer, older builds) and an arm width the pixels do
 	// not have renders wrong everywhere at once. Junk is still rejected.
 	if typ == "skin" && model != "" && model != texture.ModelDefault && model != texture.ModelSlim {
-		return TextureView{}, false, errf(CodeInvalid, "皮肤模型必须是 default 或 slim", nil)
+		return TextureView{}, false, errf(CodeInvalid, "skin model must be default or slim", nil)
 	}
 	desc := strings.TrimSpace(um.Name)
 	if !utf8.ValidString(desc) || !utf8.ValidString(um.DetailMD) ||
 		!utf8.ValidString(um.Source) || !utf8.ValidString(um.SourceURL) {
-		return TextureView{}, false, errf(CodeInvalid, "材质信息必须是 UTF-8 文本", nil)
+		return TextureView{}, false, errf(CodeInvalid, "texture metadata must be UTF-8 text", nil)
 	}
 	if utf8.RuneCountInString(desc) > 50 {
-		return TextureView{}, false, errf(CodeInvalid, "纹理备注最多 50 个字", nil)
+		return TextureView{}, false, errf(CodeInvalid, "texture name is limited to 50 characters", nil)
 	}
 	detail := strings.TrimSpace(um.DetailMD)
 	if utf8.RuneCountInString(detail) > 4000 {
-		return TextureView{}, false, errf(CodeInvalid, "材质描述最多 4000 个字", nil)
+		return TextureView{}, false, errf(CodeInvalid, "texture description is limited to 4000 characters", nil)
 	}
 	source := strings.ToLower(strings.TrimSpace(um.Source))
 	sourceURL := strings.TrimSpace(um.SourceURL)
@@ -121,13 +121,13 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 		sourceURL = ""
 	case "derivative", "repost":
 		if sourceURL == "" {
-			return TextureView{}, false, errf(CodeSourceURLReq, "二创/转载必须填写原始发布地址", nil)
+			return TextureView{}, false, errf(CodeSourceURLReq, "reposts and derivative works need the original URL", nil)
 		}
 		if !validSourceURL(sourceURL) {
-			return TextureView{}, false, errf(CodeSourceURLBad, "原始发布地址必须是 http(s) 链接", nil)
+			return TextureView{}, false, errf(CodeSourceURLBad, "the original URL must be an http(s) link", nil)
 		}
 	default:
-		return TextureView{}, false, errf(CodeInvalid, "材质来源不合法", nil)
+		return TextureView{}, false, errf(CodeInvalid, "texture source is not one of the allowed values", nil)
 	}
 	if source == "original" {
 		sourceURL = ""
@@ -136,13 +136,13 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 	if desc != "" {
 		if re, _, _ := s.Store.GetOption(ctx, "texture_name_regexp"); re != "" {
 			if rx, err := regexp.Compile(re); err == nil && !rx.MatchString(desc) {
-				return TextureView{}, false, errf(CodeInvalid, "材质备注不符合命名规则", nil)
+				return TextureView{}, false, errf(CodeInvalid, "texture name breaks the site naming rule", nil)
 			}
 		}
 	}
 	limitKB := s.Store.MaxUploadKB(ctx, texture.MaxUploadBytes>>10)
 	if int64(len(png)) > int64(limitKB)<<10 {
-		return TextureView{}, false, errf(CodeTooLarge, "文件超过上传大小上限", texture.ErrTooLarge)
+		return TextureView{}, false, errf(CodeTooLarge, "the file exceeds the upload size limit", texture.ErrTooLarge)
 	}
 	guardData := map[string]any{"filename": meta.Filename}
 	if len(meta.PluginData) > 0 {
@@ -178,7 +178,7 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 	failMsg := ""
 	lockErr := s.Store.WithHashLock(ctx, res.Hash, func(ctx context.Context) error {
 		if err := s.Textures.Save(res); err != nil {
-			failMsg = "保存纹理失败"
+			failMsg = "could not save the texture file"
 			return err
 		}
 		existing, ok, err := s.Store.TextureByOwnerHash(ctx, uid, typ, res.Hash)
@@ -214,7 +214,7 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 			written.tid, addErr = s.Store.AddTexturePrivate(ctx, uid, typ, res.Hash, res.Model, meta)
 		}
 		if addErr != nil {
-			failMsg = "写入纹理失败"
+			failMsg = "could not write the texture"
 			if !errors.Is(addErr, store.ErrDuplicatePublic) {
 				return addErr
 			}
@@ -234,11 +234,11 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 	})
 	if lockErr != nil {
 		if failMsg == "" {
-			failMsg = "写入纹理失败"
+			failMsg = "could not write the texture"
 		}
 		log.Printf("texture upload failed: %v", lockErr)
 		if errors.Is(lockErr, store.ErrBusy) {
-			return TextureView{}, false, errf(CodeBusy, "该材质正被其他操作占用，请稍后重试", lockErr)
+			return TextureView{}, false, errf(CodeBusy, "this texture is locked by another operation, try again shortly", lockErr)
 		}
 		return TextureView{}, false, errf(CodeInternal, failMsg, lockErr)
 	}
@@ -268,7 +268,7 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 }
 
 func (s *Service) duplicatePublic(pub store.TextureRow) *Error {
-	return errDetails(CodeDuplicatePub, "该皮肤已在公共皮肤库", map[string]any{
+	return errDetails(CodeDuplicatePub, "this skin is already in the public library", map[string]any{
 		"textureId": pub.ID,
 		"url":       fmt.Sprintf("%s/skinlib/%d", s.base(), pub.ID),
 	})

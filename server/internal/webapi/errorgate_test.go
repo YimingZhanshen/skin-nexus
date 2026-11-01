@@ -2,7 +2,7 @@ package webapi
 
 // errorgate_test.go is the envelope gate for the player-facing HTTP surface.
 // The machinery lives in internal/errorgate; what is declared here is which
-// functions in these packages emit a response and which argument of each holds
+// functions in these packages emit a response, and which argument of each holds
 // the prose and the code.
 //
 // The account service is watched from here because its prose reaches the browser
@@ -15,8 +15,6 @@ import (
 
 	"skin-nexus/server/internal/errorgate"
 )
-
-const budgetFile = "testdata/error-budget.txt"
 
 var codeOwners = []string{"../i18n", "../account"}
 
@@ -51,8 +49,8 @@ var governed = []errorgate.Scope{
 	},
 }
 
-func TestErrorBudget(t *testing.T) {
-	errorgate.Budget(t, budgetFile, governed...)
+func TestErrorEnvelopeIsClean(t *testing.T) {
+	errorgate.AssertClean(t, governed...)
 }
 
 func TestCodesComeFromCatalogue(t *testing.T) {

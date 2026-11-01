@@ -111,7 +111,7 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !found {
-		writeErrCode(w, http.StatusBadRequest, "未知设置项", i18n.MsgSettingUnknown)
+		writeErrCode(w, http.StatusBadRequest, "unknown setting", i18n.MsgSettingUnknown)
 		return
 	}
 	val := strings.TrimSpace(req.Value)
@@ -119,7 +119,7 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 	case "invite_required", "require_verification", "union_enabled", "union_enable_update", "union_enable_oauth2", "ygg_mojang_fallback", "cdn_enabled":
 		normalized, ok := normalizeBool(val)
 		if !ok {
-			writeErrCode(w, http.StatusBadRequest, "布尔值需为 1/0/true/false/on/off/yes/no", i18n.MsgInvalidValue)
+			writeErrCode(w, http.StatusBadRequest, "boolean must be 1/0/true/false/on/off/yes/no", i18n.MsgInvalidValue)
 			return
 		}
 		val = normalized
@@ -137,18 +137,18 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			if len(p) > 64 || !regexp.MustCompile(`^[A-Za-z0-9-]+$`).MatchString(p) {
-				writeErrCode(w, http.StatusBadRequest, "CDN 头名称只能包含字母、数字与连字符", i18n.MsgInvalidValue)
+				writeErrCode(w, http.StatusBadRequest, "CDN header names allow letters, digits and hyphens only", i18n.MsgInvalidValue)
 				return
 			}
 			switch strings.ToLower(p) {
 			case "authorization", "cookie", "host", "content-length", "content-type":
-				writeErrCode(w, http.StatusBadRequest, "不允许使用该头作为客户端 IP 来源", i18n.MsgInvalidValue)
+				writeErrCode(w, http.StatusBadRequest, "that header may not be used as the client IP source", i18n.MsgInvalidValue)
 				return
 			}
 			clean = append(clean, http.CanonicalHeaderKey(p))
 		}
 		if len(clean) == 0 {
-			writeErrCode(w, http.StatusBadRequest, "至少保留一个 CDN 头", i18n.MsgInvalidValue)
+			writeErrCode(w, http.StatusBadRequest, "keep at least one CDN header", i18n.MsgInvalidValue)
 			return
 		}
 		val = strings.Join(clean, ",")
@@ -158,21 +158,21 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		// fallback, and negatives silently disabled the limiter layers)
 		n, err := strconv.Atoi(val)
 		if err != nil || n < 0 || n > 1000000 {
-			writeErrCode(w, http.StatusBadRequest, "数值需为 0-1000000 的整数", i18n.MsgInvalidValue)
+			writeErrCode(w, http.StatusBadRequest, "value must be an integer between 0 and 1000000", i18n.MsgInvalidValue)
 			return
 		}
 		val = strconv.Itoa(n)
 	case "ygg_search_profile_max":
 		n, err := strconv.Atoi(val)
 		if err != nil || n < 1 || n > 100 {
-			writeErrCode(w, http.StatusBadRequest, "批量查询上限需为 1-100 的整数", i18n.MsgInvalidValue)
+			writeErrCode(w, http.StatusBadRequest, "batch lookup limit must be an integer between 1 and 100", i18n.MsgInvalidValue)
 			return
 		}
 		val = strconv.Itoa(n)
 	case "max_upload_file_size":
 		n, err := strconv.Atoi(val)
 		if err != nil || n < 1 || n > 65536 {
-			writeErrCode(w, http.StatusBadRequest, "上传上限需为 1-65536 的整数（KB）", i18n.MsgInvalidValue)
+			writeErrCode(w, http.StatusBadRequest, "upload cap must be an integer between 1 and 65536 (KB)", i18n.MsgInvalidValue)
 			return
 		}
 		val = strconv.Itoa(n)
@@ -180,14 +180,14 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		switch val {
 		case "official", "cjk", "utf8", "custom":
 		default:
-			writeErrCode(w, http.StatusBadRequest, "角色名规则需为 official/cjk/utf8/custom", i18n.MsgInvalidValue)
+			writeErrCode(w, http.StatusBadRequest, "player name rule must be official/cjk/utf8/custom", i18n.MsgInvalidValue)
 			return
 		}
 	case "union_api_root":
 		// same shape gate as union.Config.Validate: absolute http(s) URL
 		if val != "" {
 			if !strings.HasPrefix(val, "http://") && !strings.HasPrefix(val, "https://") {
-				writeErrCode(w, http.StatusBadRequest, "union_api_root 需为 http(s) 绝对地址", i18n.MsgInvalidValue)
+				writeErrCode(w, http.StatusBadRequest, "union_api_root must be an absolute http(s) URL", i18n.MsgInvalidValue)
 				return
 			}
 		}
@@ -195,20 +195,20 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		switch val {
 		case "full", "off":
 		default:
-			writeErrCode(w, http.StatusBadRequest, "查询邮箱模式需为 full/off", i18n.MsgInvalidValue)
+			writeErrCode(w, http.StatusBadRequest, "email lookup mode must be full or off", i18n.MsgInvalidValue)
 			return
 		}
 	case "union_oauth2_sig_private_key", "union_oauth2_sig_public_key":
 		// PEM sanity only (full parse happens at boot; restart-marked key)
 		if val != "" && (!strings.Contains(val, "-----BEGIN ") || !strings.Contains(val, "-----END ")) {
-			writeErrCode(w, http.StatusBadRequest, "需为 PEM 格式密钥（或留空自动生成）", i18n.MsgInvalidValue)
+			writeErrCode(w, http.StatusBadRequest, "a PEM key is required (leave empty to generate one)", i18n.MsgInvalidValue)
 			return
 		}
 	case "custom_player_name_regexp", "texture_name_regexp":
 		// an unparsable regexp would silently fail-closed at every new write
 		if val != "" {
 			if _, err := regexp.Compile(val); err != nil {
-				writeLogged(r, w, http.StatusBadRequest, i18n.MsgInvalidValue, "正则表达式无效", err)
+				writeLogged(r, w, http.StatusBadRequest, i18n.MsgInvalidValue, "the regular expression is not valid", err)
 				return
 			}
 		}
@@ -216,7 +216,7 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		// 拍板（dev-plan §9）: 仅收 http(s) 绝对地址。留空=回退 env 首启默认，
 		// 所以放行空串。boot 侧 isHTTPBaseURL 再兜一次（防直写 DB）。
 		if val != "" && !strings.HasPrefix(val, "http://") && !strings.HasPrefix(val, "https://") {
-			writeErrCode(w, http.StatusBadRequest, "site_url 需为 http(s) 绝对地址", i18n.MsgInvalidValue)
+			writeErrCode(w, http.StatusBadRequest, "site_url must be an absolute http(s) URL", i18n.MsgInvalidValue)
 			return
 		}
 		val = strings.TrimRight(val, "/")
@@ -225,7 +225,7 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		// marked+DOMPurify 再消毒——渲染实现见 internal/announce）；长度
 		// 上限保持 options TEXT 列诚实。
 		if len(val) > 4096 {
-			writeErrCode(w, http.StatusBadRequest, "公告最长 4096 字符", i18n.MsgTooLong)
+			writeErrCode(w, http.StatusBadRequest, "announcement is limited to 4096 characters", i18n.MsgTooLong)
 			return
 		}
 	}

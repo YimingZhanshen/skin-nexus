@@ -35,7 +35,7 @@ func statFile(p string) (int64, error) {
 func (b *Backend) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	var req struct {
@@ -50,7 +50,7 @@ func (b *Backend) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 	if req.Nickname != "" {
 		req.Nickname = strings.TrimSpace(req.Nickname)
 		if !nickRe.MatchString(req.Nickname) {
-			writeErrCode(w, http.StatusBadRequest, "昵称需为 2-24 位字母/数字/下划线/中文", i18n.MsgNicknameInvalid)
+			writeErrCode(w, http.StatusBadRequest, "nickname must be 2-24 letters, digits, underscores or Chinese characters", i18n.MsgNicknameInvalid)
 			return
 		}
 		changed = true
@@ -58,13 +58,13 @@ func (b *Backend) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 	if req.Email != "" {
 		req.Email = strings.TrimSpace(req.Email)
 		if !mailRe.MatchString(req.Email) {
-			writeErrCode(w, http.StatusBadRequest, "邮箱格式不正确", i18n.MsgEmailInvalid)
+			writeErrCode(w, http.StatusBadRequest, "email address is not valid", i18n.MsgEmailInvalid)
 			return
 		}
 		changed = true
 	}
 	if !changed {
-		writeErrCode(w, http.StatusBadRequest, "没有可更新的字段", i18n.MsgNoFields)
+		writeErrCode(w, http.StatusBadRequest, "nothing to update", i18n.MsgNoFields)
 		return
 	}
 	if err := b.checkGuard(r.Context(), "profile.update.check", plugin.EventPayload{
@@ -77,7 +77,7 @@ func (b *Backend) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 	if req.Nickname != "" {
 		if err := b.Store.UpdateUserNickname(r.Context(), uid, req.Nickname); err != nil {
 			if err == store.ErrDuplicate {
-				writeErrCode(w, http.StatusConflict, "昵称已被占用", i18n.MsgNicknameTaken)
+				writeErrCode(w, http.StatusConflict, "nickname already taken", i18n.MsgNicknameTaken)
 				return
 			}
 			writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
@@ -87,7 +87,7 @@ func (b *Backend) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 	if req.Email != "" {
 		if err := b.Store.UpdateUserEmail(r.Context(), uid, req.Email); err != nil {
 			if err == store.ErrDuplicate {
-				writeErrCode(w, http.StatusConflict, "邮箱已被占用", i18n.MsgEmailTaken)
+				writeErrCode(w, http.StatusConflict, "email already taken", i18n.MsgEmailTaken)
 				return
 			}
 			writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
@@ -117,7 +117,7 @@ func (b *Backend) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleAccountDelete(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	var req struct {
@@ -133,12 +133,12 @@ func (b *Backend) handleAccountDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if perm > 0 {
-		writeErrCode(w, http.StatusForbidden, "管理员账号不可自助删除", i18n.MsgSelfDeleteAdmin)
+		writeErrCode(w, http.StatusForbidden, "admin accounts cannot delete themselves", i18n.MsgSelfDeleteAdmin)
 		return
 	}
 	ok, err := b.Store.VerifyPassword(r.Context(), uid, req.Password)
 	if err != nil || !ok {
-		writeErrCode(w, http.StatusUnauthorized, "密码不正确", i18n.MsgCredentials)
+		writeErrCode(w, http.StatusUnauthorized, "wrong account or password", i18n.MsgCredentials)
 		return
 	}
 	if err := b.Store.DeleteUser(r.Context(), uid); err != nil {
@@ -168,14 +168,14 @@ func (b *Backend) handleAccountDelete(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleAvatarSet(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	var req struct {
 		TextureID int64 `json:"textureId"`
 	}
 	if err := jsonDecode(r, &req); err != nil || req.TextureID <= 0 {
-		writeErrCode(w, http.StatusBadRequest, "textureId 无效", i18n.MsgTextureBadID)
+		writeErrCode(w, http.StatusBadRequest, "textureId is not valid", i18n.MsgTextureBadID)
 		return
 	}
 	owner, err := b.Store.TextureOwner(r.Context(), req.TextureID)
@@ -186,7 +186,7 @@ func (b *Backend) handleAvatarSet(w http.ResponseWriter, r *http.Request) {
 	// Type gate (legacy TextureController.php:141 parity: 422 unless the
 	// texture is a skin) — a cape must never become an avatar.
 	if typ, err := b.Store.TextureType(r.Context(), req.TextureID); err != nil || typ != "skin" {
-		writeErrCode(w, http.StatusUnprocessableEntity, "只有皮肤可以设为头像", i18n.MsgTextureAvatarSkin)
+		writeErrCode(w, http.StatusUnprocessableEntity, "only a skin can be used as the avatar", i18n.MsgTextureAvatarSkin)
 		return
 	}
 	if err := b.Store.SetUserAvatar(r.Context(), uid, req.TextureID); err != nil {
@@ -199,7 +199,7 @@ func (b *Backend) handleAvatarSet(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleAvatarReset(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	if err := b.Store.SetUserAvatar(r.Context(), uid, 0); err != nil {
@@ -216,7 +216,7 @@ func (b *Backend) handleAvatarReset(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) ownPlayer(w http.ResponseWriter, r *http.Request, uid int64) (int64, bool) {
 	pid, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if pid <= 0 {
-		writeErrCode(w, http.StatusBadRequest, "invalid pid", i18n.MsgPlayerBadID)
+		writeErrCode(w, http.StatusBadRequest, "player id is not valid", i18n.MsgPlayerBadID)
 		return 0, false
 	}
 	players, err := b.Store.PlayersByUID(r.Context(), uid)
@@ -229,7 +229,7 @@ func (b *Backend) ownPlayer(w http.ResponseWriter, r *http.Request, uid int64) (
 			return pid, true
 		}
 	}
-	writeErrCode(w, http.StatusNotFound, "角色不存在或不属于你", account.CodeNotFound)
+	writeErrCode(w, http.StatusNotFound, "player not found or not yours", account.CodeNotFound)
 	return 0, false
 }
 
@@ -240,7 +240,7 @@ func (b *Backend) ownPlayer(w http.ResponseWriter, r *http.Request, uid int64) (
 func (b *Backend) handlePlayerRename(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	pid, ok := b.ownPlayer(w, r, uid)
@@ -274,7 +274,7 @@ func (b *Backend) handlePlayerRename(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handlePlayerDeleteSelf(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	pid, ok := b.ownPlayer(w, r, uid)

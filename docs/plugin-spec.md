@@ -201,7 +201,7 @@ skin.route("GET", "/notes", function (req) {
   二进制上传建议 10000）。
 - CSRF：`GET /api/plugins/<name>/_csrf` 获取 token（同时设置 `skin_csrf` cookie）；
   非 GET 的 session/admin 路由必须带 `X-CSRF-Token`。iframe bridge 会自动处理。
-- 错误体：宿主错误统一 `{error, message, code}`；插件返回的 JSON 原样透传。
+- 错误体：宿主错误统一 `{error, message, code}`——`error` 与 `code` 同为稳定码（`internal/i18n` 命名空间），`message` 是英文兜底，中文文案由前端 `errors.<code>` 词典承担；插件返回的 JSON 原样透传。
 - 所有路由必须先在 manifest `routes` 中声明，未声明即加载失败。
 
 ## 8. UI（`ui`）

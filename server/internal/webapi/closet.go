@@ -15,7 +15,7 @@ import (
 func (b *Backend) handleClosetList(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	rows, err := b.Store.ListCloset(r.Context(), uid)
@@ -44,7 +44,7 @@ func (b *Backend) handleClosetList(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleClosetAdd(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	var req struct {
@@ -63,7 +63,7 @@ func (b *Backend) handleClosetAdd(w http.ResponseWriter, r *http.Request) {
 	}
 	created, err := b.Store.AddClosetEntry(r.Context(), uid, req.TextureID, strings.TrimSpace(req.ItemName))
 	if errors.Is(err, store.ErrNotFound) {
-		writeErrCode(w, http.StatusNotFound, "纹理不存在", i18n.MsgTextureNotFound)
+		writeErrCode(w, http.StatusNotFound, "texture not found", i18n.MsgTextureNotFound)
 		return
 	}
 	if err != nil {
@@ -78,7 +78,7 @@ func (b *Backend) handleClosetAdd(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleClosetRename(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -94,7 +94,7 @@ func (b *Backend) handleClosetRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := b.Store.SetClosetItemName(r.Context(), uid, id, strings.TrimSpace(req.ItemName)); errors.Is(err, store.ErrNotFound) {
-		writeErrCode(w, http.StatusNotFound, "条目不存在", i18n.MsgClosetNotFound)
+		writeErrCode(w, http.StatusNotFound, "closet entry not found", i18n.MsgClosetNotFound)
 		return
 	} else if err != nil {
 		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
@@ -107,7 +107,7 @@ func (b *Backend) handleClosetRename(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleClosetRemove(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -116,7 +116,7 @@ func (b *Backend) handleClosetRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := b.Store.RemoveClosetEntry(r.Context(), uid, id); errors.Is(err, store.ErrNotFound) {
-		writeErrCode(w, http.StatusNotFound, "条目不存在", i18n.MsgClosetNotFound)
+		writeErrCode(w, http.StatusNotFound, "closet entry not found", i18n.MsgClosetNotFound)
 		return
 	} else if err != nil {
 		writeErrCode(w, http.StatusInternalServerError, "delete failed", i18n.MsgInternal)

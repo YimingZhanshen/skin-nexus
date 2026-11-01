@@ -42,10 +42,10 @@ const (
 var (
 	ErrMarketOff   = errors.New("theme market is not configured")
 	ErrNotFound    = errors.New("theme package not found in market")
-	ErrUnverified  = errors.New("未签名主题包需显式确认风险（acceptUnverified）")
-	ErrDigestStale = errors.New("上传内容与刚才检查的包不一致，请重试")
-	ErrActiveTheme = errors.New("该主题正在使用中，先切换到其它主题再卸载")
-	ErrBadThemePkg = errors.New("主题包校验失败")
+	ErrUnverified  = errors.New("an unsigned theme package needs explicit consent (acceptUnverified)")
+	ErrDigestStale = errors.New("the uploaded package is not the one that was inspected, retry")
+	ErrActiveTheme = errors.New("this theme is active; switch to another theme before uninstalling")
+	ErrBadThemePkg = errors.New("the theme package failed validation")
 )
 
 type Config struct {
@@ -439,7 +439,7 @@ func (s *Service) installStaged(zipPath, id string) error {
 			_ = os.Rename(backup, final)
 		}
 		_ = s.reg.Rescan()
-		return fmt.Errorf("%w: 解包后未通过主题注册表校验", ErrBadThemePkg)
+		return fmt.Errorf("%w: the unpacked bundle failed registry validation", ErrBadThemePkg)
 	}
 	if hadOld {
 		_ = os.RemoveAll(backup)
@@ -469,5 +469,5 @@ func findPackRoot(dir string) (string, error) {
 			return root, nil
 		}
 	}
-	return "", fmt.Errorf("%w: theme.json 必须在压缩包根（或单层顶层目录）", ErrBadThemePkg)
+	return "", fmt.Errorf("%w: theme.json must sit at the archive root (or inside one top-level folder)", ErrBadThemePkg)
 }

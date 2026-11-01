@@ -228,7 +228,7 @@ type Service struct {
 
 func (s *Service) ensure() *Error {
 	if s == nil || s.Store == nil {
-		return errf(CodeInternal, "账号服务不可用", nil)
+		return errf(CodeInternal, "account service is unavailable", nil)
 	}
 	return nil
 }

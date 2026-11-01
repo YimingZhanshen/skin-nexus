@@ -302,7 +302,7 @@ func (a *API) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			a.accessLog(r, accesslog.Entry{Kind: accesslog.YggRefresh,
 				Outcome: accesslog.OutcomeFail, Detail: "bad_profile_ref uuid=" + ref})
-			writeError(w, http.StatusBadRequest, "IllegalArgumentException", "请求参数不合法")
+			writeError(w, http.StatusBadRequest, "IllegalArgumentException", "invalid arguments")
 			return
 		}
 		pid = p
@@ -385,7 +385,7 @@ func (a *API) handleJoin(w http.ResponseWriter, r *http.Request) {
 		ServerID        string          `json:"serverId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "IllegalArgumentException", "请求参数不合法")
+		writeError(w, http.StatusBadRequest, "IllegalArgumentException", "invalid arguments")
 		return
 	}
 	// authlib-injector sends selectedProfile as a bare UUID string; our own
@@ -395,7 +395,7 @@ func (a *API) handleJoin(w http.ResponseWriter, r *http.Request) {
 	if uu == "" {
 		a.accessLog(r, accesslog.Entry{Kind: accesslog.YggJoin,
 			Outcome: accesslog.OutcomeFail, Detail: "bad_profile_ref serverId=" + req.ServerID})
-		writeError(w, http.StatusBadRequest, "IllegalArgumentException", "请求参数不合法")
+		writeError(w, http.StatusBadRequest, "IllegalArgumentException", "invalid arguments")
 		return
 	}
 	err := a.svc.Join(r.Context(), req.AccessToken, uu, req.ServerID, clientIP(r))
@@ -407,7 +407,7 @@ func (a *API) handleJoin(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, ErrPlayerMismatch):
 		a.accessLog(r, accesslog.Entry{Kind: accesslog.YggJoin,
 			Outcome: accesslog.OutcomeFail, Detail: "player_mismatch uuid=" + uu + " serverId=" + req.ServerID})
-		writeError(w, http.StatusForbidden, "ForbiddenOperationException", "请求的角色与令牌绑定的角色不一致")
+		writeError(w, http.StatusForbidden, "ForbiddenOperationException", "the selected profile is not owned by this access token")
 	case isJoinDenied(err):
 		var denied *JoinDeniedError
 		_ = errors.As(err, &denied)

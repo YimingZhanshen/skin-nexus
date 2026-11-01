@@ -23,7 +23,7 @@ func (s *Service) playerLimit(ctx context.Context, uid int64) int {
 }
 
 func (s *Service) ownershipError() *Error {
-	return errf(CodeNotFound, "角色不存在", nil)
+	return errf(CodeNotFound, "player not found", nil)
 }
 
 func (s *Service) guard(ctx context.Context, kind string, p plugin.EventPayload) *Error {
@@ -63,7 +63,7 @@ func (s *Service) ListPlayers(ctx context.Context, uid int64) ([]Player, *Error)
 	}
 	rows, err := s.Store.PlayersByUID(ctx, uid)
 	if err != nil {
-		return nil, errf(CodeInternal, "读取角色失败", err)
+		return nil, errf(CodeInternal, "could not read the player", err)
 	}
 	out := make([]Player, 0, len(rows))
 	for _, p := range rows {
@@ -136,10 +136,10 @@ func (s *Service) CreatePlayer(ctx context.Context, uid int64, name string, meta
 	}
 	existing, err := s.Store.PlayersByUID(ctx, uid)
 	if err != nil {
-		return PlayerView{}, false, errf(CodeInternal, "读取角色失败", err)
+		return PlayerView{}, false, errf(CodeInternal, "could not read the player", err)
 	}
 	if len(existing) >= s.playerLimit(ctx, uid) {
-		return PlayerView{}, false, errf(CodeLimit, "角色数已达上限", nil)
+		return PlayerView{}, false, errf(CodeLimit, "player limit reached", nil)
 	}
 	pid, uuid, err := s.Store.CreatePlayer(ctx, uid, name)
 	if err != nil {
@@ -148,9 +148,9 @@ func (s *Service) CreatePlayer(ctx context.Context, uid int64, name string, meta
 			return v, false, e
 		}
 		if errors.Is(err, store.ErrDuplicate) {
-			return PlayerView{}, false, errf(CodeNameTaken, "角色名已被占用", err)
+			return PlayerView{}, false, errf(CodeNameTaken, "player name already taken", err)
 		}
-		return PlayerView{}, false, errf(CodeInternal, "创建角色失败", err)
+		return PlayerView{}, false, errf(CodeInternal, "could not create the player", err)
 	}
 	s.audit(ctx, uid, meta, "", "plugin_player_create", map[string]any{"pid": pid, "name": name})
 	if s.EmitEvent != nil {
@@ -189,12 +189,12 @@ func (s *Service) RenamePlayer(ctx context.Context, uid, pid int64, name string,
 	}
 	if err := s.Store.AdminRenamePlayer(ctx, pid, name); err != nil {
 		if errors.Is(err, store.ErrDuplicate) {
-			return PlayerView{}, false, errf(CodeNameTaken, "角色名已被占用", err)
+			return PlayerView{}, false, errf(CodeNameTaken, "player name already taken", err)
 		}
 		if errors.Is(err, store.ErrNotFound) {
 			return PlayerView{}, false, s.ownershipError()
 		}
-		return PlayerView{}, false, errf(CodeInternal, "改名失败", err)
+		return PlayerView{}, false, errf(CodeInternal, "could not rename the player", err)
 	}
 	s.audit(ctx, uid, meta, "player_rename_self", "plugin_player_rename", map[string]any{
 		"pid": pid, "name": name, "oldName": p.Name,
@@ -221,7 +221,7 @@ func (s *Service) DeletePlayer(ctx context.Context, uid, pid int64, meta CallMet
 		if errors.Is(err, store.ErrNotFound) {
 			return s.ownershipError()
 		}
-		return errf(CodeInternal, "删除失败", err)
+		return errf(CodeInternal, "delete failed", err)
 	}
 	s.audit(ctx, uid, meta, "player_delete_self", "plugin_player_delete", map[string]any{
 		"pid": pid, "name": name, "uuid": uuid,
@@ -239,7 +239,7 @@ func (s *Service) SetTexture(ctx context.Context, uid, pid int64, kind string, t
 		return PlayerView{}, e
 	}
 	if kind != "skin" && kind != "cape" {
-		return PlayerView{}, errf(CodeTypeMismatch, "纹理类型必须是 skin 或 cape", nil)
+		return PlayerView{}, errf(CodeTypeMismatch, "texture type must be skin or cape", nil)
 	}
 	if _, e := s.GetPlayer(ctx, uid, pid); e != nil {
 		return PlayerView{}, e
@@ -247,16 +247,16 @@ func (s *Service) SetTexture(ctx context.Context, uid, pid int64, kind string, t
 	if tid != 0 {
 		owner, err := s.Store.TextureOwner(ctx, tid)
 		if err != nil || owner != uid {
-			return PlayerView{}, errf(CodeNotOwned, "纹理不属于你", err)
+			return PlayerView{}, errf(CodeNotOwned, "you do not own this texture", err)
 		}
 		typ, err := s.Store.TextureType(ctx, tid)
 		if err != nil || typ != kind {
-			return PlayerView{}, errf(CodeTypeMismatch, "纹理类型不匹配", err)
+			return PlayerView{}, errf(CodeTypeMismatch, "texture type does not match this operation", err)
 		}
 	}
 	skinTID, capeTID, err := s.Store.PlayerTextureIDs(ctx, pid)
 	if err != nil {
-		return PlayerView{}, errf(CodeInternal, "读取角色失败", err)
+		return PlayerView{}, errf(CodeInternal, "could not read the player", err)
 	}
 	if kind == "skin" {
 		skinTID = tid
@@ -264,7 +264,7 @@ func (s *Service) SetTexture(ctx context.Context, uid, pid int64, kind string, t
 		capeTID = tid
 	}
 	if err := s.Store.SetPlayerTextures(ctx, pid, skinTID, capeTID); err != nil {
-		return PlayerView{}, errf(CodeInternal, "更新外观失败", err)
+		return PlayerView{}, errf(CodeInternal, "could not update the appearance", err)
 	}
 	s.audit(ctx, uid, meta, "", "plugin_player_texture", map[string]any{
 		"pid": pid, "kind": kind, "textureId": tid,
@@ -279,7 +279,7 @@ func (s *Service) Account(ctx context.Context, uid int64) (AccountView, *Error) 
 	}
 	u, err := s.Store.UserByID(ctx, uid)
 	if err != nil {
-		return AccountView{}, errf(CodeInternal, "读取账号失败", err)
+		return AccountView{}, errf(CodeInternal, "could not read the account", err)
 	}
 	perm, _ := s.Store.UserPermission(ctx, uid)
 	players, _ := s.Store.PlayersByUID(ctx, uid)

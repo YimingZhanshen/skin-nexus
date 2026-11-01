@@ -28,16 +28,16 @@ func sameOriginForAdmin(r *http.Request) bool {
 func (b *Backend) pluginSuper(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	actor := actorUID(r)
 	if actor == 0 {
-		writeErrCode(w, http.StatusForbidden, "该操作仅支持超级管理员网页会话", i18n.MsgWebSessionRequired)
+		writeErrCode(w, http.StatusForbidden, "this action needs a super admin web session", i18n.MsgWebSessionRequired)
 		return 0, false
 	}
 	perm, err := actorPermission(r.Context(), b, actor)
 	if err != nil || perm != 2 {
-		writeErrCode(w, http.StatusForbidden, "需要超级管理员（permission=2）账号", i18n.MsgSuperAdminRequired)
+		writeErrCode(w, http.StatusForbidden, "a super admin account (permission=2) is required", i18n.MsgSuperAdminRequired)
 		return 0, false
 	}
 	if !sameOriginForAdmin(r) {
-		writeErrCode(w, http.StatusForbidden, "请求来源校验失败", i18n.MsgOriginMismatch)
+		writeErrCode(w, http.StatusForbidden, "origin check failed", i18n.MsgOriginMismatch)
 		return 0, false
 	}
 	return actor, true
@@ -51,7 +51,7 @@ func (b *Backend) handlePluginRollback(w http.ResponseWriter, r *http.Request) {
 	ctx := plugin.WithActor(r.Context(), actor)
 	if err := b.plugins.Host.Rollback(ctx, r.PathValue("name")); err != nil {
 		if errors.Is(err, plugin.ErrNoRollback) {
-			writeErrCode(w, http.StatusConflict, "没有可回滚的版本", i18n.MsgPluginNoRollback)
+			writeErrCode(w, http.StatusConflict, "there is no version to roll back to", i18n.MsgPluginNoRollback)
 			return
 		}
 		writeLogged(r, w, http.StatusBadGateway, i18n.MsgPluginOpFailed, "plugin operation failed", err)

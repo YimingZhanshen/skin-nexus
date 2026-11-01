@@ -37,7 +37,7 @@ func (s *Service) ListLibrary(ctx context.Context, uid int64, opt store.SkinlibO
 	}
 	rows, total, err := s.Store.SkinlibList(ctx, opt)
 	if err != nil {
-		return LibraryPage{}, errf(CodeInternal, "读取皮肤库失败", err)
+		return LibraryPage{}, errf(CodeInternal, "could not read the skin library", err)
 	}
 	page := opt.Page
 	if page <= 0 {
@@ -57,12 +57,12 @@ func (s *Service) GetLibrary(ctx context.Context, uid, tid int64) (LibraryItem, 
 	row, err := s.Store.SkinlibOne(ctx, tid, uid, false)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return LibraryItem{}, errf(CodeLibraryNotFnd, "纹理不存在", err)
+			return LibraryItem{}, errf(CodeLibraryNotFnd, "texture not found", err)
 		}
-		return LibraryItem{}, errf(CodeInternal, "读取纹理失败", err)
+		return LibraryItem{}, errf(CodeInternal, "could not read the texture", err)
 	}
 	if !row.Public && row.UID != uid {
-		return LibraryItem{}, errf(CodeLibraryNotFnd, "纹理不存在", nil)
+		return LibraryItem{}, errf(CodeLibraryNotFnd, "texture not found", nil)
 	}
 	return s.libraryItem(ctx, uid, row), nil
 }
@@ -76,12 +76,12 @@ func (s *Service) ImportLibraryTexture(ctx context.Context, uid, tid int64, meta
 	row, err := s.Store.SkinlibOne(ctx, tid, uid, false)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return TextureView{}, false, errf(CodeLibraryNotFnd, "纹理不存在", err)
+			return TextureView{}, false, errf(CodeLibraryNotFnd, "texture not found", err)
 		}
-		return TextureView{}, false, errf(CodeInternal, "读取纹理失败", err)
+		return TextureView{}, false, errf(CodeInternal, "could not read the texture", err)
 	}
 	if !row.Public && row.UID != uid {
-		return TextureView{}, false, errf(CodeLibraryNotFnd, "纹理不存在", nil)
+		return TextureView{}, false, errf(CodeLibraryNotFnd, "texture not found", nil)
 	}
 	if existing, ok, err := s.Store.TextureByOwnerHash(ctx, uid, row.Type, row.Hash); err == nil && ok {
 		return s.textureRowView(ctx, existing), false, nil
@@ -94,7 +94,7 @@ func (s *Service) ImportLibraryTexture(ctx context.Context, uid, tid int64, meta
 		Description: row.Name, DetailMD: row.DetailMD, Source: row.Source, SourceURL: row.SourceURL,
 	})
 	if err != nil {
-		return TextureView{}, false, errf(CodeInternal, "导入纹理失败", err)
+		return TextureView{}, false, errf(CodeInternal, "could not import the texture", err)
 	}
 	s.audit(ctx, uid, meta, "", "plugin_texture_import", map[string]any{
 		"tid": newTID, "sourceTid": tid, "hash": row.Hash, "type": row.Type,

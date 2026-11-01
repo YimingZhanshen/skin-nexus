@@ -21,10 +21,10 @@ func (s *Service) DeleteTexture(ctx context.Context, actorUID, tid, ownerUID int
 	}
 	hash, typ, err := s.Store.TextureContentRef(ctx, tid)
 	if errors.Is(err, store.ErrNotFound) {
-		return errf(CodeNotFound, "纹理不存在", err)
+		return errf(CodeNotFound, "texture not found", err)
 	}
 	if err != nil {
-		return errf(CodeInternal, "读取纹理失败", err)
+		return errf(CodeInternal, "could not read the texture", err)
 	}
 
 	if ge := s.guard(ctx, "texture.delete.check", plugin.EventPayload{
@@ -53,23 +53,23 @@ func (s *Service) DeleteTexture(ctx context.Context, actorUID, tid, ownerUID int
 	})
 	switch {
 	case errors.Is(lockErr, store.ErrNotFound):
-		return errf(CodeNotFound, "纹理不存在", lockErr)
+		return errf(CodeNotFound, "texture not found", lockErr)
 	case errors.Is(lockErr, store.ErrForbidden):
-		return errf(CodeForbidden, "只有上传者可以删除", lockErr)
+		return errf(CodeForbidden, "only the uploader may delete this texture", lockErr)
 	case errors.Is(lockErr, store.ErrTextureInUse):
 		// Naming the blockers is the point: "in use" without a who is
 		// something the site owner cannot act on.
-		return errDetails(CodeInUse, "材质仍被使用", map[string]any{
+		return errDetails(CodeInUse, "the texture is still in use", map[string]any{
 			"players":     res.Refs.Players,
 			"playerCount": len(res.Refs.Players),
 			"closets":     res.Refs.Closets,
 			"avatars":     res.Refs.Avatars,
 		})
 	case errors.Is(lockErr, store.ErrBusy):
-		return errf(CodeBusy, "该材质正被其他操作占用，请稍后重试", lockErr)
+		return errf(CodeBusy, "this texture is locked by another operation, try again shortly", lockErr)
 	case lockErr != nil:
 		log.Printf("texture delete failed: %v", lockErr)
-		return errf(CodeInternal, "删除纹理失败", lockErr)
+		return errf(CodeInternal, "could not delete the texture", lockErr)
 	}
 
 	if s.EmitEvent != nil {

@@ -78,10 +78,10 @@ func TestErrorEnvelopeShape(t *testing.T) {
 			if env.Message == "" {
 				t.Error("`message` is empty: an unknown code would render as nothing")
 			}
-			// `code` is optional until the budget in testdata/error-budget.txt
-			// reaches zero, but a code that is present is already API surface —
-			// a malformed one is invisible to every language pack.
-			if env.Code != "" && !errorgate.CodePattern.MatchString(env.Code) {
+			// Every branch carries a code now (errorgate_test.go fails the build
+			// otherwise); this is the runtime proof that the gate's static rule
+			// actually reaches the wire for these routes.
+			if !errorgate.CodePattern.MatchString(env.Code) {
 				t.Errorf("code %q is not a namespaced key (see internal/i18n)", env.Code)
 			}
 		})
