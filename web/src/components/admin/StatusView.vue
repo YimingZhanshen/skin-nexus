@@ -91,7 +91,7 @@ onMounted(async () => {
       <section class="status-section">
         <h3>{{ t('admin.statusDepsTitle') }}</h3>
         <div class="status-grid">
-          <div class="status-item"><span class="k">{{ t('admin.statusMySQL') }}</span><span class="v">{{ show(status.mysqlVersion) }}</span></div>
+          <div class="status-item"><span class="k">{{ t('admin.statusDatabase') }}</span><span class="v">{{ show(status.dbEngine) }} {{ show(status.dbVersion) }}</span></div>
           <div class="status-item"><span class="k">{{ t('admin.statusMigration') }}</span><span class="v">{{ show(status.migration) }}</span></div>
         </div>
         <div class="status-badges">

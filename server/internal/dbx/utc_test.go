@@ -2,6 +2,7 @@ package dbx
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -149,6 +150,81 @@ func TestTimeArgsPassThroughOnInstantEngines(t *testing.T) {
 	}
 	if in[0].(time.Time).Location() != east {
 		t.Error("normalisation mutated the caller's slice")
+	}
+}
+
+// TestSQLiteNormalisesPointerAndNullTimeArgs covers the shapes an instant can
+// arrive in. The plugin KV passes *time.Time for an expiry, and a normaliser
+// that only matched time.Time let an expired key stay readable on SQLite while
+// MySQL rejected the same row — the store tests caught it, this test pins it.
+func TestSQLiteNormalisesPointerAndNullTimeArgs(t *testing.T) {
+	dsn := filepath.Join(t.TempDir(), "ptr.db")
+	db, err := Open(context.Background(), string(dialect.SQLite), dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, `CREATE TABLE k (id INTEGER PRIMARY KEY, exp DATETIME NULL)`); err != nil {
+		t.Fatal(err)
+	}
+
+	east := time.FixedZone("CST", 8*3600)
+	past := time.Date(2026, 11, 1, 5, 0, 0, 0, east) // 21:00 UTC the day before
+	if _, err := db.ExecContext(ctx, `INSERT INTO k (exp) VALUES (?)`, &past); err != nil {
+		t.Fatalf("pointer argument: %v", err)
+	}
+	var raw string
+	if err := db.QueryRowContext(ctx, `SELECT CAST(exp AS TEXT) FROM k WHERE id = 1`).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(raw, "+0000 UTC") {
+		t.Errorf("*time.Time stored as %q, want a UTC rendering", raw)
+	}
+	now := time.Date(2026, 11, 1, 22, 0, 0, 0, time.UTC)
+	var live int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM k WHERE exp > ?`, now).Scan(&live); err != nil {
+		t.Fatal(err)
+	}
+	if live != 0 {
+		t.Errorf("a past deadline bound as *time.Time compared as future (%d rows live)", live)
+	}
+
+	// A +08 instant that is genuinely in the future must compare as future once
+	// it is stored in UTC — the shape alone is not the point, the ordering is.
+	pastEast := time.Date(2026, 11, 1, 23, 0, 0, 0, east)  // 15:00 UTC, before `now`
+	futureEast := time.Date(2026, 11, 2, 7, 0, 0, 0, east) // 23:00 UTC, after `now`
+	if _, err := db.ExecContext(ctx, `INSERT INTO k (exp) VALUES (?)`, sql.NullTime{Time: pastEast, Valid: true}); err != nil {
+		t.Fatalf("NullTime argument: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO k (exp) VALUES (?)`, sql.NullTime{Time: futureEast, Valid: true}); err != nil {
+		t.Fatalf("NullTime argument: %v", err)
+	}
+	for _, id := range []int{2, 3} {
+		if err := db.QueryRowContext(ctx, `SELECT CAST(exp AS TEXT) FROM k WHERE id = ?`, id).Scan(&raw); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasSuffix(raw, "+0000 UTC") {
+			t.Errorf("NullTime row %d stored as %q, want a UTC rendering", id, raw)
+		}
+	}
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM k WHERE exp > ?`, now).Scan(&live); err != nil {
+		t.Fatal(err)
+	}
+	if live != 1 {
+		t.Errorf("live NullTime rows = %d, want only the genuinely future one", live)
+	}
+
+	// NULL stays NULL: normalising must not invent a timestamp.
+	if _, err := db.ExecContext(ctx, `INSERT INTO k (exp) VALUES (?)`, (*time.Time)(nil)); err != nil {
+		t.Fatal(err)
+	}
+	var nullCount int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM k WHERE exp IS NULL`).Scan(&nullCount); err != nil {
+		t.Fatal(err)
+	}
+	if nullCount != 1 {
+		t.Errorf("nil pointer rows = %d, want 1", nullCount)
 	}
 }
 

@@ -45,11 +45,11 @@ func TestIntegrationEmailVerifyUnknownAndExpired(t *testing.T) {
 	if err := m.CreateEmailVerifyToken(ctx, uid, stale, time.Hour); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	// Rewind on the DB clock — the same clock the validator reads, so no
-	// Go/MySQL timezone assumption is involved.
+	// Rewind with the same clock the validator reads (the store's clock), so no
+	// engine's date arithmetic is involved.
 	if _, err := m.db.ExecContext(ctx,
-		`UPDATE email_verify_tokens SET expires_at = NOW(3) - INTERVAL 1 MINUTE WHERE token_hash = ?`,
-		stale); err != nil {
+		`UPDATE email_verify_tokens SET expires_at = ? WHERE token_hash = ?`,
+		time.Now().UTC().Add(-time.Minute), stale); err != nil {
 		t.Fatalf("rewind: %v", err)
 	}
 	if _, err := m.ConsumeEmailVerifyToken(ctx, stale); !errors.Is(err, ErrNotFound) {

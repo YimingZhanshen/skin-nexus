@@ -570,7 +570,7 @@
     "statusTitle": "Status",
     "statusVersion": "Server",
     "statusGo": "Go",
-    "statusMySQL": "MySQL",
+    "statusDatabase": "Database",
     "statusMigration": "Migration",
     "statusUnion": "Union",
     "statusAppearance": "Appearance",

@@ -570,7 +570,7 @@
     "statusTitle": "运行状态",
     "statusVersion": "服务版本",
     "statusGo": "Go",
-    "statusMySQL": "MySQL",
+    "statusDatabase": "数据库",
     "statusMigration": "迁移版本",
     "statusUnion": "Union 模块",
     "statusAppearance": "外观模块",

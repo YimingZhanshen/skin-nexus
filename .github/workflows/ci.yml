@@ -95,6 +95,83 @@ jobs:
       - name: Integration test
         run: go test -tags integration ./internal/store/
 
+  # The same suite against the other engines the store now claims to speak.
+  # MariaDB is on the MySQL wire, so it is the cheap way to catch a statement
+  # that MySQL accepted only because of its own extensions; PostgreSQL and
+  # SQLite exercise dialect/dbx for real. MySQL-only fixtures skip themselves
+  # with a reason rather than passing quietly (see
+  # server/internal/store/engine_gate_integration_test.go).
+  integration-mariadb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        mariadb: ['11.4', '10.11']
+    services:
+      mariadb:
+        image: mariadb:${{ matrix.mariadb }}
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: skin_nexus_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mariadb-admin ping -uroot -proot"
+          --health-interval=5s --health-timeout=3s --health-retries=20
+    defaults:
+      run:
+        working-directory: server
+    env:
+      SKIN_TEST_DSN: 'root:root@tcp(127.0.0.1:3306)/skin_nexus_test?parseTime=true'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26'
+          cache-dependency-path: server/go.sum
+      - name: Integration test
+        run: go test -tags integration ./internal/store/
+
+  integration-portable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: postgres
+            dsn: 'postgres://skin:skin@127.0.0.1:5432/skin_nexus_test?sslmode=disable'
+          - label: sqlite
+            dsn: 'sqlite:/tmp/skin-nexus-test/engine.db'
+    name: integration (${{ matrix.label }})
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: skin
+          POSTGRES_PASSWORD: skin
+          POSTGRES_DB: skin_nexus_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U skin -d skin_nexus_test"
+          --health-interval=5s --health-timeout=3s --health-retries=20
+    defaults:
+      run:
+        working-directory: server
+    env:
+      SKIN_TEST_DSN: ${{ matrix.dsn }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26'
+          cache-dependency-path: server/go.sum
+      - name: Integration test
+        # The SQLite leg starts from an empty file every run; the PostgreSQL
+        # service is also up for that leg and simply goes unused.
+        run: |
+          rm -rf /tmp/skin-nexus-test && mkdir -p /tmp/skin-nexus-test
+          go test -tags integration ./internal/store/
+
   web:
     runs-on: ubuntu-latest
     timeout-minutes: 10

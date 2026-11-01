@@ -264,6 +264,19 @@ func (e Engine) Concat(parts ...string) string {
 	return strings.Join(parts, " || ")
 }
 
+// VersionQuery reports the engine's own version string. The admin status page
+// shows it, so "which database is this site on" is answerable per engine
+// instead of being a MySQL-only function call.
+func (e Engine) VersionQuery() string {
+	switch e {
+	case SQLite:
+		return `SELECT sqlite_version()`
+	case Postgres:
+		return `SELECT version()`
+	}
+	return `SELECT VERSION()`
+}
+
 // SessionLock is the cross-connection advisory lock, keyed by name: the
 // primitive for work that straddles the database (a texture file written
 // before its row exists, deleted once no row refers to it). Both statements

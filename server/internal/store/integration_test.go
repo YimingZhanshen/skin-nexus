@@ -241,7 +241,12 @@ func TestIntegrationJobsLifecycle(t *testing.T) {
 	}
 
 	// A +08 MySQL session must not delay resume/requeue by 8h: scheduling
-	// writes use the Go clock, not SQL NOW(3).
+	// writes use the Go clock, not SQL NOW(3). Only MySQL has a session
+	// timezone to fight with, so the other engines stop here.
+	if m.Engine() != dialect.MySQL {
+		t.Logf("%s has no MySQL session timezone; the +08 leg does not apply", m.Engine())
+		return
+	}
 	dbTZ, err := sql.Open("mysql", os.Getenv("SKIN_TEST_DSN")+"&time_zone=%27%2B08%3A00%27")
 	if err != nil {
 		t.Fatal(err)
@@ -266,6 +271,7 @@ func TestIntegrationJobsLifecycle(t *testing.T) {
 
 func TestIntegrationSessionTimezoneUTC(t *testing.T) {
 	m := openTestStore(t)
+	requireEngines(t, m, dialect.MySQL) // @@session.time_zone is a MySQL view
 	var tz string
 	if err := m.DB().QueryRowContext(context.Background(), "SELECT @@session.time_zone").Scan(&tz); err != nil {
 		t.Fatal(err)
@@ -753,9 +759,9 @@ func TestIntegrationSystemFacts(t *testing.T) {
 	m := openTestStore(t)
 	ctx := context.Background()
 
-	ver, err := m.MySQLVersion(ctx)
+	ver, err := m.ServerVersion(ctx)
 	if err != nil || ver == "" {
-		t.Fatalf("MySQLVersion = %q %v (want non-empty)", ver, err)
+		t.Fatalf("ServerVersion = %q %v (want non-empty)", ver, err)
 	}
 	// watermark = highest applied file (0009_schema_align.sql is the last
 	// migration in the chain today)
@@ -1578,6 +1584,9 @@ func TestIntegrationTextureDelete(t *testing.T) {
 // here.
 func TestIntegrationHashLockMutualExclusion(t *testing.T) {
 	m := openTestStore(t)
+	// dialect.SessionLock reports no advisory lock for SQLite, so there is
+	// nothing to be exclusive about: WithHashLock runs the body directly.
+	requireEngines(t, m, dialect.MySQL, dialect.Postgres)
 	ctx := context.Background()
 	hash := strings.Repeat("1", 64)
 

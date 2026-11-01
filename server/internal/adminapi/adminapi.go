@@ -271,14 +271,14 @@ func (b *Backend) handleOverview(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleStatus: read-only runtime facts for the 运行状态 page — build
-// version, Go version, MySQL server version, applied-migration watermark,
+// version, Go version, database server version and engine, applied-migration watermark,
 // and which optional modules are mounted (union / appearance / oidc are
 // wiring-time facts, so no extra deps needed beyond the existing fields).
 func (b *Backend) handleStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	mysqlVer, err := b.Store.MySQLVersion(ctx)
+	dbVer, err := b.Store.ServerVersion(ctx)
 	if err != nil {
-		mysqlVer = "?" // degraded display; the page still renders
+		dbVer = "?" // degraded display; the page still renders
 	}
 	migVer, err := b.Store.MigrationVersion(ctx)
 	if err != nil {
@@ -302,10 +302,11 @@ func (b *Backend) handleStatus(w http.ResponseWriter, r *http.Request) {
 		envName = "production"
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"version":      b.Version,
-		"goVersion":    runtime.Version(),
-		"mysqlVersion": mysqlVer,
-		"migration":    migVer,
+		"version":   b.Version,
+		"goVersion": runtime.Version(),
+		"dbVersion": dbVer,
+		"dbEngine":  string(b.Store.Engine()),
+		"migration": migVer,
 		"build": map[string]string{
 			"version": b.Version,
 			"commit":  b.BuildCommit,

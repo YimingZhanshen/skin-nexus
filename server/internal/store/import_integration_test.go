@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"skin-nexus/server/internal/dialect"
+
 	"skin-nexus/server/internal/migrate"
 
 	"golang.org/x/crypto/bcrypt"
@@ -52,6 +54,10 @@ CREATE TABLE legacy_invitation_codes (
 
 func TestIntegrationImport(t *testing.T) {
 	m := openTestStore(t)
+	// The legacy fixture is written in MySQL DDL because blessing's shipped
+	// schema is MySQL; importing from a SQLite/PostgreSQL legacy site is the
+	// importer's own next step, not something this fixture can prove.
+	requireEngines(t, m, dialect.MySQL)
 	ctx := context.Background()
 	for _, stmt := range splitDDL(legacyDDL) {
 		if _, err := m.db.ExecContext(ctx, stmt); err != nil {

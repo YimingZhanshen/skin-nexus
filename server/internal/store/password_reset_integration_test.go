@@ -48,8 +48,8 @@ func TestIntegrationPasswordResetUnknownAndExpired(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 	if _, err := m.db.ExecContext(ctx,
-		`UPDATE password_reset_tokens SET expires_at = NOW(3) - INTERVAL 1 MINUTE WHERE token_hash = ?`,
-		expired); err != nil {
+		`UPDATE password_reset_tokens SET expires_at = ? WHERE token_hash = ?`,
+		time.Now().UTC().Add(-time.Minute), expired); err != nil {
 		t.Fatalf("rewind: %v", err)
 	}
 	if _, err := m.ConsumePasswordResetToken(ctx, expired); !errors.Is(err, ErrNotFound) {

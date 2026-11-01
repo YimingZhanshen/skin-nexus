@@ -5,10 +5,12 @@ import "context"
 // System facts for the admin status page (B1, 2026-10-24): read-only,
 // MySQL 5.7-safe (no window functions, no CTEs).
 
-// MySQLVersion reports the server version string (e.g. "5.7.44-log").
-func (m *Mysql) MySQLVersion(ctx context.Context) (string, error) {
+// ServerVersion reports the database server's own version string ("5.7.44-log",
+// "PostgreSQL 16.4 …", "3.50.2"). The panel shows it next to the engine name, so
+// a station operator can tell which of the three they are sitting on.
+func (m *Mysql) ServerVersion(ctx context.Context) (string, error) {
 	var v string
-	err := m.db.QueryRowContext(ctx, `SELECT VERSION()`).Scan(&v)
+	err := m.db.QueryRowContext(ctx, m.db.Dialect().VersionQuery()).Scan(&v)
 	return v, err
 }
 

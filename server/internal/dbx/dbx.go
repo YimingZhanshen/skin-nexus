@@ -148,24 +148,33 @@ func (t *Tx) QueryRowContext(ctx context.Context, query string, args ...any) *sq
 // different strings — and text comparison silently stops being time
 // comparison. Forcing UTC here is what makes the DDL defaults
 // (`strftime(... +0000 UTC','now')`) and every bound value order alike. MySQL
-// and PostgreSQL store instants and need nothing, so the slice passes through
-// untouched.
+// and PostgreSQL store instants and need nothing, so they pass through.
+//
+// Three shapes carry an instant into this project: time.Time, *time.Time (the
+// nullable expiries in the plugin KV) and sql.NullTime. A previous version
+// matched only the first, and an expired key bound as *time.Time stayed
+// readable on SQLite — so all three are handled, and the test pins it.
 func (d *DB) args(args []any) []any {
 	if d.eng != dialect.SQLite {
 		return args
 	}
-	var out []any
-	for i, a := range args {
-		if t, ok := a.(time.Time); ok {
-			if out == nil {
-				out = make([]any, len(args))
-				copy(out, args)
+	out := make([]any, len(args))
+	copy(out, args)
+	for i, a := range out {
+		switch v := a.(type) {
+		case time.Time:
+			out[i] = v.UTC()
+		case *time.Time:
+			if v != nil {
+				utc := v.UTC()
+				out[i] = &utc
 			}
-			out[i] = t.UTC()
+		case sql.NullTime:
+			if v.Valid {
+				v.Time = v.Time.UTC()
+				out[i] = v
+			}
 		}
-	}
-	if out == nil {
-		return args
 	}
 	return out
 }

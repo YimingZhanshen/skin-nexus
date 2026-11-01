@@ -92,8 +92,8 @@ func TestIntegrationAccessLogInsertListPurge(t *testing.T) {
 
 	// Retention purge: rewind one row past 90 days, purge, assert only it died.
 	if _, err := m.db.ExecContext(ctx,
-		`UPDATE access_logs SET created_at = NOW(3) - INTERVAL 100 DAY WHERE kind = ?`,
-		accesslog.UnionOut); err != nil {
+		`UPDATE access_logs SET created_at = ? WHERE kind = ?`,
+		time.Now().UTC().Add(-100*24*time.Hour), accesslog.UnionOut); err != nil {
 		t.Fatalf("rewind: %v", err)
 	}
 	deleted, err := m.PurgeAccessLogs(ctx, 90*24*time.Hour)
