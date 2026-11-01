@@ -17,7 +17,7 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: '1.26'
@@ -87,7 +87,7 @@ jobs:
     env:
       SKIN_TEST_DSN: 'root:root@tcp(127.0.0.1:3306)/skin_nexus_test?parseTime=true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: '1.26'
@@ -102,7 +102,7 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -141,7 +141,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: github/codeql-action/init@v4
         with:
           languages: go, javascript-typescript
@@ -155,7 +155,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -171,7 +171,7 @@ jobs:
     timeout-minutes: 10
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install
         # Pinned: a silent upgrade that starts flagging new issue classes would
         # turn an advisory job into noise nobody reads.
@@ -192,7 +192,7 @@ jobs:
     permissions:
       packages: write   # ghcr push
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # image names must be lowercase; github.repository keeps the owner's case
       - name: Resolve lowercase image name
         run: echo "IMAGE=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"

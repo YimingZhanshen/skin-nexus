@@ -4,14 +4,16 @@
 
 ## 2026-11-02
 
-- **CodeQL 首轮 15 条告警全部分诊**（三路代理并行读码 + 本人逐条复核证据后定性）：**4 条改代码，11 条按误报关闭并写明依据**（告警页每条都留了 `文件:行` 的理由）。
+- **CodeQL 首轮清零**：15 条全部处置完——**4 条改代码后由扫描自动关闭**（zip 落点两处、SPA 资源探测、`?next=` 跳转），
+  **11 条按误报关闭**，每条在告警上留了 `文件:line` 的判定说明。前端那条第二版改用 `new URL(next, location.origin)`
+  比 origin，而不是手写前缀正则——扫描器认这个形状，而且浏览器怎么解析就怎么判，`javascript:`/`data:` 也因
+  origin 为 null 一起挡掉；生产页面实测矩阵见提交说明。分诊由三路只读代理并行读码 + 本人逐条复核行号后定性。
   - 改：`plugin/archive.go` 补目录穿越的落点校验（同 `signedpkg/extract.go` 已有的那段，此前**只有那一个**提取器有）；
     `signedpkg/extract.go` 把校验提到 `IsDir` 分支之前——原来 `os.MkdirAll` 跑在校验前面，防线漏掉了目录项；
     `cmd/skin-nexus/main.go` 的 SPA 资源探测先做包含性判断再 `os.Stat`（只读探测，但越界路径会泄露目录外文件是否存在）；
-    `plugin/assets.go` 拒绝控制字符与 NUL（保留 unicode 文件名，插件作者可以用非 ASCII 资源名）；
-    `web/src/App.vue` 的 `?next=` 同源判断补上反斜杠——`/\evil.com` 以 `/` 开头、不是 `//`，但 WHATWG 解析会当成跨域，登录后 token 上下文会外泄。
-  - 关：`mailer.go` 的 email injection（收件人经 `mailRe` + `checkAddr` 双重拒绝 CR/LF，主题 Q-encoding、正文 base64，且已有
-    `TestSendRejectsHeaderInjection`）；`compress.go` 的反射 XSS（该行走的是 gzip 透传，HTML 全部经 `html/template`，
+    `plugin/assets.go` 拒绝控制字符与 NUL（保留 unicode 文件名，插件作者可以用非 ASCII 资源名）。
+  - 关：`mailer.go` 的 email injection（收件人经 `mailRe` + `checkAddr` 双重拒绝 CR/LF，主题 Q-encoding、正文 base64，
+    且已有 `TestSendRejectsHeaderInjection`）；`compress.go` 的反射 XSS（该行走的是 gzip 透传，HTML 全部经 `html/template`，
     唯一反射路径是标准库 `http.Redirect` 自带转义）；`main.go` 的开放重定向（跳转目标是站长配置项并写入时校验，
     请求参数只贡献 `?` 之后且逐个 `QueryEscape`）；三条 legacy 密码哈希（MD5/SHA256/SHA512 只用于**比对**
     blessing 存量哈希，`hmac.Equal` 消费，新密码一律 argon2id，且只有 `password_algo LIKE 'legacy%'` 的行会走到这里）；
@@ -19,6 +21,21 @@
   - 没有为了讨好扫描器改写已经足够强的守卫链：`plugin/assets.go` 的 `path.Clean` + 段检查 + 两次 `filepath.Rel`
     包含性 + `EvalSymlinks` + `Lstat` 只允许常规文件，是读得懂的防御，改成正则白名单反而会让 CodeQL 满意而让代码变差，
     所以那两条走带理由的关闭。
+- **Dependabot 告警首轮 6 条全部关闭（`not_used`）**，判定依据如下（**Dependabot 告警的 API 没有评论字段**，
+  只有 code-scanning 有，所以理由记在这里而不是告警上）：
+  - `vue-i18n` / `@intlify/core-base` / `@intlify/shared` 的 5 条（3 High + 2 Low）：两条 advisory 都关于
+    `escapeParameter` 的转义不完全。本仓库**从未开启该选项**（`web/src/i18n.js` 的 `createI18n` 只有
+    legacy/locale/fallbackLocale/messages），且**全仓没有 `srcdoc`**——插件界面是 `:src` URL 加载
+    （`web/src/components/plugin/PluginFrame.vue:203`）；翻译结果只走文本插值（`web/src/components/ToastHub.vue:41`
+    `{{ x.message }}`），带进来的服务端参数（角色名、计数）由 Vue 转义。`v-html` 的几处分别是硬编码品牌 SVG、
+    来自 `navIcons` 常量表的图标路径、以及 markdown-it + DOMPurify 之后的公告/详情正文。
+    升到 11 仍按计划做（PR #5），但动机是 `npm audit` 的 4 个 high，不是这几条 advisory。
+  - `go-chi/chi` 的 X-Forwarded-For 伪造（Moderate）：`server/go.mod:21` 标 `// indirect`，全仓零 import；
+    HTTP 栈是 `net/http` 的 `ServeMux`，客户端 IP 走自研 `ygg.ClientIP`，chi 的中间件从未挂载。
+- **dependabot 第二批 actions 升级**：合并 `codeql-action` 3→4 与 `docker/setup-buildx-action` 3→4；
+  `actions/checkout` 4→7 因与前者改同一文件冲突（PR 变 CONFLICTING），直接在 `ci.yml` 落 7 处并关闭该 PR。
+  三条前端大版本 PR（vite 6→8 / plugin-vue 5→6 / vue-i18n 9→11）继续开着，等专轮一起做。
+
 - **dependabot 首批 9 条 PR 处置**：合并 go 补丁组、`golang:1.26→1.27`、三条 GitHub Actions 升级；
   关闭 `node:22→26`（26 不是 LTS，依赖分析不认 LTS 线）并在 `.github/dependabot.yml` 给 node 加 major 忽略；
   vite 6→8 与 @vitejs/plugin-vue 5→6 **必须同批**（单独升 vite 会 ERESOLVE 装不上），与 vue-i18n 9→11 一起留作前端工具链专轮。
