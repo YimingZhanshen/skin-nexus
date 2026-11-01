@@ -162,12 +162,14 @@ func compileCached(expr string) (*regexp.Regexp, error) {
 	return re, nil
 }
 
-// error constructors keep the messages in one place (i18n keys map 1:1 later)
+// error constructors keep the messages in one place. They reach the wire as the
+// envelope's `message`, so they stay English like every other answer on this
+// host; the browser shows the translated `player.name_invalid` instead.
 func errPlayerNameLen(min, max int) error {
-	return &playerNameErr{msg: "角色名长度需 " + strconv.Itoa(min) + "-" + strconv.Itoa(max) + " 位"}
+	return &playerNameErr{msg: "player name must be " + strconv.Itoa(min) + "-" + strconv.Itoa(max) + " characters"}
 }
 func errPlayerNameRule(rule string) error {
-	return &playerNameErr{msg: "角色名不符合当前命名规则（" + rule + "）"}
+	return &playerNameErr{msg: "player name does not match the site naming rule (" + rule + ")"}
 }
 
 type playerNameErr struct{ msg string }

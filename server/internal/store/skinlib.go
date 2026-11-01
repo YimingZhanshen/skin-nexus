@@ -108,6 +108,11 @@ func (o *SkinlibOpts) where() (clause string, args []any) {
 		conds = append(conds, "t.uid = ?")
 		args = append(args, o.Uploader)
 	}
+	// An admin with no filter has nothing to constrain — without a predicate the
+	// caller assembles `... WHERE ORDER BY` and MySQL rejects the statement.
+	if len(conds) == 0 {
+		conds = append(conds, "1=1")
+	}
 	return strings.Join(conds, " AND "), args
 }
 
