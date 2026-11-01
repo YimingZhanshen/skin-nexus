@@ -55,7 +55,8 @@ func (m *Mysql) ListAccessLogs(ctx context.Context, kind, q string, page, size i
 		args = append(args, kind)
 	}
 	if q = strings.TrimSpace(q); q != "" {
-		where += " AND (who LIKE ? OR ip LIKE ? OR detail LIKE ?)"
+		ci := m.db.Dialect()
+		where += " AND (" + ci.CIContains("who") + " OR " + ci.CIContains("ip") + " OR " + ci.CIContains("detail") + ")"
 		like := "%" + q + "%"
 		args = append(args, like, like, like)
 	}

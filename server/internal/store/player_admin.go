@@ -25,7 +25,8 @@ func (m *Mysql) AdminPlayers(ctx context.Context, q string, uidFilter int64, pag
 		args = append(args, uidFilter)
 	}
 	if q != "" {
-		where += " AND (p.name LIKE ? OR usr.nickname LIKE ?"
+		ci := m.db.Dialect()
+		where += " AND (" + ci.CIContains("p.name") + " OR " + ci.CIContains("usr.nickname") + ")"
 		like := "%" + q + "%"
 		args = append(args, like, like)
 		if uidFilter == 0 {

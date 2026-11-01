@@ -101,7 +101,10 @@ func (o *SkinlibOpts) where() (clause string, args []any) {
 		conds = append(conds, "t.type = 'skin' AND t.model = 'slim'")
 	}
 	if o.Keyword != "" {
-		conds = append(conds, "t.description LIKE ?")
+		// LOWER on both sides: MySQL folded case through the column collation,
+		// PostgreSQL and SQLite do not, so a library search must not depend on
+		// which engine the site happens to run on.
+		conds = append(conds, "LOWER(t.description) LIKE LOWER(?)")
 		args = append(args, "%"+o.Keyword+"%")
 	}
 	if o.Uploader != 0 {

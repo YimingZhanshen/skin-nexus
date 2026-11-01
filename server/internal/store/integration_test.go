@@ -1281,13 +1281,12 @@ func TestIntegrationSkinModelBackfill(t *testing.T) {
 	}
 	var ids []int64
 	for _, s := range seed {
-		res, err := m.db.ExecContext(ctx,
+		id, err := m.db.InsertReturningID(ctx,
 			`INSERT INTO textures (uid,type,hash,model,description,public) VALUES (?,?,?,?,?,?)`,
 			s.uid, "skin", hash, s.model, "row", s.public)
 		if err != nil {
 			t.Fatalf("seed skin row: %v", err)
 		}
-		id, _ := res.LastInsertId()
 		ids = append(ids, id)
 	}
 	// The same bytes as a cape must stay out of reach: capes carry no model.

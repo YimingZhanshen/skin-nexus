@@ -397,6 +397,37 @@ func TestSQLiteEngineZeroMeansUnset(t *testing.T) {
 	}
 }
 
+// TestSQLiteEngineAdminSearchIsCaseInsensitive pins the search semantics that
+// MySQL's column collation gave for free. PostgreSQL and SQLite compare LIKE
+// case-sensitively, so an admin searching a player by lowercase name found
+// nothing there — the CI PostgreSQL leg caught it, and this is the same engine
+// boundary the panel must not depend on.
+func TestSQLiteEngineAdminSearchIsCaseInsensitive(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid, err := st.CreateUser(ctx, "search@example.com", "Searcher", "x", 3, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, _, err := st.CreatePlayer(ctx, uid, "NotchSteve")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{"notchsteve", "NOTCHSTEVE", "NotchSteve", "chSt"} {
+		rows, total, err := st.AdminPlayers(ctx, q, 0, 1, 20)
+		if err != nil || total != 1 || len(rows) != 1 {
+			t.Errorf("search %q: total=%d rows=%d err=%v", q, total, len(rows), err)
+		}
+	}
+	if _, total, err := st.AdminPlayers(ctx, "searcher", 0, 1, 20); err != nil || total != 1 {
+		t.Errorf("owner nickname search: total=%d err=%v", total, err)
+	}
+	if _, total, _ := st.AdminPlayers(ctx, "nomatch", 0, 1, 20); total != 0 {
+		t.Errorf("nonsense query matched %d rows, want 0", total)
+	}
+	_ = pid
+}
+
 func TestSQLiteEngineClosetDropsOneCopy(t *testing.T) {
 	st := openSQLiteStore(t)
 	ctx := context.Background()
