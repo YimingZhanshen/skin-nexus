@@ -81,10 +81,12 @@ docker run -d --name skin-nexus --restart unless-stopped -p 8080:8080 \
 <details>
 <summary><b>与 blessing-skin-server / element-skin / vSkin 的逐项对照（源码实证）</b></summary>
 
-> element-skin / vSkin 两列对照对方仓库源码复核（路由表 / grep，2026-10-25–26 快照），方法与逐条证据见
-> [`docs/competitor-analysis.md`](docs/competitor-analysis.md)；blessing 列来自老站源码与线上实测
+> 四列均按 2026-11-01 复测（各仓 HEAD 提交日见文档表头），方法与逐格「文件:行」证据见
+> [`docs/competitor-analysis.md`](docs/competitor-analysis.md)；blessing 列另有老站线上实测口径
 > （见 [`docs/compat-matrix.md`](docs/compat-matrix.md) 与 [`docs/migration.md`](docs/migration.md)）。
-> 对手占优处照实标注，勘误就地修正并记入 CHANGELOG。
+> 同一轮还取证了 Drasl（Go，Yggdrasil + services/discovery 全族）与 LittleSkin 正版校验生态件，
+> 因其定位不同（无 SEO / 无皮肤库运营面）不进本表，结论见上述文档 §2.3 与
+> [`docs/license-binding.md`](docs/license-binding.md)。对手占优处照实标注，勘误就地修正并记入 CHANGELOG。
 
 | 能力 | SkinNexus | blessing | element-skin | vSkin |
 |---|---|---|---|---|
@@ -97,6 +99,11 @@ docker run -d --name skin-nexus --restart unless-stopped -p 8080:8080 \
 | OIDC 免密登录 | ✅ 内置，设备码流 + 刷新轮换 | ⚠️ 需 Janus 外挂 | ⚠️ discovery 公告不全 | ⚠️ OAuth 细节弱 |
 | MUA Union 联盟接入 | ✅ 内置可开关 + 出站同步 | ✅ 经插件 | ❌ | ⚠️ 仅配置壳 |
 | blessing 一键迁移（ID 保全 / UUID 零漂移） | ✅ preflight→dry-run→import | —（迁移源头） | ❌ | ❌ |
+| 材质生命周期闭环（像素定模型 → 违规禁止再公开 → 引用清点后删除并留证） | ✅ 三步齐备，删除跨上传并发加锁 | ⚠️ 模型采信表单；举报处置删文件时**跳过**引用计数 | ❌ 模型采信表单；删除只删行、文件永久留盘 | ❌ 模型采信表单；删除只删行不计数 |
+| 错误契约（稳定 code + 门禁） | ✅ `{error, code, message}` + AST 闸（无码/中文文案直接构建失败） | ❌ `code` 是 0/1/2 粗粒度整数，文案后端 `trans()` 本地化 | ✅ `{object, operation, reason}` 闭合枚举，但无对应门禁 | ❌ 只有 `{"detail": "人话"}` |
+| 质量闸（覆盖率 / 集成矩阵） | ⚠️ 地板 40% + 0% 包集合钉死 + MySQL 5.7/8.0 双矩阵 | ⚠️ 上传 Codecov 但**不设阈值** | ✅ 全局硬阈值 90% | ❌ 仓库无 CI |
+| 邮箱验证流 / 站内通知中心 | ❌ 只有 `email_verified` 标志与进服门禁（找回密码已实装），通知只有瞬时 toast | ⚠️ 有，但**链接永不过期**、重发限制只存 session / ✅ | ✅ 码带 TTL 300s + 重发限流 / ✅ 三表 | ✅ SQLite 码带 TTL / ❌ |
+| 不挂 authlib-injector 的接入面（services / discovery / certificates） | ❌ 未挂，取舍记在 `docs/compat-matrix.md`（取证里只有 Drasl 整族挂载，见 §2.3） | ❌ | 未取证 | 未取证 |
 | 封禁执行面 | ✅ 登录 / 认证 / hasJoined | ✅ 权限位 | ✅ | ❌ 仅 hasJoined |
 | 运维观测面（登录 + 通信日志 + 审计） | ✅ 全链路面板可查 | ❌ | ⚠️ 仅权限审计 | ❌ |
 | 部署形态 | Go 单二进制 / Docker，CI 直出镜像 | PHP 8.1 + Laravel 10（PHP 8.1 已 EOL） | Go + PostgreSQL + Redis | FastAPI + SQLite |
@@ -176,6 +183,7 @@ docker compose up -d
 | [`docs/plugin-publishing.md`](docs/plugin-publishing.md) | 签名 bundle、registry、GitHub Pages 发布与密钥保管 |
 | [`docs/launcher-api.md`](docs/launcher-api.md) | 启动器 API v1（Bearer/OIDC、角色/纹理/皮肤库） |
 | [`docs/competitor-analysis.md`](docs/competitor-analysis.md) | 竞品对照的源码证据与方法 |
+| [`docs/license-binding.md`](docs/license-binding.md) | 正版账号绑定方案（路线对比、设计问题、红线；不含实现） |
 | [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | 迭代历史（按日期倒序） |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 贡献指南：翻译 / 主题包 / 代码与文档 |
 | [`AGENTS.md`](AGENTS.md) | 仓库地图、七条铁律与协作纪律（AI agent 首读） |
@@ -188,7 +196,7 @@ docker compose up -d
 |---|---|
 | ✅ 已完成 | 一期–三期：Yggdrasil 全量、OIDC 免密、Union 模块、i18n / SEO / 主题包、迁移工具链、管理面板；生产全量迁移与切流；v0.2.0（自助找回 / 官方兜底 / 运维日志 / SEO）；v0.3.0（签名插件安装/市场/回滚 + 发布工具链）；v0.4.0（slot 全接线、注册/上传插件字段、头像 CDN、资料/改名 guard、能力内省、本地包信任分级） |
 | 🔶 进行中 | v0.5.0：公共纹理哈希去重、受控出站、持久任务队列与 `skin-importer` 导入插件、主题市场（验签注册表 + 本地上传 + 热装） |
-| ⬜ 规划中 | 正版账号绑定（Auth Source 第二实现）、邮箱验证流、插件市场运营 / sidecar 隔离 / 第一方原生插件 |
+| ⬜ 规划中 | 正版账号绑定（方案与红线见 [`docs/license-binding.md`](docs/license-binding.md)，未排期）、邮箱验证流、插件市场运营 / sidecar 隔离 / 第一方原生插件 |
 
 ## 兼容契约（不可破坏）
 

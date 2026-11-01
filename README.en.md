@@ -89,7 +89,7 @@ Measured on a 2-core / 3.5 GB production VPS: ~600 RPS landing, 5182 RPS texture
 <details>
 <summary><b>Capability comparison with blessing-skin-server / element-skin / vSkin (source-verified)</b></summary>
 
-> element-skin and vSkin cells were checked against those repositories (route tables / grep, snapshot 2026-10-25–26); method and per-item evidence in [`docs/competitor-analysis.md`](docs/competitor-analysis.md). The blessing column comes from the legacy source and live measurements (see [`docs/compat-matrix.md`](docs/compat-matrix.md) and [`docs/migration.md`](docs/migration.md)). We credit rivals where they lead and never guess a ❌ — errata are corrected in place and logged in the CHANGELOG.
+> All four columns were re-checked on 2026-11-01 (each repository's HEAD commit date is listed in the doc header); method and per-cell `file:line` evidence in [`docs/competitor-analysis.md`](docs/competitor-analysis.md). The blessing column additionally rests on live measurements against the legacy site (see [`docs/compat-matrix.md`](docs/compat-matrix.md) and [`docs/migration.md`](docs/migration.md)). The same pass also examined Drasl (Go, full Yggdrasil + services/discovery family) and the LittleSkin premium-verification ecosystem; they sit in a different niche (no SEO, no library operations surface) so they are not columns here — see §2.3 of that document and [`docs/license-binding.md`](docs/license-binding.md). We credit rivals where they lead and never guess a ❌ — errata are corrected in place and logged in the CHANGELOG.
 
 | Capability | SkinNexus | blessing | element-skin | vSkin |
 |---|---|---|---|---|
@@ -102,6 +102,11 @@ Measured on a 2-core / 3.5 GB production VPS: ~600 RPS landing, 5182 RPS texture
 | OIDC passwordless login | ✅ built in, device-code flow + refresh rotation | ⚠️ needs Janus sidecar | ⚠️ discovery under-announces | ⚠️ weak OAuth details |
 | MUA Union federation | ✅ built-in opt-in + outbound sync | ✅ via plugin | ❌ | ⚠️ config shell only |
 | blessing migration (ID-preserving / zero UUID drift) | ✅ preflight→dry-run→import | — (source) | ❌ | ❌ |
+| Texture lifecycle (pixels decide the model → violation blocks re-publishing → delete after reference audit, with evidence retained) | ✅ all three; deletion and upload share a hash-level lock | ⚠️ model trusted from the form; the report "delete" action **skips** the reference count | ❌ model from the form; deleting removes the row and leaves the file forever | ❌ model from the form; delete removes one row, no counting |
+| Error contract (stable code + enforced) | ✅ `{error, code, message}` behind an AST gate (a missing code or Chinese prose fails the build) | ❌ `code` is a coarse 0/1/2 int; text is localized server-side | ✅ `{object, operation, reason}` closed enum, but no matching gate | ❌ `{"detail": "sentence"}` only |
+| Quality gates (coverage / integration matrix) | ⚠️ floor 40% + the set of 0%-covered packages pinned + MySQL 5.7/8.0 | ⚠️ uploads to Codecov with **no threshold** | ✅ hard 90% overall threshold | ❌ no CI in the repository |
+| Email verification / notification center | ❌ flag and join gate only (password reset ships); notifications are transient toasts | ⚠️ exists, but the link **never expires** and the resend limit lives in the session / ✅ | ✅ 300s TTL code + resend limit / ✅ three tables | ✅ hashed code with TTL / ❌ |
+| Agent-free client surface (services / discovery / certificates) | ❌ not mounted; trade-off recorded in `docs/compat-matrix.md` (only Drasl mounts the whole family in this evidence pass — see §2.3) | ❌ | not evidenced | not evidenced |
 | Ban enforcement | ✅ login / authenticate / hasJoined | ✅ permission-level | ✅ | ❌ hasJoined only |
 | Ops observability (login + traffic logs + audit) | ✅ full-chain in panel | ❌ | ⚠️ permission audit only | ❌ |
 | Deployment shape | Go binary / Docker, CI-published images | PHP 8.1 + Laravel 10 (PHP 8.1 EOL) | Go + PostgreSQL + Redis | FastAPI + SQLite |
@@ -180,6 +185,7 @@ Full env-var tables, reverse-proxy examples, backup/restore and troubleshooting:
 | [`docs/plugin-publishing.md`](docs/plugin-publishing.md) | Signed bundles, registry, GitHub Pages publishing and key custody |
 | [`docs/launcher-api.md`](docs/launcher-api.md) | Launcher API v1 (Bearer/OIDC, characters/textures/library) |
 | [`docs/competitor-analysis.md`](docs/competitor-analysis.md) | Source evidence behind the comparison table |
+| [`docs/license-binding.md`](docs/license-binding.md) | Official-account binding design (routes, open questions, red lines; no implementation) |
 | [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | Iteration history |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributing: translations / themes / code and docs |
 | [`AGENTS.md`](AGENTS.md) | Repository map, iron rules, collaboration discipline |
@@ -194,7 +200,7 @@ Most detailed docs are currently in Chinese.
 |---|---|
 | ✅ Done | Phases 1–3: full Yggdrasil, OIDC passwordless, Union module, i18n / SEO / theme packs, migration toolchain, admin panel; production migration and cutover; v0.2.0 (password reset / Mojang fallback / ops logs / SEO); v0.3.0 (signed plugin install/market/rollback + publishing CLI); v0.4.0 (all slots wired, plugin form fields, avatar CDN, profile/rename guards, capability introspection, local bundle trust levels) |
 | 🔶 In progress | v0.5.0: public texture hash dedupe, scoped outbound HTTP, durable jobs and `skin-importer`, **theme market** (signed registry + local upload + hot install); real-device launcher acceptance (SJMCL and community launchers: OAuth → character select → join) |
-| ⬜ Planned | Official-account binding (second Auth Source), email verification, plugin marketplace operations / sidecar isolation / first-party native plugins |
+| ⬜ Planned | Official-account binding (design and red lines in [`docs/license-binding.md`](docs/license-binding.md), not scheduled), email verification, plugin marketplace operations / sidecar isolation / first-party native plugins |
 
 ## Frozen compatibility contracts
 

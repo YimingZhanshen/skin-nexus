@@ -47,7 +47,8 @@ JWT access token 实测形状：`aud="2"（shared_client_id）、sub=uid、scope
 | 项 | 状态 | 说明 |
 |---|---|---|
 | 邮箱验证流 | ⚠️ 缺口 | `SKIN_REQUIRE_VERIFICATION` 门与字段已就位，发信验证链路未实现，保持关 |
-| 正版账号绑定 | ⚠️ 未做 | Auth Source 第二实现，排期见 README 路线图 |
+| 正版账号绑定 | ⚠️ 未做 | 路线对比、七条设计问题与红线见 [`license-binding.md`](license-binding.md)；未排期 |
+| `uploadableTextures` 按能力位裁剪 | 🔧 取舍 | 本站恒答 `skin,cape`（`server/internal/ygg/models.go:103`），且与事实一致——上传不按类型设限（`type` 只校验 `skin\|cape`）。老站可按用户能力逐位裁剪，前提是有按位能力位；本站 `permission` 是整型档位（0 普通 / >0 管理员 / -1 封禁，`server/internal/store/web.go:151`），要做「站长关掉披风上传」得先重做权限模型，不属兼容缺口 |
 | 通知/纹理广场 · OAuth 社交登录 · API PAT 面 · 积分商城 · 2FA · 验证码 · `/api` 根装饰 | ⚠️ 未做 | 均为增强面，不属兼容缺口 |
 | 删除材质后已下发的纹理 URL | 🔧 取舍 | `/textures/{hash}` 只查磁盘、不校验行与可见性，且响应是 `max-age=31536000, immutable`。删除保证**源站停止供源**并保留取证记录，不保证浏览器/中间缓存/CDN 上的旧副本失效（hash 即 URL，无法主动失效）。加每请求 DB 校验会推翻纹理分发的性能模型，故不做 |
 | 「换肤必须先入柜」 | ➖ 不复刻 | 拍板：那是老站 UI 流程而非数据约束，强加会破坏已验收的 setSkin 直连；衣柜按收藏集合上线 |
