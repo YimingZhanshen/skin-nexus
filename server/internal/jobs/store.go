@@ -7,6 +7,8 @@ import (
 	"database/sql"
 	"errors"
 	"time"
+
+	"skin-nexus/server/internal/dbx"
 )
 
 var ErrNotFound = errors.New("jobs: not found")
@@ -35,9 +37,9 @@ type Job struct {
 	FinishedAt  time.Time
 }
 
-type Store struct{ db *sql.DB }
+type Store struct{ db *dbx.DB }
 
-func New(db *sql.DB) *Store { return &Store{db: db} }
+func New(db *dbx.DB) *Store { return &Store{db: db} }
 
 const cols = `id, plugin, handler, owner_uid, state, payload, job_cursor, result,
  progress, message, COALESCE(last_error,''), attempts, max_attempts, reclaims,
@@ -76,12 +78,12 @@ func jsonOrNil(b []byte) any {
 }
 
 func (s *Store) Create(ctx context.Context, j Job) error {
-	now := time.Now()
+	now := time.Now().UTC()
 	if j.RunAfter.IsZero() {
 		j.RunAfter = now
 	}
-	// MySQL 5.7 DATETIME(3) rounds sub-millisecond values; truncate so a
-	// job created with the same instant a worker polls is immediately due.
+	// DATETIME(3) rounds sub-millisecond values; truncate so a job created
+	// with the same instant a worker polls is immediately due.
 	j.RunAfter = j.RunAfter.Truncate(time.Millisecond)
 	if j.CreatedAt.IsZero() {
 		j.CreatedAt = now
@@ -146,6 +148,12 @@ func (s *Store) List(ctx context.Context, plugin, state string, page, perPage in
 
 // Claim leases one queued job, or reclaims a running job whose lease expired.
 func (s *Store) Claim(ctx context.Context, worker string, now time.Time, lease time.Duration) (*Job, error) {
+	now = now.UTC()
+	// One claim predicate, reused verbatim by the SELECT (pick a candidate) and
+	// the UPDATE (re-check it before writing): the guarded UPDATE, not a row
+	// lock, is what makes the lease race-free per engine, so the two must not drift.
+	claimable := `(state='queued' AND run_after<=?)
+		     OR (state='running' AND (lease_until IS NULL OR lease_until<?))`
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -153,9 +161,8 @@ func (s *Store) Claim(ctx context.Context, worker string, now time.Time, lease t
 	defer tx.Rollback()
 	j, err := scan(tx.QueryRowContext(ctx,
 		`SELECT `+cols+` FROM host_jobs
-		  WHERE (state='queued' AND run_after<=?)
-		     OR (state='running' AND (lease_until IS NULL OR lease_until<?))
-		  ORDER BY run_after LIMIT 1 FOR UPDATE`, now, now))
+		  WHERE `+claimable+`
+		  ORDER BY run_after LIMIT 1`, now, now))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -167,11 +174,22 @@ func (s *Store) Claim(ctx context.Context, worker string, now time.Time, lease t
 		reclaims++
 	}
 	until := now.Add(lease)
-	if _, err := tx.ExecContext(ctx,
+	// The UPDATE's WHERE re-checks the row is still claimable: whichever worker
+	// writes first flips state and pushes lease_until into the future, so every
+	// later worker matches 0 rows. InnoDB/PostgreSQL read the latest committed
+	// row for an UPDATE's WHERE and SQLite serialises writers, and a matched row
+	// always changes (state or lease_until moves), so MySQL-changed, PG-matched
+	// and SQLite-changed all report 1 for exactly one worker.
+	res, err := tx.ExecContext(ctx,
 		`UPDATE host_jobs SET state='running', lease_owner=?, lease_until=?,
-		 reclaims=?, started_at=COALESCE(started_at,?), updated_at=? WHERE id=?`,
-		worker, until, reclaims, now, now, j.ID); err != nil {
+		 reclaims=?, started_at=COALESCE(started_at,?), updated_at=?
+		 WHERE id=? AND (`+claimable+`)`,
+		worker, until, reclaims, now, now, j.ID, now, now)
+	if err != nil {
 		return nil, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, nil
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
@@ -191,12 +209,13 @@ func (s *Store) SaveStep(ctx context.Context, id, worker string, cursor []byte, 
 	if delay > time.Minute {
 		delay = time.Minute
 	}
-	runAfter := time.Now().Add(delay).Truncate(time.Millisecond)
+	now := time.Now().UTC()
+	runAfter := now.Add(delay).Truncate(time.Millisecond)
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE host_jobs SET job_cursor=?, progress=?, message=?, state='queued',
-		 run_after=?, attempts=0, last_error='', lease_owner='', lease_until=NULL, updated_at=NOW(3)
+		 run_after=?, attempts=0, last_error='', lease_owner='', lease_until=NULL, updated_at=?
 		 WHERE id=? AND state='running' AND lease_owner=?`,
-		jsonOrNil(cursor), progress, message, runAfter, id, worker)
+		jsonOrNil(cursor), progress, message, runAfter, now, id, worker)
 	if err != nil {
 		return false, err
 	}
@@ -205,18 +224,20 @@ func (s *Store) SaveStep(ctx context.Context, id, worker string, cursor []byte, 
 }
 
 func (s *Store) Finish(ctx context.Context, id, worker string, result []byte) error {
+	now := time.Now().UTC()
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE host_jobs SET state='done', result=?, progress=100, lease_owner='', lease_until=NULL,
-		 finished_at=NOW(3), updated_at=NOW(3) WHERE id=? AND state='running' AND lease_owner=?`,
-		jsonOrNil(result), id, worker)
+		 finished_at=?, updated_at=? WHERE id=? AND state='running' AND lease_owner=?`,
+		jsonOrNil(result), now, now, id, worker)
 	return err
 }
 
 func (s *Store) MarkCancelled(ctx context.Context, id, worker string) error {
+	now := time.Now().UTC()
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE host_jobs SET state='cancelled', lease_owner='', lease_until=NULL,
-		 finished_at=NOW(3), updated_at=NOW(3) WHERE id=? AND state IN ('running','cancelling') AND lease_owner=?`,
-		id, worker)
+		 finished_at=?, updated_at=? WHERE id=? AND state IN ('running','cancelling') AND lease_owner=?`,
+		now, now, id, worker)
 	return err
 }
 
@@ -226,37 +247,40 @@ func (s *Store) Fail(ctx context.Context, id, worker string, cause error, attemp
 	if cause != nil {
 		msg = cause.Error()
 	}
+	now := time.Now().UTC()
 	if attempts < maxAttempts {
 		backoff := time.Duration(1<<uint(attempts)) * 2 * time.Second
 		_, err := s.db.ExecContext(ctx,
 			`UPDATE host_jobs SET state='queued', attempts=?, last_error=?, run_after=?,
-			 lease_owner='', lease_until=NULL, updated_at=NOW(3)
+			 lease_owner='', lease_until=NULL, updated_at=?
 			 WHERE id=? AND state='running' AND lease_owner=?`,
-			attempts, msg, time.Now().Add(backoff), id, worker)
+			attempts, msg, now.Add(backoff), now, id, worker)
 		return err
 	}
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE host_jobs SET state='failed', attempts=?, last_error=?, lease_owner='', lease_until=NULL,
-		 finished_at=NOW(3), updated_at=NOW(3) WHERE id=? AND lease_owner=?`,
-		attempts, msg, id, worker)
+		 finished_at=?, updated_at=? WHERE id=? AND lease_owner=?`,
+		attempts, msg, now, now, id, worker)
 	return err
 }
 
 func (s *Store) RequestCancel(ctx context.Context, id string) error {
+	now := time.Now().UTC()
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE host_jobs SET state=CASE WHEN state IN ('queued','paused') THEN 'cancelled' ELSE 'cancelling' END,
-		 updated_at=NOW(3) WHERE id=? AND state IN ('queued','running','paused')`, id)
+		 updated_at=? WHERE id=? AND state IN ('queued','running','paused')`, now, id)
 	return err
 }
 
 func (s *Store) Resume(ctx context.Context, id string) error {
 	// Scheduling columns must be written from the same clock the worker
-	// compares against. SQL NOW(3) follows the MySQL session time zone; on
+	// compares against. SQL clock functions follow the DB session time zone; on
 	// a +08 database that put a resumed job 8h into the future.
-	runAfter := time.Now().Truncate(time.Millisecond)
+	now := time.Now().UTC()
+	runAfter := now.Truncate(time.Millisecond)
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE host_jobs SET state='queued', run_after=?, attempts=0, lease_owner='', lease_until=NULL,
-		 updated_at=NOW(3) WHERE id=? AND state IN ('cancelled','failed','paused','cancelling')`, runAfter, id)
+		 updated_at=? WHERE id=? AND state IN ('cancelled','failed','paused','cancelling')`, runAfter, now, id)
 	if err != nil {
 		return err
 	}
@@ -267,27 +291,30 @@ func (s *Store) Resume(ctx context.Context, id string) error {
 }
 
 func (s *Store) PausePlugin(ctx context.Context, plugin string) error {
+	now := time.Now().UTC()
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE host_jobs SET state='paused', updated_at=NOW(3) WHERE plugin=? AND state='queued'`, plugin)
+		`UPDATE host_jobs SET state='paused', updated_at=? WHERE plugin=? AND state='queued'`, now, plugin)
 	return err
 }
 
 // ResumePausedByPlugin requeues jobs parked by Disable when the plugin comes
 // back. Without it disabled→enabled left every queued job paused forever.
 func (s *Store) ResumePausedByPlugin(ctx context.Context, plugin string) error {
-	runAfter := time.Now().Truncate(time.Millisecond)
+	now := time.Now().UTC()
+	runAfter := now.Truncate(time.Millisecond)
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE host_jobs SET state='queued', run_after=?, updated_at=NOW(3)
-		 WHERE plugin=? AND state='paused'`, runAfter, plugin)
+		`UPDATE host_jobs SET state='queued', run_after=?, updated_at=?
+		 WHERE plugin=? AND state='paused'`, runAfter, now, plugin)
 	return err
 }
 
 // Requeue releases a lease without consuming an attempt (plugin not loaded
 // yet, host shutting down, etc.).
 func (s *Store) Requeue(ctx context.Context, id, worker string) error {
-	runAfter := time.Now().Truncate(time.Millisecond)
+	now := time.Now().UTC()
+	runAfter := now.Truncate(time.Millisecond)
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE host_jobs SET state='queued', run_after=?, lease_owner='', lease_until=NULL,
-		 updated_at=NOW(3) WHERE id=? AND state='running' AND lease_owner=?`, runAfter, id, worker)
+		 updated_at=? WHERE id=? AND state='running' AND lease_owner=?`, runAfter, now, id, worker)
 	return err
 }

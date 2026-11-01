@@ -92,7 +92,8 @@ func (m *Mysql) PurgeAccessLogs(ctx context.Context, olderThan time.Duration) (i
 		days = 1
 	}
 	res, err := m.db.ExecContext(ctx,
-		`DELETE FROM access_logs WHERE created_at < NOW(3) - INTERVAL ? DAY`, days)
+		`DELETE FROM access_logs WHERE created_at < ?`,
+		m.now().UTC().Add(-time.Duration(days)*24*time.Hour))
 	if err != nil {
 		return 0, err
 	}

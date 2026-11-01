@@ -8,6 +8,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"skin-nexus/server/internal/dialect"
 )
 
 // ---- registration & web sessions ----
@@ -60,14 +62,14 @@ func (m *Mysql) EnsureSuperAdmin(ctx context.Context) (int64, bool, error) {
 }
 
 func (m *Mysql) createUser(ctx context.Context, email, nickname, passwordHash string, playerLimit, permission int, ip string) (int64, error) {
-	res, err := m.db.ExecContext(ctx,
+	uid, err := m.db.InsertReturningID(ctx,
 		`INSERT INTO users (email, nickname, password, password_algo, player_limit, email_verified, can_join_server, permission, ip)
 		 VALUES (?,?,?,'argon2id',?,0,1,?,?)`,
 		nullableStr(email), nickname, passwordHash, playerLimit, permission, nullableStr(ip))
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	return uid, nil
 }
 
 // CreateSession stores an opaque web session token.
@@ -81,7 +83,7 @@ func (m *Mysql) CreateSession(ctx context.Context, token string, uid int64, expi
 func (m *Mysql) SessionUser(ctx context.Context, token string) (int64, error) {
 	var uid int64
 	err := m.db.QueryRowContext(ctx,
-		`SELECT user_id FROM web_sessions WHERE token = ? AND expires_at > NOW(3)`, token).
+		`SELECT user_id FROM web_sessions WHERE token = ? AND expires_at > ?`, token, m.now().UTC()).
 		Scan(&uid)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNotFound
@@ -182,12 +184,15 @@ func (m *Mysql) UpdateUserEmail(ctx context.Context, uid int64, email string) er
 	// Changing the address clears the verified flag: a verified mailbox is no
 	// longer evidence that the *current* one is reachable. When the value is
 	// unchanged the flag survives, so a no-op edit cannot lock a player out.
-	// The flag assignment comes FIRST on purpose: MySQL evaluates SET left to
-	// right and later assignments see already-updated columns, so comparing
-	// after `email = ?` would always compare the new value with itself.
+	// The email_verified assignment comes FIRST and reads `email` from the OLD
+	// row: MySQL evaluates SET left-to-right (later assignments see already-
+	// updated columns, so `email` is still old here), and PostgreSQL/SQLite
+	// always evaluate every right-hand side against the old row — all three
+	// therefore compare the pre-update email with the incoming value.
 	_, err := m.db.ExecContext(ctx,
-		`UPDATE users SET email_verified = IF(email <=> ?, email_verified, 0), email = ?
-		 WHERE id = ?`, nullableStr(email), nullableStr(email), uid)
+		`UPDATE users SET email_verified = CASE WHEN `+dialect.NullSafeEq("email", "?")+` THEN email_verified ELSE 0 END, email = ?
+		 WHERE id = ?`,
+		nullableStr(email), nullableStr(email), nullableStr(email), uid)
 	if isDupKey(err) {
 		return ErrDuplicate
 	}
@@ -234,25 +239,25 @@ func (m *Mysql) SetUserPermission(ctx context.Context, uid int64, perm int) erro
 // AddTexture inserts a public texture record and returns its id. The
 // public_dedupe unique key rejects concurrent duplicate content.
 func (m *Mysql) AddTexture(ctx context.Context, uid int64, typ, hash, model string, meta TextureMeta) (int64, error) {
-	res, err := m.db.ExecContext(ctx,
+	tid, err := m.db.InsertReturningID(ctx,
 		`INSERT INTO textures (uid, type, hash, model, description, detail_md, source, source_url, public_dedupe)
 		 VALUES (?,?,?,?,?,?,?,?,?)`,
 		uid, typ, hash, nullableStr(model), nullableStr(meta.Description),
 		nullableStr(meta.DetailMD), meta.Source, nullableStr(meta.SourceURL), typ+":"+hash)
 	if err != nil {
-		if isDuplicateKey(err) {
+		if isDupKey(err) {
 			return 0, ErrDuplicatePublic
 		}
 		return 0, err
 	}
-	return res.LastInsertId()
+	return tid, nil
 }
 
 // AddTexturePrivate inserts a library import as a private copy (no file copy;
 // the content-addressed blob already exists). public_dedupe stays NULL, so
 // private copies may coexist with a public row.
 func (m *Mysql) AddTexturePrivate(ctx context.Context, uid int64, typ, hash, model string, meta TextureMeta) (int64, error) {
-	res, err := m.db.ExecContext(ctx,
+	tid, err := m.db.InsertReturningID(ctx,
 		`INSERT INTO textures (uid, type, hash, model, description, detail_md, source, source_url, public, public_dedupe)
 		 VALUES (?,?,?,?,?,?,?,?,0,NULL)`,
 		uid, typ, hash, nullableStr(model), nullableStr(meta.Description),
@@ -260,7 +265,7 @@ func (m *Mysql) AddTexturePrivate(ctx context.Context, uid int64, typ, hash, mod
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	return tid, nil
 }
 
 // TextureByOwnerHash returns one of the user's textures with the same content
@@ -602,11 +607,7 @@ func (m *Mysql) CreatePlayer(ctx context.Context, uid int64, name string) (int64
 	}
 	defer tx.Rollback()
 
-	res, err := tx.ExecContext(ctx, `INSERT INTO players (uid, name) VALUES (?,?)`, uid, name)
-	if err != nil {
-		return 0, "", err
-	}
-	pid, err := res.LastInsertId()
+	pid, err := tx.InsertReturningID(ctx, `INSERT INTO players (uid, name) VALUES (?,?)`, uid, name)
 	if err != nil {
 		return 0, "", err
 	}
@@ -621,8 +622,8 @@ func (m *Mysql) CreatePlayer(ctx context.Context, uid int64, name string) (int64
 func (m *Mysql) SetPlayerTextures(ctx context.Context, pid, skinTid, capeTid int64) error {
 	_, err := m.db.ExecContext(ctx,
 		`UPDATE players SET
-		 tid_skin = IF(? = 0, NULL, ?),
-		 tid_cape = IF(? = 0, NULL, ?)
+		 tid_skin = CASE WHEN ? = 0 THEN NULL ELSE ? END,
+		 tid_cape = CASE WHEN ? = 0 THEN NULL ELSE ? END
 		 WHERE id = ?`, skinTid, skinTid, capeTid, capeTid, pid)
 	return err
 }
@@ -633,7 +634,7 @@ func (m *Mysql) SetPlayerTextures(ctx context.Context, pid, skinTid, capeTid int
 // job (webapi checks TextureOwner first); this method only writes.
 func (m *Mysql) SetUserAvatar(ctx context.Context, uid, tid int64) error {
 	_, err := m.db.ExecContext(ctx,
-		`UPDATE users SET avatar_tid = IF(? = 0, NULL, ?) WHERE id = ?`, tid, tid, uid)
+		`UPDATE users SET avatar_tid = CASE WHEN ? = 0 THEN NULL ELSE ? END WHERE id = ?`, tid, tid, uid)
 	return err
 }
 

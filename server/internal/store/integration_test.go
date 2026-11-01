@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"skin-nexus/server/internal/auth"
+	"skin-nexus/server/internal/dbx"
+	"skin-nexus/server/internal/dialect"
 	"skin-nexus/server/internal/jobs"
 	"skin-nexus/server/internal/migrate"
 	"skin-nexus/server/internal/oidc"
@@ -172,7 +174,7 @@ func TestIntegrationPublicTextureDedupe(t *testing.T) {
 func TestIntegrationJobsLifecycle(t *testing.T) {
 	m := openTestStore(t)
 	ctx := context.Background()
-	js := jobs.New(m.DB())
+	js := jobs.New(m.DBX())
 	uid := seedUser(t, m)
 	now := time.Now()
 	mk := func(id string) {
@@ -245,7 +247,7 @@ func TestIntegrationJobsLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer dbTZ.Close()
-	jsTZ := jobs.New(dbTZ)
+	jsTZ := jobs.New(dbx.Wrap(dbTZ, dialect.MySQL))
 	now = time.Now().Add(-time.Second)
 	mk("job-c")
 	if claimed, err := jsTZ.Claim(ctx, "w3", time.Now(), time.Minute); err != nil || claimed == nil || claimed.ID != "job-c" {

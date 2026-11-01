@@ -10,11 +10,13 @@ package dbx
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
@@ -249,4 +251,68 @@ func isMemoryPath(p string) bool {
 
 func engineErr(raw string) error {
 	return fmt.Errorf("unsupported database engine %q (want mysql, sqlite or postgres)", raw)
+}
+
+// Wrap adopts an already-open pool. Tests use it to drive a connection with a
+// deliberately hostile session (a +08 MySQL timezone, for instance), which
+// Open would normalise away — the point of those tests is what the SQL looks
+// like once the clock is the application's, so they need the wrapper without
+// the DSN rewriting.
+func Wrap(db *sql.DB, eng dialect.Engine) *DB { return &DB{DB: db, eng: eng} }
+
+// IsDuplicateKey reports a unique/primary-key violation on any of the three
+// engines. Every store turns one into a stable error code, so the mapping has
+// to live in one place: a MySQL-only check would let a PostgreSQL collision
+// escape as an opaque 500.
+func IsDuplicateKey(err error) bool {
+	if err == nil {
+		return false // callers probe unconditionally
+	}
+	var me *mysql.MySQLError
+	if errors.As(err, &me) {
+		return me.Number == 1062
+	}
+	var pe *pgconn.PgError
+	if errors.As(err, &pe) {
+		return pe.Code == "23505" // unique_violation
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "Error 1062") || // MariaDB over the text protocol
+		strings.Contains(msg, "UNIQUE constraint failed") || // SQLite
+		strings.Contains(msg, "duplicate key value violates unique constraint") // PostgreSQL
+}
+
+// returningID is the clause the non-MySQL engines need to read a generated key
+// back: pgx refuses LastInsertId entirely and SQLite only answers it correctly
+// when the row really used the rowid. Every generated-key table in this project
+// names that column `id`.
+const returningID = " RETURNING id"
+
+// InsertReturningID runs an INSERT and hands back the generated primary key.
+// MySQL reports it on the result. The insert must not already carry a RETURNING.
+func (d *DB) InsertReturningID(ctx context.Context, query string, args ...any) (int64, error) {
+	if d.eng == dialect.MySQL {
+		res, err := d.ExecContext(ctx, query, args...)
+		if err != nil {
+			return 0, err
+		}
+		return res.LastInsertId()
+	}
+	var id int64
+	err := d.QueryRowContext(ctx, query+returningID, args...).Scan(&id)
+	return id, err
+}
+
+// InsertReturningID is the transaction form of DB.InsertReturningID.
+func (t *Tx) InsertReturningID(ctx context.Context, query string, args ...any) (int64, error) {
+	if t.db.eng == dialect.MySQL {
+		res, err := t.ExecContext(ctx, query, args...)
+		if err != nil {
+			return 0, err
+		}
+		return res.LastInsertId()
+	}
+	var id int64
+	err := t.QueryRowContext(ctx, t.Bind(query)+returningID, args...).Scan(&id)
+	return id, err
 }

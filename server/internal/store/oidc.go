@@ -55,13 +55,6 @@ func nullableTime(t time.Time) interface{} {
 	return t
 }
 
-// isDuplicateKeyErr reports a MySQL ER_DUP_ENTRY (1062). The error text is
-// matched instead of the driver's error type so this file stays on
-// database/sql alone.
-func isDuplicateKeyErr(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "Error 1062")
-}
-
 // ---- clients ----
 
 // GetClient returns a registered OAuth client or oidc.ErrNotFound. The
@@ -148,13 +141,17 @@ func (m *Mysql) EnsureOidcClient(ctx context.Context, rec oidc.ClientRecord) err
 	if rec.SecretHash == "" {
 		isPublic = 1
 	}
-	_, err = m.db.ExecContext(ctx,
-		`INSERT INTO oidc_clients (client_id, secret_hash, name, redirect_uris, grant_types, scopes, is_public)
-		 VALUES (?,?,?,?,?,?,?)
-		 ON DUPLICATE KEY UPDATE secret_hash = ?, name = ?, redirect_uris = ?,
-		   grant_types = ?, scopes = ?, is_public = ?`,
-		rec.ID, rec.SecretHash, rec.Name, redirectURIs, grantTypes, scopes, isPublic,
-		rec.SecretHash, rec.Name, redirectURIs, grantTypes, scopes, isPublic)
+	// The ON DUPLICATE update assignments all reuse the inserted values, so
+	// dialect's VALUES()/excluded form covers it; client_id is the primary key.
+	q, err := m.db.Dialect().Upsert("oidc_clients",
+		[]string{"client_id", "secret_hash", "name", "redirect_uris", "grant_types", "scopes", "is_public"},
+		[]string{"client_id"},
+		[]string{"secret_hash", "name", "redirect_uris", "grant_types", "scopes", "is_public"})
+	if err != nil {
+		return err
+	}
+	_, err = m.db.ExecContext(ctx, q,
+		rec.ID, rec.SecretHash, rec.Name, redirectURIs, grantTypes, scopes, isPublic)
 	return err
 }
 
@@ -224,7 +221,7 @@ func (m *Mysql) SaveAuthRequest(ctx context.Context, rec oidc.AuthRequestRecord)
 	if err == nil {
 		return nil
 	}
-	if !isDuplicateKeyErr(err) {
+	if !isDupKey(err) {
 		return err
 	}
 	// id (or code) already stored: apply as an in-place update on this id.
@@ -314,7 +311,7 @@ func (m *Mysql) GetAccessToken(ctx context.Context, jti string) (oidc.AccessToke
 // RevokeAccessToken marks one jti revoked (idempotent; live rows only).
 func (m *Mysql) RevokeAccessToken(ctx context.Context, jti string) error {
 	_, err := m.db.ExecContext(ctx,
-		`UPDATE oidc_access_tokens SET revoked_at = NOW(3) WHERE jti = ? AND revoked_at IS NULL`, jti)
+		`UPDATE oidc_access_tokens SET revoked_at = ? WHERE jti = ? AND revoked_at IS NULL`, m.now().UTC(), jti)
 	return err
 }
 
@@ -322,7 +319,7 @@ func (m *Mysql) RevokeAccessToken(ctx context.Context, jti string) error {
 // change / signout semantics). Refresh tokens are deliberately out of scope.
 func (m *Mysql) RevokeUserAccessTokens(ctx context.Context, uid int64) error {
 	_, err := m.db.ExecContext(ctx,
-		`UPDATE oidc_access_tokens SET revoked_at = NOW(3) WHERE uid = ? AND revoked_at IS NULL`, uid)
+		`UPDATE oidc_access_tokens SET revoked_at = ? WHERE uid = ? AND revoked_at IS NULL`, m.now().UTC(), uid)
 	return err
 }
 
@@ -333,6 +330,7 @@ func (m *Mysql) RevokeUserAccessTokens(ctx context.Context, uid int64) error {
 // 1-hour access tokens — live-only filtering showed 0 while two launchers
 // still refreshed fine (F12 report, 2026-10-23).
 func (m *Mysql) ListUserAccessTokens(ctx context.Context, uid int64) ([]oidc.AccessTokenRecord, error) {
+	now := m.now().UTC()
 	rows, err := m.db.QueryContext(ctx,
 		`SELECT a.jti, a.uid, a.client_id, a.scopes, a.selected_pid, a.expires_at, a.created_at
 		 FROM oidc_access_tokens a
@@ -342,11 +340,11 @@ func (m *Mysql) ListUserAccessTokens(ctx context.Context, uid int64) ([]oidc.Acc
 		       GROUP BY client_id) latest
 		   ON latest.client_id = a.client_id AND latest.mc = a.created_at
 		 WHERE a.uid = ? AND a.revoked_at IS NULL
-		   AND (a.expires_at > NOW(3)
+		   AND (a.expires_at > ?
 		        OR EXISTS (SELECT 1 FROM oidc_refresh_tokens r
 		                   WHERE r.uid = a.uid AND r.client_id = a.client_id
-		                     AND r.revoked = 0 AND r.expires_at > NOW(3)))
-		 ORDER BY a.created_at DESC, a.jti DESC LIMIT 100`, uid, uid)
+		                     AND r.revoked = 0 AND r.expires_at > ?))
+		 ORDER BY a.created_at DESC, a.jti DESC LIMIT 100`, uid, uid, now, now)
 	if err != nil {
 		return nil, err
 	}
@@ -526,7 +524,7 @@ func (m *Mysql) SaveDeviceAuth(ctx context.Context, rec oidc.DeviceAuthRecord) e
 		rec.DeviceCode, rec.UserCode, rec.ClientID, scopes, rec.ExpiresAt,
 		rec.Done, rec.Denied, rec.UserID, nullableInt(rec.SelectedPID),
 		nullableTime(rec.AuthTime), createdAt)
-	if isDuplicateKeyErr(err) {
+	if isDupKey(err) {
 		return oidc.ErrDuplicateUserCode
 	}
 	return err

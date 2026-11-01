@@ -25,7 +25,7 @@ func (m *Mysql) CreateInstallTx(ctx context.Context, tx InstallTxRecord) error {
 
 func (m *Mysql) UpdateInstallTx(ctx context.Context, id, state, errText string) error {
 	_, err := m.db.ExecContext(ctx,
-		`UPDATE plugin_install_tx SET state=?, error=?, updated_at=CURRENT_TIMESTAMP(3) WHERE id=?`,
-		state, nullableStr(errText), id)
+		`UPDATE plugin_install_tx SET state=?, error=?, updated_at=? WHERE id=?`,
+		state, nullableStr(errText), m.now().UTC(), id)
 	return err
 }

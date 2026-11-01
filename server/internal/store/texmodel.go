@@ -17,7 +17,9 @@ type ModelGroup struct {
 // SkinModelGroups lists skin hashes for the model backfill. limit <= 0 means
 // every group; ordering by hash keeps two runs comparable.
 func (m *Mysql) SkinModelGroups(ctx context.Context, limit int) ([]ModelGroup, error) {
-	q := `SELECT hash, GROUP_CONCAT(DISTINCT COALESCE(model, '') SEPARATOR ',')
+	// ConcatList defaults to a ',' separator on every engine, so DISTINCT folds
+	// into its expression and the explicit MySQL SEPARATOR clause is dropped.
+	q := `SELECT hash, ` + m.db.Dialect().ConcatList("DISTINCT COALESCE(model, '')") + `
 	      FROM textures WHERE type = 'skin' GROUP BY hash ORDER BY hash`
 	args := []any{}
 	if limit > 0 {

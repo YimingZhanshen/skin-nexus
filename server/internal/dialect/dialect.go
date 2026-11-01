@@ -249,6 +249,46 @@ func (e Engine) ConcatList(expr string) string {
 	return fmt.Sprintf("GROUP_CONCAT(%s)", expr)
 }
 
+// Concat joins scalar expressions into one string. MySQL spells it CONCAT(),
+// the other two only guarantee the || operator (PG's || is strict-NULL like
+// CONCAT, SQLite returns NULL for `x || NULL` too), so the operator form is
+// the portable one and the argument list is joined with the separator MySQL
+// would need anyway.
+func (e Engine) Concat(parts ...string) string {
+	if len(parts) == 0 {
+		return "''"
+	}
+	if e == MySQL {
+		return "CONCAT(" + strings.Join(parts, ", ") + ")"
+	}
+	return strings.Join(parts, " || ")
+}
+
+// SessionLock is the cross-connection advisory lock, keyed by name: the
+// primitive for work that straddles the database (a texture file written
+// before its row exists, deleted once no row refers to it). Both statements
+// answer one row holding 1 when the lock is (or was) held, 0 when it is
+// somebody else's, and NULL when the engine could not answer at all.
+//
+// SQLite answers supported=false: it has no such lock. Its writers already
+// serialise on the file, so the guard is unnecessary inside one process — but a
+// second process (the CLI) against a live server's file loses the
+// serialisation, which is the same single-process rule SQLite databases carry
+// everywhere.
+func (e Engine) SessionLock(timeoutSeconds int) (acquire, release string, supported bool) {
+	switch e {
+	case MySQL:
+		return fmt.Sprintf("SELECT GET_LOCK(?, %d)", timeoutSeconds),
+			"SELECT RELEASE_LOCK(?)", true
+	case Postgres:
+		// hashtext maps the name to the bigint key the lock manager takes;
+		// try-first keeps the caller's timeout semantics instead of blocking.
+		return "SELECT CASE WHEN pg_try_advisory_lock(hashtext(?)) THEN 1 ELSE 0 END",
+			"SELECT CASE WHEN pg_advisory_unlock(hashtext(?)) THEN 1 ELSE 0 END", true
+	}
+	return "", "", false
+}
+
 // LockSQL is the pessimistic row lock. SQLite is single-writer by design
 // (writers serialise on the write lock), so it gets no clause rather than a
 // statement that would not parse.

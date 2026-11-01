@@ -40,8 +40,7 @@ type NotifRow struct {
 // it reports.
 func (m *Mysql) InsertNotification(ctx context.Context, uid int64, kind string, tid int64, ref string) error {
 	_, _ = m.db.ExecContext(ctx,
-		`DELETE FROM notifications WHERE created_at < NOW(3) - INTERVAL ? SECOND`,
-		int64(notifRetention/time.Second))
+		`DELETE FROM notifications WHERE created_at < ?`, m.now().UTC().Add(-notifRetention))
 	_, err := m.db.ExecContext(ctx,
 		`INSERT INTO notifications (uid, kind, tid, ref) VALUES (?,?,?,?)`,
 		uid, kind, tid, ref)
@@ -99,14 +98,14 @@ func (m *Mysql) UnreadNotificationCount(ctx context.Context, uid int64) (int, er
 // authorization oracle.
 func (m *Mysql) MarkNotificationRead(ctx context.Context, uid, id int64) error {
 	_, err := m.db.ExecContext(ctx,
-		`UPDATE notifications SET read_at = NOW(3) WHERE id = ? AND uid = ? AND read_at IS NULL`, id, uid)
+		`UPDATE notifications SET read_at = ? WHERE id = ? AND uid = ? AND read_at IS NULL`, m.now().UTC(), id, uid)
 	return err
 }
 
 // MarkAllNotificationsRead clears the caller's badge.
 func (m *Mysql) MarkAllNotificationsRead(ctx context.Context, uid int64) error {
 	_, err := m.db.ExecContext(ctx,
-		`UPDATE notifications SET read_at = NOW(3) WHERE uid = ? AND read_at IS NULL`, uid)
+		`UPDATE notifications SET read_at = ? WHERE uid = ? AND read_at IS NULL`, m.now().UTC(), uid)
 	return err
 }
 

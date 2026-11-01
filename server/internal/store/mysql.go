@@ -20,8 +20,6 @@ import (
 	"skin-nexus/server/internal/dialect"
 	"skin-nexus/server/internal/siteurl"
 	"skin-nexus/server/internal/ygg"
-
-	"github.com/go-sql-driver/mysql"
 )
 
 // ErrNotFound is the canonical "no such row" signal.
@@ -34,11 +32,6 @@ var ErrDuplicatePublic = errors.New("store: duplicate public texture")
 // ErrModerationBan: the texture was struck by a moderation verdict and may
 // never re-enter the public library, only stay private or be deleted.
 var ErrModerationBan = errors.New("store: texture banned from republication")
-
-func isDuplicateKey(err error) bool {
-	var me *mysql.MySQLError
-	return errors.As(err, &me) && me.Number == 1062
-}
 
 // ErrForbidden: the row exists but the caller may not touch it (e.g.
 // editing another user's texture). Kept distinct from ErrNotFound so the
@@ -97,12 +90,14 @@ func (m *Mysql) UserByID(ctx context.Context, id int64) (ygg.User, error) {
 }
 
 func (m *Mysql) UserByIdentifier(ctx context.Context, ident string) (ygg.User, error) {
-	// Legacy semantics: identify by email OR nickname (case-insensitive email).
-	// COLLATE must sit on the column expression: `? COLLATE ...` is a syntax
-	// error on MySQL 5.7 (8.0 tolerates it) and made every login fail with
-	// "account or password" while the register->session path stayed healthy.
+	// Legacy semantics: identify by email OR nickname, both case-insensitive
+	// (the utf8mb4_general_ci column collation folded both on MySQL). LOWER()
+	// keeps that folding on PostgreSQL, whose default collation is case-
+	// sensitive; MySQL/SQLite already fold, so the predicate is a no-op there.
+	eng := m.db.Dialect()
 	return scanUser(m.db.QueryRowContext(ctx,
-		"SELECT id, nickname, email_verified, can_join_server, created_at FROM users WHERE email COLLATE utf8mb4_general_ci = ? OR nickname = ? LIMIT 1",
+		"SELECT id, nickname, email_verified, can_join_server, created_at FROM users WHERE "+
+			eng.CIEquals("email")+" OR "+eng.CIEquals("nickname")+" LIMIT 1",
 		ident, ident))
 }
 
@@ -159,15 +154,10 @@ func (m *Mysql) PlayerByUUID(ctx context.Context, uuid string) (ygg.Player, erro
 }
 
 func (m *Mysql) PlayerByName(ctx context.Context, name string) (ygg.Player, error) {
-	// COLLATE sits on the COLUMN side on purpose: go-sql-driver uses
-	// server-side prepared statements (binary protocol), where the
-	// parameter charset is not yet known — `? COLLATE utf8mb4_general_ci`
-	// (collate-on-placeholder) made MySQL 5.7 fail every lookup with
-	// 1267 Illegal mix of collations (observed on the panel 5.7.44 test
-	// DB; literal-text queries still worked, masking it in ad-hoc SQL).
-	// Collating the column (whose charset is fixed by DDL) keeps the
-	// case-insensitive legacy name match in both protocols.
-	return m.scanPlayer(ctx, "p.name COLLATE utf8mb4_general_ci = ?", name)
+	// Case-insensitive legacy name match: on MySQL the general_ci column
+	// collation folded it, so LOWER() preserves that on PostgreSQL (case-
+	// sensitive default) and is a no-op on MySQL/SQLite.
+	return m.scanPlayer(ctx, m.db.Dialect().CIEquals("p.name"), name)
 }
 
 func (m *Mysql) PlayersByUID(ctx context.Context, uid int64) ([]ygg.Player, error) {
@@ -275,9 +265,12 @@ func (m *Mysql) PruneUserTokens(ctx context.Context, uid int64, keep int) (int64
 		return 0, nil
 	}
 	res, err := m.db.ExecContext(ctx,
-		`UPDATE ygg_tokens SET invalidated = 1
-		 WHERE user_id = ? AND invalidated = 0
-		 ORDER BY id ASC LIMIT ?`, uid, n-keep)
+		// UPDATE ... ORDER BY ... LIMIT is MySQL-only; the derived table keeps
+		// "evict the oldest, keep the newest `keep`" on all three engines.
+		`UPDATE ygg_tokens SET invalidated = 1 WHERE id IN (
+			SELECT t.id FROM (
+				SELECT id FROM ygg_tokens WHERE user_id = ? AND invalidated = 0
+				 ORDER BY id ASC LIMIT ?) t)`, uid, n-keep)
 	if err != nil {
 		return 0, err
 	}

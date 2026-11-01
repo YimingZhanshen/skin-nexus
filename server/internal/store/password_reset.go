@@ -8,8 +8,9 @@ import (
 )
 
 // Password reset tokens (A1 找回密码): digest-only storage, single-use,
-// DB-clock TTL. Every time comparison happens in SQL (NOW(3)) — the Go and
-// MySQL clocks never need to agree, and a replayed link finds nothing.
+// Go-clock TTL. Every deadline and comparison binds a Go time (m.now()), so
+// writes and reads use one clock — the invariant that keeps the three engines
+// alike. A replayed link past its deadline still finds nothing.
 
 // CreatePasswordResetToken stores the SHA-256 digest of a fresh reset token.
 // Two housekeeping rules ride along:
@@ -22,18 +23,19 @@ func (m *Mysql) CreatePasswordResetToken(ctx context.Context, uid int64, tokenHa
 	if secs <= 0 {
 		secs = 1800
 	}
+	now := m.now().UTC()
 	// Best-effort housekeeping: a purge failure must not block the insert.
 	_, _ = m.db.ExecContext(ctx,
 		`DELETE FROM password_reset_tokens
-		  WHERE used_at IS NOT NULL OR expires_at < NOW(3) - INTERVAL 1 DAY`)
+		  WHERE used_at IS NOT NULL OR expires_at < ?`, now.Add(-24*time.Hour))
 	if _, err := m.db.ExecContext(ctx,
-		`UPDATE password_reset_tokens SET used_at = NOW(3)
-		  WHERE uid = ? AND used_at IS NULL`, uid); err != nil {
+		`UPDATE password_reset_tokens SET used_at = ?
+		  WHERE uid = ? AND used_at IS NULL`, now, uid); err != nil {
 		return err
 	}
 	_, err := m.db.ExecContext(ctx,
 		`INSERT INTO password_reset_tokens (uid, token_hash, expires_at)
-		 VALUES (?, ?, DATE_ADD(NOW(3), INTERVAL ? SECOND))`, uid, tokenHash, secs)
+		 VALUES (?, ?, ?)`, uid, tokenHash, now.Add(time.Duration(secs)*time.Second))
 	return err
 }
 
@@ -43,10 +45,11 @@ func (m *Mysql) CreatePasswordResetToken(ctx context.Context, uid int64, tokenHa
 // already used — collapses into ErrNotFound: the endpoint must not leak
 // which one it was.
 func (m *Mysql) ConsumePasswordResetToken(ctx context.Context, tokenHash string) (int64, error) {
+	now := m.now().UTC()
 	res, err := m.db.ExecContext(ctx,
-		`UPDATE password_reset_tokens SET used_at = NOW(3)
-		  WHERE token_hash = ? AND used_at IS NULL AND expires_at > NOW(3)`,
-		tokenHash)
+		`UPDATE password_reset_tokens SET used_at = ?
+		  WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?`,
+		now, tokenHash, now)
 	if err != nil {
 		return 0, err
 	}
@@ -67,13 +70,14 @@ func (m *Mysql) ConsumePasswordResetToken(ctx context.Context, tokenHash string)
 	return uid, nil
 }
 
-// UserByEmail resolves an email address to a uid (case-insensitive). The
-// COLLATE sits on the column expression — `? COLLATE …` is a syntax error
-// on MySQL 5.7 (same trap UserByIdentifier documents).
+// UserByEmail resolves an email address to a uid (case-insensitive). Legacy
+// MySQL folded it through the general_ci column collation; LOWER() keeps the
+// same match on PostgreSQL's case-sensitive default and is a no-op on the
+// other two engines.
 func (m *Mysql) UserByEmail(ctx context.Context, email string) (int64, error) {
 	var uid int64
 	err := m.db.QueryRowContext(ctx,
-		`SELECT id FROM users WHERE email COLLATE utf8mb4_general_ci = ? LIMIT 1`,
+		`SELECT id FROM users WHERE `+m.db.Dialect().CIEquals("email")+` LIMIT 1`,
 		email).Scan(&uid)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNotFound

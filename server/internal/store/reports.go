@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	mysql "github.com/go-sql-driver/mysql"
 )
 
 var ErrDuplicateReport = errors.New("store: report already exists")
@@ -49,17 +47,16 @@ func normalizeReportOpts(o ReportOpts) ReportOpts {
 // CreateReport inserts one report; the unique (texture, reporter) key is
 // mapped to ErrDuplicateReport so the HTTP layer can return 409.
 func (m *Mysql) CreateReport(ctx context.Context, textureID, reporterUID int64, reason, detail string) (int64, error) {
-	res, err := m.db.ExecContext(ctx,
+	rid, err := m.db.InsertReturningID(ctx,
 		`INSERT INTO texture_reports (texture_id, reporter_uid, reason, detail, status)
 		 VALUES (?,?,?,?,'open')`, textureID, reporterUID, reason, nullableStr(detail))
 	if err != nil {
-		var me *mysql.MySQLError
-		if errors.As(err, &me) && me.Number == 1062 {
+		if isDupKey(err) {
 			return 0, ErrDuplicateReport
 		}
 		return 0, err
 	}
-	return res.LastInsertId()
+	return rid, nil
 }
 
 func (m *Mysql) CountReportsByUserSince(ctx context.Context, uid int64, since time.Time) (int, error) {
@@ -148,8 +145,8 @@ func (m *Mysql) ResolveReport(ctx context.Context, id int64, status string, hand
 		return fmt.Errorf("invalid report status %q", status)
 	}
 	res, err := m.db.ExecContext(ctx,
-		`UPDATE texture_reports SET status=?, handled_by=?, handled_at=NOW(3)
-		  WHERE id=? AND status='open'`, status, handledBy, id)
+		`UPDATE texture_reports SET status=?, handled_by=?, handled_at=?
+		  WHERE id=? AND status='open'`, status, handledBy, m.now().UTC(), id)
 	if err != nil {
 		return err
 	}
@@ -173,7 +170,7 @@ func (m *Mysql) StrikeTexture(ctx context.Context, tid, reportID, handledBy int6
 	// Locking the texture first makes concurrent strikes on the same report
 	// serialize, and tells us the texture is really gone (not just unchanged).
 	var exists int64
-	err = tx.QueryRowContext(ctx, `SELECT id FROM textures WHERE id = ? FOR UPDATE`, tid).Scan(&exists)
+	err = tx.QueryRowContext(ctx, "SELECT id FROM textures WHERE id = ?"+tx.Engine().LockSQL(), tid).Scan(&exists)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -182,8 +179,8 @@ func (m *Mysql) StrikeTexture(ctx context.Context, tid, reportID, handledBy int6
 	}
 
 	res, err := tx.ExecContext(ctx,
-		`UPDATE texture_reports SET status='resolved', handled_by=?, handled_at=NOW(3)
-		  WHERE id=? AND status='open'`, handledBy, reportID)
+		`UPDATE texture_reports SET status='resolved', handled_by=?, handled_at=?
+		  WHERE id=? AND status='open'`, handledBy, m.now().UTC(), reportID)
 	if err != nil {
 		return fmt.Errorf("texture strike report: %w", err)
 	}

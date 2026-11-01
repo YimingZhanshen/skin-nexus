@@ -279,7 +279,7 @@ func main() {
 		Keyring:         trustKeys,
 		MarketURL:       cfg.PluginMarketURL,
 		UploadMax:       cfg.PluginUploadMax,
-		Jobs:            jobs.New(st.DB()),
+		Jobs:            jobs.New(st.DBX()),
 		HostVersion:     version,
 		State:           st,
 		Store:           pluginStore{st: st},
@@ -553,7 +553,7 @@ func main() {
 	pub.TextureURL = pluginHost.TextureURL
 	admin := adminapi.New(st, yggSvc)
 	admin.Account = backend.Account // deletion runs through the same guards/events as the user path
-	admin.Jobs = jobs.New(st.DB())
+	admin.Jobs = jobs.New(st.DBX())
 	admin.OnUserLifecycle = func(ctx context.Context, e plugin.UserLifecycleEvent) {
 		pluginHost.EmitUserLifecycle(ctx, e)
 		if e.Kind == "deleted" {

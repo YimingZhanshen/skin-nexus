@@ -45,7 +45,7 @@ func (m *Mysql) EmailByPlayerName(ctx context.Context, name string) (string, boo
 	var email sql.NullString
 	err := m.db.QueryRowContext(ctx,
 		`SELECT u.email FROM players p JOIN users u ON u.id = p.uid
-		 WHERE p.name COLLATE utf8mb4_general_ci = ? LIMIT 1`, name).
+		 WHERE `+m.db.Dialect().CIEquals("p.name")+` LIMIT 1`, name).
 		Scan(&email)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
@@ -71,8 +71,11 @@ func (m *Mysql) GetOption(ctx context.Context, k string) (string, bool, error) {
 }
 
 func (m *Mysql) SetOption(ctx context.Context, k, v string) error {
-	_, err := m.db.ExecContext(ctx,
-		`INSERT INTO options (k, v) VALUES (?,?) ON DUPLICATE KEY UPDATE v = VALUES(v)`, k, v)
+	q, err := m.db.Dialect().Upsert("options", []string{"k", "v"}, []string{"k"}, []string{"v"})
+	if err != nil {
+		return err
+	}
+	_, err = m.db.ExecContext(ctx, q, k, v)
 	return err
 }
 
@@ -91,7 +94,10 @@ func (m *Mysql) GetUnionKV(ctx context.Context, k string) (string, bool, error) 
 }
 
 func (m *Mysql) SetUnionKV(ctx context.Context, k, v string) error {
-	_, err := m.db.ExecContext(ctx,
-		`INSERT INTO union_kv (k, v) VALUES (?,?) ON DUPLICATE KEY UPDATE v = VALUES(v)`, k, v)
+	q, err := m.db.Dialect().Upsert("union_kv", []string{"k", "v"}, []string{"k"}, []string{"v"})
+	if err != nil {
+		return err
+	}
+	_, err = m.db.ExecContext(ctx, q, k, v)
 	return err
 }

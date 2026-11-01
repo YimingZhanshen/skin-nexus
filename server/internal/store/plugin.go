@@ -100,23 +100,26 @@ func (m *Mysql) UpsertPluginMeta(ctx context.Context, p PluginMeta) error {
 	if p.State == "" {
 		p.State = "discovered"
 	}
-	var installed any
+	now := m.now().UTC()
+	installed := now
 	if !p.InstalledAt.IsZero() {
-		installed = p.InstalledAt
+		installed = p.InstalledAt.UTC()
 	}
-	_, err := m.db.ExecContext(ctx,
-		`INSERT INTO plugin_meta
-		   (name, version, hook_api, runtime, manifest, config, schema_version,
-		    source, trust, signer, checksum, state, last_error, installed_at, updated_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,COALESCE(?, CURRENT_TIMESTAMP(3)), CURRENT_TIMESTAMP(3))
-		 ON DUPLICATE KEY UPDATE
-		   version=VALUES(version), hook_api=VALUES(hook_api), runtime=VALUES(runtime),
-		   manifest=VALUES(manifest), config=VALUES(config), schema_version=VALUES(schema_version),
-		   source=VALUES(source), trust=VALUES(trust), signer=VALUES(signer),
-		   checksum=VALUES(checksum), state=VALUES(state),
-		   last_error=VALUES(last_error), updated_at=CURRENT_TIMESTAMP(3)`,
+	// installed_at keeps its first value on conflict (not in the update list);
+	// updated_at is carried as an insert column so VALUES()/excluded can stamp
+	// the Go clock on both the insert and the update path. name is the PK.
+	q, err := m.db.Dialect().Upsert("plugin_meta",
+		[]string{"name", "version", "hook_api", "runtime", "manifest", "config", "schema_version",
+			"source", "trust", "signer", "checksum", "state", "last_error", "installed_at", "updated_at"},
+		[]string{"name"},
+		[]string{"version", "hook_api", "runtime", "manifest", "config", "schema_version",
+			"source", "trust", "signer", "checksum", "state", "last_error", "updated_at"})
+	if err != nil {
+		return err
+	}
+	_, err = m.db.ExecContext(ctx, q,
 		p.Name, p.Version, p.HookAPI, p.Runtime, nullableBytes(p.Manifest), nullableBytes(p.Config),
-		p.SchemaVersion, p.Source, p.Trust, p.Signer, p.Checksum, p.State, nullableStr(p.LastError), installed)
+		p.SchemaVersion, p.Source, p.Trust, p.Signer, p.Checksum, p.State, nullableStr(p.LastError), installed, now)
 	return err
 }
 
@@ -142,8 +145,8 @@ func (m *Mysql) ListPluginMeta(ctx context.Context) ([]PluginMeta, error) {
 
 func (m *Mysql) UpdatePluginState(ctx context.Context, name, state, lastErr string) error {
 	_, err := m.db.ExecContext(ctx,
-		`UPDATE plugin_meta SET state=?, last_error=?, updated_at=CURRENT_TIMESTAMP(3) WHERE name=?`,
-		state, nullableStr(lastErr), name)
+		`UPDATE plugin_meta SET state=?, last_error=?, updated_at=? WHERE name=?`,
+		state, nullableStr(lastErr), m.now().UTC(), name)
 	return err
 }
 
@@ -164,8 +167,8 @@ func (m *Mysql) GetPluginConfig(ctx context.Context, name string) ([]byte, error
 
 func (m *Mysql) SetPluginConfig(ctx context.Context, name string, config []byte) error {
 	_, err := m.db.ExecContext(ctx,
-		`UPDATE plugin_meta SET config=?, updated_at=CURRENT_TIMESTAMP(3) WHERE name=?`,
-		nullableBytes(config), name)
+		`UPDATE plugin_meta SET config=?, updated_at=? WHERE name=?`,
+		nullableBytes(config), m.now().UTC(), name)
 	return err
 }
 
@@ -187,12 +190,14 @@ func (m *Mysql) SetPluginSecret(ctx context.Context, plugin, key string, s Plugi
 	if s.KeyVersion <= 0 {
 		s.KeyVersion = 1
 	}
-	_, err := m.db.ExecContext(ctx,
-		`INSERT INTO plugin_secrets (plugin, k, ciphertext, nonce, key_version)
-		 VALUES (?,?,?,?,?)
-		 ON DUPLICATE KEY UPDATE ciphertext=VALUES(ciphertext), nonce=VALUES(nonce),
-		   key_version=VALUES(key_version), updated_at=CURRENT_TIMESTAMP(3)`,
-		plugin, key, s.Ciphertext, s.Nonce, s.KeyVersion)
+	q, err := m.db.Dialect().Upsert("plugin_secrets",
+		[]string{"plugin", "k", "ciphertext", "nonce", "key_version", "updated_at"},
+		[]string{"plugin", "k"},
+		[]string{"ciphertext", "nonce", "key_version", "updated_at"})
+	if err != nil {
+		return err
+	}
+	_, err = m.db.ExecContext(ctx, q, plugin, key, s.Ciphertext, s.Nonce, s.KeyVersion, m.now().UTC())
 	return err
 }
 
@@ -208,8 +213,8 @@ func (m *Mysql) GetPluginKV(ctx context.Context, plugin, ns, key string) (string
 	)
 	err := m.db.QueryRowContext(ctx,
 		`SELECT v, expires_at FROM plugin_kv
-		  WHERE plugin=? AND ns=? AND k=? AND (expires_at IS NULL OR expires_at > NOW(3))`,
-		plugin, ns, key).Scan(&v, &expires)
+		  WHERE plugin=? AND ns=? AND k=? AND (expires_at IS NULL OR expires_at > ?)`,
+		plugin, ns, key, m.now().UTC()).Scan(&v, &expires)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil, false, nil
 	}
@@ -224,11 +229,14 @@ func (m *Mysql) GetPluginKV(ctx context.Context, plugin, ns, key string) (string
 }
 
 func (m *Mysql) SetPluginKV(ctx context.Context, plugin, ns, key, value string, expiresAt *time.Time) error {
-	_, err := m.db.ExecContext(ctx,
-		`INSERT INTO plugin_kv (plugin, ns, k, v, expires_at)
-		 VALUES (?,?,?,?,?)
-		 ON DUPLICATE KEY UPDATE v=VALUES(v), expires_at=VALUES(expires_at), updated_at=CURRENT_TIMESTAMP(3)`,
-		plugin, ns, key, value, expiresAt)
+	q, err := m.db.Dialect().Upsert("plugin_kv",
+		[]string{"plugin", "ns", "k", "v", "expires_at", "updated_at"},
+		[]string{"plugin", "ns", "k"},
+		[]string{"v", "expires_at", "updated_at"})
+	if err != nil {
+		return err
+	}
+	_, err = m.db.ExecContext(ctx, q, plugin, ns, key, value, expiresAt, m.now().UTC())
 	return err
 }
 
@@ -243,9 +251,9 @@ func (m *Mysql) ListPluginKV(ctx context.Context, plugin, ns, prefix string, lim
 	}
 	rows, err := m.db.QueryContext(ctx,
 		`SELECT ns, k, v, expires_at, updated_at FROM plugin_kv
-		  WHERE plugin=? AND ns=? AND k LIKE CONCAT(?, '%')
-		    AND (expires_at IS NULL OR expires_at > NOW(3))
-		  ORDER BY k LIMIT ?`, plugin, ns, prefix, limit)
+		  WHERE plugin=? AND ns=? AND k LIKE `+m.db.Dialect().Concat("?", "'%'")+`
+		    AND (expires_at IS NULL OR expires_at > ?)
+		  ORDER BY k LIMIT ?`, plugin, ns, prefix, m.now().UTC(), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +280,7 @@ func (m *Mysql) CountPluginKV(ctx context.Context, plugin string) (int, error) {
 	var n int
 	err := m.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM plugin_kv WHERE plugin=?
-		  AND (expires_at IS NULL OR expires_at > NOW(3))`, plugin).Scan(&n)
+		  AND (expires_at IS NULL OR expires_at > ?)`, plugin, m.now().UTC()).Scan(&n)
 	return n, err
 }
 
@@ -281,7 +289,14 @@ func (m *Mysql) SweepPluginKV(ctx context.Context, limit int) (int64, error) {
 		limit = 500
 	}
 	res, err := m.db.ExecContext(ctx,
-		`DELETE FROM plugin_kv WHERE expires_at IS NOT NULL AND expires_at <= NOW(3) LIMIT ?`, limit)
+		// DELETE ... LIMIT is a MySQL extension. The row keys come from a
+		// derived table so MySQL does not see the delete target inside its own
+		// subquery, and PostgreSQL gets the one spelling it accepts.
+		`DELETE FROM plugin_kv WHERE (plugin, ns, k) IN (
+			SELECT p.plugin, p.ns, p.k FROM (
+				SELECT plugin, ns, k FROM plugin_kv
+				 WHERE expires_at IS NOT NULL AND expires_at <= ? LIMIT ?) p)`,
+		m.now().UTC(), limit)
 	if err != nil {
 		return 0, err
 	}
@@ -307,10 +322,14 @@ func (m *Mysql) GetPluginDoc(ctx context.Context, plugin, coll, id string) (*Plu
 }
 
 func (m *Mysql) PutPluginDoc(ctx context.Context, plugin, coll, id string, doc []byte) error {
-	_, err := m.db.ExecContext(ctx,
-		`INSERT INTO plugin_docs (plugin, coll, id, doc) VALUES (?,?,?,?)
-		 ON DUPLICATE KEY UPDATE doc=VALUES(doc), updated_at=CURRENT_TIMESTAMP(3)`,
-		plugin, coll, id, doc)
+	q, err := m.db.Dialect().Upsert("plugin_docs",
+		[]string{"plugin", "coll", "id", "doc", "updated_at"},
+		[]string{"plugin", "coll", "id"},
+		[]string{"doc", "updated_at"})
+	if err != nil {
+		return err
+	}
+	_, err = m.db.ExecContext(ctx, q, plugin, coll, id, doc, m.now().UTC())
 	return err
 }
 
@@ -325,7 +344,7 @@ func (m *Mysql) ListPluginDocs(ctx context.Context, plugin, coll, prefix string,
 	}
 	rows, err := m.db.QueryContext(ctx,
 		`SELECT coll, id, doc, created_at, updated_at FROM plugin_docs
-		  WHERE plugin=? AND coll=? AND id LIKE CONCAT(?, '%')
+		  WHERE plugin=? AND coll=? AND id LIKE `+m.db.Dialect().Concat("?", "'%'")+`
 		  ORDER BY id LIMIT ?`, plugin, coll, prefix, limit)
 	if err != nil {
 		return nil, err
@@ -364,8 +383,11 @@ func (m *Mysql) PluginMigrationApplied(ctx context.Context, plugin string, versi
 }
 
 func (m *Mysql) RecordPluginMigration(ctx context.Context, plugin string, version int) error {
-	_, err := m.db.ExecContext(ctx,
-		`INSERT IGNORE INTO plugin_migrations (plugin, version) VALUES (?,?)`, plugin, version)
+	q, err := m.db.Dialect().InsertIgnore("plugin_migrations", []string{"plugin", "version"})
+	if err != nil {
+		return err
+	}
+	_, err = m.db.ExecContext(ctx, q, plugin, version)
 	return err
 }
 

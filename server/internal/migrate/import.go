@@ -6,8 +6,9 @@
 //     zero drift, per-row reconcilable;
 //   - source tables are addressed via a schema/table prefix
 //     (`legacy.` on the same MySQL instance, `legacy_` in tests);
-//   - idempotent: INSERT IGNORE on preserved PKs, NOT EXISTS for the
-//     keyless user_closet, ON DUPLICATE KEY for options;
+//   - idempotent: INSERT IGNORE on preserved PKs (eng.InsertIgnore —
+//     target-less ON CONFLICT DO NOTHING on SQLite/PostgreSQL; options too),
+//     NOT EXISTS for the keyless user_closet;
 //   - password rows carry as-is with password_algo='legacy:bcrypt'
 //     (auth verifies $2y$ and lazily rehashes);
 //   - uuid rows go through CleanUuidTable (the five yggc:fix-uuid-table
@@ -23,13 +24,15 @@ import (
 	"strings"
 	"time"
 
+	"skin-nexus/server/internal/dbx"
+	"skin-nexus/server/internal/dialect"
 	"skin-nexus/server/internal/texture"
 )
 
 // ImportOptions configures one import run.
 type ImportOptions struct {
-	Source       *sql.DB        // legacy database connection
-	Target       *sql.DB        // skin_nexus database connection
+	Source       *sql.DB        // legacy database connection (always MySQL)
+	Target       *dbx.DB        // skin_nexus connection (carries its engine)
 	SourcePrefix string         // e.g. "legacy." or "legacy_"
 	TexturesSrc  string         // legacy storage/textures dir ("" = skip files)
 	TexturesDst  *texture.Store // where files land (nil = skip files)
@@ -56,6 +59,12 @@ type ImportReport struct {
 func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 	rep := ImportReport{Tables: map[string]TableStat{}}
 	p := opt.SourcePrefix
+	// The target knows its own engine: a second Engine field on ImportOptions
+	// would be a disagreeing answer to "which dialect do these INSERTs speak".
+	eng := opt.Target.Engine()
+	if eng == "" {
+		eng = dialect.MySQL
+	}
 
 	// Target schema assertion (review A2): the import column lists require
 	// 0005-0008. Without them the first INSERT dies with a generic
@@ -79,7 +88,7 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 		SELECT u.uid, u.email, u.nickname, u.password, u.ip,
 		       u.avatar, u.register_at, u.verified, u.score, u.locale,
 		       u.is_dark_mode, u.permission, u.last_sign_at, u.verification_token,
-		       IFNULL(pc.n, 0)
+		       COALESCE(pc.n, 0)
 		FROM %susers u
 		LEFT JOIN (SELECT uid, COUNT(*) n FROM %splayers GROUP BY uid) pc ON pc.uid = u.uid`, p, p)
 	rows, err := opt.Source.QueryContext(ctx, sel)
@@ -133,6 +142,13 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 			seenNick[kn] = u.id
 		}
 	}
+	userCols := []string{"id", "email", "nickname", "password", "password_algo", "player_limit", "ip", "avatar_tid",
+		"created_at", "updated_at", "email_verified", "can_join_server",
+		"score", "locale", "is_dark_mode", "permission", "last_sign_at", "verification_token"}
+	userIns, err := eng.InsertIgnore("users", userCols)
+	if err != nil {
+		return rep, fmt.Errorf("users insert sql: %w", err)
+	}
 	for _, u := range users {
 		limit := u.playerCount
 		if limit < 3 {
@@ -157,12 +173,7 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 		if opt.DryRun {
 			continue
 		}
-		res, err := opt.Target.ExecContext(ctx, `
-			INSERT IGNORE INTO users
-			  (id, email, nickname, password, password_algo, player_limit, ip, avatar_tid,
-			   created_at, updated_at, email_verified, can_join_server,
-			   score, locale, is_dark_mode, permission, last_sign_at, verification_token)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args...)
+		res, err := opt.Target.ExecContext(ctx, userIns, args...)
 		if err != nil {
 			return rep, fmt.Errorf("users insert uid=%d: %w", u.id, err)
 		}
@@ -211,6 +222,11 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 			seenPName[kn] = pl.id
 		}
 	}
+	playerCols := []string{"id", "uid", "name", "tid_skin", "tid_cape", "created_at", "updated_at"}
+	playerIns, err := eng.InsertIgnore("players", playerCols)
+	if err != nil {
+		return rep, fmt.Errorf("players insert sql: %w", err)
+	}
 	for _, pl := range players {
 		var skin any
 		if pl.skin > 0 {
@@ -224,9 +240,7 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 			continue
 		}
 		created := safeTime(pl.lastModified, fmt.Sprintf("players pid=%d last_modified", pl.id), true, &rep)
-		res, err := opt.Target.ExecContext(ctx, `
-			INSERT IGNORE INTO players (id, uid, name, tid_skin, tid_cape, created_at, updated_at)
-			VALUES (?,?,?,?,?,?,?)`,
+		res, err := opt.Target.ExecContext(ctx, playerIns,
 			pl.id, pl.uid, pl.name, skin, cape, created, created)
 		if err != nil {
 			return rep, fmt.Errorf("players insert pid=%d: %w", pl.id, err)
@@ -264,6 +278,11 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 	}
 	rows.Close()
 	rep.Tables["textures"] = TableStat{Selected: int64(len(texs))}
+	texCols := []string{"id", "uid", "type", "hash", "model", "description", "upload_at", "public"}
+	texIns, err := eng.InsertIgnore("textures", texCols)
+	if err != nil {
+		return rep, fmt.Errorf("textures insert sql: %w", err)
+	}
 	for _, t := range texs {
 		typ, model := "skin", sql.NullString{}
 		switch t.legacyType {
@@ -279,9 +298,7 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 		if opt.DryRun {
 			continue
 		}
-		res, err := opt.Target.ExecContext(ctx, `
-			INSERT IGNORE INTO textures (id, uid, type, hash, model, description, upload_at, public)
-			VALUES (?,?,?,?,?,?,?,?)`,
+		res, err := opt.Target.ExecContext(ctx, texIns,
 			t.id, t.uid, typ, t.hash, model, t.name,
 			safeTime(t.uploadAt, fmt.Sprintf("textures tid=%d upload_at", t.id), true, &rep), t.public)
 		if err != nil {
@@ -319,14 +336,18 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 	cleaned, uuidRep := CleanUuidTable(uuidRows, nameToPID)
 	rep.UUID = uuidRep
 	rep.Tables["uuid_map"] = TableStat{Selected: int64(len(uuidRows))}
+	uuidCols := []string{"name", "uuid", "player_id"}
+	uuidIns, err := eng.InsertIgnore("uuid_map", uuidCols)
+	if err != nil {
+		return rep, fmt.Errorf("uuid_map insert sql: %w", err)
+	}
 	if !opt.DryRun {
 		for _, r := range cleaned {
 			if !isHexOfLen(r.UUID, 32) {
 				rep.Warnings = append(rep.Warnings, fmt.Sprintf("uuid_map %q has malformed uuid — skipped", r.Name))
 				continue
 			}
-			res, err := opt.Target.ExecContext(ctx,
-				`INSERT IGNORE INTO uuid_map (name, uuid, player_id) VALUES (?,?,?)`,
+			res, err := opt.Target.ExecContext(ctx, uuidIns,
 				r.Name, r.UUID, r.PID) // r.UUID already normalized by the clean
 			if err != nil {
 				return rep, fmt.Errorf("uuid_map insert %s: %w", r.Name, err)
@@ -359,6 +380,11 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 	}
 	rows.Close()
 	rep.Tables["options"] = TableStat{Selected: int64(len(opts))}
+	optCols := []string{"k", "v"}
+	optIns, err := eng.InsertIgnore("options", optCols)
+	if err != nil {
+		return rep, fmt.Errorf("options insert sql: %w", err)
+	}
 	seenOpt := map[string]bool{}
 	for _, o := range opts {
 		if seenOpt[o.k] {
@@ -379,8 +405,7 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 		if opt.DryRun {
 			continue
 		}
-		if _, err := opt.Target.ExecContext(ctx,
-			`INSERT IGNORE INTO options (k, v) VALUES (?,?)`,
+		if _, err := opt.Target.ExecContext(ctx, optIns,
 			o.k, o.v); err != nil {
 			return rep, fmt.Errorf("options insert %s: %w", o.k, err)
 		}
@@ -410,18 +435,29 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 	}
 	rows.Close()
 	rep.Tables["user_closet"] = TableStat{Selected: int64(len(closet))}
+	// Exact-duplicate policy (review A1): 'Hat' and 'hat' are distinct rows.
+	// SQLite and PostgreSQL compare TEXT byte-exact by default; MySQL's default
+	// utf8mb4 collation is case-insensitive + PAD SPACE, so it needs a binary
+	// collation pin to match (dialect spells no byte-exact equals). FROM DUAL is
+	// dropped — MySQL-only, and SQLite/PostgreSQL reject it — while
+	// INSERT..SELECT <vals> WHERE NOT EXISTS parses and dedupes on all three.
+	nameCol := "item_name"
+	if eng == dialect.MySQL {
+		nameCol = "item_name COLLATE utf8mb4_bin"
+	}
+	closetIns := fmt.Sprintf(`
+		INSERT INTO user_closet (user_uid, texture_tid, item_name)
+		SELECT ?,?,?
+		WHERE NOT EXISTS (
+			SELECT 1 FROM user_closet
+			WHERE user_uid = ? AND texture_tid = ?
+			  AND %s)`, dialect.NullSafeEq(nameCol, "?"))
 	for _, c := range closet {
 		if opt.DryRun {
 			continue
 		}
-		res, err := opt.Target.ExecContext(ctx, `
-			INSERT INTO user_closet (user_uid, texture_tid, item_name)
-			SELECT ?,?,? FROM DUAL
-			WHERE NOT EXISTS (
-				SELECT 1 FROM user_closet
-				WHERE user_uid = ? AND texture_tid = ?
-				  AND BINARY item_name <=> BINARY ?)`, // BINARY: exact-duplicate policy (review A1: ci/PAD-SPACE collapsed 'Hat'/'hat')
-			c.uid, c.tid, c.itemName, c.uid, c.tid, c.itemName)
+		res, err := opt.Target.ExecContext(ctx, closetIns,
+			c.uid, c.tid, c.itemName, c.uid, c.tid, c.itemName, c.itemName)
 		if err != nil {
 			return rep, fmt.Errorf("closet insert uid=%d tid=%d: %w", c.uid, c.tid, err)
 		}
@@ -458,13 +494,16 @@ func RunImport(ctx context.Context, opt ImportOptions) (ImportReport, error) {
 	}
 	rows.Close()
 	rep.Tables["invitation_codes"] = TableStat{Selected: int64(len(invs))}
+	invCols := []string{"id", "code", "generated_at", "used_by", "used_at", "description"}
+	invIns, err := eng.InsertIgnore("invitation_codes", invCols)
+	if err != nil {
+		return rep, fmt.Errorf("invitation insert sql: %w", err)
+	}
 	for _, i := range invs {
 		if opt.DryRun {
 			continue
 		}
-		res, err := opt.Target.ExecContext(ctx, `
-			INSERT IGNORE INTO invitation_codes (id, code, generated_at, used_by, used_at, description)
-			VALUES (?,?,?,?,?,?)`,
+		res, err := opt.Target.ExecContext(ctx, invIns,
 			i.id, i.code,
 			safeTime(i.generatedAt, fmt.Sprintf("invitation id=%d generated_at", i.id), true, &rep),
 			i.usedBy,

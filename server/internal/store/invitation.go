@@ -45,13 +45,12 @@ func (m *Mysql) CreateInvitationCodes(ctx context.Context, n int, description st
 	out := make([]InvitationCode, 0, n)
 	for i := 0; i < n; i++ {
 		code := NewInvitationCodeValue()
-		res, err := m.db.ExecContext(ctx,
+		id, err := m.db.InsertReturningID(ctx,
 			`INSERT INTO invitation_codes (code, generated_at, used_by, description) VALUES (?,?,0,?)`,
 			code, now, nullableStr(description))
 		if err != nil {
 			return out, err
 		}
-		id, _ := res.LastInsertId()
 		out = append(out, InvitationCode{ID: id, Code: code, GeneratedAt: now, Description: description})
 	}
 	return out, nil
@@ -141,14 +140,10 @@ func (m *Mysql) CreateUserWithInvitation(ctx context.Context, email, nickname, p
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	res, err := tx.ExecContext(ctx,
+	uid, err := tx.InsertReturningID(ctx,
 		`INSERT INTO users (email, nickname, password, password_algo, player_limit, email_verified, can_join_server, ip)
 		 VALUES (?,?,?,'argon2id',?,0,1,?)`,
 		nullableStr(email), nickname, passwordHash, playerLimit, nullableStr(ip))
-	if err != nil {
-		return 0, err
-	}
-	uid, err := res.LastInsertId()
 	if err != nil {
 		return 0, err
 	}

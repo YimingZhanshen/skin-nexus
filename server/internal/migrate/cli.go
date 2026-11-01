@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"skin-nexus/server/internal/dbx"
 	"skin-nexus/server/internal/texture"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -156,7 +157,9 @@ func runImport(args []string, out io.Writer) error {
 		return err
 	}
 	defer src.Close()
-	tgt, err := sql.Open("mysql", *targetDSN)
+	// The target goes through dbx so the importer's INSERTs get the same
+	// placeholder rewriting and clock handling as the server's own writes.
+	tgt, err := dbx.Open(context.Background(), "", *targetDSN)
 	if err != nil {
 		return err
 	}

@@ -253,7 +253,12 @@ func (m *Mysql) ClosetLikes(ctx context.Context, tid int64) (int64, error) {
 // skinlib heart toggle needs no prior closet lookup.
 func (m *Mysql) RemoveClosetEntryByTID(ctx context.Context, uid, tid int64) error {
 	res, err := m.db.ExecContext(ctx,
-		`DELETE FROM user_closet WHERE user_uid = ? AND texture_tid = ? LIMIT 1`,
+		// user_closet keeps the legacy shape with no unique key, so "drop one
+		// copy" is the lowest row id rather than MySQL's DELETE ... LIMIT 1.
+		`DELETE FROM user_closet WHERE id = (
+			SELECT c.id FROM (
+				SELECT MIN(id) AS id FROM user_closet
+				 WHERE user_uid = ? AND texture_tid = ?) c)`,
 		uid, tid)
 	if err != nil {
 		return err
@@ -299,7 +304,8 @@ func (m *Mysql) UpdateTextureMeta(ctx context.Context, tid, ownerUID int64, patc
 	}
 	if patch.Public != nil {
 		if *patch.Public {
-			sets = append(sets, "public = 1", "public_dedupe = CONCAT(type, ':', hash)")
+			sets = append(sets, "public = 1",
+				"public_dedupe = "+m.db.Dialect().Concat("type", "':'", "hash"))
 		} else {
 			sets = append(sets, "public = 0", "public_dedupe = NULL")
 		}
@@ -327,7 +333,7 @@ func (m *Mysql) UpdateTextureMeta(ctx context.Context, tid, ownerUID int64, patc
 	}
 	res, err := m.db.ExecContext(ctx, q, args...)
 	if err != nil {
-		if isDuplicateKey(err) {
+		if isDupKey(err) {
 			return ErrDuplicatePublic
 		}
 		return fmt.Errorf("texture meta update: %w", err)

@@ -6,11 +6,18 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+
+	"skin-nexus/server/internal/dbx"
 )
 
 // DB exposes the raw handle for the migrate package (schema bootstrap only;
 // regular queries stay behind typed methods).
 func (m *Mysql) DB() *sql.DB { return m.db.Underlying() }
+
+// DBX hands the rewritten-statement pool to the subsystems that run their own
+// SQL (the job queue). Anything taking DB() gets no placeholder rewriting and
+// no SQLite UTC normalisation, so it is a MySQL-only path by accident.
+func (m *Mysql) DBX() *dbx.DB { return m.db }
 
 // TableExists reports whether a base table exists in the current schema.
 func (m *Mysql) TableExists(ctx context.Context, name string) (bool, error) {

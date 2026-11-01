@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
 )
 
 // Admin user management (P1 管理面余项, 2026-10-23).
@@ -51,23 +52,27 @@ func (m *Mysql) DeleteUser(ctx context.Context, uid int64) error {
 	}
 	defer tx.Rollback()
 	stmts := []struct {
-		q string
+		q    string
+		args []any
 	}{
-		{`DELETE FROM web_sessions WHERE user_id = ?`},
-		{`DELETE FROM ygg_tokens WHERE user_id = ?`},
-		{`DELETE FROM oidc_refresh_tokens WHERE uid = ?`},
-		{`DELETE FROM oidc_access_tokens WHERE uid = ?`},
+		{`DELETE FROM web_sessions WHERE user_id = ?`, []any{uid}},
+		{`DELETE FROM ygg_tokens WHERE user_id = ?`, []any{uid}},
+		{`DELETE FROM oidc_refresh_tokens WHERE uid = ?`, []any{uid}},
+		{`DELETE FROM oidc_access_tokens WHERE uid = ?`, []any{uid}},
 		// review P2: device grants and pending auth requests also carry user
 		// state and can still walk into token issuance after deletion.
-		{`DELETE FROM oidc_device_auth WHERE uid = ?`},
-		{`DELETE FROM oidc_auth_requests WHERE subject = CAST(? AS CHAR)`},
-		{`DELETE FROM user_closet WHERE user_uid = ?`},
-		{`DELETE FROM uuid_map WHERE player_id IN (SELECT id FROM players WHERE uid = ?)`},
-		{`DELETE FROM players WHERE uid = ?`},
-		{`DELETE FROM users WHERE id = ?`},
+		{`DELETE FROM oidc_device_auth WHERE uid = ?`, []any{uid}},
+		// subject stores the numeric uid as text; bind the string form so no
+		// engine-specific CAST(int AS CHAR) is needed (PostgreSQL/SQLite reject
+		// that spelling and compare text to an integer otherwise).
+		{`DELETE FROM oidc_auth_requests WHERE subject = ?`, []any{strconv.FormatInt(uid, 10)}},
+		{`DELETE FROM user_closet WHERE user_uid = ?`, []any{uid}},
+		{`DELETE FROM uuid_map WHERE player_id IN (SELECT id FROM players WHERE uid = ?)`, []any{uid}},
+		{`DELETE FROM players WHERE uid = ?`, []any{uid}},
+		{`DELETE FROM users WHERE id = ?`, []any{uid}},
 	}
 	for _, s := range stmts {
-		if _, err := tx.ExecContext(ctx, s.q, uid); err != nil {
+		if _, err := tx.ExecContext(ctx, s.q, s.args...); err != nil {
 			return err
 		}
 	}

@@ -48,6 +48,14 @@ type DeleteResult struct {
 // must take database row locks only while already holding it — otherwise two
 // orders of acquisition become possible.
 func (m *Mysql) WithHashLock(ctx context.Context, hash string, fn func(context.Context) error) error {
+	acquire, release, supported := m.db.Dialect().SessionLock(5)
+	if !supported {
+		// SQLite has no cross-process advisory lock. Its writers serialise on
+		// the file, so the guarded upload/delete pair cannot interleave inside
+		// one process. Running the CLI against a live server's file is the case
+		// that loses the guard — stop the server first, as SQLite requires.
+		return fn(ctx)
+	}
 	conn, err := m.db.Conn(ctx)
 	if err != nil {
 		return fmt.Errorf("hash lock: %w", err)
@@ -59,7 +67,9 @@ func (m *Mysql) WithHashLock(ctx context.Context, hash string, fn func(context.C
 	// collision would only cost an extra serialization.
 	name := "tex:" + hash[:min(len(hash), 32)]
 	var got sql.NullInt64
-	if err := conn.QueryRowContext(ctx, `SELECT GET_LOCK(?, 5)`, name).Scan(&got); err != nil {
+	// The lock statement runs on a pinned *sql.Conn, which is not the rewriting
+	// wrapper — bind the placeholder here or PostgreSQL never sees $1.
+	if err := conn.QueryRowContext(ctx, m.db.Bind(acquire), name).Scan(&got); err != nil {
 		return fmt.Errorf("hash lock %s: %w", name, err)
 	}
 	if !got.Valid {
@@ -68,13 +78,13 @@ func (m *Mysql) WithHashLock(ctx context.Context, hash string, fn func(context.C
 	if got.Int64 != 1 {
 		return ErrBusy
 	}
-	// GET_LOCK is per connection and the pool hands the same connection to the
-	// next caller, so releasing it is not optional. Deferred in this order:
-	// release first, then return the connection.
+	// The lock belongs to this connection and the pool hands the same
+	// connection to the next caller, so releasing it is not optional. Deferred
+	// in this order: release first, then return the connection.
 	defer func() {
-		release, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		_, _ = conn.ExecContext(release, `SELECT RELEASE_LOCK(?)`, name)
+		_, _ = conn.ExecContext(releaseCtx, m.db.Bind(release), name)
 	}()
 	return fn(ctx)
 }
@@ -109,7 +119,7 @@ func (m *Mysql) DeleteTexture(ctx context.Context, tid, ownerUID, actorUID int64
 
 	var uid int64
 	err = tx.QueryRowContext(ctx,
-		`SELECT uid, hash, type FROM textures WHERE id = ? FOR UPDATE`, tid).
+		"SELECT uid, hash, type FROM textures WHERE id = ?"+tx.Engine().LockSQL(), tid).
 		Scan(&uid, &out.Hash, &out.Type)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, ErrNotFound
@@ -140,8 +150,8 @@ func (m *Mysql) DeleteTexture(ctx context.Context, tid, ownerUID, actorUID int64
 		   (texture_id, uid, type, hash, model, description, source, source_url,
 		    public, moderation, upload_at, deleted_by, deleted_at, reason)
 		 SELECT id, uid, type, hash, model, description, COALESCE(source,''), source_url,
-		        public, moderation, upload_at, ?, NOW(3), ?
-		   FROM textures WHERE id = ?`, actorUID, reason, tid)
+		        public, moderation, upload_at, ?, ?, ?
+		   FROM textures WHERE id = ?`, actorUID, m.now().UTC(), reason, tid)
 	if err != nil {
 		return out, fmt.Errorf("texture tombstone: %w", err)
 	}
