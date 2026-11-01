@@ -23,12 +23,14 @@ export default defineConfig({
     cssCodeSplit: false,
     rollupOptions: {
       input: {
-        main: resolve(__dirname, 'index.html'),
+        // import.meta.dirname, not __dirname: vite 8 warns that the native
+        // config loader (the future default) does not provide __dirname.
+        main: resolve(import.meta.dirname, 'index.html'),
         // Fixed-name entry for the server-rendered texture detail page
         // (texturepage.go references /assets/viewer.js?v=1 — a hashed name
         // would break that contract). skinview3d is code-split into its own
         // chunk so the main SPA bundle doesn't pay for it.
-        viewer: resolve(__dirname, 'viewer-src.js'),
+        viewer: resolve(import.meta.dirname, 'viewer-src.js'),
       },
       output: {
         entryFileNames: (chunk) =>
