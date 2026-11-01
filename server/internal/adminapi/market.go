@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/plugin"
 )
 
@@ -27,16 +28,16 @@ func sameOriginForAdmin(r *http.Request) bool {
 func (b *Backend) pluginSuper(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	actor := actorUID(r)
 	if actor == 0 {
-		writeJSON(w, http.StatusForbidden, map[string]any{"error": "该操作仅支持超级管理员网页会话"})
+		writeErrCode(w, http.StatusForbidden, "该操作仅支持超级管理员网页会话", i18n.MsgWebSessionRequired)
 		return 0, false
 	}
 	perm, err := actorPermission(r.Context(), b, actor)
 	if err != nil || perm != 2 {
-		writeJSON(w, http.StatusForbidden, map[string]any{"error": "需要超级管理员（permission=2）账号"})
+		writeErrCode(w, http.StatusForbidden, "需要超级管理员（permission=2）账号", i18n.MsgSuperAdminRequired)
 		return 0, false
 	}
 	if !sameOriginForAdmin(r) {
-		writeJSON(w, http.StatusForbidden, map[string]any{"error": "请求来源校验失败"})
+		writeErrCode(w, http.StatusForbidden, "请求来源校验失败", i18n.MsgOriginMismatch)
 		return 0, false
 	}
 	return actor, true
@@ -50,10 +51,10 @@ func (b *Backend) handlePluginRollback(w http.ResponseWriter, r *http.Request) {
 	ctx := plugin.WithActor(r.Context(), actor)
 	if err := b.plugins.Host.Rollback(ctx, r.PathValue("name")); err != nil {
 		if errors.Is(err, plugin.ErrNoRollback) {
-			writeJSON(w, http.StatusConflict, map[string]any{"error": "没有可回滚的版本"})
+			writeErrCode(w, http.StatusConflict, "没有可回滚的版本", i18n.MsgPluginNoRollback)
 			return
 		}
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
+		writeLogged(r, w, http.StatusBadGateway, i18n.MsgPluginOpFailed, "plugin operation failed", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -67,7 +68,7 @@ func (b *Backend) handlePluginUninstall(w http.ResponseWriter, r *http.Request) 
 	purge := r.URL.Query().Get("purge") == "1"
 	ctx := plugin.WithActor(r.Context(), actor)
 	if err := b.plugins.Host.Uninstall(ctx, r.PathValue("name"), purge); err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
+		writeLogged(r, w, http.StatusBadGateway, i18n.MsgMarketUpstream, "upstream request failed", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -76,7 +77,7 @@ func (b *Backend) handlePluginUninstall(w http.ResponseWriter, r *http.Request) 
 func (b *Backend) handleMarketCatalog(w http.ResponseWriter, r *http.Request) {
 	list, err := b.plugins.Host.MarketCatalog(r.Context(), r.URL.Query().Get("refresh") == "1")
 	if err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": err.Error()})
+		writeLogged(r, w, http.StatusServiceUnavailable, i18n.MsgMarketUpstream, "upstream request failed", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"packages": list})
@@ -87,12 +88,12 @@ func (b *Backend) handleMarketPlan(w http.ResponseWriter, r *http.Request) {
 		Name string `json:"name"`
 	}
 	if err := jsonDecode(r, &body); err != nil || body.Name == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "name required"})
+		writeErrCode(w, http.StatusBadRequest, "name required", i18n.MsgMissingField)
 		return
 	}
 	plan, err := b.plugins.Host.MarketPlan(r.Context(), body.Name)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
+		writeLogged(r, w, http.StatusBadGateway, i18n.MsgMarketUpstream, "upstream request failed", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, plan)
@@ -108,16 +109,20 @@ func (b *Backend) handleMarketInstall(w http.ResponseWriter, r *http.Request) {
 		Consent bool   `json:"consent"`
 	}
 	if err := jsonDecode(r, &body); err != nil || body.Name == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "name required"})
+		writeErrCode(w, http.StatusBadRequest, "name required", i18n.MsgMissingField)
 		return
 	}
 	ctx := plugin.WithActor(r.Context(), actor)
 	res, err := b.plugins.Host.MarketInstall(ctx, body.Name, body.Consent)
 	switch {
-	case errors.Is(err, plugin.ErrConsentRequired), errors.Is(err, plugin.ErrInstallBlocked):
-		writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error(), "plan": res.Plan})
+	case errors.Is(err, plugin.ErrConsentRequired):
+		// The plan IS the dialog — which capabilities need consent. This error
+		// text was written by this repository for that screen, so it stays.
+		writeErrBody(w, http.StatusConflict, i18n.MsgPluginConsent, err, map[string]any{"plan": res.Plan})
+	case errors.Is(err, plugin.ErrInstallBlocked):
+		writeErrBody(w, http.StatusConflict, i18n.MsgPluginBlocked, err, map[string]any{"plan": res.Plan})
 	case err != nil:
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
+		writeLogged(r, w, http.StatusBadGateway, i18n.MsgMarketUpstream, "upstream request failed", err)
 	default:
 		writeJSON(w, http.StatusOK, res)
 	}
@@ -131,18 +136,18 @@ func (b *Backend) handleMarketUpload(w http.ResponseWriter, r *http.Request) {
 	maxUpload := b.plugins.Host.UploadMax()
 	r.Body = http.MaxBytesReader(w, r.Body, maxUpload+1<<20)
 	if err := r.ParseMultipartForm(maxUpload); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "multipart parse failed"})
+		writeErrCode(w, http.StatusBadRequest, "multipart parse failed", i18n.MsgBadBody)
 		return
 	}
 	f, _, err := r.FormFile("file")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "file required"})
+		writeErrCode(w, http.StatusBadRequest, "file required", i18n.MsgMissingField)
 		return
 	}
 	defer f.Close()
 	data, err := io.ReadAll(io.LimitReader(f, maxUpload+1))
 	if err != nil || int64(len(data)) > maxUpload {
-		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]any{"error": "bundle too large"})
+		writeErrCode(w, http.StatusRequestEntityTooLarge, "bundle too large", i18n.MsgTooLong)
 		return
 	}
 	consent := r.FormValue("consent") == "1"
@@ -150,7 +155,7 @@ func (b *Backend) handleMarketUpload(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("inspect") == "1" {
 		insp, ierr := b.plugins.Host.InspectBytes(ctx, data)
 		if ierr != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": ierr.Error()})
+			writeDomain(w, http.StatusBadRequest, ierr, i18n.MsgInvalidValue)
 			return
 		}
 		writeJSON(w, http.StatusOK, insp)
@@ -164,16 +169,23 @@ func (b *Backend) handleMarketUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := b.plugins.Host.InstallBytes(ctx, data, opts)
 	switch {
-	case errors.Is(err, plugin.ErrUnverifiedPlugin), errors.Is(err, plugin.ErrDigestMismatch):
-		writeJSON(w, http.StatusConflict, map[string]any{
-			"error": err.Error(), "inspection": res.Inspection,
-		})
-	case errors.Is(err, plugin.ErrConsentRequired), errors.Is(err, plugin.ErrInstallBlocked):
-		writeJSON(w, http.StatusConflict, map[string]any{
-			"error": err.Error(), "plan": res.Plan, "inspection": res.Inspection,
-		})
+	case errors.Is(err, plugin.ErrUnverifiedPlugin):
+		// The trust dialog is driven by the inspection payload plus this reason;
+		// `acceptUnverified` is the operator overriding it, so the body has to
+		// say what was unverified.
+		writeErrBody(w, http.StatusConflict, i18n.MsgPluginUnverified, err,
+			map[string]any{"inspection": res.Inspection})
+	case errors.Is(err, plugin.ErrDigestMismatch):
+		writeErrBody(w, http.StatusConflict, i18n.MsgDigestMismatch, err,
+			map[string]any{"inspection": res.Inspection})
+	case errors.Is(err, plugin.ErrConsentRequired):
+		writeErrBody(w, http.StatusConflict, i18n.MsgPluginConsent, err,
+			map[string]any{"plan": res.Plan, "inspection": res.Inspection})
+	case errors.Is(err, plugin.ErrInstallBlocked):
+		writeErrBody(w, http.StatusConflict, i18n.MsgPluginBlocked, err,
+			map[string]any{"plan": res.Plan, "inspection": res.Inspection})
 	case err != nil:
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeLogged(r, w, http.StatusBadRequest, i18n.MsgInvalidValue, "package rejected", err)
 	default:
 		writeJSON(w, http.StatusOK, res)
 	}

@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"skin-nexus/server/internal/i18n"
 )
 
 // Settings panel (user directive, 2026-10-23): site knobs that used to live
@@ -97,7 +99,7 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		Value string `json:"value"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON"})
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	req.Key = strings.TrimSpace(req.Key)
@@ -109,7 +111,7 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !found {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "未知设置项"})
+		writeErrCode(w, http.StatusBadRequest, "未知设置项", i18n.MsgSettingUnknown)
 		return
 	}
 	val := strings.TrimSpace(req.Value)
@@ -117,7 +119,7 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 	case "invite_required", "require_verification", "union_enabled", "union_enable_update", "union_enable_oauth2", "ygg_mojang_fallback", "cdn_enabled":
 		normalized, ok := normalizeBool(val)
 		if !ok {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "布尔值需为 1/0/true/false/on/off/yes/no"})
+			writeErrCode(w, http.StatusBadRequest, "布尔值需为 1/0/true/false/on/off/yes/no", i18n.MsgInvalidValue)
 			return
 		}
 		val = normalized
@@ -135,18 +137,18 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			if len(p) > 64 || !regexp.MustCompile(`^[A-Za-z0-9-]+$`).MatchString(p) {
-				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "CDN 头名称只能包含字母、数字与连字符"})
+				writeErrCode(w, http.StatusBadRequest, "CDN 头名称只能包含字母、数字与连字符", i18n.MsgInvalidValue)
 				return
 			}
 			switch strings.ToLower(p) {
 			case "authorization", "cookie", "host", "content-length", "content-type":
-				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "不允许使用该头作为客户端 IP 来源"})
+				writeErrCode(w, http.StatusBadRequest, "不允许使用该头作为客户端 IP 来源", i18n.MsgInvalidValue)
 				return
 			}
 			clean = append(clean, http.CanonicalHeaderKey(p))
 		}
 		if len(clean) == 0 {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "至少保留一个 CDN 头"})
+			writeErrCode(w, http.StatusBadRequest, "至少保留一个 CDN 头", i18n.MsgInvalidValue)
 			return
 		}
 		val = strings.Join(clean, ",")
@@ -156,21 +158,21 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		// fallback, and negatives silently disabled the limiter layers)
 		n, err := strconv.Atoi(val)
 		if err != nil || n < 0 || n > 1000000 {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "数值需为 0-1000000 的整数"})
+			writeErrCode(w, http.StatusBadRequest, "数值需为 0-1000000 的整数", i18n.MsgInvalidValue)
 			return
 		}
 		val = strconv.Itoa(n)
 	case "ygg_search_profile_max":
 		n, err := strconv.Atoi(val)
 		if err != nil || n < 1 || n > 100 {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "批量查询上限需为 1-100 的整数"})
+			writeErrCode(w, http.StatusBadRequest, "批量查询上限需为 1-100 的整数", i18n.MsgInvalidValue)
 			return
 		}
 		val = strconv.Itoa(n)
 	case "max_upload_file_size":
 		n, err := strconv.Atoi(val)
 		if err != nil || n < 1 || n > 65536 {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "上传上限需为 1-65536 的整数（KB）"})
+			writeErrCode(w, http.StatusBadRequest, "上传上限需为 1-65536 的整数（KB）", i18n.MsgInvalidValue)
 			return
 		}
 		val = strconv.Itoa(n)
@@ -178,14 +180,14 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		switch val {
 		case "official", "cjk", "utf8", "custom":
 		default:
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "角色名规则需为 official/cjk/utf8/custom"})
+			writeErrCode(w, http.StatusBadRequest, "角色名规则需为 official/cjk/utf8/custom", i18n.MsgInvalidValue)
 			return
 		}
 	case "union_api_root":
 		// same shape gate as union.Config.Validate: absolute http(s) URL
 		if val != "" {
 			if !strings.HasPrefix(val, "http://") && !strings.HasPrefix(val, "https://") {
-				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "union_api_root 需为 http(s) 绝对地址"})
+				writeErrCode(w, http.StatusBadRequest, "union_api_root 需为 http(s) 绝对地址", i18n.MsgInvalidValue)
 				return
 			}
 		}
@@ -193,20 +195,20 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		switch val {
 		case "full", "off":
 		default:
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "查询邮箱模式需为 full/off"})
+			writeErrCode(w, http.StatusBadRequest, "查询邮箱模式需为 full/off", i18n.MsgInvalidValue)
 			return
 		}
 	case "union_oauth2_sig_private_key", "union_oauth2_sig_public_key":
 		// PEM sanity only (full parse happens at boot; restart-marked key)
 		if val != "" && (!strings.Contains(val, "-----BEGIN ") || !strings.Contains(val, "-----END ")) {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "需为 PEM 格式密钥（或留空自动生成）"})
+			writeErrCode(w, http.StatusBadRequest, "需为 PEM 格式密钥（或留空自动生成）", i18n.MsgInvalidValue)
 			return
 		}
 	case "custom_player_name_regexp", "texture_name_regexp":
 		// an unparsable regexp would silently fail-closed at every new write
 		if val != "" {
 			if _, err := regexp.Compile(val); err != nil {
-				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "正则表达式无效：" + err.Error()})
+				writeLogged(r, w, http.StatusBadRequest, i18n.MsgInvalidValue, "正则表达式无效", err)
 				return
 			}
 		}
@@ -214,7 +216,7 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		// 拍板（dev-plan §9）: 仅收 http(s) 绝对地址。留空=回退 env 首启默认，
 		// 所以放行空串。boot 侧 isHTTPBaseURL 再兜一次（防直写 DB）。
 		if val != "" && !strings.HasPrefix(val, "http://") && !strings.HasPrefix(val, "https://") {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "site_url 需为 http(s) 绝对地址"})
+			writeErrCode(w, http.StatusBadRequest, "site_url 需为 http(s) 绝对地址", i18n.MsgInvalidValue)
 			return
 		}
 		val = strings.TrimRight(val, "/")
@@ -223,12 +225,12 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		// marked+DOMPurify 再消毒——渲染实现见 internal/announce）；长度
 		// 上限保持 options TEXT 列诚实。
 		if len(val) > 4096 {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "公告最长 4096 字符"})
+			writeErrCode(w, http.StatusBadRequest, "公告最长 4096 字符", i18n.MsgTooLong)
 			return
 		}
 	}
 	if err := b.Store.SetOption(r.Context(), req.Key, val); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "save failed"})
+		writeErrCode(w, http.StatusInternalServerError, "save failed", i18n.MsgOptionSaveFailed)
 		return
 	}
 	if b.OnSettingChanged != nil {

@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strings"
 
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/union"
 )
 
@@ -68,7 +69,7 @@ func (b *Backend) handleUnionStatus(w http.ResponseWriter, r *http.Request) {
 
 func (b *Backend) handleUnionRotationResume(w http.ResponseWriter, r *http.Request) {
 	if err := b.union.ResumeRotation(); err != nil {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		writeDomain(w, http.StatusConflict, err, i18n.MsgConflict)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -80,7 +81,7 @@ func (b *Backend) handleUnionRotationResume(w http.ResponseWriter, r *http.Reque
 func (b *Backend) handleUnionKeyUpdate(w http.ResponseWriter, r *http.Request) {
 	switched, err := b.union.ForceRotation(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
+		writeLogged(r, w, http.StatusBadGateway, i18n.MsgUnionUpstream, "upstream request failed", err)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "union_key_update",
@@ -96,7 +97,7 @@ func (b *Backend) handleUnionKeyUpdate(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleUnionServerList(w http.ResponseWriter, r *http.Request) {
 	list, err := b.union.RefreshServerList(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
+		writeLogged(r, w, http.StatusBadGateway, i18n.MsgUnionUpstream, "upstream request failed", err)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "union_serverlist_refresh", nil)
@@ -107,7 +108,7 @@ func (b *Backend) handleUnionServerList(w http.ResponseWriter, r *http.Request) 
 func (b *Backend) handleUnionRosterSync(w http.ResponseWriter, r *http.Request) {
 	n, err := b.union.SyncRoster(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
+		writeLogged(r, w, http.StatusBadGateway, i18n.MsgUnionUpstream, "upstream request failed", err)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "union_roster_sync",
@@ -155,7 +156,7 @@ func relayBlacklist(w http.ResponseWriter, status int, body json.RawMessage) {
 func (b *Backend) handleUnionBlacklistQuery(w http.ResponseWriter, r *http.Request) {
 	status, body, err := b.union.BlacklistQuery(r.Context(), r.URL.Query())
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
+		writeLogged(r, w, http.StatusBadGateway, i18n.MsgUnionUpstream, "upstream request failed", err)
 		return
 	}
 	relayBlacklist(w, status, body)
@@ -168,7 +169,7 @@ func (b *Backend) handleUnionBlacklistAdd(w http.ResponseWriter, r *http.Request
 		Reason string `json:"reason"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Email) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "email 必填"})
+		writeErrCode(w, http.StatusBadRequest, "email 必填", i18n.MsgMissingField)
 		return
 	}
 	payload, _ := json.Marshal(map[string]string{
@@ -176,7 +177,7 @@ func (b *Backend) handleUnionBlacklistAdd(w http.ResponseWriter, r *http.Request
 	})
 	status, resp, err := b.union.BlacklistAdd(r.Context(), payload)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
+		writeLogged(r, w, http.StatusBadGateway, i18n.MsgUnionUpstream, "upstream request failed", err)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "union_blacklist_add",
@@ -190,12 +191,12 @@ func (b *Backend) handleUnionBlacklistAdd(w http.ResponseWriter, r *http.Request
 func (b *Backend) handleUnionBlacklistRelease(w http.ResponseWriter, r *http.Request) {
 	id := blacklistIDParam(r)
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "id 必填"})
+		writeErrCode(w, http.StatusBadRequest, "id 必填", i18n.MsgMissingField)
 		return
 	}
 	status, resp, err := b.union.BlacklistRelease(r.Context(), id)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
+		writeLogged(r, w, http.StatusBadGateway, i18n.MsgUnionUpstream, "upstream request failed", err)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "union_blacklist_release",
@@ -208,12 +209,12 @@ func (b *Backend) handleUnionBlacklistRelease(w http.ResponseWriter, r *http.Req
 func (b *Backend) handleUnionBlacklistDelete(w http.ResponseWriter, r *http.Request) {
 	id := blacklistIDParam(r)
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "id 必填"})
+		writeErrCode(w, http.StatusBadRequest, "id 必填", i18n.MsgMissingField)
 		return
 	}
 	status, resp, err := b.union.BlacklistDelete(r.Context(), id)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
+		writeLogged(r, w, http.StatusBadGateway, i18n.MsgUnionUpstream, "upstream request failed", err)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "union_blacklist_delete",

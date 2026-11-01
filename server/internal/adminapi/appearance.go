@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"skin-nexus/server/internal/appearance"
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/seo"
 	"skin-nexus/server/internal/theme"
 	"skin-nexus/server/internal/thememkt"
@@ -40,11 +41,11 @@ func (b *Backend) handleSEOOneClick(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleSEOSave(w http.ResponseWriter, r *http.Request) {
 	var s seo.Settings
 	if err := jsonDecode(r, &s); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad body"})
+		writeErrCode(w, http.StatusBadRequest, "bad body", i18n.MsgBadBody)
 		return
 	}
 	if err := b.appearance.SEO.Save(r.Context(), s); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeInternal(r, w, err)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "seo_save", nil)
@@ -58,16 +59,18 @@ func (b *Backend) handleAppearanceGet(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleAppearanceSave(w http.ResponseWriter, r *http.Request) {
 	var s appearance.Settings
 	if err := jsonDecode(r, &s); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad body"})
+		writeErrCode(w, http.StatusBadRequest, "bad body", i18n.MsgBadBody)
 		return
 	}
 	if err := b.appearance.Appear.Save(r.Context(), s); err != nil {
-		status := http.StatusInternalServerError
 		var ve *appearance.ValidationError
 		if errors.As(err, &ve) {
-			status = http.StatusBadRequest
+			// A rejected setting is the operator's mistake and the reason is
+			// theirs to read; anything else is our failure and only goes to the log.
+			writeDomain(w, http.StatusBadRequest, ve, i18n.MsgInvalidValue)
+			return
 		}
-		writeJSON(w, status, map[string]string{"error": err.Error()})
+		writeInternal(r, w, err)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "appearance_save", map[string]any{

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"skin-nexus/server/internal/auth"
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/store"
 )
@@ -28,17 +29,32 @@ func idParam(r *http.Request) (int64, bool) {
 	return id, err == nil && id > 0
 }
 
-// writeStoreErr maps store sentinel errors to the HTTP envelope.
-func writeStoreErr(w http.ResponseWriter, err error, notFoundMsg, conflictMsg string) {
+// writeStoreErr maps store sentinel errors to the HTTP envelope. Only the
+// caller knows which column collided, so the duplicate code and prose are
+// passed in; not-found is always the user this route is addressed to.
+func writeStoreErr(w http.ResponseWriter, err error, dupCode, dupMsg string) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": notFoundMsg})
+		writeErrCode(w, http.StatusNotFound, "用户不存在", i18n.MsgUserNotFound)
 	case errors.Is(err, store.ErrDuplicate):
-		writeJSON(w, http.StatusConflict, map[string]any{"error": conflictMsg})
+		writeErrCode(w, http.StatusConflict, dupMsg, dupCode)
 	default:
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
 	}
 }
+
+// guardReason is why an inline user edit was refused. The guard answers with a
+// reason, not a sentence, because the sentence belongs in the envelope: the
+// panel translates the code and the message is only the fallback.
+type guardReason int
+
+const (
+	guardOK guardReason = iota
+	guardSelfEdit
+	guardRank
+	guardNoUser
+	guardCheckFailed
+)
 
 // inlineGuard enforces the blessing user-management guards (archive §6.2)
 // on an inline edit:
@@ -48,30 +64,45 @@ func writeStoreErr(w http.ResponseWriter, err error, notFoundMsg, conflictMsg st
 //
 // The token/API path (actorUID == 0) is the operator's machine fallback and
 // bypasses these identity guards — except the permission endpoint below,
-// which refuses it outright. Returns an error message to render, or "".
-func (b *Backend) inlineGuard(r *http.Request, target int64) string {
+// which refuses it outright.
+func (b *Backend) inlineGuard(r *http.Request, target int64) guardReason {
 	actor := actorUID(r)
 	if actor == 0 {
-		return "" // machine fallback: operator authority, no identity guards
+		return guardOK // machine fallback: operator authority, no identity guards
 	}
 	if actor == target {
-		return "不能修改自己的管理项"
+		return guardSelfEdit
 	}
 	actorPerm, err := b.Store.UserPermission(r.Context(), actor)
 	if err != nil {
-		return "权限校验失败"
+		return guardCheckFailed
 	}
 	targetPerm, err := b.Store.UserPermission(r.Context(), target)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return "用户不存在"
+			return guardNoUser
 		}
-		return "权限校验失败"
+		return guardCheckFailed
 	}
 	if targetPerm >= actorPerm {
-		return "只能操作权限严格低于自己的账号"
+		return guardRank
 	}
-	return ""
+	return guardOK
+}
+
+// writeGuard answers a refused inline edit. Statuses are unchanged from the
+// string-returning guard; only the code is new.
+func writeGuard(w http.ResponseWriter, reason guardReason) {
+	switch reason {
+	case guardSelfEdit:
+		writeErrCode(w, http.StatusForbidden, "不能修改自己的管理项", i18n.MsgAdminSelfEdit)
+	case guardRank:
+		writeErrCode(w, http.StatusForbidden, "只能操作权限严格低于自己的账号", i18n.MsgAdminRank)
+	case guardNoUser:
+		writeErrCode(w, http.StatusForbidden, "用户不存在", i18n.MsgUserNotFound)
+	case guardCheckFailed:
+		writeErrCode(w, http.StatusForbidden, "权限校验失败", i18n.MsgForbidden)
+	}
 }
 
 // POST /api/admin/v1/users/{id}/password {password} — force-set a user's
@@ -81,37 +112,37 @@ func (b *Backend) inlineGuard(r *http.Request, target int64) string {
 func (b *Backend) handleUserSetPassword(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id <= 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bad id"})
+		writeErrCode(w, http.StatusBadRequest, "bad id", i18n.MsgBadID)
 		return
 	}
 	var req struct {
 		Password string `json:"password"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON"})
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	// Same blessing guards as the inline edits: without this, any admin could
 	// reset a SUPER_ADMIN's password and take over the account.
-	if msg := b.inlineGuard(r, id); msg != "" {
-		writeJSON(w, http.StatusForbidden, map[string]any{"error": msg})
+	if reason := b.inlineGuard(r, id); reason != guardOK {
+		writeGuard(w, reason)
 		return
 	}
 	req.Password = strings.TrimSpace(req.Password)
 	if len(req.Password) < 8 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "密码至少 8 位"})
+		writeErrCode(w, http.StatusBadRequest, "密码至少 8 位", i18n.MsgPasswordTooShort)
 		return
 	}
 	hash, err := auth.HashArgon2id(req.Password)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "hash error"})
+		writeErrCode(w, http.StatusInternalServerError, "hash error", i18n.MsgInternal)
 		return
 	}
 	if err := b.Store.AdminSetPassword(r.Context(), id, hash); errors.Is(err, store.ErrNotFound) {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "用户不存在"})
+		writeErrCode(w, http.StatusNotFound, "用户不存在", i18n.MsgUserNotFound)
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
 		return
 	}
 	_ = b.Store.InvalidateUserTokens(r.Context(), id)
@@ -133,26 +164,26 @@ func (b *Backend) handleUserSetPassword(w http.ResponseWriter, r *http.Request) 
 func (b *Backend) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 	id, ok := idParam(r)
 	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bad id"})
+		writeErrCode(w, http.StatusBadRequest, "bad id", i18n.MsgBadID)
 		return
 	}
 	if id == 1 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "uid 1（管理员账号）不可删除"})
+		writeErrCode(w, http.StatusBadRequest, "uid 1（管理员账号）不可删除", i18n.MsgUserAdminProtected)
 		return
 	}
 	if targetPerm, err := b.Store.UserPermission(r.Context(), id); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, map[string]any{"error": "用户不存在"})
+			writeErrCode(w, http.StatusNotFound, "用户不存在", i18n.MsgUserNotFound)
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "权限校验失败"})
+		writeErrCode(w, http.StatusInternalServerError, "权限校验失败", i18n.MsgInternal)
 		return
 	} else if targetPerm >= 2 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "超级管理员账号不可删除"})
+		writeErrCode(w, http.StatusBadRequest, "超级管理员账号不可删除", i18n.MsgUserAdminProtected)
 		return
 	}
-	if msg := b.inlineGuard(r, id); msg != "" {
-		writeJSON(w, http.StatusForbidden, map[string]any{"error": msg})
+	if reason := b.inlineGuard(r, id); reason != guardOK {
+		writeGuard(w, reason)
 		return
 	}
 	// Union profile lifecycle: the (uuid, name) pairs must be captured BEFORE
@@ -170,10 +201,10 @@ func (b *Backend) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := b.Store.DeleteUser(r.Context(), id); errors.Is(err, store.ErrNotFound) {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "用户不存在"})
+		writeErrCode(w, http.StatusNotFound, "用户不存在", i18n.MsgUserNotFound)
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
+		writeErrCode(w, http.StatusInternalServerError, "delete failed", i18n.MsgInternal)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_user_delete", map[string]any{"target": id})
@@ -194,27 +225,27 @@ func (b *Backend) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleUserSetEmail(w http.ResponseWriter, r *http.Request) {
 	id, ok := idParam(r)
 	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bad id"})
+		writeErrCode(w, http.StatusBadRequest, "bad id", i18n.MsgBadID)
 		return
 	}
 	var req struct {
 		Email string `json:"email"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON"})
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	req.Email = strings.TrimSpace(req.Email)
 	if req.Email != "" && !adminMailRe.MatchString(req.Email) {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "邮箱格式不正确"})
+		writeErrCode(w, http.StatusBadRequest, "邮箱格式不正确", i18n.MsgEmailInvalid)
 		return
 	}
-	if msg := b.inlineGuard(r, id); msg != "" {
-		writeJSON(w, http.StatusForbidden, map[string]any{"error": msg})
+	if reason := b.inlineGuard(r, id); reason != guardOK {
+		writeGuard(w, reason)
 		return
 	}
 	if err := b.Store.UpdateUserEmail(r.Context(), id, req.Email); err != nil {
-		writeStoreErr(w, err, "用户不存在", "该邮箱已被其他账号使用")
+		writeStoreErr(w, err, i18n.MsgEmailTaken, "该邮箱已被其他账号使用")
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_user_email_update", map[string]any{"target": id, "email": req.Email})
@@ -226,27 +257,27 @@ func (b *Backend) handleUserSetEmail(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleUserSetNickname(w http.ResponseWriter, r *http.Request) {
 	id, ok := idParam(r)
 	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bad id"})
+		writeErrCode(w, http.StatusBadRequest, "bad id", i18n.MsgBadID)
 		return
 	}
 	var req struct {
 		Nickname string `json:"nickname"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON"})
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	req.Nickname = strings.TrimSpace(req.Nickname)
 	if !adminNickRe.MatchString(req.Nickname) {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "昵称需 2-24 位字母/数字/下划线/中文"})
+		writeErrCode(w, http.StatusBadRequest, "昵称需 2-24 位字母/数字/下划线/中文", i18n.MsgNicknameInvalid)
 		return
 	}
-	if msg := b.inlineGuard(r, id); msg != "" {
-		writeJSON(w, http.StatusForbidden, map[string]any{"error": msg})
+	if reason := b.inlineGuard(r, id); reason != guardOK {
+		writeGuard(w, reason)
 		return
 	}
 	if err := b.Store.UpdateUserNickname(r.Context(), id, req.Nickname); err != nil {
-		writeStoreErr(w, err, "用户不存在", "该昵称已被其他账号使用")
+		writeStoreErr(w, err, i18n.MsgNicknameTaken, "该昵称已被其他账号使用")
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_user_nickname_update", map[string]any{"target": id, "nickname": req.Nickname})
@@ -258,22 +289,22 @@ func (b *Backend) handleUserSetNickname(w http.ResponseWriter, r *http.Request) 
 func (b *Backend) handleUserSetVerification(w http.ResponseWriter, r *http.Request) {
 	id, ok := idParam(r)
 	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bad id"})
+		writeErrCode(w, http.StatusBadRequest, "bad id", i18n.MsgBadID)
 		return
 	}
 	var req struct {
 		Verified bool `json:"verified"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON"})
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
-	if msg := b.inlineGuard(r, id); msg != "" {
-		writeJSON(w, http.StatusForbidden, map[string]any{"error": msg})
+	if reason := b.inlineGuard(r, id); reason != guardOK {
+		writeGuard(w, reason)
 		return
 	}
 	if err := b.Store.SetEmailVerified(r.Context(), id, req.Verified); err != nil {
-		writeStoreErr(w, err, "用户不存在", "该邮箱已被其他账号使用")
+		writeStoreErr(w, err, i18n.MsgEmailTaken, "该邮箱已被其他账号使用")
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_user_verification_update", map[string]any{"target": id, "verified": req.Verified})
@@ -293,40 +324,40 @@ func (b *Backend) handleUserSetVerification(w http.ResponseWriter, r *http.Reque
 func (b *Backend) handleUserSetPermission(w http.ResponseWriter, r *http.Request) {
 	id, ok := idParam(r)
 	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bad id"})
+		writeErrCode(w, http.StatusBadRequest, "bad id", i18n.MsgBadID)
 		return
 	}
 	var req struct {
 		Permission *int `json:"permission"`
 	}
 	if err := jsonDecode(r, &req); err != nil || req.Permission == nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON"})
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	perm := *req.Permission
 	if perm < -1 || perm > 1 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "permission 仅支持 -1（封禁）/0（正常）/1（管理员）"})
+		writeErrCode(w, http.StatusBadRequest, "permission 仅支持 -1（封禁）/0（正常）/1（管理员）", i18n.MsgInvalidValue)
 		return
 	}
 	actor := actorUID(r)
 	if actor == 0 {
-		writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限变更需管理员会话（不支持 X-Admin-Token）"})
+		writeErrCode(w, http.StatusForbidden, "权限变更需管理员会话（不支持 X-Admin-Token）", i18n.MsgWebSessionRequired)
 		return
 	}
-	if msg := b.inlineGuard(r, id); msg != "" {
-		writeJSON(w, http.StatusForbidden, map[string]any{"error": msg})
+	if reason := b.inlineGuard(r, id); reason != guardOK {
+		writeGuard(w, reason)
 		return
 	}
 	// Guard 2: granting ADMIN requires SUPER_ADMIN (permission = 2).
 	if perm == 1 {
 		actorPerm, err := b.Store.UserPermission(r.Context(), actor)
 		if err != nil || actorPerm != 2 {
-			writeJSON(w, http.StatusForbidden, map[string]any{"error": "授予管理员权限需要超级管理员（permission=2）账号操作"})
+			writeErrCode(w, http.StatusForbidden, "授予管理员权限需要超级管理员（permission=2）账号操作", i18n.MsgSuperAdminRequired)
 			return
 		}
 	}
 	if err := b.Store.SetUserPermission(r.Context(), id, perm); err != nil {
-		writeStoreErr(w, err, "用户不存在", "该邮箱已被其他账号使用")
+		writeStoreErr(w, err, i18n.MsgEmailTaken, "该邮箱已被其他账号使用")
 		return
 	}
 	// A demoted/banned admin's session must die now — the session gate

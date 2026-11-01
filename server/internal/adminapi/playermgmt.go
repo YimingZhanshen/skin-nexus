@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"skin-nexus/server/internal/account"
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/store"
 )
 
@@ -34,7 +36,7 @@ func (b *Backend) handleAdminPlayers(w http.ResponseWriter, r *http.Request) {
 	uidFilter, _ := strconv.ParseInt(r.URL.Query().Get("uid"), 10, 64)
 	rows, total, err := b.Store.AdminPlayers(r.Context(), r.URL.Query().Get("q"), uidFilter, page, 50)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeInternal(r, w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"players": rows, "total": total, "page": page})
@@ -45,43 +47,43 @@ func (b *Backend) handleAdminPlayers(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleAdminPlayerRename(w http.ResponseWriter, r *http.Request) {
 	pid, ok := idParam(r)
 	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bad id"})
+		writeErrCode(w, http.StatusBadRequest, "bad id", i18n.MsgBadID)
 		return
 	}
 	var req struct {
 		Name string `json:"name"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON"})
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	// Same configurable rule group as user-side creation (blessing parity;
 	// legacy imported names are never re-validated).
 	if err := b.Store.ValidatePlayerName(r.Context(), req.Name); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeDomain(w, http.StatusBadRequest, err, i18n.MsgPlayerNameRuleBad)
 		return
 	}
 	before, err := b.Store.PlayerByID(r.Context(), pid)
 	if errors.Is(err, store.ErrNotFound) {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "角色不存在"})
+		writeErrCode(w, http.StatusNotFound, "角色不存在", account.CodeNotFound)
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "db error"})
+		writeErrCode(w, http.StatusInternalServerError, "db error", i18n.MsgInternal)
 		return
 	}
 	if err := b.Store.AdminRenamePlayer(r.Context(), pid, req.Name); errors.Is(err, store.ErrDuplicate) {
-		writeJSON(w, http.StatusConflict, map[string]any{"error": "角色名已被占用"})
+		writeErrCode(w, http.StatusConflict, "角色名已被占用", account.CodeNameTaken)
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "rename failed"})
+		writeErrCode(w, http.StatusInternalServerError, "rename failed", i18n.MsgInternal)
 		return
 	}
 	// UUID zero-drift is an iron rule — verify, don't trust (a regression
 	// here silently breaks every migrated account's identity).
 	after, err := b.Store.PlayerByID(r.Context(), pid)
 	if err != nil || after.UUID != before.UUID {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "UUID 漂移防护触发：改名未通过零漂移校验"})
+		writeErrCode(w, http.StatusInternalServerError, "UUID 漂移防护触发：改名未通过零漂移校验", i18n.MsgPlayerUUIDDrift)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_player_rename",
@@ -95,26 +97,26 @@ func (b *Backend) handleAdminPlayerRename(w http.ResponseWriter, r *http.Request
 func (b *Backend) handleAdminPlayerOwner(w http.ResponseWriter, r *http.Request) {
 	pid, ok := idParam(r)
 	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bad id"})
+		writeErrCode(w, http.StatusBadRequest, "bad id", i18n.MsgBadID)
 		return
 	}
 	var req struct {
 		UID int64 `json:"uid"`
 	}
 	if err := jsonDecode(r, &req); err != nil || req.UID <= 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON"})
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	if !b.uidExists(r, req.UID) {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "目标用户不存在"})
+		writeErrCode(w, http.StatusNotFound, "目标用户不存在", i18n.MsgUserNotFound)
 		return
 	}
 	before, err := b.Store.PlayerByID(r.Context(), pid)
 	if errors.Is(err, store.ErrNotFound) {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "角色不存在"})
+		writeErrCode(w, http.StatusNotFound, "角色不存在", account.CodeNotFound)
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "db error"})
+		writeErrCode(w, http.StatusInternalServerError, "db error", i18n.MsgInternal)
 		return
 	}
 	if before.UID == req.UID {
@@ -122,7 +124,7 @@ func (b *Backend) handleAdminPlayerOwner(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err := b.Store.AdminSetPlayerOwner(r.Context(), pid, req.UID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
 		return
 	}
 	// Old owner's launcher profile selection dies with the re-home.
@@ -139,7 +141,7 @@ func (b *Backend) handleAdminPlayerOwner(w http.ResponseWriter, r *http.Request)
 func (b *Backend) handleAdminPlayerTextures(w http.ResponseWriter, r *http.Request) {
 	pid, ok := idParam(r)
 	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bad id"})
+		writeErrCode(w, http.StatusBadRequest, "bad id", i18n.MsgBadID)
 		return
 	}
 	var req struct {
@@ -147,32 +149,32 @@ func (b *Backend) handleAdminPlayerTextures(w http.ResponseWriter, r *http.Reque
 		TextureID int64  `json:"textureId"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON"})
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	if req.Type != "skin" && req.Type != "cape" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "type 需为 skin 或 cape"})
+		writeErrCode(w, http.StatusBadRequest, "type 需为 skin 或 cape", i18n.MsgInvalidValue)
 		return
 	}
 	if req.TextureID != 0 {
 		if _, err := b.Store.TextureOwner(r.Context(), req.TextureID); errors.Is(err, store.ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, map[string]any{"error": "材质不存在"})
+			writeErrCode(w, http.StatusNotFound, "材质不存在", i18n.MsgTextureNotFound)
 			return
 		} else if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "db error"})
+			writeErrCode(w, http.StatusInternalServerError, "db error", i18n.MsgInternal)
 			return
 		}
 	}
 	if _, err := b.Store.PlayerByID(r.Context(), pid); errors.Is(err, store.ErrNotFound) {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "角色不存在"})
+		writeErrCode(w, http.StatusNotFound, "角色不存在", account.CodeNotFound)
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "db error"})
+		writeErrCode(w, http.StatusInternalServerError, "db error", i18n.MsgInternal)
 		return
 	}
 	skinTid, capeTid, err := b.Store.PlayerTextureIDs(r.Context(), pid)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "db error"})
+		writeErrCode(w, http.StatusInternalServerError, "db error", i18n.MsgInternal)
 		return
 	}
 	if req.Type == "skin" {
@@ -181,7 +183,7 @@ func (b *Backend) handleAdminPlayerTextures(w http.ResponseWriter, r *http.Reque
 		capeTid = req.TextureID
 	}
 	if err := b.Store.SetPlayerTextures(r.Context(), pid, skinTid, capeTid); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_player_textures_update",
@@ -196,15 +198,15 @@ func (b *Backend) handleAdminPlayerTextures(w http.ResponseWriter, r *http.Reque
 func (b *Backend) handleAdminPlayerDelete(w http.ResponseWriter, r *http.Request) {
 	pid, ok := idParam(r)
 	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bad id"})
+		writeErrCode(w, http.StatusBadRequest, "bad id", i18n.MsgBadID)
 		return
 	}
 	uuid, name, err := b.Store.AdminDeletePlayer(r.Context(), pid)
 	if errors.Is(err, store.ErrNotFound) {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "角色不存在"})
+		writeErrCode(w, http.StatusNotFound, "角色不存在", account.CodeNotFound)
 		return
 	} else if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
+		writeErrCode(w, http.StatusInternalServerError, "delete failed", i18n.MsgInternal)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_player_delete",

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/jobs"
 )
 
@@ -62,7 +63,7 @@ func (b *Backend) handleJobsList(w http.ResponseWriter, r *http.Request) {
 	perPage, _ := strconv.Atoi(q.Get("perPage"))
 	list, total, err := b.Jobs.List(r.Context(), strings.TrimSpace(q.Get("plugin")), strings.TrimSpace(q.Get("state")), page, perPage)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "jobs query failed"})
+		writeErrCode(w, http.StatusInternalServerError, "jobs query failed", i18n.MsgInternal)
 		return
 	}
 	out := make([]jobView, 0, len(list))
@@ -75,7 +76,7 @@ func (b *Backend) handleJobsList(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleJobGet(w http.ResponseWriter, r *http.Request) {
 	j, err := b.Jobs.Get(r.Context(), r.PathValue("id"))
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
+		writeErrCode(w, http.StatusNotFound, "job not found", i18n.MsgJobNotFound)
 		return
 	}
 	writeJSON(w, http.StatusOK, jobToView(j))
@@ -83,7 +84,7 @@ func (b *Backend) handleJobGet(w http.ResponseWriter, r *http.Request) {
 
 func (b *Backend) handleJobCancel(w http.ResponseWriter, r *http.Request) {
 	if err := b.Jobs.RequestCancel(r.Context(), r.PathValue("id")); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "cancel failed"})
+		writeErrCode(w, http.StatusInternalServerError, "cancel failed", i18n.MsgInternal)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "plugin_job_cancel", map[string]any{"job": r.PathValue("id")})
@@ -92,7 +93,7 @@ func (b *Backend) handleJobCancel(w http.ResponseWriter, r *http.Request) {
 
 func (b *Backend) handleJobResume(w http.ResponseWriter, r *http.Request) {
 	if err := b.Jobs.Resume(r.Context(), r.PathValue("id")); err != nil {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "job cannot be resumed"})
+		writeErrCode(w, http.StatusConflict, "job cannot be resumed", i18n.MsgJobNotResumable)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "plugin_job_resume", map[string]any{"job": r.PathValue("id")})

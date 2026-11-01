@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"skin-nexus/server/internal/auth"
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/oidc"
 )
 
@@ -27,7 +28,7 @@ func genClientSecret() string {
 func (b *Backend) handleOIDCClientsList(w http.ResponseWriter, r *http.Request) {
 	rows, err := b.Store.ListClients(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeInternal(r, w, err)
 		return
 	}
 	type item struct {
@@ -63,7 +64,7 @@ func (b *Backend) handleOIDCClientsCreate(w http.ResponseWriter, r *http.Request
 		Secret       string   `json:"secret"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad body"})
+		writeErrCode(w, http.StatusBadRequest, "bad body", i18n.MsgBadBody)
 		return
 	}
 	rec := oidc.ClientRecord{
@@ -78,13 +79,13 @@ func (b *Backend) handleOIDCClientsCreate(w http.ResponseWriter, r *http.Request
 		}
 		hash, err := auth.HashArgon2id(plain)
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "hash failed"})
+			writeErrCode(w, http.StatusInternalServerError, "hash failed", i18n.MsgInternal)
 			return
 		}
 		rec.SecretHash = hash
 	}
 	if err := b.Store.EnsureOidcClient(r.Context(), rec); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeInternal(r, w, err)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "oidc_client_upsert", map[string]any{
@@ -101,15 +102,15 @@ func (b *Backend) handleOIDCClientsCreate(w http.ResponseWriter, r *http.Request
 func (b *Backend) handleOIDCClientsDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing id"})
+		writeErrCode(w, http.StatusBadRequest, "missing id", i18n.MsgMissingField)
 		return
 	}
 	if id == b.sharedClientID {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "shared launcher client cannot be deleted"})
+		writeErrCode(w, http.StatusForbidden, "shared launcher client cannot be deleted", i18n.MsgOIDCSharedClient)
 		return
 	}
 	if err := b.Store.DeleteClient(r.Context(), id); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeInternal(r, w, err)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "oidc_client_delete", map[string]any{"client_id": id})

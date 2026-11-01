@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/store"
 )
 
@@ -14,7 +15,7 @@ import (
 func (b *Backend) handleInvitationList(w http.ResponseWriter, r *http.Request) {
 	free, used, err := b.Store.ListInvitationCodes(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "internal error"})
+		writeErrCode(w, http.StatusInternalServerError, "internal error", i18n.MsgInternal)
 		return
 	}
 	if free == nil {
@@ -32,7 +33,7 @@ func (b *Backend) handleInvitationGenerate(w http.ResponseWriter, r *http.Reques
 		Description string `json:"description"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid JSON"})
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	// explicit clamp (review B P3: silent in both directions)
@@ -44,7 +45,7 @@ func (b *Backend) handleInvitationGenerate(w http.ResponseWriter, r *http.Reques
 	}
 	codes, err := b.Store.CreateInvitationCodes(r.Context(), req.Amount, req.Description)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "internal error"})
+		writeErrCode(w, http.StatusInternalServerError, "internal error", i18n.MsgInternal)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_invite_generate", map[string]any{
@@ -59,16 +60,16 @@ func (b *Backend) handleInvitationEdit(w http.ResponseWriter, r *http.Request) {
 		Description string `json:"description"`
 	}
 	if err := jsonDecode(r, &req); err != nil || req.ID == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "id and description required"})
+		writeErrCode(w, http.StatusBadRequest, "id and description required", i18n.MsgMissingField)
 		return
 	}
 	if err := b.Store.SetInvitationCodeDescription(r.Context(), req.ID, req.Description); err != nil {
 		// review B P3: DB faults used to masquerade as 404 "not found"
 		if errors.Is(err, store.ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, map[string]interface{}{"error": "invitation code not found"})
+			writeErrCode(w, http.StatusNotFound, "invitation code not found", i18n.MsgInviteMissing)
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": "internal error"})
+		writeErrCode(w, http.StatusInternalServerError, "internal error", i18n.MsgInternal)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_invite_edit", map[string]any{

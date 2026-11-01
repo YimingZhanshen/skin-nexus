@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/plugin"
 )
 
@@ -43,12 +44,12 @@ func (b *Backend) handlePluginsList(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handlePluginAction(w http.ResponseWriter, r *http.Request) {
 	actor := actorUID(r)
 	if actor == 0 {
-		writeJSON(w, http.StatusForbidden, map[string]any{"error": "插件操作需管理员会话（不支持 X-Admin-Token）"})
+		writeErrCode(w, http.StatusForbidden, "插件操作需管理员会话（不支持 X-Admin-Token）", i18n.MsgWebSessionRequired)
 		return
 	}
 	perm, err := actorPermission(r.Context(), b, actor)
 	if err != nil || perm != 2 {
-		writeJSON(w, http.StatusForbidden, map[string]any{"error": "插件操作需要超级管理员（permission=2）账号"})
+		writeErrCode(w, http.StatusForbidden, "插件操作需要超级管理员（permission=2）账号", i18n.MsgSuperAdminRequired)
 		return
 	}
 	name := r.PathValue("name")
@@ -64,15 +65,15 @@ func (b *Backend) handlePluginAction(w http.ResponseWriter, r *http.Request) {
 	case "reload":
 		opErr = b.plugins.Host.Reload(ctx, name)
 	default:
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "unknown action"})
+		writeErrCode(w, http.StatusNotFound, "unknown action", i18n.MsgUnknownAction)
 		return
 	}
 
 	switch {
 	case errors.Is(opErr, plugin.ErrPluginNotFound):
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "plugin not found"})
+		writeErrCode(w, http.StatusNotFound, "plugin not found", i18n.MsgPluginNotFound)
 	case opErr != nil:
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": opErr.Error()})
+		writeLogged(r, w, http.StatusBadGateway, i18n.MsgPluginOpFailed, "plugin operation failed", opErr)
 	default:
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	}
@@ -83,11 +84,11 @@ func (b *Backend) handlePluginConfigGet(w http.ResponseWriter, r *http.Request) 
 	view, err := b.plugins.Host.PluginConfig(name)
 	switch {
 	case errors.Is(err, plugin.ErrPluginNotFound):
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "plugin not found"})
+		writeErrCode(w, http.StatusNotFound, "plugin not found", i18n.MsgPluginNotFound)
 	case errors.Is(err, plugin.ErrPluginNoConfig):
-		writeJSON(w, http.StatusConflict, map[string]any{"error": "plugin has no config"})
+		writeErrCode(w, http.StatusConflict, "plugin has no config", i18n.MsgPluginNoConfig)
 	case err != nil:
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		writeInternal(r, w, err)
 	default:
 		writeJSON(w, http.StatusOK, view)
 	}
@@ -100,37 +101,39 @@ type pluginConfigBody struct {
 func (b *Backend) handlePluginConfigSave(w http.ResponseWriter, r *http.Request) {
 	actor := actorUID(r)
 	if actor == 0 {
-		writeJSON(w, http.StatusForbidden, map[string]any{"error": "配置修改需超级管理员会话（不支持 X-Admin-Token）"})
+		writeErrCode(w, http.StatusForbidden, "配置修改需超级管理员会话（不支持 X-Admin-Token）", i18n.MsgWebSessionRequired)
 		return
 	}
 	perm, err := actorPermission(r.Context(), b, actor)
 	if err != nil || perm != 2 {
-		writeJSON(w, http.StatusForbidden, map[string]any{"error": "配置修改需要超级管理员（permission=2）账号"})
+		writeErrCode(w, http.StatusForbidden, "配置修改需要超级管理员（permission=2）账号", i18n.MsgSuperAdminRequired)
 		return
 	}
 	var body pluginConfigBody
 	dec := json.NewDecoder(r.Body)
 	dec.UseNumber()
 	if err := dec.Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON body"})
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON body", i18n.MsgBadBody)
 		return
 	}
 	ctx := plugin.WithActor(r.Context(), actor)
 	view, err := b.plugins.Host.SavePluginConfig(ctx, r.PathValue("name"), body.Values)
 	switch {
 	case errors.Is(err, plugin.ErrPluginNotFound):
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "plugin not found"})
+		writeErrCode(w, http.StatusNotFound, "plugin not found", i18n.MsgPluginNotFound)
 	case errors.Is(err, plugin.ErrPluginNoConfig):
-		writeJSON(w, http.StatusConflict, map[string]any{"error": "plugin has no config"})
+		writeErrCode(w, http.StatusConflict, "plugin has no config", i18n.MsgPluginNoConfig)
 	case errors.Is(err, plugin.ErrPluginNoStore), errors.Is(err, plugin.ErrPluginNoSecrets):
-		writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error()})
+		// The manifest is the reason — it declares no store or no secrets, so
+		// there is nowhere to put what was typed. The text says which.
+		writeDomain(w, http.StatusConflict, err, i18n.MsgPluginNoConfig)
 	case err != nil:
 		var ce *plugin.ConfigError
 		if errors.As(err, &ce) {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": ce.Error()})
+			writeDomain(w, http.StatusBadRequest, ce, i18n.MsgInvalidValue)
 			return
 		}
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeLogged(r, w, http.StatusBadRequest, i18n.MsgPluginOpFailed, "config rejected", err)
 	default:
 		writeJSON(w, http.StatusOK, view)
 	}
@@ -139,24 +142,24 @@ func (b *Backend) handlePluginConfigSave(w http.ResponseWriter, r *http.Request)
 func (b *Backend) handlePluginGuardBypass(w http.ResponseWriter, r *http.Request) {
 	actor := actorUID(r)
 	if actor == 0 {
-		writeJSON(w, http.StatusForbidden, map[string]any{"error": "破窗操作需超级管理员会话"})
+		writeErrCode(w, http.StatusForbidden, "破窗操作需超级管理员会话", i18n.MsgWebSessionRequired)
 		return
 	}
 	perm, err := actorPermission(r.Context(), b, actor)
 	if err != nil || perm != 2 {
-		writeJSON(w, http.StatusForbidden, map[string]any{"error": "破窗操作需要超级管理员（permission=2）账号"})
+		writeErrCode(w, http.StatusForbidden, "破窗操作需要超级管理员（permission=2）账号", i18n.MsgSuperAdminRequired)
 		return
 	}
 	var body struct {
 		Enabled bool `json:"enabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON body"})
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON body", i18n.MsgBadBody)
 		return
 	}
 	ctx := plugin.WithActor(r.Context(), actor)
 	if err := b.plugins.Host.SetGuardsBypassed(ctx, body.Enabled); err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
+		writeLogged(r, w, http.StatusBadGateway, i18n.MsgPluginOpFailed, "plugin operation failed", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"guardsBypassed": body.Enabled})

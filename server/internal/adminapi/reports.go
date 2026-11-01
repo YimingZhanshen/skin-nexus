@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"skin-nexus/server/internal/account"
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/ygg"
 )
@@ -49,7 +50,7 @@ func (b *Backend) handleReportsList(w http.ResponseWriter, r *http.Request) {
 		Status: strings.TrimSpace(q.Get("status")), Page: page, PerPage: perPage,
 	})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "reports query failed"})
+		writeErrCode(w, http.StatusInternalServerError, "reports query failed", i18n.MsgInternal)
 		return
 	}
 	out := make([]reportView, 0, len(rows))
@@ -62,19 +63,19 @@ func (b *Backend) handleReportsList(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleReportResolve(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id <= 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad report id"})
+		writeErrCode(w, http.StatusBadRequest, "bad report id", i18n.MsgBadID)
 		return
 	}
 	var body struct {
 		Action string `json:"action"`
 	}
 	if err := jsonDecode(r, &body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	row, err := b.Store.GetReport(r.Context(), id)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "report not found"})
+		writeErrCode(w, http.StatusNotFound, "report not found", i18n.MsgReportNotFound)
 		return
 	}
 	handledBy := actorUID(r)
@@ -85,7 +86,7 @@ func (b *Backend) handleReportResolve(w http.ResponseWriter, r *http.Request) {
 			status = "dismissed"
 		}
 		if err := b.Store.ResolveReport(r.Context(), id, status, handledBy); err != nil {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "report already handled"})
+			writeErrCode(w, http.StatusConflict, "report already handled", i18n.MsgAlreadyDone)
 			return
 		}
 		event := "texture_report_resolve"
@@ -98,17 +99,17 @@ func (b *Backend) handleReportResolve(w http.ResponseWriter, r *http.Request) {
 	case "hide":
 		if err := b.Store.StrikeTexture(r.Context(), row.TextureID, id, handledBy); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
-				writeJSON(w, http.StatusConflict, map[string]string{"error": "report already handled"})
+				writeErrCode(w, http.StatusConflict, "report already handled", i18n.MsgAlreadyDone)
 				return
 			}
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "hide texture failed"})
+			writeErrCode(w, http.StatusInternalServerError, "hide texture failed", i18n.MsgInternal)
 			return
 		}
 		b.Store.InsertAudit(r.Context(), handledBy, "texture_report_hide", map[string]any{
 			"report": row.ID, "texture": row.TextureID, "moderation": "violation",
 		})
 	default:
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action must be resolve|dismiss|hide"})
+		writeErrCode(w, http.StatusBadRequest, "action must be resolve|dismiss|hide", i18n.MsgUnknownAction)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -119,27 +120,27 @@ func (b *Backend) handleReportResolve(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleTextureModeration(w http.ResponseWriter, r *http.Request) {
 	tid, err := strconv.ParseInt(r.PathValue("tid"), 10, 64)
 	if err != nil || tid <= 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad texture id"})
+		writeErrCode(w, http.StatusBadRequest, "bad texture id", i18n.MsgTextureBadID)
 		return
 	}
 	var body struct {
 		Moderation string `json:"moderation"`
 	}
 	if err := jsonDecode(r, &body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	if body.Moderation != "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "only an empty moderation value can be set here"})
+		writeErrCode(w, http.StatusBadRequest, "only an empty moderation value can be set here", i18n.MsgInvalidValue)
 		return
 	}
 	handledBy := actorUID(r)
 	if err := b.Store.LiftTextureModeration(r.Context(), tid); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "texture not found"})
+			writeErrCode(w, http.StatusNotFound, "texture not found", i18n.MsgTextureNotFound)
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "moderation update failed"})
+		writeErrCode(w, http.StatusInternalServerError, "moderation update failed", i18n.MsgInternal)
 		return
 	}
 	b.Store.InsertAudit(r.Context(), handledBy, "texture_moderation_lift", map[string]any{"texture": tid})
@@ -153,17 +154,17 @@ func (b *Backend) handleTextureModeration(w http.ResponseWriter, r *http.Request
 func (b *Backend) handleTextureDelete(w http.ResponseWriter, r *http.Request) {
 	tid, err := strconv.ParseInt(r.PathValue("tid"), 10, 64)
 	if err != nil || tid <= 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad texture id"})
+		writeErrCode(w, http.StatusBadRequest, "bad texture id", i18n.MsgTextureBadID)
 		return
 	}
 	reason := strings.TrimSpace(r.URL.Query().Get("reason"))
 	if len([]rune(reason)) > 500 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "reason too long"})
+		writeErrCode(w, http.StatusBadRequest, "reason too long", i18n.MsgTooLong)
 		return
 	}
 	force := r.URL.Query().Get("force") == "1"
 	if b.Account == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "texture service unavailable"})
+		writeErrCode(w, http.StatusInternalServerError, "texture service unavailable", i18n.MsgUnavailable)
 		return
 	}
 	aerr := b.Account.DeleteTexture(r.Context(), actorUID(r), tid, 0, force, reason, account.CallMeta{IP: ygg.ClientIP(r)})
@@ -171,18 +172,5 @@ func (b *Backend) handleTextureDelete(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 		return
 	}
-	switch aerr.Code {
-	case account.CodeNotFound:
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "texture not found"})
-	case account.CodeForbidden:
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-	case account.CodeInUse, account.CodeBusy:
-		body := map[string]any{"error": aerr.Code, "message": aerr.Message}
-		for k, v := range aerr.Details {
-			body[k] = v
-		}
-		writeJSON(w, http.StatusConflict, body)
-	default:
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "texture delete failed"})
-	}
+	writeAccountErr(w, aerr)
 }

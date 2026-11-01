@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"skin-nexus/server/internal/account"
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/jobs"
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/store"
@@ -234,9 +235,9 @@ func (b *Backend) auth(next http.HandlerFunc) http.HandlerFunc {
 			next(w, r.WithContext(context.WithValue(r.Context(), actorUIDKey{}, uid)))
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusForbidden)
-		_, _ = w.Write([]byte(`{"error":"Forbidden","message":"admin token invalid"}`))
+		// Through the helper, not a hand-written body: a response built with
+		// w.Write is invisible to the envelope gate.
+		writeErrCode(w, http.StatusForbidden, "admin token invalid", i18n.MsgAdminTokenInvalid)
 	}
 }
 
@@ -345,7 +346,7 @@ func (b *Backend) handleUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, total, err := b.Store.AdminUsers(r.Context(), r.URL.Query().Get("q"), page, 50)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeInternal(r, w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"users": rows, "total": total, "page": page})
@@ -358,7 +359,7 @@ func (b *Backend) handleTextures(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, total, err := b.Store.AdminTextures(r.Context(), page, 50)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeInternal(r, w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"textures": rows, "total": total, "page": page})
@@ -367,7 +368,7 @@ func (b *Backend) handleTextures(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleAudit(w http.ResponseWriter, r *http.Request) {
 	rows, err := b.Store.RecentAudit(r.Context(), 100)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeInternal(r, w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"audit": rows})
@@ -381,7 +382,7 @@ func (b *Backend) handleAccessLogs(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(q.Get("page"))
 	rows, total, err := b.Store.ListAccessLogs(r.Context(), q.Get("kind"), q.Get("q"), page, 50)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeInternal(r, w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"logs": rows, "total": total, "page": page})
