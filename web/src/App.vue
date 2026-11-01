@@ -294,12 +294,16 @@ function onLocaleChange(e) {
 // 其次设备页流程、launcher 深链恢复；落地即清 pendingView（防"迟到恢复"跳页）。
 function finishAuth() {
   const next = new URLSearchParams(location.search).get('next')
-  // Same-origin only. `//host` is a protocol-relative host, and WHATWG URL
-  // parsing also treats a backslash as a separator, so `/\host` escapes too.
-  if (next && next.startsWith('/') && !/^\/[/\\]/.test(next)) {
-    pendingView.value = ''
-    location.href = next
-    return
+  // Same-origin only, decided by the browser's own URL parser rather than a
+  // hand-written prefix rule: `/\evil.com` starts with one "/" and is not "//",
+  // yet resolves to another host. Origin equality also rejects javascript: URIs.
+  if (next) {
+    const target = new URL(next, location.origin)
+    if (target.origin === location.origin) {
+      pendingView.value = ''
+      location.href = target.href
+      return
+    }
   }
   if (location.pathname === '/device') view.value = 'device'
   else if (pendingExt.value) { const p = pendingExt.value; pendingExt.value = ''; openExt(p) }
