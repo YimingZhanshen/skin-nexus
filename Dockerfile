@@ -15,8 +15,10 @@ COPY web/ ./
 RUN npm run build
 
 # ---- stage 2: server ----
-# go.mod requires go >= 1.26; the golang image sets GOTOOLCHAIN=local so the
-# builder tag must match the go directive (no auto toolchain upgrade inside).
+# The golang image sets GOTOOLCHAIN=local, so the builder is the toolchain that
+# compiles us — it must be at least the `go` directive in go.mod, and moving it
+# forward is how a toolchain patch reaches the image. The exact version is not a
+# guess: the admin status page reports the running binary's runtime version.
 FROM golang:1.27-alpine AS server
 # goproxy.cn is fast from mainland China but slow/unreliable from GitHub's
 # US runners; CI overrides this build arg with proxy.golang.org.

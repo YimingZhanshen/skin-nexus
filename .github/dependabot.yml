@@ -36,6 +36,12 @@ updates:
     schedule: { interval: weekly, day: monday, time: "09:00", timezone: Asia/Shanghai }
     open-pull-requests-limit: 3
     commit-message: { prefix: "chore(deps)" }
+    ignore:
+      # Node majors are followed deliberately: 26 is not an LTS line and this
+      # dependency analysis has no notion of LTS, so it proposes it weekly.
+      # The web build rides Node LTS (22 → 24 when we choose).
+      - dependency-name: node
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
