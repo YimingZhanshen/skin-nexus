@@ -12,9 +12,8 @@ package i18n
 // Prefixing a constant with `Msg` is the greppable convention — `i18n\.Msg`
 // finds every call site — and `<area>.<reason>` keeps one namespace per area.
 //
-// Naming is `<area>.<reason>`, lowercase, dot-separated; `internal` is the one
-// exception (the 500 fallback, deliberately unprefixed because it is not a
-// domain). Codes are stable API surface: renaming one breaks every frontend
+// Naming is `<area>.<reason>`, lowercase, dot-separated — codes are stable API
+// surface: renaming one breaks every frontend
 // translation and any script that branches on it, so retire a code by leaving it
 // here and stopping use, never by redefining it to mean something else.
 //
@@ -57,6 +56,12 @@ const (
 	MsgRegisterFailed   = "auth.register_failed"
 	MsgIPLimit          = "auth.ip_limit"
 	MsgSelfDeleteAdmin  = "auth.self_delete_forbidden"
+	MsgPasswordSame     = "auth.password_unchanged" // new password equals the old one
+	MsgIdentifierTaken  = "auth.identifier_taken"   // which of the two is taken is unknown
+	// One code for every failed token check on /password/reset: the handler
+	// deliberately collapses them into one message so the endpoint never says
+	// which check failed, and the code must not leak it either.
+	MsgResetLink = "auth.reset_link_invalid"
 
 	// invitation gate
 	MsgInviteRequired = "invite.required"
@@ -74,14 +79,20 @@ const (
 	MsgTextureNotOwner   = "texture.not_owner"
 	MsgTextureModeration = "texture.moderation_ban" // struck: may not republish
 	MsgTextureAvatarSkin = "texture.avatar_skin_only"
+	MsgTextureSourceBad  = "texture.source_invalid" // the source enum is not one of three
+	MsgTextureModelBad   = "texture.model_invalid"  // PATCH model outside default|slim
 	MsgClosetNotFound    = "closet.not_found"
+	MsgClosetBadID       = "closet.bad_id"
+	MsgLikeMissing       = "skinlib.like_missing" // unlike a texture that is not liked
 	MsgPlayerNotOwner    = "player.not_owner"
+	MsgPlayerBadID       = "player.bad_id" // malformed or absent player id
 	MsgPlayerUUIDBad     = "player.uuid_invalid"
 	MsgPlayerNameRuleBad = "player.name_rule_invalid"
 
 	// reports
 	MsgReportDuplicate = "report.duplicate"
 	MsgReportQuota     = "report.quota_exceeded"
+	MsgReportSelf      = "report.self_report"
 	MsgReportFailed    = "report.save_failed"
 
 	// mail
@@ -90,6 +101,7 @@ const (
 	// federation (MUA Union)
 	MsgUnionConvergeFailed = "union.converge_failed" // hub accepted, local write failed
 	MsgUnionUUIDConflict   = "union.uuid_conflict"   // needs an operator to merge
+	MsgUnionUpstream       = "union.upstream_error"  // hub unreachable or answered wrongly
 
 	// appearance / themes / plugins
 	MsgThemeNotFound    = "theme.not_found"
@@ -97,6 +109,7 @@ const (
 	MsgPluginNotFound   = "plugin.not_found"
 	MsgPluginNoConfig   = "plugin.no_config"
 	MsgPluginNoRollback = "plugin.no_rollback"
+	MsgGuardDenied      = "plugin.guard_denied" // a plugin refused the write; its reason is the message
 
 	// setup / install
 	MsgSetupDone      = "setup.already_done"

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"skin-nexus/server/internal/account"
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/ygg"
@@ -34,7 +35,7 @@ func statFile(p string) (int64, error) {
 func (b *Backend) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "请先登录")
+		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
 		return
 	}
 	var req struct {
@@ -42,14 +43,14 @@ func (b *Backend) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 		Email    string `json:"email"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	changed := false
 	if req.Nickname != "" {
 		req.Nickname = strings.TrimSpace(req.Nickname)
 		if !nickRe.MatchString(req.Nickname) {
-			writeErr(w, http.StatusBadRequest, "昵称需为 2-24 位字母/数字/下划线/中文")
+			writeErrCode(w, http.StatusBadRequest, "昵称需为 2-24 位字母/数字/下划线/中文", i18n.MsgNicknameInvalid)
 			return
 		}
 		changed = true
@@ -57,39 +58,39 @@ func (b *Backend) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 	if req.Email != "" {
 		req.Email = strings.TrimSpace(req.Email)
 		if !mailRe.MatchString(req.Email) {
-			writeErr(w, http.StatusBadRequest, "邮箱格式不正确")
+			writeErrCode(w, http.StatusBadRequest, "邮箱格式不正确", i18n.MsgEmailInvalid)
 			return
 		}
 		changed = true
 	}
 	if !changed {
-		writeErr(w, http.StatusBadRequest, "没有可更新的字段")
+		writeErrCode(w, http.StatusBadRequest, "没有可更新的字段", i18n.MsgNoFields)
 		return
 	}
 	if err := b.checkGuard(r.Context(), "profile.update.check", plugin.EventPayload{
 		UserID: uid, IP: ygg.ClientIP(r),
 		Data: map[string]any{"nickname": req.Nickname, "email": req.Email},
 	}); err != nil {
-		writeErr(w, http.StatusForbidden, err.Error())
+		writeErrCode(w, http.StatusForbidden, err.Error(), i18n.MsgGuardDenied)
 		return
 	}
 	if req.Nickname != "" {
 		if err := b.Store.UpdateUserNickname(r.Context(), uid, req.Nickname); err != nil {
 			if err == store.ErrDuplicate {
-				writeErr(w, http.StatusConflict, "昵称已被占用")
+				writeErrCode(w, http.StatusConflict, "昵称已被占用", i18n.MsgNicknameTaken)
 				return
 			}
-			writeErr(w, http.StatusInternalServerError, "update failed")
+			writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
 			return
 		}
 	}
 	if req.Email != "" {
 		if err := b.Store.UpdateUserEmail(r.Context(), uid, req.Email); err != nil {
 			if err == store.ErrDuplicate {
-				writeErr(w, http.StatusConflict, "邮箱已被占用")
+				writeErrCode(w, http.StatusConflict, "邮箱已被占用", i18n.MsgEmailTaken)
 				return
 			}
-			writeErr(w, http.StatusInternalServerError, "update failed")
+			writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
 			return
 		}
 		// New address = unverified (blessing parity).
@@ -116,32 +117,32 @@ func (b *Backend) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleAccountDelete(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "请先登录")
+		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
 		return
 	}
 	var req struct {
 		Password string `json:"password"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	perm, err := b.Store.UserPermission(r.Context(), uid)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "db error")
+		writeErrCode(w, http.StatusInternalServerError, "db error", i18n.MsgInternal)
 		return
 	}
 	if perm > 0 {
-		writeErr(w, http.StatusForbidden, "管理员账号不可自助删除")
+		writeErrCode(w, http.StatusForbidden, "管理员账号不可自助删除", i18n.MsgSelfDeleteAdmin)
 		return
 	}
 	ok, err := b.Store.VerifyPassword(r.Context(), uid, req.Password)
 	if err != nil || !ok {
-		writeErr(w, http.StatusUnauthorized, "密码不正确")
+		writeErrCode(w, http.StatusUnauthorized, "密码不正确", i18n.MsgCredentials)
 		return
 	}
 	if err := b.Store.DeleteUser(r.Context(), uid); err != nil {
-		writeErr(w, http.StatusInternalServerError, "delete failed")
+		writeErrCode(w, http.StatusInternalServerError, "delete failed", i18n.MsgInternal)
 		return
 	}
 	if b.OnUserLifecycle != nil {
@@ -167,29 +168,29 @@ func (b *Backend) handleAccountDelete(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleAvatarSet(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "请先登录")
+		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
 		return
 	}
 	var req struct {
 		TextureID int64 `json:"textureId"`
 	}
 	if err := jsonDecode(r, &req); err != nil || req.TextureID <= 0 {
-		writeErr(w, http.StatusBadRequest, "textureId 无效")
+		writeErrCode(w, http.StatusBadRequest, "textureId 无效", i18n.MsgTextureBadID)
 		return
 	}
 	owner, err := b.Store.TextureOwner(r.Context(), req.TextureID)
 	if err != nil || owner != uid {
-		writeErr(w, http.StatusForbidden, "not yours")
+		writeErrCode(w, http.StatusForbidden, "not yours", i18n.MsgTextureNotOwner)
 		return
 	}
 	// Type gate (legacy TextureController.php:141 parity: 422 unless the
 	// texture is a skin) — a cape must never become an avatar.
 	if typ, err := b.Store.TextureType(r.Context(), req.TextureID); err != nil || typ != "skin" {
-		writeErr(w, http.StatusUnprocessableEntity, "只有皮肤可以设为头像")
+		writeErrCode(w, http.StatusUnprocessableEntity, "只有皮肤可以设为头像", i18n.MsgTextureAvatarSkin)
 		return
 	}
 	if err := b.Store.SetUserAvatar(r.Context(), uid, req.TextureID); err != nil {
-		writeErr(w, http.StatusInternalServerError, "update failed")
+		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
@@ -198,11 +199,11 @@ func (b *Backend) handleAvatarSet(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleAvatarReset(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "请先登录")
+		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
 		return
 	}
 	if err := b.Store.SetUserAvatar(r.Context(), uid, 0); err != nil {
-		writeErr(w, http.StatusInternalServerError, "update failed")
+		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
@@ -215,12 +216,12 @@ func (b *Backend) handleAvatarReset(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) ownPlayer(w http.ResponseWriter, r *http.Request, uid int64) (int64, bool) {
 	pid, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if pid <= 0 {
-		writeErr(w, http.StatusBadRequest, "invalid pid")
+		writeErrCode(w, http.StatusBadRequest, "invalid pid", i18n.MsgPlayerBadID)
 		return 0, false
 	}
 	players, err := b.Store.PlayersByUID(r.Context(), uid)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "db error")
+		writeErrCode(w, http.StatusInternalServerError, "db error", i18n.MsgInternal)
 		return 0, false
 	}
 	for _, p := range players {
@@ -228,7 +229,7 @@ func (b *Backend) ownPlayer(w http.ResponseWriter, r *http.Request, uid int64) (
 			return pid, true
 		}
 	}
-	writeErr(w, http.StatusNotFound, "角色不存在或不属于你")
+	writeErrCode(w, http.StatusNotFound, "角色不存在或不属于你", account.CodeNotFound)
 	return 0, false
 }
 
@@ -239,7 +240,7 @@ func (b *Backend) ownPlayer(w http.ResponseWriter, r *http.Request, uid int64) (
 func (b *Backend) handlePlayerRename(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "请先登录")
+		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
 		return
 	}
 	pid, ok := b.ownPlayer(w, r, uid)
@@ -250,12 +251,12 @@ func (b *Backend) handlePlayerRename(w http.ResponseWriter, r *http.Request) {
 		Name string `json:"name"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	if err := b.Store.ValidatePlayerName(r.Context(), req.Name); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
+		writeErrCode(w, http.StatusBadRequest, err.Error(), i18n.MsgPlayerNameRuleBad)
 		return
 	}
 	_, invalidated, aerr := b.Account.RenamePlayer(r.Context(), uid, pid, req.Name, account.CallMeta{IP: ygg.ClientIP(r)})
@@ -273,7 +274,7 @@ func (b *Backend) handlePlayerRename(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handlePlayerDeleteSelf(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "请先登录")
+		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
 		return
 	}
 	pid, ok := b.ownPlayer(w, r, uid)

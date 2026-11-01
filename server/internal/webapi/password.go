@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"skin-nexus/server/internal/auth"
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/mailer"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/ygg"
@@ -37,7 +38,7 @@ func sessionCookieValue(r *http.Request) string {
 func (b *Backend) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "请先登录")
+		writeErrCode(w, http.StatusUnauthorized, "请先登录", i18n.MsgUnauthorized)
 		return
 	}
 	var req struct {
@@ -45,27 +46,27 @@ func (b *Backend) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 		NewPassword     string `json:"newPassword"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	ok, err := b.Store.VerifyPassword(r.Context(), uid, req.CurrentPassword)
 	if err != nil || !ok {
-		writeErr(w, http.StatusUnauthorized, "当前密码不正确")
+		writeErrCode(w, http.StatusUnauthorized, "当前密码不正确", i18n.MsgCurrentPassword)
 		return
 	}
 	// Passwords may legitimately contain spaces — never trim (review P3:
 	// the old TrimSpace silently changed the credential the user typed).
 	if len(req.NewPassword) < 8 {
-		writeErr(w, http.StatusBadRequest, "新密码至少 8 位")
+		writeErrCode(w, http.StatusBadRequest, "新密码至少 8 位", i18n.MsgPasswordTooShort)
 		return
 	}
 	if req.NewPassword == req.CurrentPassword {
-		writeErr(w, http.StatusBadRequest, "新密码不能与当前密码相同")
+		writeErrCode(w, http.StatusBadRequest, "新密码不能与当前密码相同", i18n.MsgPasswordSame)
 		return
 	}
 	hash, err := auth.HashArgon2id(req.NewPassword)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "hash error")
+		writeErrCode(w, http.StatusInternalServerError, "hash error", i18n.MsgInternal)
 		return
 	}
 	// SetPasswordHash writes UNCONDITIONALLY (chain-trace P0: the legacy-
@@ -73,7 +74,7 @@ func (b *Backend) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 	// the change a silent no-op for argon2id users while tokens were still
 	// revoked, turning "change password to stop a leak" into an amplifier).
 	if err := b.Store.SetPasswordHash(r.Context(), uid, hash); err != nil {
-		writeErr(w, http.StatusInternalServerError, "update failed")
+		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
 		return
 	}
 	// Kill every yggdrasil token this user holds (join/validate credentials).
@@ -165,12 +166,12 @@ func (b *Backend) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 		Email string `json:"email"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	req.Email = strings.TrimSpace(req.Email)
 	if req.Email == "" || !mailRe.MatchString(req.Email) {
-		writeErr(w, http.StatusBadRequest, "邮箱格式不正确")
+		writeErrCode(w, http.StatusBadRequest, "邮箱格式不正确", i18n.MsgEmailInvalid)
 		return
 	}
 	// Sliding-window limits in the shared limiter's key space: per IP stops
@@ -179,7 +180,7 @@ func (b *Backend) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	if b.Limiter != nil {
 		if !b.Limiter.Allow("pwf-ip:"+ygg.ClientIP(r)) ||
 			!b.Limiter.Allow("pwf-mail:"+strings.ToLower(req.Email)) {
-			writeErr(w, http.StatusTooManyRequests, "请求过于频繁，请稍后再试")
+			writeErrCode(w, http.StatusTooManyRequests, "请求过于频繁，请稍后再试", i18n.MsgRateLimited)
 			return
 		}
 	}
@@ -187,12 +188,12 @@ func (b *Backend) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	// of pretending a mail went out. Identical for every address.
 	cfg := b.smtpConfig(r.Context())
 	if cfg == nil {
-		writeErr(w, http.StatusServiceUnavailable, "站点未配置邮件服务，请联系管理员")
+		writeErrCode(w, http.StatusServiceUnavailable, "站点未配置邮件服务，请联系管理员", i18n.MsgMailNotConfigured)
 		return
 	}
 	uid, err := b.Store.UserByEmail(r.Context(), req.Email)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusInternalServerError, "服务暂时不可用，请稍后再试")
+		writeErrCode(w, http.StatusInternalServerError, "服务暂时不可用，请稍后再试", i18n.MsgInternal)
 		return
 	}
 	if errors.Is(err, store.ErrNotFound) {
@@ -202,13 +203,13 @@ func (b *Backend) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	var raw [32]byte
 	if _, err := rand.Read(raw[:]); err != nil {
-		writeErr(w, http.StatusInternalServerError, "服务暂时不可用，请稍后再试")
+		writeErrCode(w, http.StatusInternalServerError, "服务暂时不可用，请稍后再试", i18n.MsgInternal)
 		return
 	}
 	token := hex.EncodeToString(raw[:])
 	digest := sha256.Sum256([]byte(token))
 	if err := b.Store.CreatePasswordResetToken(r.Context(), uid, hex.EncodeToString(digest[:]), resetTokenTTL); err != nil {
-		writeErr(w, http.StatusInternalServerError, "服务暂时不可用，请稍后再试")
+		writeErrCode(w, http.StatusInternalServerError, "服务暂时不可用，请稍后再试", i18n.MsgInternal)
 		return
 	}
 	link := strings.TrimRight(b.BaseURL, "/") + "/reset-password?token=" + url.QueryEscape(token)
@@ -232,48 +233,48 @@ func (b *Backend) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	// Cheap pre-filter only — every failure below collapses to the SAME
 	// message so the endpoint never says which check failed.
 	badLink := "重置链接无效或已过期，请重新申请。"
 	if len(req.Token) != 64 {
-		writeErr(w, http.StatusBadRequest, badLink)
+		writeErrCode(w, http.StatusBadRequest, badLink, i18n.MsgResetLink)
 		return
 	}
 	if _, err := hex.DecodeString(req.Token); err != nil {
-		writeErr(w, http.StatusBadRequest, badLink)
+		writeErrCode(w, http.StatusBadRequest, badLink, i18n.MsgResetLink)
 		return
 	}
 	// Password policy mirrors register/change (never trimmed: spaces are
 	// legal credential characters).
 	if len(req.Password) < 8 {
-		writeErr(w, http.StatusBadRequest, "密码至少 8 位")
+		writeErrCode(w, http.StatusBadRequest, "密码至少 8 位", i18n.MsgPasswordTooShort)
 		return
 	}
 	if b.Limiter != nil && !b.Limiter.Allow("pwr-ip:"+ygg.ClientIP(r)) {
-		writeErr(w, http.StatusTooManyRequests, "请求过于频繁，请稍后再试")
+		writeErrCode(w, http.StatusTooManyRequests, "请求过于频繁，请稍后再试", i18n.MsgRateLimited)
 		return
 	}
 	digest := sha256.Sum256([]byte(req.Token))
 	uid, err := b.Store.ConsumePasswordResetToken(r.Context(), hex.EncodeToString(digest[:]))
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			writeErr(w, http.StatusBadRequest, badLink)
+			writeErrCode(w, http.StatusBadRequest, badLink, i18n.MsgResetLink)
 			return
 		}
-		writeErr(w, http.StatusInternalServerError, "服务暂时不可用，请稍后再试")
+		writeErrCode(w, http.StatusInternalServerError, "服务暂时不可用，请稍后再试", i18n.MsgInternal)
 		return
 	}
 	hash, err := auth.HashArgon2id(req.Password)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "hash error")
+		writeErrCode(w, http.StatusInternalServerError, "hash error", i18n.MsgInternal)
 		return
 	}
 	// SetPasswordHash writes UNCONDITIONALLY (same P0 guard as change).
 	if err := b.Store.SetPasswordHash(r.Context(), uid, hash); err != nil {
-		writeErr(w, http.StatusInternalServerError, "update failed")
+		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
 		return
 	}
 	// Revocation mirrors handlePasswordChange, minus "keep my session": the

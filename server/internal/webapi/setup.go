@@ -22,7 +22,7 @@ type SetupState struct {
 func (b *Backend) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	need, err := b.Store.NeedsSetup(r.Context())
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "setup state unavailable")
+		writeErrCode(w, http.StatusInternalServerError, "setup state unavailable", i18n.MsgInternal)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"needs_setup": need})
@@ -33,12 +33,12 @@ func (b *Backend) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 	need, err := b.Store.NeedsSetup(r.Context())
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "setup state unavailable")
+		writeErrCode(w, http.StatusInternalServerError, "setup state unavailable", i18n.MsgInternal)
 		return
 	}
 	if !need {
 		// one-way door
-		writeErr(w, http.StatusNotFound, "setup already completed")
+		writeErrCode(w, http.StatusNotFound, "setup already completed", i18n.MsgSetupDone)
 		return
 	}
 	var req struct {
@@ -69,14 +69,14 @@ func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	hash, err := auth.HashArgon2id(req.Password)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "hash failed")
+		writeErrCode(w, http.StatusInternalServerError, "hash failed", i18n.MsgInternal)
 		return
 	}
 	// The wizard's bootstrap account is the site SUPER_ADMIN (permission=2):
 	// plugin install/market operations require exactly 2, not merely >0.
 	uid, err := b.Store.CreateUserAdmin(r.Context(), req.Email, req.Nickname, hash, req.PlayerLimit)
 	if err != nil {
-		writeErr(w, http.StatusConflict, "账号创建失败（昵称或邮箱可能已存在）")
+		writeErrCode(w, http.StatusConflict, "账号创建失败（昵称或邮箱可能已存在）", i18n.MsgRegisterFailed)
 		return
 	}
 	// site identity + SEO defaults
