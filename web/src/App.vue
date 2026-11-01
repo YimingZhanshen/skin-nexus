@@ -652,7 +652,7 @@ onMounted(() => {
           <SkinlibPage v-else-if="view === 'skinlib'" :user="user" @login="skinlibLogin" />
           <ClosetPage v-else-if="view === 'closet'" />
           <PlayersPage v-else-if="view === 'players'" />
-          <ProfilePage v-else-if="view === 'profile'" />
+          <ProfilePage v-else-if="view === 'profile'" :mail-enabled="mailEnabled" />
           <NotificationsPage v-else-if="view === 'notifications'" @read="onInboxRead" />
           <AuthorizedAppsPage v-else-if="view === 'apps'" />
           <UnionBindPage v-else-if="view === 'union'" />

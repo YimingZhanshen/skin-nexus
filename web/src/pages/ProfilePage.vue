@@ -9,6 +9,10 @@ import PluginSlot from '../components/plugin/PluginSlot.vue'
 
 const { t } = useI18n()
 
+// Same gating rule as the forgot-password link: a surface that cannot possibly
+// work on this deployment is not shown.
+defineProps({ mailEnabled: { type: Boolean, default: false } })
+
 const me = ref(null)
 const closet = ref([])
 const err = ref('')
@@ -145,7 +149,7 @@ onMounted(load)
     </div>
     <div class="row" style="margin-top: 8px;">
       <button @click="saveProfile">{{ t('common.save') }}</button>
-      <button class="secondary" v-if="me && !me.emailVerified" @click="requestEmailVerification">{{ t('auth.verifySubmit') }}</button>
+      <button class="secondary" v-if="mailEnabled && me && !me.emailVerified" @click="requestEmailVerification">{{ t('auth.verifySubmit') }}</button>
       <span class="muted" v-if="me">{{ t('profile.verifiedState', { state: me.emailVerified ? t('profile.verified') : t('profile.unverified') }) }}</span>
     </div>
     <div class="muted" style="margin-top: 6px; font-size: var(--fs-xs);">{{ t('profile.emailResetHint') }}</div>
