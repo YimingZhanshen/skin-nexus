@@ -1,10 +1,12 @@
 <script setup>
 // SkinPreview — small auto-rotating skinview3d canvas (PlayersPage rows,
 // Dashboard upload preview).
-// v2 (2026-10-26 批注): modelType prop (default/slim) hot-swaps the player
-// model; WebGL probe keeps a static fallback viable on gl-less browsers;
-// dispose on unmount so the context budget stays honest (grid pages must
-// not accumulate live WebGL contexts).
+// v2 (2026-10-26): modelType prop (default/slim) hot-swaps the player model;
+// dispose on unmount so the context budget stays honest (grid pages must not
+// accumulate live WebGL contexts).
+// v3 (2026-11-01): the no-WebGL fallback lives here. Every consumer used to
+// re-implement "canvas is empty, show a flat PNG" — or, worse, left a blank box
+// that looked like a broken skin.
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 
 const props = defineProps({
@@ -15,6 +17,9 @@ const props = defineProps({
 })
 const emit = defineEmits(['gl-unavailable'])
 const canvas = ref(null)
+// glLost is why the template branches: the page still gets `gl-unavailable` to
+// reflow its layout, but it never has to guess how to draw one preview.
+const glLost = ref(false)
 let viewer = null
 
 function webglOK() {
@@ -26,7 +31,11 @@ function webglOK() {
 
 async function ensureViewer() {
   if (viewer || !canvas.value) return
-  if (!webglOK()) { emit('gl-unavailable'); return }
+  if (!webglOK()) {
+    glLost.value = true
+    emit('gl-unavailable')
+    return
+  }
   const skinview3d = await import('skinview3d')
   viewer = new skinview3d.SkinViewer({
     canvas: canvas.value,
@@ -57,5 +66,7 @@ onBeforeUnmount(() => { if (viewer) { viewer.dispose(); viewer = null } })
 </script>
 
 <template>
-  <canvas ref="canvas" style="background: transparent;" />
+  <img v-if="glLost && url" :src="url" alt=""
+       :style="`width:${width}px;height:${height}px;object-fit:contain;image-rendering:pixelated;background:transparent;`" />
+  <canvas v-else ref="canvas" style="background: transparent;" />
 </template>
