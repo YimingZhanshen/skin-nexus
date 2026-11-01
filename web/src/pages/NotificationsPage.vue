@@ -53,7 +53,9 @@ async function markAllRead() {
 }
 
 function text(n) {
-  return t('notifications.kinds.' + n.kind, n.ref ? { name: n.ref } : {})
+  // The texture may have been hard-deleted since; the row then carries an empty
+  // snapshot and the notice still has to read as a sentence.
+  return t('notifications.kinds.' + n.kind, { name: n.ref || t('notifications.deletedTexture') })
 }
 
 function when(tm) {

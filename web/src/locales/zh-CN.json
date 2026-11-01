@@ -420,6 +420,7 @@
     "colWhen": "时间",
     "empty": "还没有通知",
     "emptyUnread": "没有未读通知",
+    "deletedTexture": "已删除的材质",
     "kinds": {
       "account": {
         "banned": "你的账号已被管理员封禁",

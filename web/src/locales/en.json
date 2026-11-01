@@ -420,6 +420,7 @@
     "colWhen": "When",
     "empty": "Nothing here yet",
     "emptyUnread": "No unread notifications",
+    "deletedTexture": "the removed texture",
     "kinds": {
       "account": {
         "banned": "Your account was banned by a site administrator",
