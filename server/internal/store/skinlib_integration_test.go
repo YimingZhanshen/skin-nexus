@@ -33,17 +33,18 @@ func TestIntegrationSkinlibListViewerMatrix(t *testing.T) {
 	}
 
 	cases := []struct {
-		name    string
-		opts    SkinlibOpts
-		wantTID int64 // 0 = no specific row asserted
+		name       string
+		opts       SkinlibOpts
+		wantTotal  int   // 3 = the private entry is visible too
+		wantPubTID int64 // 0 = no specific row asserted
 	}{
-		{"admin unfiltered", SkinlibOpts{ViewerUID: owner, ViewerAdmin: true}, pubSkin},
-		{"admin unfiltered by likes", SkinlibOpts{ViewerUID: owner, ViewerAdmin: true, Sort: "likes"}, pubSkin},
-		{"admin unknown filter", SkinlibOpts{ViewerUID: owner, ViewerAdmin: true, Type: "bogus"}, pubSkin},
-		{"anonymous", SkinlibOpts{}, pubSkin},
-		{"normal viewer", SkinlibOpts{ViewerUID: owner}, pubSkin},
-		{"public only", SkinlibOpts{PublicOnly: true}, pubSkin},
-		{"keyword only", SkinlibOpts{ViewerUID: owner, ViewerAdmin: true, Keyword: "matrix"}, pubSkin},
+		{"admin unfiltered", SkinlibOpts{ViewerUID: owner, ViewerAdmin: true}, 3, pubSkin},
+		{"admin unfiltered by likes", SkinlibOpts{ViewerUID: owner, ViewerAdmin: true, Sort: "likes"}, 3, pubSkin},
+		{"admin unknown filter", SkinlibOpts{ViewerUID: owner, ViewerAdmin: true, Type: "bogus"}, 3, pubSkin},
+		{"anonymous", SkinlibOpts{}, 2, pubSkin},
+		{"normal viewer", SkinlibOpts{ViewerUID: owner}, 2, pubSkin},
+		{"public only", SkinlibOpts{PublicOnly: true}, 2, pubSkin},
+		{"keyword only", SkinlibOpts{ViewerUID: owner, ViewerAdmin: true, Keyword: "matrix"}, 3, pubSkin},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -53,12 +54,13 @@ func TestIntegrationSkinlibListViewerMatrix(t *testing.T) {
 			if err != nil {
 				t.Fatalf("SkinlibList(%+v): %v", opt, err)
 			}
-			if total < 3 || len(rows) == 0 {
-				t.Fatalf("total=%d rows=%d, want at least the three seeded entries", total, len(rows))
+			if total != tc.wantTotal || len(rows) != tc.wantTotal {
+				t.Fatalf("total=%d rows=%d, want %d (three seeded entries, one of them private)",
+					total, len(rows), tc.wantTotal)
 			}
 			var found bool
 			for _, r := range rows {
-				if r.TID == tc.wantTID {
+				if r.TID == tc.wantPubTID {
 					found = true
 					if r.Hash != strings.Repeat("b", 64) || r.Type != "skin" {
 						t.Errorf("row %d came back as type=%q hash=%q", r.TID, r.Type, r.Hash)
@@ -66,7 +68,7 @@ func TestIntegrationSkinlibListViewerMatrix(t *testing.T) {
 				}
 			}
 			if !found {
-				t.Errorf("public skin %d missing from the page", tc.wantTID)
+				t.Errorf("public skin %d missing from the page", tc.wantPubTID)
 			}
 		})
 	}
