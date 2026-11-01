@@ -80,3 +80,41 @@ func TestMarketDefaultsAndDisable(t *testing.T) {
 		t.Fatalf("explicit empty should disable, got %+v", []string{c.PluginMarketURL, c.PluginTrustKeys, c.ThemeMarketURL, c.ThemeTrustKeys})
 	}
 }
+
+// TestSMTPPanelMapHidesThePassword: the mailer needs the credential, the
+// settings panel must not see it. One struct feeds both, and the difference is
+// this one field — so the check is that the two maps are the same shape and
+// differ only there.
+func TestSMTPPanelMapHidesThePassword(t *testing.T) {
+	s := SMTPConfig{Host: "smtp.test", Port: "465", User: "bot", Pass: "hunter2", From: "bot@test"}
+	full, panel := s.Map(), s.PanelMap()
+	if len(full) != len(panel) {
+		t.Fatalf("key sets diverged: %d vs %d", len(full), len(panel))
+	}
+	for k, v := range full {
+		pv, ok := panel[k]
+		if !ok {
+			t.Fatalf("PanelMap lost %s", k)
+		}
+		if k == "smtp_pass" {
+			if pv != "" {
+				t.Errorf("PanelMap still carries the password: %q", pv)
+			}
+			continue
+		}
+		if pv != v {
+			t.Errorf("PanelMap[%s] = %q, want %q", k, pv, v)
+		}
+	}
+	if full["smtp_pass"] != "hunter2" {
+		t.Error("Map() must keep the password: the mailer builds its auth from it")
+	}
+}
+
+func TestSMTPPortDefault(t *testing.T) {
+	t.Setenv("SKIN_SMTP_HOST", "smtp.test")
+	c := loadSMTP()
+	if c.Port != "465" {
+		t.Errorf("unset SKIN_SMTP_PORT gave %q, want the documented 465 default", c.Port)
+	}
+}

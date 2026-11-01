@@ -23,3 +23,7 @@ Thumbs.db
 
 # 工具本地状态（Qoder RepoWiki 等）
 .qoder/
+
+# CI 覆盖率产物（server/ 下生成，不入库）
+coverage.out
+coverage.txt

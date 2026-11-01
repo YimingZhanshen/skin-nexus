@@ -22,54 +22,66 @@ type settingMeta struct {
 	Restart bool   `json:"restart"`
 	Desc    string `json:"desc"`
 	Group   string `json:"group"` // panel section id (basic/register/mail/security/ygg/texture/union)
+	// Secret keys never return a value: `set` says whether one exists. The UI
+	// mask used to be the only thing standing between a credential and the page
+	// source, so anything reading the response — a log, an XSS, a saved copy —
+	// saw the plaintext.
+	Secret bool `json:"secret"`
+	Set    bool `json:"set"`
 }
 
-// settingsWhitelist: key / restart / group / desc. Group ids drive the panel
-// section grouping (UI-ordered by the frontend's group sequence; unknown ids
-// fall to the end) — keep them lowercase-stable, they are part of the API.
-var settingsWhitelist = []struct {
+// settingSpec is one panel knob: its option key, whether applying it needs a
+// restart, which panel section it belongs to, the operator-facing description,
+// and whether its value is a secret (write-only over this endpoint).
+type settingSpec struct {
 	key     string
 	restart bool
 	group   string
 	desc    string
-}{
-	{"site_name", true, "basic", "站点名称（页头/标题）"},
-	{"server_name", true, "basic", "服务器名称"},
-	{"site_url", true, "basic", "站点地址（http(s) 绝对地址；页面链接/sitemap 基址，重启后生效。注意：纹理 URL 与 OIDC issuer 由环境变量 SKIN_BASE_URL/SKIN_OIDC_ISSUER 决定，此处不改它们）"}, // B4 (blessing 原名 — 迁移导入器原样搬运生产 options，改名会让存量值成死键)
-	{"announcement", false, "basic", "站点公告（Markdown，支持标题/粗体/链接/列表；双层消毒渲染，留空隐藏）"},
-	{"invite_required", false, "register", "注册强制邀请码（立即生效）"},
-	{"require_verification", false, "register", "join 前须邮箱验证（立即生效；邮件流未上线前开了会挡住所有新号进服）"},
-	{"regs_per_ip", false, "register", "每 IP 可注册账号数上限（0=不限制，立即生效）"},
-	{"smtp_host", false, "mail", "SMTP 服务器地址（留空=关闭邮件功能；须同时配 smtp_user 或 smtp_from 作为发件人，否则视为未配置；立即生效）"},
-	{"smtp_port", false, "mail", "SMTP 端口（465=隐式 TLS 直连；其它端口自动 STARTTLS 升级；默认 465）"},
-	{"smtp_user", false, "mail", "SMTP 用户名（多数服务商填完整邮箱地址）"},
-	{"smtp_pass", false, "mail", "SMTP 密码/授权码（QQ/163 等填授权码，不是登录密码）"},
-	{"smtp_from", false, "mail", "发件人（留空=用 smtp_user；可写 Name <a@b.c> 形式）"},
-	{"rate_limit_auth", true, "security", "认证端点每 IP 每 10 分钟请求数上限（0=关闭；重启后生效）"},
-	{"login_fail_limit", true, "security", "同账号连续失败锁定阈值（0=关闭；重启后生效）"},
-	{"cdn_enabled", false, "security", "CDN 加速开关（启用后按下方头顺序解析真实客户端 IP；仅当 Nginx/CDN 会覆盖这些头时开启，立即生效）"},
-	{"cdn_headers", false, "security", "CDN 真实 IP 头（按顺序匹配，逗号分隔；默认 CF-Connecting-IP,True-Client-IP,Ali-CDN-Real-IP,X-Real-IP,X-Forwarded-For）"},
-	{"skin_domains", true, "ygg", "皮肤域名（CSV，ygg metadata 皮肤来源）"},
-	{"ygg_token_expire_1", false, "ygg", "ygg 令牌软窗口（秒，默认 259200=3 天）：validate/join 有效期，过后可 refresh 换新"}, // B5（blessing yggdrasil-connect 原名，callbacks.php:93-98 默认值）
-	{"ygg_token_expire_2", false, "ygg", "ygg 令牌硬窗口（秒，默认 604800=7 天）：refresh 有效期，过后须重新登录"},
-	{"ygg_tokens_limit", false, "ygg", "每用户 ygg 令牌数上限（默认 10，0=不限）：超限淘汰最旧令牌并留审计"},
-	{"ygg_search_profile_max", false, "ygg", "批量查角色单次上限（默认 5，1-100）"},
-	{"ygg_rate_limit", false, "ygg", "同名认证最小间隔（毫秒，默认 1000，0=关闭）"},
-	{"ygg_mojang_fallback", false, "ygg", "Mojang 官方兜底（profile/hasJoined 本地未命中时向官方查询；默认开，立即生效）"}, // A2（2026-10-26）：官方 sessionserver 兜底，热开关——关=本地未命中直接 204
-	{"max_upload_file_size", false, "texture", "材质上传大小上限（KB，不超过服务端硬顶，立即生效）"},
-	{"player_name_rule", false, "texture", "角色名规则：official/cjk/utf8/custom（仅拦新写入，立即生效）"},
-	{"custom_player_name_regexp", false, "texture", "自定义角色名正则（player_name_rule=custom 时生效）"},
-	{"player_name_length_min", false, "texture", "角色名最小长度（字符）"},
-	{"player_name_length_max", false, "texture", "角色名最大长度（字符）"},
-	{"texture_name_regexp", false, "texture", "材质备注命名正则（空=不限制，仅拦新上传）"},
-	{"union_enabled", false, "union", "Union 联盟模块开关（热切换：关=全路由 404、签名回本地密钥）"}, // Union（blessing yggdrasil-connect 原名；union_enabled 为本项目新增键——老站用插件启停表达，无 option 行。热切换 2026-10-24 拍板）
-	{"union_api_root", false, "union", "Union hub API 根（默认 https://skin.mualliance.ltd/api/union，立即生效）"},
-	{"union_member_key", false, "union", "Union 成员密钥（联盟下发；切勿泄露，立即生效）"},
-	{"union_enable_update", true, "union", "允许 hub 远程轮换成员密钥（updatebackendkey，重启后生效）"},
-	{"union_enable_oauth2", true, "union", "Union OAuth2 联合登录（重启后生效）"},
-	{"union_queryemail_mode", true, "union", "Union 查询邮箱模式：full/off（重启后生效）"},
-	{"union_oauth2_sig_private_key", true, "union", "Union OAuth2 用户信息签名私钥（PEM；留空首启自动生成，重启后生效）"},
-	{"union_oauth2_sig_public_key", true, "union", "Union OAuth2 用户信息签名公钥（PEM；留空首启自动生成，重启后生效）"},
+	secret  bool
+}
+
+// settingsWhitelist: key / restart / group / desc / secret. Group ids drive the panel
+// section grouping (UI-ordered by the frontend's group sequence; unknown ids
+// fall to the end) — keep them lowercase-stable, they are part of the API.
+var settingsWhitelist = []settingSpec{
+	{"site_name", true, "basic", "站点名称（页头/标题）", false},
+	{"server_name", true, "basic", "服务器名称", false},
+	{"site_url", true, "basic", "站点地址（http(s) 绝对地址；页面链接/sitemap 基址，重启后生效。注意：纹理 URL 与 OIDC issuer 由环境变量 SKIN_BASE_URL/SKIN_OIDC_ISSUER 决定，此处不改它们）", false}, // B4 (blessing 原名 — 迁移导入器原样搬运生产 options，改名会让存量值成死键)
+	{"announcement", false, "basic", "站点公告（Markdown，支持标题/粗体/链接/列表；双层消毒渲染，留空隐藏）", false},
+	{"invite_required", false, "register", "注册强制邀请码（立即生效）", false},
+	{"require_verification", false, "register", "join 前须邮箱验证（立即生效；邮件流未上线前开了会挡住所有新号进服）", false},
+	{"regs_per_ip", false, "register", "每 IP 可注册账号数上限（0=不限制，立即生效）", false},
+	{"smtp_host", false, "mail", "SMTP 服务器地址（留空=关闭邮件功能；须同时配 smtp_user 或 smtp_from 作为发件人，否则视为未配置；立即生效）", false},
+	{"smtp_port", false, "mail", "SMTP 端口（465=隐式 TLS 直连；其它端口自动 STARTTLS 升级；默认 465）", false},
+	{"smtp_user", false, "mail", "SMTP 用户名（多数服务商填完整邮箱地址）", false},
+	{"smtp_pass", false, "mail", "SMTP 密码/授权码（QQ/163 等填授权码，不是登录密码；不回显，留空=保持原值）", true},
+	{"smtp_from", false, "mail", "发件人（留空=用 smtp_user；可写 Name <a@b.c> 形式）", false},
+	{"rate_limit_auth", true, "security", "认证端点每 IP 每 10 分钟请求数上限（0=关闭；重启后生效）", false},
+	{"login_fail_limit", true, "security", "同账号连续失败锁定阈值（0=关闭；重启后生效）", false},
+	{"cdn_enabled", false, "security", "CDN 加速开关（启用后按下方头顺序解析真实客户端 IP；仅当 Nginx/CDN 会覆盖这些头时开启，立即生效）", false},
+	{"cdn_headers", false, "security", "CDN 真实 IP 头（按顺序匹配，逗号分隔；默认 CF-Connecting-IP,True-Client-IP,Ali-CDN-Real-IP,X-Real-IP,X-Forwarded-For）", false},
+	{"skin_domains", true, "ygg", "皮肤域名（CSV，ygg metadata 皮肤来源）", false},
+	{"ygg_token_expire_1", false, "ygg", "ygg 令牌软窗口（秒，默认 259200=3 天）：validate/join 有效期，过后可 refresh 换新", false}, // B5（blessing yggdrasil-connect 原名，callbacks.php:93-98 默认值）
+	{"ygg_token_expire_2", false, "ygg", "ygg 令牌硬窗口（秒，默认 604800=7 天）：refresh 有效期，过后须重新登录", false},
+	{"ygg_tokens_limit", false, "ygg", "每用户 ygg 令牌数上限（默认 10，0=不限）：超限淘汰最旧令牌并留审计", false},
+	{"ygg_search_profile_max", false, "ygg", "批量查角色单次上限（默认 5，1-100）", false},
+	{"ygg_rate_limit", false, "ygg", "同名认证最小间隔（毫秒，默认 1000，0=关闭）", false},
+	{"ygg_mojang_fallback", false, "ygg", "Mojang 官方兜底（profile/hasJoined 本地未命中时向官方查询；默认开，立即生效）", false}, // A2（2026-10-26）：官方 sessionserver 兜底，热开关——关=本地未命中直接 204
+	{"max_upload_file_size", false, "texture", "材质上传大小上限（KB，不超过服务端硬顶，立即生效）", false},
+	{"player_name_rule", false, "texture", "角色名规则：official/cjk/utf8/custom（仅拦新写入，立即生效）", false},
+	{"custom_player_name_regexp", false, "texture", "自定义角色名正则（player_name_rule=custom 时生效）", false},
+	{"player_name_length_min", false, "texture", "角色名最小长度（字符）", false},
+	{"player_name_length_max", false, "texture", "角色名最大长度（字符）", false},
+	{"texture_name_regexp", false, "texture", "材质备注命名正则（空=不限制，仅拦新上传）", false},
+	{"union_enabled", false, "union", "Union 联盟模块开关（热切换：关=全路由 404、签名回本地密钥）", false}, // Union（blessing yggdrasil-connect 原名；union_enabled 为本项目新增键——老站用插件启停表达，无 option 行。热切换 2026-10-24 拍板）
+	{"union_api_root", false, "union", "Union hub API 根（默认 https://skin.mualliance.ltd/api/union，立即生效）", false},
+	{"union_member_key", false, "union", "Union 成员密钥（联盟下发；不回显，留空=保持原值，立即生效）", true},
+	{"union_enable_update", true, "union", "允许 hub 远程轮换成员密钥（updatebackendkey，重启后生效）", false},
+	{"union_enable_oauth2", true, "union", "Union OAuth2 联合登录（重启后生效）", false},
+	{"union_queryemail_mode", true, "union", "Union 查询邮箱模式：full/off（重启后生效）", false},
+	{"union_oauth2_sig_private_key", true, "union", "Union OAuth2 用户信息签名私钥（PEM；不回显，留空=保持原值，首启自动生成，重启后生效）", true},
+	{"union_oauth2_sig_public_key", true, "union", "Union OAuth2 用户信息签名公钥（PEM；留空首启自动生成，重启后生效）", false},
 }
 
 func (b *Backend) settingValue(ctx context.Context, key, def string) string {
@@ -83,11 +95,7 @@ func (b *Backend) settingValue(ctx context.Context, key, def string) string {
 func (b *Backend) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 	out := make([]settingMeta, 0, len(settingsWhitelist))
 	for _, s := range settingsWhitelist {
-		def := b.SettingsDefaults[s.key]
-		out = append(out, settingMeta{
-			Key: s.key, Value: b.settingValue(r.Context(), s.key, def),
-			Default: def, Restart: s.restart, Desc: s.desc, Group: s.group,
-		})
+		out = append(out, b.metaFor(r.Context(), s))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"settings": out})
 }
@@ -97,24 +105,32 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Key   string `json:"key"`
 		Value string `json:"value"`
+		Clear bool   `json:"clear"`
 	}
 	if err := jsonDecode(r, &req); err != nil {
 		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
 	req.Key = strings.TrimSpace(req.Key)
-	found := false
-	for _, s := range settingsWhitelist {
-		if s.key == req.Key {
-			found = true
+	var entry *settingSpec
+	for i := range settingsWhitelist {
+		if settingsWhitelist[i].key == req.Key {
+			entry = &settingsWhitelist[i]
 			break
 		}
 	}
-	if !found {
+	if entry == nil {
 		writeErrCode(w, http.StatusBadRequest, "unknown setting", i18n.MsgSettingUnknown)
 		return
 	}
 	val := strings.TrimSpace(req.Value)
+	if keepsSecret(*entry, val, req.Clear) {
+		// An empty secret means "leave it alone" — the form has no value to resend
+		// because GET never returns one, and writing what the field shows would
+		// store the mask as the credential. Clearing is its own explicit action.
+		b.writeSettingState(r.Context(), w, *entry)
+		return
+	}
 	switch req.Key {
 	case "invite_required", "require_verification", "union_enabled", "union_enable_update", "union_enable_oauth2", "ygg_mojang_fallback", "cdn_enabled":
 		normalized, ok := normalizeBool(val)
@@ -240,14 +256,47 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 	// record shape only. (union_member_key is a shared hub credential and the
 	// sig private key signs user-info; their VALUES stay in the options row.)
 	auditVal := val
-	switch req.Key {
-	case "union_member_key", "union_oauth2_sig_private_key", "smtp_pass":
+	if entry.secret {
 		auditVal = "<redacted>"
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "settings_update", map[string]any{
 		"key": req.Key, "value": auditVal,
 	})
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "key": req.Key, "value": val})
+	b.writeSettingState(r.Context(), w, *entry)
+}
+
+// metaFor renders one setting, masking a secret's value and default alike: the
+// plaintext lives in the options row and nowhere a client can archive it.
+func (b *Backend) metaFor(ctx context.Context, s settingSpec) settingMeta {
+	def := b.SettingsDefaults[s.key]
+	return projectSpec(s, b.settingValue(ctx, s.key, def), def)
+}
+
+// keepsSecret is the write-side half of the masking rule: a blank secret field
+// is not a request to erase, it is a form that has nothing to send.
+func keepsSecret(s settingSpec, val string, clear bool) bool {
+	return s.secret && val == "" && !clear
+}
+
+// projectSpec is the masking rule, kept apart from the store read so it can be
+// tested without a database: a secret never carries its value or its env
+// fallback into the response, only whether one exists.
+func projectSpec(s settingSpec, val, def string) settingMeta {
+	m := settingMeta{
+		Key: s.key, Value: val, Default: def, Restart: s.restart,
+		Desc: s.desc, Group: s.group, Secret: s.secret, Set: val != "",
+	}
+	if s.secret {
+		m.Value, m.Default = "", ""
+	}
+	return m
+}
+
+// writeSettingState answers a settings write with the same masked shape the GET
+// produces — echoing the value back would put a credential in the response twice.
+func (b *Backend) writeSettingState(ctx context.Context, w http.ResponseWriter, entry settingSpec) {
+	m := b.metaFor(ctx, entry)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "key": m.Key, "value": m.Value, "setting": m})
 }
 
 // normalizeBool maps the accepted boolean spellings to "1"/"0"; ok=false on

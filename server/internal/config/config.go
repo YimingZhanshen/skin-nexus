@@ -16,6 +16,11 @@ type Config struct {
 	Environment string // SKIN_ENV — free-form deployment label (production/demo/...)
 	DatabaseDSN string // user:pass@tcp(host:3306)/skin-nexus?parseTime=true&charset=utf8mb4
 
+	// SMTP is the password-recovery mailer's env fallback. Read once, here: the
+	// reset mailer and the settings panel's placeholders used to build this map
+	// separately from the same five variables, so they could drift apart.
+	SMTP SMTPConfig
+
 	TexturesDir string
 
 	// Yggdrasil metadata
@@ -142,6 +147,7 @@ func Load() (*Config, error) {
 		BaseURL:     strings.TrimRight(getenv("SKIN_BASE_URL", "http://localhost:8080"), "/"),
 		Environment: getenv("SKIN_ENV", "production"),
 		DatabaseDSN: os.Getenv("SKIN_DATABASE_DSN"),
+		SMTP:        loadSMTP(),
 		TexturesDir: resolveDataPath("SKIN_TEXTURES_DIR", dataDir, "textures"),
 		ServerName:  getenv("SKIN_SERVER_NAME", "SkinNexus"),
 		SkinDomains: splitCSV(getenv("SKIN_SKIN_DOMAINS", "")),
@@ -230,4 +236,43 @@ func (c *Config) Port() int {
 		return 8080
 	}
 	return p
+}
+
+// SMTPConfig is the five mail variables grouped as one value.
+type SMTPConfig struct {
+	Host string
+	Port string
+	User string
+	Pass string
+	From string
+}
+
+func loadSMTP() SMTPConfig {
+	return SMTPConfig{
+		Host: os.Getenv("SKIN_SMTP_HOST"),
+		Port: getenv("SKIN_SMTP_PORT", "465"),
+		User: os.Getenv("SKIN_SMTP_USER"),
+		Pass: os.Getenv("SKIN_SMTP_PASS"),
+		From: os.Getenv("SKIN_SMTP_FROM"),
+	}
+}
+
+// Map keys the five variables by their options-panel names, so the panel's
+// option keys and the env fallbacks cannot drift into two vocabularies.
+func (s SMTPConfig) Map() map[string]string {
+	return map[string]string{
+		"smtp_host": s.Host,
+		"smtp_port": s.Port,
+		"smtp_user": s.User,
+		"smtp_pass": s.Pass,
+		"smtp_from": s.From,
+	}
+}
+
+// PanelMap is Map() with the password removed. The settings endpoint serializes
+// this map, and a credential is not a placeholder — it is a secret.
+func (s SMTPConfig) PanelMap() map[string]string {
+	m := s.Map()
+	m["smtp_pass"] = ""
+	return m
 }

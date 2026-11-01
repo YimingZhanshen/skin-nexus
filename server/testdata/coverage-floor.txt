@@ -1,0 +1,16 @@
+# Coverage gates for `go test ./...` (unit leg only — the DB-backed statements
+# live in the integration job and are not in this number).
+#
+# total        floor for the overall statement percentage, measured 2026-11-01 at
+#              41.8%. The margin is 1.8 points, not a stretch: the unit leg is
+#              deterministic, so a drop means code was added without tests.
+# zero-allowed packages with no reachable statements under this leg. Each entry
+# is a debt that is named rather than hidden:
+#   internal/errorgate  — a test-only AST engine, covered only when its callers
+#                         run (Go attributes per-package coverage).
+#   internal/jobs       — the job runner still has no unit tests; it is exercised
+#                         through the admin API and the skin-importer plugin.
+# A new 0% package, or one removed from this list, fails the check.
+total 40.0
+zero-allowed internal/errorgate
+zero-allowed internal/jobs

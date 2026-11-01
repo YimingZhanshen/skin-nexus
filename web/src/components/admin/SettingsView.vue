@@ -23,10 +23,8 @@ const boolKeys = new Set([
 ])
 const textKeys = new Set([
   'skin_domains', 'announcement', 'custom_player_name_regexp', 'texture_name_regexp',
-  'union_oauth2_sig_private_key', 'union_oauth2_sig_public_key', 'cdn_headers',
+  'union_oauth2_sig_public_key', 'cdn_headers',
 ])
-// secrets never render as plain text inputs
-const secretKeys = new Set(['union_member_key', 'smtp_pass'])
 
 // Panel section grouping: the backend tags every whitelist key with a
 // `group`; this list is the display order (unknown ids fall to the end,
@@ -87,6 +85,30 @@ async function saveSetting(s) {
     await loadSettings()
   } catch (e) {
     // review P2-10: refetch so the UI doesn't keep a toggled-but-unsaved value
+    await loadSettings()
+    setError.value = e.message
+  }
+}
+
+// A secret never comes back from the server, so an untouched field means
+// "leave it as it is" — the backend says so, and `set` is the only thing the
+// operator can see. Clearing is its own explicit action.
+function secretHint(s) {
+  if (!s.secret) return s.default || ''
+  return s.set ? t('admin.settingsSecretSet') : t('admin.settingsSecretUnset')
+}
+async function clearSetting(s) {
+  if (!confirm(t('admin.settingsClearConfirm', { key: s.key }))) return
+  setError.value = ''
+  try {
+    await fetchJSON('/api/admin/v1/settings', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: s.key, clear: true }),
+    })
+    setOk.value = t('common.saved')
+    emit('settings-changed', s.key, '')
+    await loadSettings()
+  } catch (e) {
     await loadSettings()
     setError.value = e.message
   }
@@ -213,7 +235,7 @@ onMounted(load)
           </label>
           <input v-if="boolKeys.has(s.key)"
                  type="checkbox" v-model="s.value" true-value="1" false-value="0" />
-          <textarea v-else-if="textKeys.has(s.key)"
+          <textarea v-else-if="!s.secret && textKeys.has(s.key)"
                     v-model="s.value" :style="s.key.startsWith('union_oauth2_sig_') ? 'max-width: 360px; min-height: 72px; font-family: monospace; font-size: var(--fs-xs);' : 'max-width: 360px; min-height: 38px;'"></textarea>
           <select v-else-if="s.key === 'player_name_rule'" v-model="s.value" style="max-width: 160px;">
             <option value="official">official（字母/数字/下划线）</option>
@@ -225,8 +247,10 @@ onMounted(load)
             <option value="full">full（按 union 协议返回邮箱）</option>
             <option value="off">off（不返回）</option>
           </select>
-          <input v-else v-model="s.value" :type="secretKeys.has(s.key) ? 'password' : 'text'" style="max-width: 300px;" :placeholder="s.default" />
+          <input v-else v-model="s.value" :type="s.secret ? 'password' : 'text'" style="max-width: 300px;"
+                 :placeholder="secretHint(s)" autocomplete="new-password" />
           <button @click="saveSetting(s)">保存</button>
+          <button v-if="s.secret && s.set" class="secondary" @click="clearSetting(s)">{{ t('admin.settingsClear') }}</button>
           <span class="muted" style="font-size: var(--fs-xs);">{{ s.restart ? '重启后生效' : '立即生效' }}</span>
         </div>
       </template>

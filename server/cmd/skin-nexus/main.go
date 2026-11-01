@@ -113,6 +113,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
+	// A typo'd SKIN_* variable is otherwise invisible: the site starts, uses the
+	// default, and the operator believes they configured it.
+	config.WarnUnknownEnv()
 	startedAt := time.Now()
 
 	// Legacy verifier: built from optional legacy .env (SKIN_LEGACY_ENV).
@@ -446,13 +449,7 @@ func main() {
 	// panel's SMTP keys (option wins per request, see smtpConfig).
 	backend.BaseURL = cfg.BaseURL
 	backend.SiteName = cfg.SiteName
-	backend.SMTPDefaults = map[string]string{
-		"smtp_host": os.Getenv("SKIN_SMTP_HOST"),
-		"smtp_port": envOr("SKIN_SMTP_PORT", "465"),
-		"smtp_user": os.Getenv("SKIN_SMTP_USER"),
-		"smtp_pass": os.Getenv("SKIN_SMTP_PASS"),
-		"smtp_from": os.Getenv("SKIN_SMTP_FROM"),
-	}
+	backend.SMTPDefaults = cfg.SMTP.Map()
 	backend.OnPasswordChange = func(uid int64) {
 		if oidcProvider != nil {
 			if err := oidcProvider.RevokeUserAllTokens(context.Background(), uid); err != nil {
@@ -622,12 +619,13 @@ func main() {
 		"union_queryemail_mode":        cfg.UnionQueryEmailMode,
 		"union_oauth2_sig_private_key": "",
 		"union_oauth2_sig_public_key":  "",
-		// A1 找回密码: SMTP env fallbacks shown as panel placeholders
-		"smtp_host": os.Getenv("SKIN_SMTP_HOST"),
-		"smtp_port": envOr("SKIN_SMTP_PORT", "465"),
-		"smtp_user": os.Getenv("SKIN_SMTP_USER"),
-		"smtp_pass": os.Getenv("SKIN_SMTP_PASS"),
-		"smtp_from": os.Getenv("SKIN_SMTP_FROM"),
+		// A1 找回密码: SMTP env fallbacks shown as panel placeholders. Same map as
+		// the mailer's, minus the password — see config.SMTPConfig.PanelMap.
+		"smtp_host": cfg.SMTP.Host,
+		"smtp_port": cfg.SMTP.Port,
+		"smtp_user": cfg.SMTP.User,
+		"smtp_pass": "",
+		"smtp_from": cfg.SMTP.From,
 	}
 	// Admin user management shares the credential-change revoke semantics.
 	admin.OnUserCredentialChange = func(uid int64) {
