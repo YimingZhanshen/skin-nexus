@@ -26,6 +26,15 @@ func (b *Backend) uidExists(r *http.Request, uid int64) bool {
 	return err == nil
 }
 
+// pidParam reads the {pid} the four player routes bind. It is deliberately not
+// idParam (which reads "id"): the routes and the readers once disagreed, every
+// PathValue answered "", and rename / owner / textures / delete all failed with
+// bad id. internal/adminapi/routeparams_test.go keeps the two in sync.
+func pidParam(r *http.Request) (int64, bool) {
+	pid, err := strconv.ParseInt(r.PathValue("pid"), 10, 64)
+	return pid, err == nil && pid > 0
+}
+
 // GET /api/admin/v1/players?q=&page=&uid= — paged player list (PID / name /
 // owner / UUID / texture hashes for thumbnail previews / updated time).
 func (b *Backend) handleAdminPlayers(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +54,7 @@ func (b *Backend) handleAdminPlayers(w http.ResponseWriter, r *http.Request) {
 // PUT /api/admin/v1/players/{pid}/name {name} — rename. UUID ZERO-DRIFT:
 // the store method never touches uuid_map.uuid, only the name columns.
 func (b *Backend) handleAdminPlayerRename(w http.ResponseWriter, r *http.Request) {
-	pid, ok := idParam(r)
+	pid, ok := pidParam(r)
 	if !ok {
 		writeErrCode(w, http.StatusBadRequest, "bad id", i18n.MsgBadID)
 		return
@@ -95,7 +104,7 @@ func (b *Backend) handleAdminPlayerRename(w http.ResponseWriter, r *http.Request
 // old owner's ygg tokens are revoked (their launcher selection pointed
 // here); the new owner must exist.
 func (b *Backend) handleAdminPlayerOwner(w http.ResponseWriter, r *http.Request) {
-	pid, ok := idParam(r)
+	pid, ok := pidParam(r)
 	if !ok {
 		writeErrCode(w, http.StatusBadRequest, "bad id", i18n.MsgBadID)
 		return
@@ -139,7 +148,7 @@ func (b *Backend) handleAdminPlayerOwner(w http.ResponseWriter, r *http.Request)
 // EXISTING texture id is assignable (admins curate the shared library —
 // ownership is a user-path rule, see webapi.setPlayerTexture).
 func (b *Backend) handleAdminPlayerTextures(w http.ResponseWriter, r *http.Request) {
-	pid, ok := idParam(r)
+	pid, ok := pidParam(r)
 	if !ok {
 		writeErrCode(w, http.StatusBadRequest, "bad id", i18n.MsgBadID)
 		return
@@ -157,11 +166,20 @@ func (b *Backend) handleAdminPlayerTextures(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if req.TextureID != 0 {
-		if _, err := b.Store.TextureOwner(r.Context(), req.TextureID); errors.Is(err, store.ErrNotFound) {
+		// Existence check doubles as the type check: a cape file mounted in the
+		// skin slot is served to the launcher as a skin, which is a broken
+		// avatar rather than a curation choice. Admins may assign ANY existing
+		// texture (ownership is a user-path rule) — the slot still has to match.
+		typ, err := b.Store.TextureType(r.Context(), req.TextureID)
+		if errors.Is(err, store.ErrNotFound) {
 			writeErrCode(w, http.StatusNotFound, "texture not found", i18n.MsgTextureNotFound)
 			return
 		} else if err != nil {
 			writeErrCode(w, http.StatusInternalServerError, "db error", i18n.MsgInternal)
+			return
+		}
+		if typ != req.Type {
+			writeErrCode(w, http.StatusUnprocessableEntity, "texture type does not match this slot", account.CodeTypeMismatch)
 			return
 		}
 	}
@@ -196,7 +214,7 @@ func (b *Backend) handleAdminPlayerTextures(w http.ResponseWriter, r *http.Reque
 // library semantics). Frontend double-confirms; union hub announcement is
 // best-effort via the main-wired OnPlayerDeleted hook.
 func (b *Backend) handleAdminPlayerDelete(w http.ResponseWriter, r *http.Request) {
-	pid, ok := idParam(r)
+	pid, ok := pidParam(r)
 	if !ok {
 		writeErrCode(w, http.StatusBadRequest, "bad id", i18n.MsgBadID)
 		return
