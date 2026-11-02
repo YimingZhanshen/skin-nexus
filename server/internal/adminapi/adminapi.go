@@ -100,6 +100,9 @@ func (b *Backend) Handler() http.Handler {
 	// Deployment self-check (U16): mutable configuration + filesystem + a real
 	// preview render, so it is a separate handler from the /status snapshot.
 	mux.HandleFunc("GET /api/admin/v1/diagnostics", b.auth(b.handleDiagnostics))
+	// Test send (U17): web session only, recipient always the caller's own
+	// address — there is no `to` field to turn this into a relay.
+	mux.HandleFunc("POST /api/admin/v1/mail-test", b.auth(b.handleMailTest))
 	mux.HandleFunc("GET /api/admin/v1/users", b.auth(b.handleUsers))
 	mux.HandleFunc("GET /api/admin/v1/textures", b.auth(b.handleTextures))
 	mux.HandleFunc("GET /api/admin/v1/audit", b.auth(b.handleAudit))

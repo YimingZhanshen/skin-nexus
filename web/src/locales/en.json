@@ -70,7 +70,8 @@
       "not_found": "Skin library entry not found"
     },
     "mail": {
-      "not_configured": "Mail is not configured, contact the site owner"
+      "not_configured": "Mail is not configured, contact the site owner",
+      "send_failed": "The test mail could not be sent — check the SMTP settings and the server log"
     },
     "market": {
       "upstream_error": "The market is unavailable right now, try again later"
@@ -635,6 +636,9 @@
     "diagRecheck": "Re-check",
     "diagChecking": "Checking…",
     "diagCheckedAt": "Checked",
+    "diagMailTest": "Send test mail",
+    "diagMailTesting": "Sending…",
+    "diagMailSent": "Handed to {host} for {to} — check the inbox (and spam) to confirm it arrived.",
     "diag": {
       "site": "Site address",
       "migrations": "Database migrations",

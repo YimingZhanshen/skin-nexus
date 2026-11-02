@@ -111,6 +111,11 @@ const (
 
 	// mail
 	MsgMailNotConfigured = "mail.not_configured"
+	// The panel's test send (U17) names the transport failure itself. It cannot
+	// reuse email.verification_failed: that sentence promises a retry will
+	// deliver the verification link, which is not what an operator testing an
+	// SMTP account needs to hear.
+	MsgMailSendFailed = "mail.send_failed"
 	// Email verification (2026-11-02). link_invalid covers every failed token
 	// check for the same reason auth.reset_link_invalid does: the endpoint must
 	// not say which check failed.

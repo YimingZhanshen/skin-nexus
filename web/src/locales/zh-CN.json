@@ -70,7 +70,8 @@
       "not_found": "皮肤库条目不存在"
     },
     "mail": {
-      "not_configured": "站点未配置邮件服务，请联系管理员"
+      "not_configured": "站点未配置邮件服务，请联系管理员",
+      "send_failed": "测试邮件没能发出去，请核对 SMTP 设置并查看服务日志"
     },
     "market": {
       "upstream_error": "市场暂时不可用，请稍后重试"
@@ -635,6 +636,9 @@
     "diagRecheck": "重新检查",
     "diagChecking": "检查中…",
     "diagCheckedAt": "检查于",
+    "diagMailTest": "发送测试邮件",
+    "diagMailTesting": "发送中…",
+    "diagMailSent": "测试邮件已交给 {host} 发往 {to}，请到收件箱（含垃圾箱）确认收到。",
     "diag": {
       "site": "站点地址",
       "migrations": "数据库迁移",

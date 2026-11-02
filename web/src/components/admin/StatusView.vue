@@ -15,6 +15,9 @@ const error = ref('')
 const diag = ref(null)
 const diagError = ref('')
 const diagBusy = ref(false)
+const mailBusy = ref(false)
+const mailMsg = ref('')
+const mailErr = ref('')
 
 const build = computed(() => {
   const s = status.value || {}
@@ -55,6 +58,19 @@ async function loadDiag() {
   try {
     diag.value = await fetchJSON('/api/admin/v1/diagnostics')
   } catch (e) { diagError.value = e.message } finally { diagBusy.value = false }
+}
+
+// The endpoint takes no recipient (it is the caller's own address), so there is
+// nothing to pass and nothing to relay.
+async function sendTestMail() {
+  if (mailBusy.value) return
+  mailBusy.value = true
+  mailMsg.value = ''
+  mailErr.value = ''
+  try {
+    const d = await fetchJSON('/api/admin/v1/mail-test', { method: 'POST' })
+    mailMsg.value = t('admin.diagMailSent', { to: d.to, host: d.host })
+  } catch (e) { mailErr.value = e.message } finally { mailBusy.value = false }
 }
 
 onMounted(async () => {
@@ -144,6 +160,13 @@ onMounted(async () => {
             <div class="diag-name">{{ t('admin.diag.' + it.id) }}</div>
             <div class="diag-value" v-if="it.value">{{ it.value }}</div>
             <div class="diag-fix" v-if="it.state !== 'ok' && it.fix">{{ t('admin.diagFix.' + it.fix) }}</div>
+            <template v-if="it.id === 'mail'">
+              <button class="secondary" :disabled="mailBusy" @click="sendTestMail">
+                {{ mailBusy ? t('admin.diagMailTesting') : t('admin.diagMailTest') }}
+              </button>
+              <div class="success" role="status" v-if="mailMsg">{{ mailMsg }}</div>
+              <div class="error" role="alert" v-if="mailErr">{{ mailErr }}</div>
+            </template>
           </div>
         </div>
         <div class="muted diag-at">{{ t('admin.diagCheckedAt') }} {{ formatTime(diag.checked_at) }}</div>
