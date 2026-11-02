@@ -769,6 +769,148 @@ func TestIntegrationCloset(t *testing.T) {
 	}
 }
 
+// runMigrationFile executes one migration's statements again, the way the
+// tracked boot path runs them. Tests that need the state a live database would
+// already be in (rows that predate the migration) seed it and replay the file.
+func runMigrationFile(t *testing.T, m *Mysql, file string) {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "..", "migrations", string(m.Engine()), file))
+	if err != nil {
+		t.Fatalf("read %s: %v", file, err)
+	}
+	for _, stmt := range migrate.SplitSQL(string(raw)) {
+		if _, err := m.db.ExecContext(context.Background(), stmt); err != nil {
+			t.Fatalf("exec %s: %v\nstmt: %s", file, err, stmt)
+		}
+	}
+}
+
+func closetCount(t *testing.T, m *Mysql, tid int64) int {
+	t.Helper()
+	var n int
+	if err := m.db.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM user_closet WHERE texture_tid = ?`, tid).Scan(&n); err != nil {
+		t.Fatalf("count closet for %d: %v", tid, err)
+	}
+	return n
+}
+
+// ---- 0022 closet backfill (the closet is the wearable set) ----
+
+// TestIntegrationClosetBackfill pins the one-time backfill that keeps history
+// wearable: an own upload that never got collected is collected, a pair that
+// already exists is left alone (alias and row count), and an upload whose
+// account is gone gets no entry. Re-running the file must change nothing —
+// pre-tracking databases replay unmarked files.
+func TestIntegrationClosetBackfill(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	uploader := seedUser(t, m)
+	collector := seedUser(t, m)
+	goner := seedUser(t, m)
+
+	plain, err := m.AddTexture(ctx, uploader, "skin", strings.Repeat("c", 64), "default", TextureMeta{Description: "never collected"})
+	if err != nil {
+		t.Fatalf("seed plain: %v", err)
+	}
+	kept, err := m.AddTexture(ctx, collector, "cape", strings.Repeat("d", 64), "", TextureMeta{Description: "already collected"})
+	if err != nil {
+		t.Fatalf("seed kept: %v", err)
+	}
+	if _, err := m.AddClosetEntry(ctx, collector, kept, "my alias"); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	orphan, err := m.AddTexture(ctx, goner, "skin", strings.Repeat("e", 64), "default", TextureMeta{Description: "uploader deleted"})
+	if err != nil {
+		t.Fatalf("seed orphan: %v", err)
+	}
+	// DeleteUser keeps the library files and drops the closet rows (orphan
+	// visibility beats silent data loss) — exactly the shape the backfill must
+	// not turn into junk entries.
+	if err := m.DeleteUser(ctx, goner); err != nil {
+		t.Fatalf("delete uploader: %v", err)
+	}
+
+	runMigrationFile(t, m, "0022_closet_backfill.sql")
+
+	if n := closetCount(t, m, plain); n != 1 {
+		t.Fatalf("backfilled closet rows for %d = %d, want 1", plain, n)
+	}
+	if n := closetCount(t, m, kept); n != 1 {
+		t.Fatalf("existing pair duplicated: %d rows, want 1", n)
+	}
+	var alias string
+	if err := m.db.QueryRowContext(ctx,
+		`SELECT COALESCE(item_name, '') FROM user_closet WHERE texture_tid = ?`, kept).Scan(&alias); err != nil {
+		t.Fatalf("alias read: %v", err)
+	}
+	if alias != "my alias" {
+		t.Fatalf("alias after backfill = %q, want the user's own name kept", alias)
+	}
+	if n := closetCount(t, m, orphan); n != 0 {
+		t.Fatalf("closet rows for a deleted uploader = %d, want 0", n)
+	}
+
+	runMigrationFile(t, m, "0022_closet_backfill.sql")
+	if n := closetCount(t, m, plain); n != 1 {
+		t.Fatalf("re-run is not a no-op: %d rows for %d, want 1", n, plain)
+	}
+}
+
+// TestIntegrationWearableIsClosetOnly pins the collapse: the picker set is the
+// closet, nothing else. An own upload only appears once it is collected (which
+// upload itself does, and migration 0022 did for history).
+func TestIntegrationWearableIsClosetOnly(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	uid := seedUser(t, m)
+
+	own, err := m.AddTexture(ctx, uid, "skin", strings.Repeat("f", 64), "slim", TextureMeta{Description: "own upload"})
+	if err != nil {
+		t.Fatalf("seed own: %v", err)
+	}
+	if rows, err := m.WearableTextures(ctx, uid, "skin"); err != nil || len(rows) != 0 {
+		t.Fatalf("wearable before collecting = %+v %v, want empty", rows, err)
+	}
+
+	if _, err := m.AddClosetEntry(ctx, uid, own, "衣柜里的名字"); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	rows, err := m.WearableTextures(ctx, uid, "skin")
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("wearable after collecting = %+v %v, want one row", rows, err)
+	}
+	if rows[0].ID != own || rows[0].Alias != "衣柜里的名字" || rows[0].Name != "own upload" || rows[0].Model != "slim" {
+		t.Fatalf("wearable row = %+v", rows[0])
+	}
+
+	// The legacy table has no unique key: a direct import can carry the pair
+	// twice, and the picker must still show it once.
+	if _, err := m.db.ExecContext(ctx,
+		`INSERT INTO user_closet (user_uid, texture_tid, item_name) VALUES (?, ?, NULL)`, uid, own); err != nil {
+		t.Fatalf("insert legacy duplicate: %v", err)
+	}
+	if rows, err := m.WearableTextures(ctx, uid, "skin"); err != nil || len(rows) != 1 {
+		t.Fatalf("wearable with a duplicate pair = %+v %v, want one row", rows, err)
+	}
+
+	// Type isolation: a cape upload is not offered to the skin picker.
+	cape, err := m.AddTexture(ctx, uid, "cape", strings.Repeat("a", 64), "", TextureMeta{Description: "a cape"})
+	if err != nil {
+		t.Fatalf("seed cape: %v", err)
+	}
+	if _, err := m.AddClosetEntry(ctx, uid, cape, ""); err != nil {
+		t.Fatalf("collect cape: %v", err)
+	}
+	capes, err := m.WearableTextures(ctx, uid, "cape")
+	if err != nil || len(capes) != 1 || capes[0].ID != cape {
+		t.Fatalf("cape picker = %+v %v, want only the cape", capes, err)
+	}
+	if rows, err := m.WearableTextures(ctx, uid, "skin"); err != nil || len(rows) != 1 {
+		t.Fatalf("skin picker after adding a cape = %+v %v, want the skin alone", rows, err)
+	}
+}
+
 // ---- system facts (admin status page, B1) ----
 
 func TestIntegrationSystemFacts(t *testing.T) {

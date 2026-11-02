@@ -246,21 +246,17 @@ func (s *Service) SetTexture(ctx context.Context, uid, pid int64, kind string, t
 		return PlayerView{}, e
 	}
 	if tid != 0 {
-		// Wearable = own it, or have it in the closet. Blessing only lets the
-		// picker offer closet entries (PlayerController), and the closet is where
-		// a favourited community texture lands — without this leg there is no
-		// way to wear anything but one's own uploads.
-		owner, err := s.Store.TextureOwner(ctx, tid)
-		wearable := err == nil && owner == uid
-		if !wearable {
-			inCloset, cerr := s.Store.InCloset(ctx, uid, tid)
-			if cerr != nil {
-				return PlayerView{}, errf(CodeInternal, "could not check the closet", cerr)
-			}
-			wearable = inCloset
+		// The closet IS the wearable set — one concept, as in blessing. Own
+		// uploads no longer wear on bare ownership: they get collected at upload
+		// (textures.autoCloset) and history was backfilled by migration 0022, so
+		// the only way an own upload is missing here is that its owner removed
+		// it, which is exactly the state that should refuse the wear.
+		inCloset, cerr := s.Store.InCloset(ctx, uid, tid)
+		if cerr != nil {
+			return PlayerView{}, errf(CodeInternal, "could not check the closet", cerr)
 		}
-		if !wearable {
-			return PlayerView{}, errf(CodeNotOwned, "you do not own this texture", err)
+		if !inCloset {
+			return PlayerView{}, errf(CodeNotOwned, "this texture is not in your closet", nil)
 		}
 		typ, err := s.Store.TextureType(ctx, tid)
 		if err != nil || typ != kind {

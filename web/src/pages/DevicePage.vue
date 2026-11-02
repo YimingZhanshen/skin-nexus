@@ -2,11 +2,12 @@
 // DevicePage: RFC 8628 verification page (SPA). Reached at /device?user_code=…
 // (launcher verification_uri). Without a code it shows an input box for the
 // bare verification_uri case. Submit is the JSON endpoint /api/v1/oidc/device/submit.
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { oidc } from '../api.js'
 
 const { t } = useI18n()
+const goto = inject('gotoView', null)
 
 const userCode = ref(new URLSearchParams(location.search).get('user_code') || '')
 const inputCode = ref('')
@@ -93,7 +94,14 @@ onMounted(loadInfo)
           </label>
         </div>
       </template>
-      <div v-else class="error">{{ t('device.noProfiles') }}</div>
+      <!-- No profile is the one dead end of the launcher flow: the player has
+           to leave this page to fix it, so say where and hand them the way. -->
+      <template v-else>
+        <div class="error" role="alert">{{ t('device.noProfiles') }}</div>
+        <div class="row" v-if="goto">
+          <button class="secondary" @click="goto('players')">{{ t('device.goPlayers') }}</button>
+        </div>
+      </template>
       <div class="error" role="alert" v-if="error">{{ error }}</div>
       <div class="row" style="margin-top: 16px;">
         <button :disabled="loading || !selectedPID" @click="submit('approve')">{{ t('device.approve') }}</button>

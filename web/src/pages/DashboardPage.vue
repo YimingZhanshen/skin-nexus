@@ -423,7 +423,7 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
           </select>
           <span v-else>{{ tx.model || '—' }}</span>
         </td>
-        <td><img :src="tx.previewURL || tx.url" :alt="t('dashboard.colPreview')" style="height: 48px; image-rendering: pixelated;" loading="lazy" decoding="async" /></td>
+        <td><img :src="tx.previewURL || tx.url" :alt="t('dashboard.colPreview')" :title="tx.type === 'cape' ? t('common.capeFlat') : ''" style="height: 48px; image-rendering: pixelated;" loading="lazy" decoding="async" /></td>
         <td class="muted">{{ shortHash(tx.hash) }}</td>
         <td>
           <div class="row" style="gap: 6px; flex-wrap: wrap;">
@@ -436,7 +436,9 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
     </table>
     <Pager :page="texPage" :pages="texPages" :total="texTotal" @update:page="goTexPage" />
     </div>
-    <EmptyState v-else :text="t('dashboard.texturesEmpty')" />
+    <EmptyState v-else :text="t('dashboard.texturesEmpty')" :hint="t('dashboard.texturesHint')">
+      <button @click="pickFile">{{ t('dashboard.chooseFile') }}</button>
+    </EmptyState>
   </div>
   <PluginSlot slot="dashboard.cards" />
 </template>

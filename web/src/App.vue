@@ -556,6 +556,7 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
       <h2>{{ t('auth.registerTitle') }}</h2>
       <label for="f-nickname">{{ t('auth.nickname') }}</label>
       <input id="f-nickname" v-model="nickname" />
+      <span class="field-hint">{{ t('auth.nicknameRule') }}</span>
       <template v-if="mailEnabled">
         <label for="f-email">{{ t('auth.email') }}</label>
         <input id="f-email" v-model="email" type="email" />

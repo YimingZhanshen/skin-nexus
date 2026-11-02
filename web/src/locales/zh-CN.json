@@ -26,7 +26,8 @@
       "password_too_short": "密码至少 8 位",
       "password_unchanged": "新密码不能与当前密码相同",
       "reset_link_invalid": "重置链接无效或已过期，请重新申请",
-      "self_delete_forbidden": "管理员账号不可自助删除"
+      "self_delete_forbidden": "管理员账号不可自助删除",
+      "banned": "该账号已被管理员封禁，无法登录。原因请查看站内通知，或联系站点管理员。"
     },
     "closet": {
       "bad_id": "收藏条目编号不合法",
@@ -180,7 +181,8 @@
     "language": "语言",
     "dataLoadFailed": "数据加载失败：{message}",
     "footerLinks": "页面底部链接",
-    "breadcrumb": "面包屑导航"
+    "breadcrumb": "面包屑导航",
+    "capeFlat": "披风是展开图，穿到角色后的样子请到角色管理查看。"
   },
   "nav": {
     "home": "首页",
@@ -209,15 +211,18 @@
     "sortTime": "最新上传",
     "sortLikes": "最多收藏",
     "mineOnly": "只看我上传的",
-    "empty": "没有符合条件的纹理",
+    "empty": "没有符合条件的材质",
     "total": "共 {n} 件",
     "makePrivate": "设为私有",
     "makePublic": "设为公开",
     "renamePrompt": "新的名称：",
-    "likeTip": "喜欢（加入衣柜）",
+    "likeTip": "收藏（加入衣柜）",
     "closetNow": "「{name}」已收进衣柜",
     "privateBadge": "密",
-    "privateTip": "仅自己可见，未进入公共皮肤库"
+    "privateTip": "仅自己可见，未进入公共皮肤库",
+    "rename": "改材质名",
+    "emptyHint": "没有合适的？自己上传一张——它会同时出现在这里和你的衣柜里。",
+    "goUpload": "去上传材质"
   },
   "site": {
     "name": "SkinNexus",
@@ -230,7 +235,7 @@
     "identifier": "邮箱或昵称",
     "password": "密码",
     "registerTitle": "注册",
-    "nickname": "昵称（MC 风格）",
+    "nickname": "昵称",
     "email": "邮箱（可留空）",
     "passwordMin": "密码（≥8 位）",
     "invitationCode": "邀请码（选填）",
@@ -264,10 +269,11 @@
     "resetSubmit": "重置密码",
     "resetDone": "密码已重置——所有启动器授权已失效，请用新密码登录。",
     "resetInvalid": "重置链接无效或已过期，请重新申请。",
-    "resetMismatch": "两次输入的新密码不一致"
+    "resetMismatch": "两次输入的新密码不一致",
+    "nicknameRule": "2–24 位：字母、数字、下划线或中文"
   },
   "dashboard": {
-    "uploadTitle": "上传纹理",
+    "uploadTitle": "上传材质",
     "announcement": "公告",
     "typeSkin": "皮肤",
     "typeCape": "披风",
@@ -290,8 +296,8 @@
     "uploadDuplicate": "该图片已在公共皮肤库：",
     "uploadExisting": "查看已有皮肤",
     "pickPng": "请选择 PNG 文件",
-    "texturesTitle": "我的纹理（{count}）",
-    "texturesEmpty": "还没有纹理，先上传一个吧",
+    "texturesTitle": "我的材质（{count}）",
+    "texturesEmpty": "还没有上传过材质",
     "colType": "类型",
     "colModel": "模型",
     "colPreview": "预览",
@@ -309,7 +315,6 @@
     "deleteConfirm": "确认删除材质「{name}」？删除后无法恢复。",
     "deleteBlocked": "它仍被使用：角色 {players} · 衣柜 {closets} 条 · 头像 {avatars} 个。",
     "deleteForceConfirm": "删除会解除这些绑定，对应角色回到默认外观。仍要删除吗？",
-    "closetAdded": "已加入衣柜",
     "closetName": "备注名",
     "closetRename": "改名",
     "closetRemove": "移出",
@@ -346,23 +351,27 @@
     "uploadPrivateSuccess": "已上传为私密材质，仅自己可见",
     "sourceOriginalBadge": "原创",
     "sourceDerivativeBadge": "二创",
-    "sourceRepostBadge": "转载"
+    "sourceRepostBadge": "转载",
+    "texturesHint": "上传后会自动收进衣柜，在角色管理里就能穿上。"
   },
   "closet": {
     "title": "衣柜（{count}）",
     "tabAll": "全部",
-    "searchPlaceholder": "即输即搜：备注名 / hash…",
+    "searchPlaceholder": "即输即搜：备注名 / 材质名 / hash…",
     "colName": "备注名",
     "colHash": "hash",
     "setAvatar": "设为头像",
-    "rename": "改名",
+    "rename": "改备注名",
     "remove": "移出",
     "renamePrompt": "输入新备注名",
     "removeConfirm": "把「{name}」移出衣柜？",
     "avatarSet": "头像已更新",
-    "orphanNoAvatar": "该条目的纹理已不存在（遗留孤儿行），无法设为头像",
-    "empty": "衣柜空空如也——先在仪表盘上传纹理再入柜",
-    "emptyFiltered": "没有匹配的条目"
+    "orphanNoAvatar": "该条目的材质已不存在（遗留孤儿行），无法设为头像",
+    "empty": "衣柜里还没有可穿的材质",
+    "emptyFiltered": "没有匹配的条目",
+    "emptyHint": "上传材质会自动收进衣柜；也可以在皮肤库点 ♥ 把喜欢的作品收进来。",
+    "goUpload": "去上传材质",
+    "goSkinlib": "去皮肤库收藏"
   },
   "wear": {
     "title": "穿到角色",
@@ -378,16 +387,17 @@
   },
   "players": {
     "title": "角色管理（{count}）",
-    "hint": "你可以使用你所拥有的角色名来登录皮肤站；改名后 UUID 保持不变。",
-    "rename": "改名",
+    "hint": "角色名就是你在游戏里显示的名字：用它登录皮肤站，进服后就是这个角色的外观。改名不影响 UUID。",
+    "rename": "改角色名",
     "renamePrompt": "「{name}」的新角色名（UUID 不变）：",
     "renamed": "已改名（UUID 未变）",
-    "deleteConfirm": "删除角色「{name}」（PID {id}）？UUID 映射一并删除，纹理保留。不可恢复！",
+    "deleteConfirm": "删除角色「{name}」（PID {id}）？UUID 映射一并删除，材质保留。不可恢复！",
     "deleteDouble": "再次确认：删除「{name}」？",
     "deleted": "角色已删除",
     "created": "角色已创建",
     "textureSet": "已更新",
-    "empty": "还没有角色，先创建一个吧"
+    "empty": "还没有角色，先创建一个吧",
+    "nameRule": "3–16 位，字母、数字或下划线（本站规则可由管理员调整）"
   },
   "profile": {
     "title": "个人资料",
@@ -407,7 +417,7 @@
     "dangerZone": "危险区域",
     "deletePwPlaceholder": "当前密码（复核）",
     "deleteBtn": "删除我的账号",
-    "deleteConfirm": "确认删除账号？会话/令牌/衣柜/角色一并删除，纹理与审计保留。不可恢复！",
+    "deleteConfirm": "确认删除账号？会话/令牌/衣柜/角色一并删除，材质与审计保留。不可恢复！",
     "deleteDouble": "再次确认：删除「{name}」的账号？",
     "deleteHint": "删除后所有启动器授权立即失效；管理员账号不可自助删除。"
   },
@@ -424,12 +434,13 @@
     "requestClient": "请求方",
     "requestScopes": "请求权限：{scopes}",
     "selectProfile": "选择要授权的角色：",
-    "noProfiles": "账号下没有可选角色，请先在个人页创建角色。",
+    "noProfiles": "这个账号下还没有角色，启动器没有可登录的身份。",
     "approve": "同意",
     "deny": "拒绝",
     "approved": "已授权，可返回启动器继续登录。",
     "denied": "已拒绝，可返回启动器。",
-    "needLoginOnSubmit": "请先登录皮肤站账号后再批准"
+    "needLoginOnSubmit": "请先登录皮肤站账号后再批准",
+    "goPlayers": "去角色管理建一个"
   },
   "notifications": {
     "title": "站内通知",
@@ -514,7 +525,7 @@
     "overviewTitle": "总览",
     "users": "用户",
     "players": "角色",
-    "textures": "纹理",
+    "textures": "材质",
     "weakHash": "弱哈希余量",
     "signKeyFingerprint": "签名密钥",
     "usersTitle": "用户管理",
@@ -532,7 +543,7 @@
     "resetPwPrompt": "重设 {name}（uid {id}）的密码（≥8 位）：",
     "resetPwDone": "已重设：该用户全部令牌与启动器授权已失效。",
     "delete": "删除",
-    "deleteConfirm": "删除用户 {name}（uid {id}）？会话/令牌/衣柜/角色一并删除，纹理与审计保留。不可恢复！",
+    "deleteConfirm": "删除用户 {name}（uid {id}）？会话/令牌/衣柜/角色一并删除，材质与审计保留。不可恢复！",
     "prevPage": "上一页",
     "nextPage": "下一页",
     "colId": "ID",
@@ -640,7 +651,7 @@
     "ownerConfirm": "将 {name} 从 #{from} 转给 #{to}？原拥有者的启动器令牌将全部失效。",
     "texturePrompt": "设置 {name} 的{kind}：输入材质 TID（0=解除，当前：{current}）",
     "textureInvalid": "TID 需为非负整数",
-    "playerDeleteConfirm": "删除角色 {name}（PID {id}）？UUID 映射一并删除，纹理保留。不可恢复！",
+    "playerDeleteConfirm": "删除角色 {name}（PID {id}）？UUID 映射一并删除，材质保留。不可恢复！",
     "playerDeleteDouble": "再次确认：删除 {name}？删除后将向 Union hub 同步档案下线。",
     "unionDisabled": "Union 模块未启用（SKIN_UNION_ENABLED 未开启）。",
     "unionTitle": "Union 联盟模块",
@@ -691,7 +702,7 @@
     "unionBlReleaseConfirm": "释放 {email}？（解封并保留记录）",
     "unionBlDeleteConfirm1": "永久删除 {email} 的黑名单记录？此操作不可恢复！",
     "unionBlDeleteConfirm2": "再次确认：记录将从联盟 hub 彻底删除，无法找回。确定继续？",
-    "unionTrustNotice": "⚠️ 信任声明：加入 MUA Union 后，本站的纹理签名私钥与联盟全网共享——任何成员站都可使用同一签名密钥发布纹理。请仅在加入联盟组织时启用本模块。",
+    "unionTrustNotice": "⚠️ 信任声明：加入 MUA Union 后，本站的材质签名私钥与联盟全网共享——任何成员站都可使用同一签名密钥发布材质。请仅在加入联盟组织时启用本模块。",
     "oidcClientsTitle": "OAuth 客户端（{count}）",
     "oidcClientId": "client_id",
     "oidcClientName": "名称",

@@ -190,14 +190,16 @@ onMounted(() => { load() })
         </div>
       </div>
     </div>
-    <EmptyState v-else-if="!items.length" :text="t('skinlib.empty')" />
+    <EmptyState v-else-if="!items.length" :text="t('skinlib.empty')" :hint="t('skinlib.emptyHint')">
+      <button v-if="me && goto" @click="goto('dashboard')">{{ t('skinlib.goUpload') }}</button>
+    </EmptyState>
 
     <div class="skinlib-grid" v-else>
       <div class="skin-card" v-for="it in items" :key="it.tid">
         <div class="skin-card-prev">
           <a :href="'/skinlib/' + it.tid" :title="it.name || ('#' + it.tid)">
             <img v-if="it.type === 'skin'" :src="previewURL(it)" :alt="it.name" class="skin-preview-img" loading="lazy" decoding="async" />
-            <img v-else :src="previewURL(it)" :alt="it.name" class="cape-thumb" loading="lazy" decoding="async" />
+            <img v-else :src="previewURL(it)" :alt="it.name" :title="t('common.capeFlat')" class="cape-thumb" loading="lazy" decoding="async" />
           </a>
         </div>
         <div class="skin-card-body">
@@ -220,7 +222,7 @@ onMounted(() => { load() })
               ♥ {{ it.likes }}
             </button>
             <template v-if="canEdit(it)">
-              <button class="ghost" @click="renameItem(it)">{{ t('common.rename') }}</button>
+              <button class="ghost" @click="renameItem(it)">{{ t('skinlib.rename') }}</button>
               <button class="ghost" @click="togglePublic(it)">
                 {{ it.public ? t('skinlib.makePrivate') : t('skinlib.makePublic') }}
               </button>

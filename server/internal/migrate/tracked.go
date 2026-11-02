@@ -17,8 +17,11 @@
 //     column already exists) is tolerated — pre-tracking databases
 //     self-bootstrap — and the file still gets marked;
 //   - any other error fails loud (log.Fatal at the caller);
-//   - migration files stay DDL-only: no data INSERTs (a re-run on a
-//     pre-tracking DB would otherwise double-apply).
+//   - migration files are DDL-only by default: no data statements, because a
+//     re-run on a pre-tracking database would otherwise double-apply. The one
+//     allowed exception is a data statement that is a provable no-op when it
+//     runs twice (0022_closet_backfill.sql inserts only unmatched pairs);
+//     backfills that cannot be written that way belong in Go instead.
 package migrate
 
 import (

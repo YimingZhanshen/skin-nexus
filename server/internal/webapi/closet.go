@@ -50,7 +50,7 @@ func (b *Backend) handleClosetList(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/v1/me/wearable?type=skin|cape — the compact set a player may wear.
 // The picker used to read /me/textures, which both carried fields it never
-// shows and missed the closet half of what is wearable.
+// shows and missed the collected half of what is wearable.
 func (b *Backend) handleMyWearable(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {

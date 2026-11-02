@@ -1,8 +1,8 @@
 -- Plugin platform v2 foundation (2026-10-28): installed metadata, encrypted
 -- config secrets, namespaced KV/documents, and host-recorded plugin schema
--- versions. DDL-only by convention (see internal/migrate/tracked.go): every
--- data backfill lives in Go, because pre-tracking databases re-run unmarked
--- migration files.
+-- versions. DDL-only by convention (see internal/migrate/tracked.go): a data
+-- backfill lives in Go unless the statement is provably a no-op when it runs
+-- twice, because pre-tracking databases re-run unmarked migration files.
 --
 -- Enable/disable authority stays in options (`plugin_enabled:<name>`) so the
 -- v1 rollback path remains intact; plugin_meta mirrors lifecycle state for the

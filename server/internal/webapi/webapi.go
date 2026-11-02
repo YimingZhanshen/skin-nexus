@@ -702,6 +702,24 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if b.Limiter != nil {
 		b.Limiter.Succeed(idKey)
 	}
+	// A ban (legacy permission = -1) has to refuse the web door too. Launcher
+	// logins were gated (ygg.Service) and the admin surface is gated by rank,
+	// but nothing stopped a suspended account from signing in on the site and
+	// publishing textures to the public library. The admin handler purges the
+	// live sessions when a ban lands; this stops the next one.
+	perm, err := b.Store.UserPermission(r.Context(), u.ID)
+	if err != nil {
+		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
+			Outcome: accesslog.OutcomeError, UID: u.ID, Who: req.Identifier, Detail: "permission_read"})
+		writeInternal(r, w, err)
+		return
+	}
+	if perm == -1 {
+		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
+			Outcome: accesslog.OutcomeDenied, UID: u.ID, Who: req.Identifier, Detail: "banned"})
+		writeErrCode(w, http.StatusForbidden, "this account is suspended", i18n.MsgAccountBanned)
+		return
+	}
 	if err := b.checkGuard(r.Context(), "auth.login.check", plugin.EventPayload{
 		UserID: u.ID, PlayerName: u.Nickname, IP: ygg.ClientIP(r),
 		Data: map[string]any{"identifier": req.Identifier},
@@ -732,12 +750,8 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 	b.emitEvent(r.Context(), "user.logged_in", plugin.EventPayload{
 		UserID: u.ID, PlayerName: u.Nickname, IP: ygg.ClientIP(r),
 	})
-	// `permission` is additive: the SPA needs the admin-entry gate right away
-	// and previously had to spend another /me round trip after login.
-	perm := 0
-	if p, err := b.Store.UserPermission(r.Context(), u.ID); err == nil {
-		perm = p
-	}
+	// `permission` is additive: the SPA needs the admin-entry gate right away,
+	// and the read the ban check above already did carries it — no second query.
 	writeJSON(w, http.StatusOK, map[string]interface{}{"id": u.ID, "nickname": u.Nickname, "permission": perm})
 }
 

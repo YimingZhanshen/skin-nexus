@@ -89,26 +89,22 @@ type WearableRow struct {
 	Name  string // the texture's own description
 }
 
-// WearableTextures is the set a player may wear: the user's own uploads plus
-// everything they collected. Blessing gates the skin picker on the closet
-// (PlayerController); own uploads stay in the set so a site that predates
-// auto-collect keeps what it could already wear.
+// WearableTextures is the set a player may wear: exactly the user's closet.
+// Blessing gates the skin picker on the closet (PlayerController), and this
+// project keeps that single concept — an own upload reaches the picker because
+// upload collects it (and migration 0022 collected the history), not because
+// the picker also unions the uploads table.
 //
-// The union is grouped in SQL rather than deduped in Go, and the non-closet
-// branch contributes ” instead of NULL: MAX() over ” picks a real alias on
-// every engine, while a bare NULL in a UNION is a type the three engines
-// resolve differently.
+// GROUP BY, not a unique key: user_closet keeps the legacy shape with no unique
+// constraint, so a direct import can carry the same pair twice. MAX() over the
+// closet alias picks the entry's own name over the texture's, as in blessing.
 func (m *Mysql) WearableTextures(ctx context.Context, uid int64, typ string) ([]WearableRow, error) {
 	rows, err := m.db.QueryContext(ctx, `
-		SELECT x.id, x.hash, x.model, MAX(x.item_name), MAX(x.description)
-		FROM (
-			SELECT t.id, t.hash, COALESCE(t.model, '') AS model, '' AS item_name, COALESCE(t.description, '') AS description
-			  FROM textures t WHERE t.uid = ? AND t.type = ?
-			UNION ALL
-			SELECT t.id, t.hash, COALESCE(t.model, '') AS model, COALESCE(c.item_name, ''), COALESCE(t.description, '')
-			  FROM user_closet c JOIN textures t ON t.id = c.texture_tid
-			 WHERE c.user_uid = ? AND t.type = ?
-		) x GROUP BY x.id, x.hash, x.model ORDER BY x.id DESC`, uid, typ, uid, typ)
+		SELECT c.texture_tid, MAX(t.hash), MAX(COALESCE(t.model, '')),
+		       MAX(COALESCE(c.item_name, '')), MAX(COALESCE(t.description, ''))
+		FROM user_closet c JOIN textures t ON t.id = c.texture_tid
+		WHERE c.user_uid = ? AND t.type = ?
+		GROUP BY c.texture_tid ORDER BY MAX(c.id) DESC`, uid, typ)
 	if err != nil {
 		return nil, err
 	}
@@ -187,10 +183,9 @@ func (m *Mysql) SetClosetItemName(ctx context.Context, uid, id int64, name strin
 	return nil
 }
 
-// InCloset reports whether the user collected this texture. Wearing a texture
-// is allowed when the user owns it or has it in their closet: blessing gates
-// the skin picker on the closet, and the closet is where favouriting a
-// community texture puts it.
+// InCloset reports whether this texture sits in the user's closet — the whole
+// of what account.SetTexture accepts as wearable, and the reason both upload
+// (autoCloset) and migration 0022 keep own uploads collected.
 func (m *Mysql) InCloset(ctx context.Context, uid, tid int64) (bool, error) {
 	var one int
 	err := m.db.QueryRowContext(ctx,

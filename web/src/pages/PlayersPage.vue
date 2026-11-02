@@ -12,8 +12,9 @@ import PluginSlot from '../components/plugin/PluginSlot.vue'
 const { t } = useI18n()
 
 const players = ref([])
-// The picker reads the wearable set (own uploads ∪ closet) from the server,
-// split by type — not /me/textures, which never contained the closet half.
+// The picker reads the wearable set — the closet, which is exactly what the
+// server will accept — split by type. Own uploads reach it because upload
+// collects them (and migration 0022 collected the history).
 const skins = ref([])
 const capes = ref([])
 const newName = ref('')
@@ -130,6 +131,7 @@ onMounted(load)
       <input v-model="newName" :placeholder="t('dashboard.newPlayerName')" style="max-width: 220px;" @keyup.enter="createPlayer" />
       <button :disabled="creating" @click="createPlayer">{{ creating ? t('common.pleaseWait') : t('dashboard.createPlayer') }}</button>
     </div>
+    <span class="field-hint">{{ t('players.nameRule') }}</span>
     <div class="error" role="alert" v-if="err">{{ err }}</div>
     <div class="success" role="status" v-if="ok">{{ ok }}</div>
     <div class="player-grid" v-if="players.length">

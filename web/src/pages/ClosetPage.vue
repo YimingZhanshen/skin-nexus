@@ -33,6 +33,10 @@ let reqSeq = 0
 const busyId = ref(0) // one row in flight at a time (avatar / rename / remove)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+// A search that matches nothing and a closet with nothing in it are different
+// news, so the headline changes — but the way out (upload / collect) is the
+// same, and a type tab that hides every entry needs it just as much.
+const searched = computed(() => !!query.value.trim())
 
 async function load() {
   const seq = ++reqSeq
@@ -130,6 +134,7 @@ onMounted(load)
     </div>
     <div class="error" role="alert" v-if="err">{{ err }}</div>
     <div class="success" role="status" v-if="ok">{{ ok }}</div>
+    <p class="muted" v-if="tab === 'cape'">{{ t('common.capeFlat') }}</p>
     <!-- First paint has nothing to show rows against, so it gets the same
          skeleton the skin library uses; later fetches keep the old rows rather
          than blanking the page under the cursor. -->
@@ -172,7 +177,15 @@ onMounted(load)
     </table>
     <Pager :page="page" :pages="totalPages" :total="total" @update:page="goPage" />
     </div>
-    <EmptyState v-else :text="query || tab !== 'all' ? t('closet.emptyFiltered') : t('closet.empty')" />
+    <EmptyState
+      v-else
+      :text="tab === 'all' && !searched ? t('closet.empty') : t('closet.emptyFiltered')"
+      :hint="t('closet.emptyHint')">
+      <div class="row" v-if="goto">
+        <button @click="goto('dashboard')">{{ t('closet.goUpload') }}</button>
+        <button class="secondary" @click="goto('skinlib')">{{ t('closet.goSkinlib') }}</button>
+      </div>
+    </EmptyState>
   </div>
 
   <WearTargetPicker

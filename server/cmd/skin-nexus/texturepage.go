@@ -212,7 +212,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
       <dl class="meta">
         <div><dt>类型</dt><dd>{{if eq .Type "cape"}}披风{{else if eq .Model "slim"}}皮肤（Alex 瘦臂）{{else}}皮肤（Steve 常规）{{end}}</dd></div>
         <div><dt>材质 ID</dt><dd>#{{.TID}}</dd></div>
-        <div><dt>喜欢</dt><dd><span id="like-count">{{.Likes}}</span> 人</dd></div>
+        <div><dt>收藏</dt><dd><span id="like-count">{{.Likes}}</span> 人</dd></div>
         {{if .UploadAt}}<div><dt>上传时间</dt><dd>{{.UploadAt}}</dd></div>{{end}}
         <div><dt>可见性</dt><dd>{{if .Public}}公开{{else}}私密{{end}}</dd></div>
       </dl>
@@ -224,8 +224,8 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
       </section>
       {{end}}
       <div class="actions">
-        <button class="alt like-btn{{if .Liked}} liked{{end}}" data-like="{{.TID}}" data-liked="{{if .Liked}}1{{else}}0{{end}}">♥ <span>喜欢 / 加入衣柜</span></button>
-        <a class="primary" href="{{.TextureURL}}" download>下载纹理 PNG</a>
+        <button class="alt like-btn{{if .Liked}} liked{{end}}" data-like="{{.TID}}" data-liked="{{if .Liked}}1{{else}}0{{end}}">♥ <span>收藏 / 加入衣柜</span></button>
+        <a class="primary" href="{{.TextureURL}}" download>下载材质 PNG</a>
         <a class="alt" href="/register">注册使用同款</a>
         {{if .CanEdit}}<button class="alt" id="edit-btn">编辑资料</button>{{end}}
         {{if .Public}}<button class="alt report-btn" id="report-btn" data-tid="{{.TID}}">举报</button>{{end}}
@@ -484,7 +484,7 @@ func texDescription(d texDetailData) string {
 	}
 	return intro + " — " + d.SiteName + "皮肤库中的 Minecraft " + kind + model +
 		"，由 " + d.Nickname + " 上传，" + strconv.FormatInt(d.Likes, 10) +
-		" 人喜欢。注册账号即可一键使用。"
+		" 人收藏。注册账号即可一键使用。"
 }
 
 // writeTexNotFound renders the branded 404 with theme/custom-css injection

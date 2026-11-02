@@ -61,6 +61,7 @@ const (
 	MsgPasswordTooShort = "auth.password_too_short"
 	MsgIPLimit          = "auth.ip_limit"
 	MsgSelfDeleteAdmin  = "auth.self_delete_forbidden"
+	MsgAccountBanned    = "auth.banned"             // permission = -1, refused at the web door
 	MsgPasswordSame     = "auth.password_unchanged" // new password equals the old one
 	MsgIdentifierTaken  = "auth.identifier_taken"   // which of the two is taken is unknown
 	// One code for every failed token check on /password/reset: the handler

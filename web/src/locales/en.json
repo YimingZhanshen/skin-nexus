@@ -26,7 +26,8 @@
       "password_too_short": "Password must be at least 8 characters",
       "password_unchanged": "New password must differ from the current one",
       "reset_link_invalid": "Reset link is invalid or expired, request a new one",
-      "self_delete_forbidden": "Admin accounts cannot delete themselves"
+      "self_delete_forbidden": "Admin accounts cannot delete themselves",
+      "banned": "This account is suspended by an administrator and cannot sign in. Check your notifications for the reason, or contact the site admin."
     },
     "closet": {
       "bad_id": "Closet entry id is not valid",
@@ -180,7 +181,8 @@
     "language": "Language",
     "dataLoadFailed": "Failed to load data: {message}",
     "footerLinks": "Footer links",
-    "breadcrumb": "Breadcrumb"
+    "breadcrumb": "Breadcrumb",
+    "capeFlat": "A cape is shown unfolded. See how it hangs on the profiles page."
   },
   "nav": {
     "home": "Home",
@@ -200,24 +202,27 @@
   },
   "skinlib": {
     "title": "Skin library",
-    "subtitle": "Browse community skins and capes — hit ♥ to save to your closet",
+    "subtitle": "Browse community skins and capes — hit ♥ to collect one into your closet",
     "tabSkin": "Skins",
     "tabCape": "Capes",
     "tabSteve": "Steve",
     "tabAlex": "Alex",
     "searchPlaceholder": "Search by name…",
     "sortTime": "Newest",
-    "sortLikes": "Most liked",
+    "sortLikes": "Most collected",
     "mineOnly": "Only mine",
     "empty": "No textures match",
     "total": "{n} total",
     "makePrivate": "Make private",
     "makePublic": "Make public",
     "renamePrompt": "New name:",
-    "likeTip": "Like (adds to your closet)",
+    "likeTip": "Collect into your closet",
     "closetNow": "{name} is in your closet",
     "privateBadge": "Private",
-    "privateTip": "Visible only to you, not in the public library"
+    "privateTip": "Visible only to you, not in the public library",
+    "rename": "Rename texture",
+    "emptyHint": "Nothing suitable? Upload one — it lands here and in your closet at the same time.",
+    "goUpload": "Upload a texture"
   },
   "site": {
     "name": "SkinNexus",
@@ -230,7 +235,7 @@
     "identifier": "Email or nickname",
     "password": "Password",
     "registerTitle": "Sign up",
-    "nickname": "Nickname (MC style)",
+    "nickname": "Nickname",
     "email": "Email (optional)",
     "passwordMin": "Password (min 8 chars)",
     "invitationCode": "Invitation code (optional)",
@@ -264,7 +269,8 @@
     "verifyDone": "Email verified. You can close this page.",
     "verifyInvalid": "This verification link is invalid or expired — sign in and request a new one.",
     "verifyNeedsAddress": "Add an email address on your profile page first.",
-    "verifyBackToProfile": "Open profile"
+    "verifyBackToProfile": "Open profile",
+    "nicknameRule": "2–24 characters: letters, digits, underscore or Chinese"
   },
   "dashboard": {
     "uploadTitle": "Upload texture",
@@ -309,7 +315,6 @@
     "deleteConfirm": "Delete “{name}”? This cannot be undone.",
     "deleteBlocked": "Still in use: players {players} · {closets} closet entries · {avatars} avatars.",
     "deleteForceConfirm": "Deleting unbinds all of them and those characters fall back to the default skin. Delete anyway?",
-    "closetAdded": "Added to closet",
     "closetName": "Note name",
     "closetRename": "Rename",
     "closetRemove": "Remove",
@@ -346,23 +351,27 @@
     "uploadPrivateSuccess": "Uploaded as private — only you can see it",
     "sourceOriginalBadge": "Original",
     "sourceDerivativeBadge": "Derivative",
-    "sourceRepostBadge": "Repost"
+    "sourceRepostBadge": "Repost",
+    "texturesHint": "Uploads land in your closet automatically, ready to wear from the profiles page."
   },
   "closet": {
     "title": "Closet ({count})",
     "tabAll": "All",
-    "searchPlaceholder": "Search as you type: note / hash…",
+    "searchPlaceholder": "Search as you type: alias / name / hash…",
     "colName": "Note name",
     "colHash": "hash",
     "setAvatar": "Set as avatar",
-    "rename": "Rename",
+    "rename": "Rename alias",
     "remove": "Remove",
     "renamePrompt": "Enter a new note name",
     "removeConfirm": "Remove “{name}” from the closet?",
     "avatarSet": "Avatar updated",
     "orphanNoAvatar": "This entry's texture no longer exists (orphan legacy row) — cannot be an avatar",
-    "empty": "The closet is empty — upload a texture on the dashboard first",
-    "emptyFiltered": "No matching entries"
+    "empty": "Nothing to wear yet — your closet is empty",
+    "emptyFiltered": "No matching entries",
+    "emptyHint": "Uploads land here automatically; you can also tap ♥ in the skin library to collect one.",
+    "goUpload": "Upload a texture",
+    "goSkinlib": "Collect from the skin library"
   },
   "wear": {
     "title": "Wear on a character",
@@ -378,8 +387,8 @@
   },
   "players": {
     "title": "Profiles ({count})",
-    "hint": "You can sign in to the skin site with any profile name you own; the UUID never changes on rename.",
-    "rename": "Rename",
+    "hint": "The profile name is the name you show in game: sign in to the skin site with it and the skin applies. Renaming never changes the UUID.",
+    "rename": "Rename profile",
     "renamePrompt": "New name for “{name}” (UUID stays):",
     "renamed": "Renamed (UUID unchanged)",
     "deleteConfirm": "Delete profile “{name}” (PID {id})? The UUID mapping goes with it; textures are kept. Irreversible!",
@@ -387,7 +396,8 @@
     "deleted": "Profile deleted",
     "created": "Profile created",
     "textureSet": "Updated",
-    "empty": "No profiles yet — create one"
+    "empty": "No profiles yet — create one",
+    "nameRule": "3–16 characters: letters, digits or underscore (the site rule can be adjusted by admins)"
   },
   "profile": {
     "title": "Profile",
@@ -424,12 +434,13 @@
     "requestClient": "Requested by",
     "requestScopes": "Requested scopes: {scopes}",
     "selectProfile": "Choose the profile to authorize:",
-    "noProfiles": "No profiles on this account. Create one on your dashboard first.",
+    "noProfiles": "This account has no profiles yet, so a launcher has nothing to sign in as.",
     "approve": "Approve",
     "deny": "Deny",
     "approved": "Authorized — return to the launcher to continue.",
     "denied": "Denied — you can return to the launcher.",
-    "needLoginOnSubmit": "Sign in first, then approve"
+    "needLoginOnSubmit": "Sign in first, then approve",
+    "goPlayers": "Create one on the profiles page"
   },
   "notifications": {
     "title": "Notifications",

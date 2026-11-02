@@ -50,7 +50,7 @@ func TestTexDetailTemplateRenders(t *testing.T) {
 		`data-skinview3d`,   // progressive-enhancement canvas marker
 		`data-model="slim"`, // model passthrough for skinview3d
 		"/assets/viewer.js", // fixed-name enhancement module
-		"下载纹理 PNG",          // download action
+		"下载材质 PNG",          // download action
 		"材质 ID",             // meta grid label
 		"#42",               // tid
 		"2026-10-01",        // upload date
@@ -139,7 +139,7 @@ func TestTexJSONLDSafe(t *testing.T) {
 func TestTexDescriptionCopy(t *testing.T) {
 	d := detailFixture()
 	got := texDescription(d)
-	for _, want := range []string{"测试皮肤", "测试站", "皮肤", "Alice", "7 人喜欢", "Alex 瘦臂模型"} {
+	for _, want := range []string{"测试皮肤", "测试站", "皮肤", "Alice", "7 人收藏", "Alex 瘦臂模型"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("description missing %q: %s", want, got)
 		}
