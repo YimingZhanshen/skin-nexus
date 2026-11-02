@@ -3,6 +3,7 @@ package texture
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"image"
 	"image/color"
 	"image/png"
@@ -101,6 +102,26 @@ func TestDimensionRules(t *testing.T) {
 		if !c.wantOK && err == nil {
 			t.Errorf("%s %dx%d: want reject", c.typ, c.w, c.h)
 		}
+	}
+}
+
+func TestDimensionErrorCarriesTheNumbers(t *testing.T) {
+	// The rejection the player reads names their own size; that only works if the
+	// numbers survive the trip out of checkDimensions.
+	_, err := Process(bytes.NewReader(testPNG(t, 100, 100)), TypeSkin)
+	var de *DimensionsError
+	if !errors.As(err, &de) {
+		t.Fatalf("want a *DimensionsError, got %v", err)
+	}
+	if de.W != 100 || de.H != 100 || de.Typ != TypeSkin {
+		t.Errorf("details = %dx%d for %s, want 100x100 for skin", de.W, de.H, de.Typ)
+	}
+	// Callers that only classify must not need the concrete type.
+	if !errors.Is(err, ErrDimensions) {
+		t.Errorf("errors.Is(err, ErrDimensions) = false for %v", err)
+	}
+	if !strings.Contains(err.Error(), "100x100") {
+		t.Errorf("log line lost the numbers: %q", err.Error())
 	}
 }
 

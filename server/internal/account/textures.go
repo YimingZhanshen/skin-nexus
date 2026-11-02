@@ -96,25 +96,25 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 		return TextureView{}, false, e
 	}
 	if typ != "skin" && typ != "cape" {
-		return TextureView{}, false, errf(CodeInvalid, "texture type must be skin or cape", nil)
+		return TextureView{}, false, errf(CodeMetadata, "texture type must be skin or cape", nil)
 	}
 	// The uploader's model claim is advisory only: clients keep sending it
 	// (launcher-api, skin-importer, older builds) and an arm width the pixels do
 	// not have renders wrong everywhere at once. Junk is still rejected.
 	if typ == "skin" && model != "" && model != texture.ModelDefault && model != texture.ModelSlim {
-		return TextureView{}, false, errf(CodeInvalid, "skin model must be default or slim", nil)
+		return TextureView{}, false, errf(CodeModelBad, "skin model must be default or slim", nil)
 	}
 	desc := strings.TrimSpace(um.Name)
 	if !utf8.ValidString(desc) || !utf8.ValidString(um.DetailMD) ||
 		!utf8.ValidString(um.Source) || !utf8.ValidString(um.SourceURL) {
-		return TextureView{}, false, errf(CodeInvalid, "texture metadata must be UTF-8 text", nil)
+		return TextureView{}, false, errf(CodeMetadata, "texture metadata must be UTF-8 text", nil)
 	}
 	if utf8.RuneCountInString(desc) > 50 {
-		return TextureView{}, false, errf(CodeInvalid, "texture name is limited to 50 characters", nil)
+		return TextureView{}, false, errf(CodeMetadata, "texture name is limited to 50 characters", nil)
 	}
 	detail := strings.TrimSpace(um.DetailMD)
 	if utf8.RuneCountInString(detail) > 4000 {
-		return TextureView{}, false, errf(CodeInvalid, "texture description is limited to 4000 characters", nil)
+		return TextureView{}, false, errf(CodeMetadata, "texture description is limited to 4000 characters", nil)
 	}
 	source := strings.ToLower(strings.TrimSpace(um.Source))
 	sourceURL := strings.TrimSpace(um.SourceURL)
@@ -129,7 +129,7 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 			return TextureView{}, false, errf(CodeSourceURLBad, "the original URL must be an http(s) link", nil)
 		}
 	default:
-		return TextureView{}, false, errf(CodeInvalid, "texture source is not one of the allowed values", nil)
+		return TextureView{}, false, errf(CodeSourceBad, "texture source is not one of the allowed values", nil)
 	}
 	if source == "original" {
 		sourceURL = ""
@@ -138,7 +138,7 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 	if desc != "" {
 		if re, _, _ := s.Store.GetOption(ctx, "texture_name_regexp"); re != "" {
 			if rx, err := regexp.Compile(re); err == nil && !rx.MatchString(desc) {
-				return TextureView{}, false, errf(CodeInvalid, "texture name breaks the site naming rule", nil)
+				return TextureView{}, false, errf(CodeMetadata, "texture name breaks the site naming rule", nil)
 			}
 		}
 	}
@@ -162,10 +162,24 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 	}
 	res, err := texture.Process(bytes.NewReader(png), texture.Type(typ))
 	if err != nil {
-		if errors.Is(err, texture.ErrTooLarge) {
+		// One code per reason. A player who sent 100×100 needs to hear the
+		// numbers they typed, not "the file could not be parsed" — that sentence
+		// sends them back to the drawing board with no idea which door failed.
+		var de *texture.DimensionsError
+		switch {
+		case errors.Is(err, texture.ErrTooLarge):
 			return TextureView{}, false, errDomain(CodeTooLarge, err)
+		case errors.As(err, &de):
+			// The numbers go out as fields, not as the Go error string: the
+			// dictionary puts them into a sentence in the player's language.
+			return TextureView{}, false, errDetails(CodeDimensions, "the texture size is not one of the accepted families", map[string]any{
+				"width": de.W, "height": de.H, "type": string(de.Typ),
+			})
+		case errors.Is(err, texture.ErrPixelBomb):
+			return TextureView{}, false, errDomain(CodePixelBomb, err)
+		default:
+			return TextureView{}, false, errDomain(CodeInvalid, err)
 		}
-		return TextureView{}, false, errDomain(CodeInvalid, err)
 	}
 	// One line per disagreement: the only way to notice that a launcher keeps
 	// declaring the wrong model is that the log says so.

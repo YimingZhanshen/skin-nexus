@@ -51,6 +51,11 @@ func TestErrorStatusCoversEveryCode(t *testing.T) {
 		CodeBusy:          http.StatusConflict,
 		CodeInvalidName:   http.StatusBadRequest,
 		CodeInvalid:       http.StatusBadRequest,
+		CodeDimensions:    http.StatusBadRequest,
+		CodePixelBomb:     http.StatusBadRequest,
+		CodeMetadata:      http.StatusBadRequest,
+		CodeModelBad:      http.StatusBadRequest,
+		CodeSourceBad:     http.StatusBadRequest,
 		CodeTypeMismatch:  http.StatusBadRequest,
 		CodeSourceURLReq:  http.StatusBadRequest,
 		CodeSourceURLBad:  http.StatusBadRequest,
@@ -94,6 +99,11 @@ func TestErrorBodyAlwaysCarriesCode(t *testing.T) {
 			"in use names what still blocks",
 			&Error{Code: CodeInUse, Message: "still equipped",
 				Details: map[string]any{"players": []string{"Steve"}, "playerCount": 1}},
+		},
+		{
+			"dimensions carry the numbers the uploader sent",
+			&Error{Code: CodeDimensions, Message: "texture: dimensions not allowed: 100x100 for skin",
+				Details: map[string]any{"width": uint32(100), "height": uint32(100), "type": "skin"}},
 		},
 	}
 	for _, tc := range cases {

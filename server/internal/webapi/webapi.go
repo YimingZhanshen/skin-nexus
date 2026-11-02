@@ -565,7 +565,29 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 		uid, err = b.Store.CreateUser(r.Context(), req.Email, req.Nickname, hash, b.MaxChars, ygg.ClientIP(r))
 	}
 	if err != nil {
-		// unique constraint violation -> nickname/email taken
+		if !errors.Is(err, store.ErrDuplicate) {
+			b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebRegister,
+				Outcome: accesslog.OutcomeFail, Who: req.Nickname, Detail: "create_failed"})
+			writeInternal(r, w, err)
+			return
+		}
+		// Which of the two columns fired is not in the error, so ask — on the
+		// failure path only. Naming the taken half is the difference between a
+		// player changing one field and trying both for ten minutes.
+		if req.Email != "" {
+			if _, eerr := b.Store.UserByEmail(r.Context(), req.Email); eerr == nil {
+				b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebRegister,
+					Outcome: accesslog.OutcomeFail, Who: req.Nickname, Detail: "email_taken"})
+				writeErrCode(w, http.StatusConflict, "email already taken", i18n.MsgEmailTaken)
+				return
+			}
+		}
+		if taken, nerr := b.Store.NicknameTaken(r.Context(), req.Nickname); nerr == nil && taken {
+			b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebRegister,
+				Outcome: accesslog.OutcomeFail, Who: req.Nickname, Detail: "nickname_taken"})
+			writeErrCode(w, http.StatusConflict, "nickname already taken", i18n.MsgNicknameTaken)
+			return
+		}
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebRegister,
 			Outcome: accesslog.OutcomeFail, Who: req.Nickname, Detail: "taken"})
 		writeErrCode(w, http.StatusConflict, "nickname or email already taken", i18n.MsgIdentifierTaken)

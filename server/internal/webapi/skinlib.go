@@ -196,7 +196,7 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		default:
-			writeErrCode(w, http.StatusBadRequest, "texture source is not one of the allowed values", i18n.MsgTextureSourceBad)
+			writeErrCode(w, http.StatusBadRequest, "texture source is not one of the allowed values", account.CodeSourceBad)
 			return
 		}
 	}
@@ -235,7 +235,7 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 	if req.Model != nil {
 		m := strings.TrimSpace(*req.Model)
 		if m != "default" && m != "slim" {
-			writeErrCode(w, http.StatusBadRequest, "arm model must be default or slim", i18n.MsgTextureModelBad)
+			writeErrCode(w, http.StatusBadRequest, "arm model must be default or slim", account.CodeModelBad)
 			return
 		}
 		patch.Model = &m

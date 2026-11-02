@@ -76,7 +76,7 @@ func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 	// plugin install/market operations require exactly 2, not merely >0.
 	uid, err := b.Store.CreateUserAdmin(r.Context(), req.Email, req.Nickname, hash, req.PlayerLimit)
 	if err != nil {
-		writeErrCode(w, http.StatusConflict, "could not create the account (nickname or email may already exist)", i18n.MsgRegisterFailed)
+		writeErrCode(w, http.StatusConflict, "could not create the account (nickname or email may already exist)", i18n.MsgIdentifierTaken)
 		return
 	}
 	// site identity + SEO defaults

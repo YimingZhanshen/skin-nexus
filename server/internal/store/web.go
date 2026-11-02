@@ -65,9 +65,29 @@ func (m *Mysql) createUser(ctx context.Context, email, nickname, passwordHash st
 		 VALUES (?,?,?,'argon2id',?,0,1,?,?)`,
 		nullableStr(email), nickname, passwordHash, playerLimit, permission, nullableStr(ip))
 	if err != nil {
+		if isDupKey(err) {
+			return 0, ErrDuplicate
+		}
 		return 0, err
 	}
 	return uid, nil
+}
+
+// NicknameTaken says which half of the (nickname, email) pair a rejected
+// registration collided with: the unique index does not tell, and answering
+// "昵称或邮箱已被占用" sends the player trying both. The case folding matches
+// UserByIdentifier, so the name that would log in is the name reported taken.
+func (m *Mysql) NicknameTaken(ctx context.Context, nickname string) (bool, error) {
+	var one int
+	err := m.db.QueryRowContext(ctx,
+		`SELECT 1 FROM users WHERE `+m.db.Dialect().CIEquals("nickname")+` LIMIT 1`, nickname).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // CreateSession stores an opaque web session token.

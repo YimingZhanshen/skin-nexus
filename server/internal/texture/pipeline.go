@@ -214,6 +214,22 @@ func scanIHDR(raw []byte) (uint32, uint32, error) {
 	return w, h, nil
 }
 
+// DimensionsError carries the size that was actually sent. "dimensions not
+// allowed" alone leaves the uploader guessing — the sentence they can act on
+// names their own numbers next to the ones the format expects.
+type DimensionsError struct {
+	W, H uint32
+	Typ  Type
+}
+
+func (e *DimensionsError) Error() string {
+	return fmt.Sprintf("%s: %dx%d for %s", ErrDimensions, e.W, e.H, e.Typ)
+}
+
+// Unwrap keeps `errors.Is(err, ErrDimensions)` working for callers that only
+// classify, while errors.As hands the numbers to the ones that explain.
+func (e *DimensionsError) Unwrap() error { return ErrDimensions }
+
 // checkDimensions enforces the legacy dimension families:
 // skin 64x32 / 64x64 and integer multiples up to MaxPixels;
 // cape 64x32 / 22x17 and integer multiples.
@@ -234,7 +250,7 @@ func checkDimensions(typ Type, w, h uint32) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("%w: %dx%d for %s", ErrDimensions, w, h, typ)
+	return &DimensionsError{W: w, H: h, Typ: typ}
 }
 
 // VerifyStored re-hashes a stored file and checks it matches its name.

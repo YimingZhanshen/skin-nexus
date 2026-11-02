@@ -45,7 +45,8 @@ func (e *Error) Status() int {
 	case CodeNameTaken, CodeDuplicatePub, CodeInUse, CodeBusy:
 		return http.StatusConflict
 	case CodeInvalidName, CodeInvalid, CodeTypeMismatch,
-		CodeSourceURLReq, CodeSourceURLBad:
+		CodeSourceURLReq, CodeSourceURLBad,
+		CodeDimensions, CodePixelBomb, CodeMetadata, CodeModelBad, CodeSourceBad:
 		return http.StatusBadRequest
 	case CodeTooLarge:
 		return http.StatusRequestEntityTooLarge
@@ -53,14 +54,15 @@ func (e *Error) Status() int {
 	return http.StatusInternalServerError
 }
 
-// Body is the wire envelope `{error, code, message}`. Two codes also flatten
+// Body is the wire envelope `{error, code, message}`. Some codes also flatten
 // their details: the duplicate points at the page the user should use instead,
-// the in-use answer names what still blocks a deletion — either is unactionable
-// as prose alone.
+// the in-use answer names what still blocks a deletion, and a rejected size is
+// meaningless without the numbers the uploader actually sent — each is
+// unactionable as prose alone.
 func (e *Error) Body() map[string]any {
 	body := map[string]any{"error": e.Code, "code": e.Code, "message": e.Message}
 	switch e.Code {
-	case CodeDuplicatePub, CodeInUse:
+	case CodeDuplicatePub, CodeInUse, CodeDimensions:
 		for k, v := range e.Details {
 			body[k] = v
 		}
@@ -68,12 +70,21 @@ func (e *Error) Body() map[string]any {
 	return body
 }
 
+// The wire codes this package emits. CodeModelBad/CodeSourceBad live here
+// rather than in i18n because this package decides the HTTP status: a code the
+// status table does not know falls back to 500, which would blame the server
+// for the player's typo.
 const (
 	CodeNotFound      = "player.not_found"
 	CodeLimit         = "player.limit"
 	CodeInvalidName   = "player.name_invalid"
 	CodeNameTaken     = "player.name_taken"
 	CodeInvalid       = "texture.invalid"
+	CodeDimensions    = "texture.dimensions_invalid"
+	CodePixelBomb     = "texture.pixel_bomb"
+	CodeMetadata      = "texture.metadata_invalid"
+	CodeModelBad      = "texture.model_invalid"  // the arm model field, on upload
+	CodeSourceBad     = "texture.source_invalid" // the source field, on upload
 	CodeTooLarge      = "texture.too_large"
 	CodeNotOwned      = "texture.not_owned"
 	CodeTypeMismatch  = "texture.type_mismatch"

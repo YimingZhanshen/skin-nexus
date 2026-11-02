@@ -59,7 +59,6 @@ const (
 	MsgNicknameTaken    = "auth.nickname_taken"
 	MsgNicknameInvalid  = "auth.nickname_invalid"
 	MsgPasswordTooShort = "auth.password_too_short"
-	MsgRegisterFailed   = "auth.register_failed"
 	MsgIPLimit          = "auth.ip_limit"
 	MsgSelfDeleteAdmin  = "auth.self_delete_forbidden"
 	MsgPasswordSame     = "auth.password_unchanged" // new password equals the old one
@@ -91,8 +90,6 @@ const (
 	MsgTextureNotOwner   = "texture.not_owner"
 	MsgTextureModeration = "texture.moderation_ban" // struck: may not republish
 	MsgTextureAvatarSkin = "texture.avatar_skin_only"
-	MsgTextureSourceBad  = "texture.source_invalid" // the source enum is not one of three
-	MsgTextureModelBad   = "texture.model_invalid"  // PATCH model outside default|slim
 	MsgClosetNotFound    = "closet.not_found"
 	MsgClosetBadID       = "closet.bad_id"
 	MsgLikeMissing       = "skinlib.like_missing" // unlike a texture that is not liked
