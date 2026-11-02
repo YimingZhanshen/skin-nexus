@@ -2,6 +2,10 @@
 
 > 迭代历史（按日期倒序，每天一条，只记要点）。开发细节见对应 commit；README 状态行只留一句话摘要。
 
+## 2026-11-03
+
+- **文档有了对外镜像**：仓库内生成的 Repo Wiki 全量同步到 [skin-nexus/wiki](https://github.com/YimingZhanshen/skin-nexus/wiki)，mermaid 图与目录锚点在 wiki 侧照常渲染。同步时把生成产物里的 `file://server/...` 引用改写成 `blob/<生成基准 commit>/...`——相对路径在 wiki 上是死链，跟 `main` 的绝对链接又会在文件挪动后失效，锁基准 commit 才能让每条 `文件:行` 永久解析到它对应的那一版。基准取自 `repowiki-metadata.json`，每条被引路径都要在该 commit 存在才放行（`git cat-file -e` 逐条核，核不到就降级成纯文本路径），本轮 200 条引用零缺失；生成器偶尔会把目录前缀写重（`server/server/internal/...`），这类同样按真实文件树纠正。wiki 是与代码仓库分离的另一个仓库：默认分支 `master`，页名里的空格按 GitHub 规范写成连字符，而且必须先在网页上建出一页才拿得到可推的地址。生成物与同步脚本都留在 `.qoder/` 下，不入仓。
+
 ## 2026-11-02
 
 - **文档里的数字改成不靠人记（U18）**：`AGENTS.md` 的迁移范围还停在「0001…0017」，而三套引擎树已经到

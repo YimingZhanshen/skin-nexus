@@ -92,6 +92,7 @@ Measured on one 2-core / 3.5 GB production VPS: landing ~600 RPS, texture delive
 - Compatibility baseline [`docs/compat-matrix.md`](docs/compat-matrix.md) · launcher API [`docs/launcher-api.md`](docs/launcher-api.md)
 - Theme packs [`docs/theme-spec.md`](docs/theme-spec.md) · plugins [`docs/plugin-spec.md`](docs/plugin-spec.md) · publishing and signing [`docs/plugin-publishing.md`](docs/plugin-publishing.md)
 - Competitor evidence [`docs/competitor-analysis.md`](docs/competitor-analysis.md) · iteration history [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
+- Online wiki (mirror of the docs generated in this repository, with architecture and protocol deep dives) [YimingZhanshen/skin-nexus/wiki](https://github.com/YimingZhanshen/skin-nexus/wiki)
 - Contributing [`CONTRIBUTING.md`](CONTRIBUTING.md) · governance [`GOVERNANCE.md`](GOVERNANCE.md) · vulnerability reporting [`SECURITY.md`](SECURITY.md) · code of conduct [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) · accessibility [`ACCESSIBILITY.md`](ACCESSIBILITY.md) · repository collaboration notes [`AGENTS.md`](AGENTS.md)
 
 Most detailed documentation is still Chinese-first.

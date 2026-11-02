@@ -92,6 +92,7 @@ docker compose -f docker-compose.quickstart.yml up -d
 - 兼容基线 [`docs/compat-matrix.md`](docs/compat-matrix.md) · 启动器 API [`docs/launcher-api.md`](docs/launcher-api.md)
 - 主题包 [`docs/theme-spec.md`](docs/theme-spec.md) · 插件 [`docs/plugin-spec.md`](docs/plugin-spec.md) · 发布与签名 [`docs/plugin-publishing.md`](docs/plugin-publishing.md)
 - 竞品取证 [`docs/competitor-analysis.md`](docs/competitor-analysis.md) · 迭代历史 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
+- 在线 Wiki（仓库内生成文档的对外镜像，含架构与协议详解）[YimingZhanshen/skin-nexus/wiki](https://github.com/YimingZhanshen/skin-nexus/wiki)
 - 贡献 [`CONTRIBUTING.md`](CONTRIBUTING.md) · 治理 [`GOVERNANCE.md`](GOVERNANCE.md) · 漏洞报告 [`SECURITY.md`](SECURITY.md) · 行为准则 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) · 无障碍 [`ACCESSIBILITY.md`](ACCESSIBILITY.md) · 仓库协作说明 [`AGENTS.md`](AGENTS.md)
 
 ## 兼容契约
