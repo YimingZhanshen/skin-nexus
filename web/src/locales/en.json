@@ -178,7 +178,9 @@
     "delete": "Delete",
     "rename": "Rename",
     "language": "Language",
-    "dataLoadFailed": "Failed to load data: {message}"
+    "dataLoadFailed": "Failed to load data: {message}",
+    "footerLinks": "Footer links",
+    "breadcrumb": "Breadcrumb"
   },
   "nav": {
     "home": "Home",
@@ -213,7 +215,9 @@
     "makePublic": "Make public",
     "renamePrompt": "New name:",
     "likeTip": "Like (adds to your closet)",
-    "closetNow": "{name} is in your closet"
+    "closetNow": "{name} is in your closet",
+    "privateBadge": "Private",
+    "privateTip": "Visible only to you, not in the public library"
   },
   "site": {
     "name": "SkinNexus",
@@ -278,6 +282,7 @@
     "uploadLimit": "; one file up to {size}",
     "fileTooLarge": "That file is too large — this site accepts up to {size}",
     "dropHint": "Drop a PNG here, or click to choose",
+    "chooseFile": "Choose a file",
     "clearFile": "Clear selected file",
     "previewEmpty": "Pick a file to preview it here",
     "uploadSuccess": "Uploaded",

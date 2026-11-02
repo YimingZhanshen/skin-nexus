@@ -15,6 +15,7 @@ import Pager from '../components/Pager.vue'
 import { api, uploadTexture } from '../api.js'
 import { detectSkinModel } from '../skinModel.js'
 import { shortHash, textureLabel, nameFromFile } from '../textureLabel.js'
+import { formatBytes } from '../format.js'
 import { guard401 } from '../session.js'
 import { confirmDialog } from '../dialog.js'
 
@@ -129,15 +130,6 @@ const usageText = computed(() => {
   const bytes = me.value.storageBytes ?? 0
   return t('dashboard.usageLine', { n, limit, storage: formatBytes(bytes) })
 })
-
-function formatBytes(b) {
-  if (b < 1024) return `${b} B`
-  const units = ['KB', 'MB', 'GB']
-  let v = b
-  let i = -1
-  do { v /= 1024; i++ } while (v >= 1024 && i < units.length - 1)
-  return `${v.toFixed(1)} ${units[i]}`
-}
 
 // ---- launcher quick config ----
 const aliUrl = `${location.origin}/api/yggdrasil`
@@ -270,6 +262,10 @@ async function doUpload() {
   } finally { uploading.value = false; uploadProgress.value = 0 }
 }
 
+function pickFile() {
+  if (fileInput.value) fileInput.value.click()
+}
+
 function onPick(e) {
   const f = e.target.files[0] || null
   if (f && oversize(f)) {
@@ -297,7 +293,7 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
 
 <template>
   <!-- 页面级数据错误（与上传卡错误位分离） -->
-  <div class="error" v-if="pageErr">{{ pageErr }}</div>
+  <div class="error" role="alert" v-if="pageErr">{{ pageErr }}</div>
   <!-- announcement (Markdown, double-sanitized) -->
   <div class="card" v-if="announcement">
     <h2>{{ t('dashboard.announcement') }}</h2>
@@ -353,7 +349,7 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
         <p v-if="uploadType === 'skin'" class="muted model-hint">{{ t('dashboard.modelAutoHint') }}</p>
         <div class="drop-zone" :class="{ over: dragging }"
              @dragover.prevent="dragging = true" @dragleave.prevent="dragging = false"
-             @drop.prevent="onDrop" @click="fileInput && fileInput.click()">
+             @drop.prevent="onDrop" @click="pickFile">
           <input type="file" accept="image/png" ref="fileInput" @change="onPick" class="file-hidden" />
           <template v-if="uploadFile">
             <span class="file-name" :title="uploadFile.name">{{ uploadFile.name }}</span>
@@ -361,6 +357,10 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
           </template>
           <span v-else class="muted">{{ t('dashboard.dropHint') }}</span>
         </div>
+        <!-- The zone itself is click/drag only: a keyboard user needs a real
+             control, and a role="button" wrapper would have to contain the
+             "clear file" button once a file is picked. -->
+        <button type="button" class="secondary pick-file" @click="pickFile">{{ t('dashboard.chooseFile') }}</button>
         <div class="detail-editor">
           <div class="tabs detail-tabs">
             <button type="button" class="tab" :class="{ active: detailTab === 'edit' }" @click="detailTab = 'edit'">{{ t('dashboard.detailEdit') }}</button>
@@ -384,18 +384,18 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
           <div class="bar"><i :style="{ width: uploadProgress + '%' }"></i></div>
           <span class="muted">{{ uploadProgress }}%</span>
         </div>
-        <div class="error" v-if="uploadErr">{{ uploadErr }}</div>
-        <div class="error" v-if="uploadDup">
+        <div class="error" role="alert" v-if="uploadErr">{{ uploadErr }}</div>
+        <div class="error" role="alert" v-if="uploadDup">
           {{ t('dashboard.uploadDuplicate') }}
           <a :href="uploadDup.url">{{ t('dashboard.uploadExisting') }}</a>
         </div>
-        <div class="success" v-if="uploadOk">{{ uploadOk }}</div>
+        <div class="success" role="status" v-if="uploadOk">{{ uploadOk }}</div>
         <PluginFields form="texture.upload" v-model="uploadPluginData" />
         <div class="muted">{{ t('dashboard.uploadHint') }}{{ uploadLimitText ? t('dashboard.uploadLimit', { size: uploadLimitText }) : '' }}</div>
       </div>
       <div class="prev-box">
         <template v-if="previewURL">
-          <img v-if="previewIsCape || glLost" class="cape-prev" :src="previewURL" alt="preview" />
+          <img v-if="previewIsCape || glLost" class="cape-prev" :src="previewURL" :alt="t('dashboard.colPreview')" />
           <SkinPreview v-else :url="previewURL" :model-type="previewModel"
                        @gl-unavailable="glLost = true" />
         </template>

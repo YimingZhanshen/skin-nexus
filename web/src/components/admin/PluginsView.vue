@@ -169,8 +169,8 @@ onMounted(async () => {
       <input type="checkbox" :checked="guardsBypassed" @change="toggleBypass" />
       <span class="muted">{{ t('admin.pluginsGuardBypass') }}</span>
     </label>
-    <div class="error" v-if="loadError">{{ loadError }}</div>
-    <div class="error" v-if="actionError">{{ actionError }}</div>
+    <div class="error" role="alert" v-if="loadError">{{ loadError }}</div>
+    <div class="error" role="alert" v-if="actionError">{{ actionError }}</div>
 
     <p v-if="!plugins.length" class="muted">{{ t('admin.pluginsEmpty') }}</p>
     <div v-else class="plugin-list">
@@ -224,8 +224,8 @@ onMounted(async () => {
         <button class="secondary" @click="configTarget = null">{{ t('common.close') }}</button>
       </div>
       <p class="muted">{{ t('admin.pluginsConfigHint') }}</p>
-      <div class="error" v-if="configError">{{ configError }}</div>
-      <div class="success" v-if="configOk">{{ configOk }}</div>
+      <div class="error" role="alert" v-if="configError">{{ configError }}</div>
+      <div class="success" role="status" v-if="configOk">{{ configOk }}</div>
       <template v-if="configView">
         <SchemaForm :schema="configView.schema" v-model="configValues" :disabled="!isSuper || configSaving" />
         <div class="row" style="margin-top: 12px;">

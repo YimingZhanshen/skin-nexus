@@ -4,21 +4,13 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
+import { formatBytes } from '../../format.js'
 
 const { t } = useI18n()
 const emit = defineEmits(['go'])
 
 const overview = ref(null)
 const error = ref('')
-
-function fmtBytes(n) {
-  if (n === null || n === undefined) return '—'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let i = 0
-  let v = Number(n)
-  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
-  return `${v >= 10 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`
-}
 
 onMounted(async () => {
   error.value = ''
@@ -47,7 +39,7 @@ onMounted(async () => {
           <span class="stat-label">{{ t('admin.textures') }}</span>
         </div>
         <div class="stat-card">
-          <span class="stat-num">{{ fmtBytes(overview.storageBytes) }}</span>
+          <span class="stat-num">{{ formatBytes(overview.storageBytes) }}</span>
           <span class="stat-label">{{ t('admin.storage') }}</span>
         </div>
       </div>
@@ -57,7 +49,7 @@ onMounted(async () => {
         </span>
         <span class="badge">{{ t('admin.signKeyFingerprint') }} {{ overview.signKeyFingerprint }}</span>
       </div>
-      <div class="error" v-if="error">{{ error }}</div>
+      <div class="error" role="alert" v-if="error">{{ error }}</div>
     </div>
   </div>
 </template>

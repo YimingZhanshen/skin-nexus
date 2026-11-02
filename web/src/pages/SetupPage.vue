@@ -112,10 +112,10 @@ function goHome() {
 
     <!-- step 4: done -->
     <template v-else>
-      <div class="success">初始化完成！请用刚才创建的管理员账号登录。</div>
+      <div class="success" role="status">初始化完成！请用刚才创建的管理员账号登录。</div>
     </template>
 
-    <div class="error" v-if="error">{{ error }}</div>
+    <div class="error" role="alert" v-if="error">{{ error }}</div>
 
     <div class="row" style="margin-top: 14px;">
       <button v-if="step > 1 && step < 4" class="secondary" @click="step--">上一步</button>

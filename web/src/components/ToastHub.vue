@@ -67,6 +67,11 @@ onBeforeUnmount(() => {
   min-height: 0; font-size: var(--fs-m); line-height: 1;
 }
 .toast .toast-x:hover { color: var(--text); background: none; box-shadow: none; transform: none; }
+/* Dismissing a toast is a thumb-sized target on a phone; the scoped min-height
+   above would otherwise beat the global coarse-pointer rule. */
+@media (pointer: coarse) {
+  .toast .toast-x { min-height: 44px; padding-inline: 10px; }
+}
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
   .toast { animation: none; }

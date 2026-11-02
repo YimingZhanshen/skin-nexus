@@ -9,6 +9,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
+import { formatWhen } from '../format.js'
 import EmptyState from '../components/EmptyState.vue'
 import Pager from '../components/Pager.vue'
 
@@ -59,7 +60,7 @@ function text(n) {
 }
 
 function when(tm) {
-  return new Date(tm).toLocaleString()
+  return formatWhen(tm)
 }
 
 onMounted(load)
@@ -79,7 +80,7 @@ onMounted(load)
         </button>
       </div>
     </div>
-    <div class="error" v-if="error">{{ error }}</div>
+    <div class="error" role="alert" v-if="error">{{ error }}</div>
     <p class="muted">{{ t('notifications.hint') }}</p>
 
     <table v-if="rows.length">

@@ -178,7 +178,9 @@
     "delete": "删除",
     "rename": "改名",
     "language": "语言",
-    "dataLoadFailed": "数据加载失败：{message}"
+    "dataLoadFailed": "数据加载失败：{message}",
+    "footerLinks": "页面底部链接",
+    "breadcrumb": "面包屑导航"
   },
   "nav": {
     "home": "首页",
@@ -213,7 +215,9 @@
     "makePublic": "设为公开",
     "renamePrompt": "新的名称：",
     "likeTip": "喜欢（加入衣柜）",
-    "closetNow": "「{name}」已收进衣柜"
+    "closetNow": "「{name}」已收进衣柜",
+    "privateBadge": "密",
+    "privateTip": "仅自己可见，未进入公共皮肤库"
   },
   "site": {
     "name": "SkinNexus",
@@ -278,6 +282,7 @@
     "uploadLimit": "；单个文件不超过 {size}",
     "fileTooLarge": "文件太大，本站单个文件上限 {size}",
     "dropHint": "将 PNG 拖入此处，或点击选择",
+    "chooseFile": "选择文件",
     "clearFile": "清除已选文件",
     "previewEmpty": "选中文件后在此预览",
     "uploadSuccess": "上传成功",

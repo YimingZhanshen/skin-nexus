@@ -223,8 +223,8 @@ onMounted(load)
     <!-- 站点设置（env 迁 UI），按后端 group 分节 -->
     <div class="card">
       <h2 style="margin-top: 0;">站点设置（原环境变量，管理员可改）</h2>
-      <div class="error" v-if="setError">{{ setError }}</div>
-      <div class="success" v-if="setOk">{{ setOk }}</div>
+      <div class="error" role="alert" v-if="setError">{{ setError }}</div>
+      <div class="success" role="status" v-if="setOk">{{ setOk }}</div>
       <template v-for="grp in groupedSettings" :key="grp.id">
         <h3 class="settings-group-title">{{ groupTitle(grp.id) }}</h3>
         <div class="row" v-for="s in grp.items" :key="s.key" style="margin-top: 12px; align-items: center;">
@@ -260,7 +260,7 @@ onMounted(load)
     <!-- SEO：加载失败不再静默（卡外横幅 + 重试），卡内横幅只管保存失败 -->
     <div class="card" v-if="!seo && seoError">
       <h2>SEO 配置</h2>
-      <div class="error">{{ seoError }}</div>
+      <div class="error" role="alert">{{ seoError }}</div>
       <button class="secondary" style="margin-top: 12px;" @click="loadSEO">{{ t('common.retry') }}</button>
     </div>
     <div class="card" v-if="seo">
@@ -293,13 +293,13 @@ onMounted(load)
       </div>
       <label style="margin-top: 8px;" for="seo-robots">robots.txt 内容</label>
       <textarea id="seo-robots" v-model="seo.robots" rows="3"></textarea>
-      <div class="error" v-if="seoError">{{ seoError }}</div>
+      <div class="error" role="alert" v-if="seoError">{{ seoError }}</div>
     </div>
 
     <!-- Appearance: themes + custom CSS/JS（失败卡外可见 + 重试） -->
     <div class="card" v-if="!appearance && appearError">
       <h2>外观（主题 / 页脚 / 自定义 CSS / JS）</h2>
-      <div class="error">{{ appearError }}</div>
+      <div class="error" role="alert">{{ appearError }}</div>
       <button class="secondary" style="margin-top: 12px;" @click="loadAppearance">{{ t('common.retry') }}</button>
     </div>
     <div class="card" v-if="appearance">
@@ -333,7 +333,7 @@ onMounted(load)
       <div class="row" style="margin-top: 12px;">
         <button @click="appearSave">保存外观</button>
       </div>
-      <div class="error" v-if="appearError">{{ appearError }}</div>
+      <div class="error" role="alert" v-if="appearError">{{ appearError }}</div>
       <ThemeMarketSection @changed="loadAppearance" />
     </div>
 
@@ -350,10 +350,10 @@ onMounted(load)
       </div>
       <textarea v-model="newClient.redirect_uris" :placeholder="t('admin.oidcRedirectPlaceholder')" rows="2"
                 style="margin-top: 8px; width: 100%;"></textarea>
-      <div class="success" v-if="lastSecret" style="margin-top: 8px;">
+      <div class="success" role="status" v-if="lastSecret" style="margin-top: 8px;">
         {{ t('admin.oidcSecretOnce') }}<code>{{ lastSecret }}</code>
       </div>
-      <div class="error" v-if="oidcError">{{ oidcError }}</div>
+      <div class="error" role="alert" v-if="oidcError">{{ oidcError }}</div>
       <div class="table-scroll" v-if="oidcClients.length" style="margin-top: 12px;">
       <table>
         <tr><th>{{ t('admin.oidcClientId') }}</th><th>{{ t('admin.oidcClientName') }}</th><th>{{ t('admin.oidcClientType') }}</th><th>{{ t('admin.oidcClientGrants') }}</th><th>{{ t('admin.oidcClientRedirects') }}</th><th></th></tr>

@@ -160,7 +160,7 @@ button.secondary { background: transparent; border: 1px solid var(--line-strong)
 button.secondary:hover { background: var(--ink-3); border-color: var(--gold); color: var(--moon); box-shadow: none; }
 button.danger { background: var(--danger); color: var(--on-danger); }
 button.danger:hover { background: var(--danger-hi); box-shadow: 0 6px 16px -8px var(--glow-danger); }
-button.danger-outline { border: 1px solid var(--danger); background: transparent; color: var(--danger); }
+button.danger-outline { border: 1px solid var(--danger); background: transparent; color: var(--danger-ink, var(--danger)); }
 button.danger-outline:hover { background: var(--danger); color: var(--on-danger); }
 button:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
 button:disabled:hover { background: var(--cinnabar); }
@@ -191,7 +191,7 @@ textarea:focus, input:focus, select:focus {
 label { display: block; margin: 12px 0 4px; font-size: var(--fs-s); color: var(--muted); }
 label.required { color: var(--cinnabar); }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.error { color: var(--danger); font-size: var(--fs-s); margin-top: 8px; }
+.error { color: var(--danger-ink, var(--danger)); font-size: var(--fs-s); margin-top: 8px; }
 .success { color: var(--ok); font-size: var(--fs-s); margin-top: 8px; }
 
 /* ── 页头（页面标题行，大改新增） ── */
@@ -260,7 +260,7 @@ tbody tr:hover, table tr:hover { background: var(--hover-wash); }
   font-size: var(--fs-xs); font-weight: 600; border: 1px solid var(--line-strong); color: var(--moon-2);
   font-variant-numeric: tabular-nums;
 }
-.badge.danger { color: var(--danger); border-color: var(--danger); }
+.badge.danger { color: var(--danger-ink, var(--danger)); border-color: var(--danger); }
 .badge.accent { color: var(--cinnabar); border-color: var(--cinnabar); }
 .badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
 .badge.jade { color: var(--jade); border-color: color-mix(in srgb, var(--jade) 55%, transparent); }
@@ -338,6 +338,9 @@ tbody tr:hover, table tr:hover { background: var(--hover-wash); }
    checkbox/radio hit area grows via their wrapping label, not the control */
 @media (pointer: coarse) {
   button, .tab { min-height: 44px; }
+  /* .small/.ghost set their own min-height and outspecify the bare `button`
+     rule above, so on a phone they would still be 28–32px targets */
+  button.small, button.ghost { min-height: 44px; }
   label:has(input[type="checkbox"]), label:has(input[type="radio"]) { min-height: 44px; display: flex; align-items: center; }
   .topbar-right select, .topbar-right button { min-height: 40px; }
 }

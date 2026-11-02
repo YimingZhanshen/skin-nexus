@@ -34,6 +34,11 @@
   --gold: #c9a06a;      /* 赭金：警示/强调数字 */
   --ochre: var(--gold); /* 落地页旧别名 */
   --danger-hi: #e5655c;
+  /* Error text on a panel surface. --danger (#d9564c) lands at 4.21:1 on
+     --panel, under WCAG AA for body text, so red prose gets its own token at
+     6.01:1. Packs that set a light panel should define their own value;
+     consumers fall back to var(--danger), i.e. today's rendering. */
+  --danger-ink: #ef7a70;
   --on-danger: #fff;
   --ok: #6fbf7d;
   --hover-wash: rgba(233, 237, 241, .05);

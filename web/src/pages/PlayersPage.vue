@@ -130,8 +130,8 @@ onMounted(load)
       <input v-model="newName" :placeholder="t('dashboard.newPlayerName')" style="max-width: 220px;" @keyup.enter="createPlayer" />
       <button :disabled="creating" @click="createPlayer">{{ creating ? t('common.pleaseWait') : t('dashboard.createPlayer') }}</button>
     </div>
-    <div class="error" v-if="err">{{ err }}</div>
-    <div class="success" v-if="ok">{{ ok }}</div>
+    <div class="error" role="alert" v-if="err">{{ err }}</div>
+    <div class="success" role="status" v-if="ok">{{ ok }}</div>
     <div class="player-grid" v-if="players.length">
       <article class="player-card" v-for="p in players" :key="pid(p)">
         <div class="pc-preview">

@@ -80,7 +80,7 @@ onMounted(load)
       <button class="secondary" @click="search">{{ t('admin.search') }}</button>
       <span class="muted">{{ t('admin.accessTotal', { total }) }}</span>
     </div>
-    <div class="error" v-if="error">{{ error }}</div>
+    <div class="error" role="alert" v-if="error">{{ error }}</div>
     <div class="table-scroll" v-if="logs.length">
     <table class="logs-table" style="margin-top: 10px;">
       <tr>

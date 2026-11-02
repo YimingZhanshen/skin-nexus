@@ -128,8 +128,8 @@ onMounted(load)
         <button class="tab" :class="{ active: tab === 'cape' }" @click="setTab('cape')">{{ t('dashboard.typeCape') }}</button>
       </div>      <input :value="query" @input="query = $event.target.value; onQuery()" :placeholder="t('closet.searchPlaceholder')" style="max-width: 240px;" />
     </div>
-    <div class="error" v-if="err">{{ err }}</div>
-    <div class="success" v-if="ok">{{ ok }}</div>
+    <div class="error" role="alert" v-if="err">{{ err }}</div>
+    <div class="success" role="status" v-if="ok">{{ ok }}</div>
     <!-- First paint has nothing to show rows against, so it gets the same
          skeleton the skin library uses; later fetches keep the old rows rather
          than blanking the page under the cursor. -->

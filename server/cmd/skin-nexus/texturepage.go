@@ -171,7 +171,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   .report-dialog label { display: block; margin: 10px 0; font-size: var(--fs-s); }
   .report-dialog select, .report-dialog textarea { width: 100%; margin-top: 4px; }
   .report-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
-  .report-error { color: var(--danger, #d9564c); font-size: var(--fs-s); }
+  .report-error { color: var(--danger-ink, var(--danger, #d9564c)); font-size: var(--fs-s); }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
   @media (max-width: 560px) {
     .topbar-inner { padding: 0 14px; }

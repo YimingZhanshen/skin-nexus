@@ -4,6 +4,30 @@
 
 ## 2026-11-02
 
+- **降低上手门槛第二轮：弹窗、待决态、可达性与反馈一致性**：SPA 里 42 处原生对话框
+  （7 prompt + 34 confirm + 1 alert）全部改为应用内 `<dialog>`（`DialogPanel` 一个外壳：顶层渲染、
+  焦点陷阱、Tab 成环、Escape 关闭、关闭后焦点回触发元素），样式沿用服务端详情页
+  `.report-dialog` 的令牌；`dialog.js` 提供 `promptDialog/confirmDialog/alertDialog`，返回值语义与原生一致。
+  这不只是好看：沙箱插件 iframe 没有 `allow-modals`，子页确认只能委托宿主，而宿主此前用
+  `window.confirm` —— 后台标签页里浏览器直接拒绝、返回 false，插件会把「弹不出来」当成「用户拒绝」。
+  衣柜与角色页补齐待决态（按行 `busy` + `:disabled` + 首次骨架 + `reqSeq` 序号守卫）：
+  此前改名/移出/设为头像/换肤在请求飞行中可连点，tab/搜索/分页三种触发还可能让慢响应盖掉新结果。
+  可达性与一致性一次收口：58 处错误/成功横幅加 `role="alert"`/`role="status"`（此前全站只有 4 个
+  live region）；上传拖放区旁边给出真正的 `<button type=button>选择文件`（原 zone 只能鼠标点击，
+  且包内已有一个按钮，不能再套 `role=button`）；`--danger-ink: #ef7a70` 专供面板上的红字
+  （`--danger` 落在 `--panel` 上实测 4.21:1 不达 AA，新令牌 6.01:1，取值走
+  `var(--danger-ink, var(--danger))` 回退，不给已有主题包带来回归）；粗指针下
+  `button.small/ghost`、`.like-btn`、`.toast-x` 恢复 44px 命中区（scoped 属性选择器会压过全局
+  `button` 规则，故在组件内补）；字节格式化两处合一、日期改按界面语言（`Intl` + `i18n.global.locale`）；
+  预览图 URL 与举报缩略图不再由前端硬写 `?v=5`，改由服务端下发；`index.html` 启动占位、
+  页脚/面包屑 `aria-label`、预览 `alt`、「密」徽章文字进词典。
+  真机实测：衣柜改名弹窗焦点落在输入框、确认后行内显示新备注名、按 Escape 不写库；
+  把 fetch 人为拖慢 600 ms 可观测到飞行中该行四个按钮全部 disabled、落地后全部恢复；
+  `/reset-password` 无令牌页的错误条 `role=alert` 且计算色为 `rgb(239,122,112)`；
+  选文件按钮可 Tab 聚焦，用真实文件走完上传（命中重复图，返回「你已经上传过这张图」）；
+  上传提示显示「单个文件不超过 1.0 MB」、用量显示「1.2 MB」、缩略图为 `/preview/<tid>?v=5&small=1`。
+  词典 764 key 中英平价，错误码目录 109 条。
+
 - **上传限额理顺 + 失败原因分码 + 登录锁定倒计时（降低上手门槛第一轮）**：
   `maxBody` 把整个 `/api/v1` 的请求体一律截到 1 MiB，而纹理上传允许 2 MiB、像素上限 1M——
   1 MiB 以上的皮肤 PNG 在 multipart 解析阶段就被截，玩家读到的是「请求内容无法解析」，

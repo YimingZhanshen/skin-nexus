@@ -178,8 +178,8 @@ onMounted(async () => {
     </div>
     <p class="muted">{{ t('admin.marketHint') }}</p>
     <p class="muted" v-if="readOnly">{{ t('admin.marketReadOnly') }}</p>
-    <div class="error" v-if="loadError">{{ loadError }}</div>
-    <div class="error" v-if="actionError">{{ actionError }}</div>
+    <div class="error" role="alert" v-if="loadError">{{ loadError }}</div>
+    <div class="error" role="alert" v-if="actionError">{{ actionError }}</div>
 
     <div class="row" style="margin: 12px 0; gap: 8px; align-items: center;">
       <input v-model="search" :placeholder="t('admin.marketSearch')" style="max-width: 360px;" @input="page = 1" />

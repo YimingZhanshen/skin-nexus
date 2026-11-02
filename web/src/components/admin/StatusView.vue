@@ -4,6 +4,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
+import { formatWhen } from '../../format.js'
 
 const { t } = useI18n()
 const status = ref(null)
@@ -22,8 +23,7 @@ const show = (v) => (v === undefined || v === null || v === '' ? '—' : String(
 
 function formatTime(v) {
   if (!v || v === 'unknown') return '—'
-  const d = new Date(v)
-  return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleString()
+  return formatWhen(v)
 }
 
 function formatUptime(sec) {
@@ -50,7 +50,7 @@ onMounted(async () => {
 <template>
   <div class="card">
     <h2 style="margin-top: 0;">{{ t('admin.statusTitle') }}</h2>
-    <div class="error" v-if="error">{{ error }}</div>
+    <div class="error" role="alert" v-if="error">{{ error }}</div>
 
     <template v-if="status">
       <section class="status-section">

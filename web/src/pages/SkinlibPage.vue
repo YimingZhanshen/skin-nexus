@@ -150,7 +150,7 @@ onMounted(() => { load() })
 </script>
 
 <template>
-  <nav class="crumb" aria-label="breadcrumb">
+  <nav class="crumb" :aria-label="t('common.breadcrumb')">
     <a href="/">{{ t('nav.home') }}</a><span class="sep" aria-hidden="true">›</span><span aria-current="page">{{ t('nav.skinlib') }}</span>
   </nav>
   <div class="card">
@@ -173,8 +173,8 @@ onMounted(() => { load() })
     </div>
     <PluginSlot slot="skinlib.list.toolbar" />
 
-    <div class="error" v-if="err">{{ err }}</div>
-    <div class="success" v-if="ok">{{ ok }}</div>
+    <div class="error" role="alert" v-if="err">{{ err }}</div>
+    <div class="success" role="status" v-if="ok">{{ ok }}</div>
     <div class="row wear-next" v-if="justLiked">
       <span class="muted">{{ t('skinlib.closetNow', { name: justLiked.name || ('#' + justLiked.tid) }) }}</span>
       <button class="secondary" @click="wearOpen = true">{{ t('wear.button') }}</button>
@@ -202,7 +202,7 @@ onMounted(() => { load() })
         </div>
         <div class="skin-card-body">
           <div class="skin-card-name" :title="it.name">
-            <span v-if="!it.public" class="lock">密</span>
+            <span v-if="!it.public" class="lock" :title="t('skinlib.privateTip')">{{ t('skinlib.privateBadge') }}</span>
             <a :href="'/skinlib/' + it.tid" class="skin-card-link">{{ it.name || `#${it.tid}` }}</a>
           </div>
           <div class="skin-card-meta">
@@ -266,6 +266,10 @@ onMounted(() => { load() })
   transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-mid) var(--ease);
 }
 .skin-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-lift); }
+/* the scoped .like-btn min-height outspecifies the global coarse-pointer rule */
+@media (pointer: coarse) {
+  .like-btn { min-height: 44px; padding-inline: 14px; }
+}
 .skin-card-prev {
   height: 180px; display: flex; align-items: center; justify-content: center;
   background: var(--panel-2);

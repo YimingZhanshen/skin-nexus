@@ -153,7 +153,7 @@ onMounted(async () => {
     <div class="row" style="margin-bottom: 8px;">
       <button class="secondary small" :disabled="loading" @click="load(true)">{{ t('admin.themeRefresh') }}</button>
     </div>
-    <div class="error" v-if="loadError">{{ loadError }}</div>
+    <div class="error" role="alert" v-if="loadError">{{ loadError }}</div>
     <p class="muted" v-if="loading">{{ t('common.loading') }}</p>
     <p class="muted" v-else-if="marketOff">{{ t('admin.themeMarketOff') }}</p>
     <p class="muted" v-else-if="!packages.length">{{ t('admin.themeMarketEmpty') }}</p>
@@ -187,7 +187,7 @@ onMounted(async () => {
         </tbody>
       </table>
     </div>
-    <p class="error" v-if="actionError">{{ actionError }}</p>
+    <p class="error" role="alert" v-if="actionError">{{ actionError }}</p>
     <p class="muted" v-if="!isSuper">{{ t('admin.themeNeedSuper') }}</p>
 
     <h3 class="tm-title">{{ t('admin.themeUploadTitle') }}</h3>
@@ -202,7 +202,7 @@ onMounted(async () => {
         <strong v-if="inspection.theme">{{ label({ 'zh-CN': inspection.theme.name }, inspection.theme.id) }}</strong>
         <span class="muted">{{ inspection.name }}@{{ inspection.version }}</span>
       </div>
-      <p class="error" v-if="inspection.error">{{ inspection.error }}</p>
+      <p class="error" role="alert" v-if="inspection.error">{{ inspection.error }}</p>
       <label class="row tm-risk" v-if="inspection.status === 'unsigned'">
         <input type="checkbox" v-model="riskAck" style="width: auto;" />
         <span>{{ t('admin.themeRiskAck') }}</span>
@@ -211,7 +211,7 @@ onMounted(async () => {
         <button :disabled="uploading || !isSuper || (inspection.status === 'unsigned' && !riskAck) || inspection.status === 'invalid' || inspection.status === 'unknown-key'" @click="commitUpload">{{ t('admin.themeCommit') }}</button>
       </div>
     </div>
-    <p class="success" v-if="uploadNote">{{ uploadNote }}</p>
+    <p class="success" role="status" v-if="uploadNote">{{ uploadNote }}</p>
   </div>
 </template>
 

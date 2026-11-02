@@ -116,8 +116,8 @@ onMounted(load)
 <template>
   <div class="card">
     <h2 style="margin-top: 0;">{{ t('profile.title') }}</h2>
-    <div class="error" v-if="err">{{ err }}</div>
-    <div class="success" v-if="ok">{{ ok }}</div>
+    <div class="error" role="alert" v-if="err">{{ err }}</div>
+    <div class="success" role="status" v-if="ok">{{ ok }}</div>
 
     <!-- avatar -->
     <h3>{{ t('profile.avatarSection') }}</h3>

@@ -94,7 +94,7 @@ onMounted(loadInfo)
         </div>
       </template>
       <div v-else class="error">{{ t('device.noProfiles') }}</div>
-      <div class="error" v-if="error">{{ error }}</div>
+      <div class="error" role="alert" v-if="error">{{ error }}</div>
       <div class="row" style="margin-top: 16px;">
         <button :disabled="loading || !selectedPID" @click="submit('approve')">{{ t('device.approve') }}</button>
         <button class="secondary" :disabled="loading" @click="submit('deny')">{{ t('device.deny') }}</button>
@@ -103,7 +103,7 @@ onMounted(loadInfo)
 
     <!-- error / no info -->
     <div v-else>
-      <div class="error" v-if="error">{{ error }}</div>
+      <div class="error" role="alert" v-if="error">{{ error }}</div>
       <div class="row">
         <input v-model="inputCode" :placeholder="t('device.userCodePlaceholder')" style="max-width: 160px; text-transform: uppercase;"
                @keyup.enter="useCode" />

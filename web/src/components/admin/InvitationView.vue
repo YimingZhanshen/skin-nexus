@@ -58,7 +58,7 @@ onMounted(load)
       <input v-model="invNew.description" :placeholder="t('admin.invitationDescPh')" style="max-width: 320px;" />
       <button @click="invGenerate">{{ t('admin.invitationGenerate') }}</button>
     </div>
-    <div class="error" v-if="invError">{{ invError }}</div>
+    <div class="error" role="alert" v-if="invError">{{ invError }}</div>
     <h3>{{ t('admin.invitationAvailable') }}</h3>
     <div class="table-scroll" v-if="invFree.length">
     <table>

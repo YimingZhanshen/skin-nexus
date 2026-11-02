@@ -7,6 +7,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
+import { formatWhen } from '../../format.js'
 import Pager from '../Pager.vue'
 import EmptyState from '../EmptyState.vue'
 
@@ -139,7 +140,7 @@ function exportDiagnose() {
   const meta = diag.value
     ? `<p>key_fingerprint: ${diag.value.key_fingerprint || '—'} · private_key_version: ${diag.value.private_key_version || '—'} · server_list_version: ${diag.value.server_list_version || '—'}</p>`
     : ''
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${t('admin.diagExportTitle')}</title></head><body><h2>${t('admin.diagExportTitle')}</h2><p>${new Date().toLocaleString()}</p>${meta}<table style="border-collapse:collapse;width:100%;">${rows}</table></body></html>`
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${t('admin.diagExportTitle')}</title></head><body><h2>${t('admin.diagExportTitle')}</h2><p>${formatWhen(new Date())}</p>${meta}<table style="border-collapse:collapse;width:100%;">${rows}</table></body></html>`
   const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
   const a = document.createElement('a')
   a.href = url
@@ -236,15 +237,15 @@ onMounted(async () => {
           {{ t('admin.unionOpDiagnose') }}
         </button>
       </div>
-      <div class="success" v-if="opResult">{{ opResult }}</div>
+      <div class="success" role="status" v-if="opResult">{{ opResult }}</div>
 
       <div class="muted" style="margin-top: 12px; font-size: var(--fs-xs);">
         {{ t('admin.unionTrustNotice') }}
       </div>
-      <div class="error" v-if="error">{{ error }}</div>
+      <div class="error" role="alert" v-if="error">{{ error }}</div>
     </div>
     <div class="card" v-else-if="loadFailed">
-      <div class="error">{{ error }}</div>
+      <div class="error" role="alert">{{ error }}</div>
       <button class="secondary" style="margin-top: 12px;" @click="load">{{ t('common.retry') }}</button>
     </div>
     <div class="card" v-else>

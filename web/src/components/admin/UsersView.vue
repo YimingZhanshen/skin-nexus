@@ -152,7 +152,7 @@ onMounted(load)
       <button class="secondary" @click="search">{{ t('admin.search') }}</button>
       <span class="muted">{{ t('admin.userTotal', { total }) }}</span>
     </div>
-    <div class="error" v-if="error">{{ error }}</div>
+    <div class="error" role="alert" v-if="error">{{ error }}</div>
     <p class="muted" v-if="!users.length && !error" style="margin-top: 12px;">{{ t('admin.usersEmpty') }}</p>
     <div class="table-scroll" v-if="users.length">
     <table class="users-table" style="margin-top: 12px;">

@@ -153,8 +153,8 @@ onMounted(load)
       <button class="secondary" :class="{ active: status === 'all' }" @click="setStatus('all')">{{ t('admin.reportsAll') }}</button>
       <span class="muted">{{ t('admin.reportsTotal', { n: total }) }}</span>
     </div>
-    <div class="error" v-if="error">{{ error }}</div>
-    <div class="success" v-if="ok">{{ ok }}</div>
+    <div class="error" role="alert" v-if="error">{{ error }}</div>
+    <div class="success" role="status" v-if="ok">{{ ok }}</div>
     <p class="muted" v-if="loading">{{ t('common.loading') }}</p>
     <EmptyState v-else-if="!reports.length" :text="t('admin.reportsEmpty')" />
     <div class="table-scroll" v-else>

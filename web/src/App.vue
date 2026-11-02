@@ -473,7 +473,7 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
     <p class="muted">{{ t('common.loading') }}</p>
   </div>
   <div v-else-if="bootErr" class="boot-screen">
-    <p class="error">{{ t('common.dataLoadFailed', { message: bootErr }) }}</p>
+    <p class="error" role="alert">{{ t('common.dataLoadFailed', { message: bootErr }) }}</p>
     <button @click="boot">{{ t('common.retry') }}</button>
   </div>
   <div v-else class="app-shell">
@@ -543,7 +543,7 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
       <div style="margin-top: 8px; text-align: right;" v-if="mailEnabled">
         <a href="/forgot-password" class="muted" @click.prevent="forgotSent = false; view = 'forgot'">{{ t('auth.forgotLink') }}</a>
       </div>
-      <div class="error" v-if="authErr || locked">{{ locked ? waitText() : authErr }}</div>
+      <div class="error" role="alert" v-if="authErr || locked">{{ locked ? waitText() : authErr }}</div>
       <div class="row" style="margin-top: 16px;">
         <button :disabled="authBusy || locked" @click="doLogin">{{ authBusy ? t('common.pleaseWait') : t('common.login') }}</button>
         <button class="secondary" @click="view = 'register'">{{ t('common.register') }}</button>
@@ -567,7 +567,7 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
         <input id="f-invite" v-model="invitationCode" @keyup.enter="doRegister" />
       </template>
       <PluginFields form="auth.register" v-model="pluginFormData" />
-      <div class="error" v-if="authErr">{{ authErr }}</div>
+      <div class="error" role="alert" v-if="authErr">{{ authErr }}</div>
       <div class="row" style="margin-top: 16px;">
         <button :disabled="authBusy" @click="doRegister">{{ authBusy ? t('common.pleaseWait') : t('common.register') }}</button>
         <button class="secondary" @click="view = 'login'">{{ t('auth.toLogin') }}</button>
@@ -589,7 +589,7 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
       <template v-else-if="!forgotSent">
         <label for="f-forgot-email">{{ t('auth.forgotEmail') }}</label>
         <input id="f-forgot-email" v-model="forgotEmail" type="email" autocomplete="email" @keyup.enter="doForgot" />
-        <div class="error" v-if="authErr">{{ authErr }}</div>
+        <div class="error" role="alert" v-if="authErr">{{ authErr }}</div>
         <div class="row" style="margin-top: 16px;">
           <button :disabled="authBusy" @click="doForgot">{{ authBusy ? t('common.pleaseWait') : t('auth.forgotSubmit') }}</button>
           <button class="secondary" @click="view = 'login'">{{ t('auth.toLogin') }}</button>
@@ -617,14 +617,14 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
         <input id="f-reset1" v-model="resetPw1" type="password" autocomplete="new-password" />
         <label for="f-reset2">{{ t('auth.resetConfirm') }}</label>
         <input id="f-reset2" v-model="resetPw2" type="password" autocomplete="new-password" @keyup.enter="doReset" />
-        <div class="error" v-if="authErr">{{ authErr }}</div>
+        <div class="error" role="alert" v-if="authErr">{{ authErr }}</div>
         <div class="row" style="margin-top: 16px;">
           <button :disabled="authBusy" @click="doReset">{{ authBusy ? t('common.pleaseWait') : t('auth.resetSubmit') }}</button>
           <button class="secondary" @click="view = 'login'">{{ t('auth.toLogin') }}</button>
         </div>
       </template>
       <template v-else>
-        <p class="error">{{ t('auth.resetInvalid') }}</p>
+        <p class="error" role="alert">{{ t('auth.resetInvalid') }}</p>
         <div class="row" style="margin-top: 16px;">
           <button v-if="mailEnabled" @click="forgotSent = false; view = 'forgot'">{{ t('auth.forgotSubmit') }}</button>
           <button class="secondary" @click="view = 'login'">{{ t('auth.toLogin') }}</button>
@@ -637,13 +637,13 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
       <h2>{{ t('auth.verifyTitle') }}</h2>
       <p class="muted" v-if="verifyState === 'working'">{{ t('common.loading') }}</p>
       <template v-else-if="verifyState === 'done'">
-        <p class="success">{{ t('auth.verifyDone') }}</p>
+        <p class="success" role="status">{{ t('auth.verifyDone') }}</p>
         <div class="row" style="margin-top: 16px;">
           <button @click="view = user ? 'profile' : 'login'">{{ user ? t('nav.userCenter') : t('common.login') }}</button>
         </div>
       </template>
       <template v-else>
-        <p class="error">{{ t('auth.verifyInvalid') }}</p>
+        <p class="error" role="alert">{{ t('auth.verifyInvalid') }}</p>
         <div class="row" style="margin-top: 16px;">
           <button v-if="user" @click="view = 'profile'">{{ t('auth.verifyBackToProfile') }}</button>
           <button v-else class="secondary" @click="view = 'login'">{{ t('auth.toLogin') }}</button>
@@ -718,7 +718,7 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
     <PluginSlot slot="footer.before" />
     <!-- SkinNexus · Copyright (C) 2026 SkinNexus contributors · AGPL-3.0 -->
     <footer class="site-footer">
-      <nav v-if="siteFooter.links.length" class="site-footer-links" aria-label="footer links">
+      <nav v-if="siteFooter.links.length" class="site-footer-links" :aria-label="t('common.footerLinks')">
         <a v-for="(l, i) in siteFooter.links" :key="i" :href="l.url" target="_blank" rel="noopener noreferrer">{{ l.label }}</a>
       </nav>
       <p v-if="siteFooter.text" class="site-footer-text">{{ siteFooter.text }}</p>

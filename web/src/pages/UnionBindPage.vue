@@ -182,8 +182,8 @@ onMounted(load)
         {{ t('union.intro') }}
         <template v-if="serverVersion">{{ t('union.serverListVersion', { version: serverVersion }) }}</template>
       </p>
-      <div class="error" v-if="error">{{ error }}</div>
-      <div class="success" v-if="success">{{ success }}</div>
+      <div class="error" role="alert" v-if="error">{{ error }}</div>
+      <div class="success" role="status" v-if="success">{{ success }}</div>
 
       <template v-if="players.length">
         <label>{{ t('union.selectProfile') }}</label>

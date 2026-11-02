@@ -7,6 +7,7 @@ import { useI18n } from 'vue-i18n'
 import { oidc } from '../api.js'
 import { guard401 } from '../session.js'
 import { confirmDialog } from '../dialog.js'
+import { formatWhen } from '../format.js'
 import EmptyState from '../components/EmptyState.vue'
 
 const { t } = useI18n()
@@ -47,7 +48,7 @@ async function revokeAll() {
 }
 
 function fmt(tm) {
-  return new Date(tm).toLocaleString()
+  return formatWhen(tm)
 }
 
 onMounted(load)
@@ -59,8 +60,8 @@ onMounted(load)
       <h2>{{ t('apps.title', { count: tokens.length }) }}</h2>
       <button class="secondary" :disabled="loading || !tokens.length" @click="revokeAll">{{ t('apps.revokeAll') }}</button>
     </div>
-    <div class="error" v-if="error">{{ error }}</div>
-    <div class="success" v-if="success">{{ success }}</div>
+    <div class="error" role="alert" v-if="error">{{ error }}</div>
+    <div class="success" role="status" v-if="success">{{ success }}</div>
     <div class="table-scroll" v-if="tokens.length">
     <table>
       <tr><th>{{ t('apps.colApp') }}</th><th>{{ t('apps.colScopes') }}</th><th>{{ t('apps.colProfile') }}</th><th>{{ t('apps.colCreated') }}</th><th>{{ t('apps.colExpires') }}</th><th></th></tr>
