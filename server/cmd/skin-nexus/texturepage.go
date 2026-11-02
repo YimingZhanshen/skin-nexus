@@ -262,8 +262,8 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
       <label>{{t .Lang "edit.detail"}}<textarea id="edit-detail" rows="5" maxlength="4000">{{.DetailRaw}}</textarea></label>
       <p class="report-error" id="edit-error" hidden></p>
       <div class="report-actions">
-        <button type="button" class="alt" id="edit-cancel">{{t .Lang "common.cancel"}}</button>
-        <button type="submit">{{t .Lang "common.save"}}</button>
+        <button type="button" class="alt" id="edit-cancel">{{t .Lang "ui.cancel"}}</button>
+        <button type="submit">{{t .Lang "ui.save"}}</button>
       </div>
     </form>
   </dialog>
@@ -286,7 +286,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
       </label>
       <p class="report-error" id="report-error" hidden></p>
       <div class="report-actions">
-        <button type="button" class="alt" id="report-cancel">{{t .Lang "common.cancel"}}</button>
+        <button type="button" class="alt" id="report-cancel">{{t .Lang "ui.cancel"}}</button>
         <button type="submit" value="submit">{{t .Lang "report.submit"}}</button>
       </div>
     </form>

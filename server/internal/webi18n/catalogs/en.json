@@ -1,6 +1,4 @@
 {
-  "common.cancel": "Cancel",
-  "common.save": "Save",
   "detail.descTitle": "Description",
   "detail.download": "Download the PNG",
   "detail.edit": "Edit details",
@@ -81,6 +79,8 @@
   "seo.modelDefault": " (Steve classic)",
   "seo.modelSlim": " (Alex slim)",
   "seo.titleSuffix": "{name} - a Minecraft {kind}",
+  "ui.cancel": "Cancel",
+  "ui.save": "Save",
   "viewer.likeFailed": "That did not work — please try again.",
   "viewer.network": "Network problem — please try again.",
   "viewer.reportDone": "Report submitted — an administrator will review it.",

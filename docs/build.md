@@ -47,6 +47,10 @@ npm run dev       # 本地开发（Vite 热更新；API 代理按 vite.config.js
 
 前端为纯静态 SPA（Vue 3 + Vite + vue-i18n + skinview3d），构建后由后端在 `/` 挂载。
 
+文案平价由 `scripts/check-locales.mjs`（CI 的 web job）钉住，三处一起查：SPA 词典
+`web/src/locales/`、后端错误码目录（`internal/i18n` + `internal/account` 声明的码）、服务端渲染页的
+`internal/webi18n` 目录。规则是两边键集相等、每个后端码都有中英词条、渲染模板里不留未入表的中文。
+
 ## 四、Docker 构建与镜像
 
 仓库根的 `Dockerfile` 是多阶段构建（每轮 CI 实证）：

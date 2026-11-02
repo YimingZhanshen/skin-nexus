@@ -1,6 +1,4 @@
 {
-  "common.cancel": "取消",
-  "common.save": "保存",
   "detail.descTitle": "材质描述",
   "detail.download": "下载材质 PNG",
   "detail.edit": "编辑资料",
@@ -81,6 +79,8 @@
   "seo.modelDefault": "，Steve 常规模型",
   "seo.modelSlim": "，Alex 瘦臂模型",
   "seo.titleSuffix": "{name} 的 Minecraft {kind}",
+  "ui.cancel": "取消",
+  "ui.save": "保存",
   "viewer.likeFailed": "操作失败，请稍后重试",
   "viewer.network": "网络异常，请稍后重试",
   "viewer.reportDone": "举报已提交，管理员会尽快处理。",
