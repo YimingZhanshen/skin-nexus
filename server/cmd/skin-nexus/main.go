@@ -50,6 +50,7 @@ import (
 	"skin-nexus/server/internal/thememkt"
 	"skin-nexus/server/internal/union"
 	"skin-nexus/server/internal/webapi"
+	"skin-nexus/server/internal/webi18n"
 	"skin-nexus/server/internal/ygg"
 )
 
@@ -1063,7 +1064,7 @@ func spaHandler(dir string, seoEng *seo.Engine, appearEng *appearance.Engine, si
 			// Known shell routes: auth flows, device verification, the public
 			// skinlib list and the /user/* launcher-deep-link family.
 			if inject && !isKnownSPAPath(p, uiPath) {
-				writeTexNotFound(r.Context(), w, siteName, appearEng, "页面不存在。")
+				writeTexNotFound(r.Context(), w, siteName, appearEng, webi18n.ResolveLang(r), "notfound.page")
 				return
 			}
 			if inject {

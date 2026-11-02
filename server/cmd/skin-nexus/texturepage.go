@@ -29,10 +29,22 @@ import (
 	"skin-nexus/server/internal/seo"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/texturemd"
+	"skin-nexus/server/internal/webi18n"
 )
+
+// tmplFuncs resolve catalog copy at render time, so ONE parsed template serves
+// every language. `t` takes (lang, key); `f` also takes positional
+// "name", value pairs for {placeholders}.
+var tmplFuncs = template.FuncMap{
+	"t":      webi18n.T,
+	"f":      webi18n.F,
+	"kind":   kindLabel,
+	"viewer": webi18n.ViewerPayload,
+}
 
 // texDetailData feeds the detail template.
 type texDetailData struct {
+	Lang          string // resolved per request: "zh-CN" | "en"
 	SiteName      string
 	TID           int64
 	Name          string
@@ -66,8 +78,8 @@ type texDetailData struct {
 	PluginSlot  template.HTML
 }
 
-var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE html>
-<html lang="zh-CN">
+var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Parse(`<!DOCTYPE html>
+<html lang="{{.Lang}}">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -187,48 +199,48 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
 <!--skin-custom-head-->
 </head>
 <body>
-  <a class="skip-link" href="#main-content">跳到主内容</a>
+  <a class="skip-link" href="#main-content">{{t .Lang "page.skip"}}</a>
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="/">
         <img src="/favicon.svg" alt="" />
         <span>{{.SiteName}}</span>
       </a>
-      <nav class="topnav" aria-label="site">
-        <a href="/skinlib">皮肤库</a>
-        {{if .LoggedIn}}<a href="/user/dashboard">用户中心{{if .Unread}}<span class="unread-badge">{{.Unread}}</span>{{end}}</a>{{else}}<a href="/login">登录</a><a class="primary" href="/register">注册</a>{{end}}
+      <nav class="topnav" aria-label="{{t .Lang "page.topnav"}}">
+        <a href="/skinlib">{{t .Lang "page.skinlib"}}</a>
+        {{if .LoggedIn}}<a href="/user/dashboard">{{t .Lang "page.userCenter"}}{{if .Unread}}<span class="unread-badge">{{.Unread}}</span>{{end}}</a>{{else}}<a href="/login">{{t .Lang "page.login"}}</a><a class="primary" href="/register">{{t .Lang "page.register"}}</a>{{end}}
       </nav>
     </div>
   </header>
   <div class="wrap" id="main-content" tabindex="-1">
-    <nav class="crumb" aria-label="面包屑导航"><a href="/">首页</a><span class="sep" aria-hidden="true"> › </span><a href="/skinlib">皮肤库</a><span class="sep" aria-hidden="true"> › </span><span aria-current="page">{{.Name}}</span></nav>
+    <nav class="crumb" aria-label="{{t .Lang "page.breadcrumb"}}"><a href="/">{{t .Lang "page.home"}}</a><span class="sep" aria-hidden="true"> › </span><a href="/skinlib">{{t .Lang "page.skinlib"}}</a><span class="sep" aria-hidden="true"> › </span><span aria-current="page">{{.Name}}</span></nav>
     <article class="card" itemscope itemtype="https://schema.org/CreativeWork">
       <h1 itemprop="name">{{.Name}}</h1>
-      <p class="sub">Minecraft {{if eq .Type "cape"}}披风{{else}}皮肤{{end}} · 上传者 <span itemprop="author">{{.Nickname}}</span></p>
+      <p class="sub">Minecraft {{kind .Lang .Type}} · {{t .Lang "detail.uploadedBy"}} <span itemprop="author">{{.Nickname}}</span></p>
       <div class="viewer" id="tex-viewer">
-        <img class="static" src="{{.PreviewURL}}" alt="{{.Name}} 的 Minecraft {{if eq .Type "cape"}}披风{{else}}皮肤{{end}} 预览图" itemprop="image" />
+        <img class="static" src="{{.PreviewURL}}" alt="{{f .Lang "detail.imgAlt" "name" .Name "kind" (kind .Lang .Type)}}" itemprop="image" />
         {{if eq .Type "skin"}}<canvas data-skinview3d data-texture="{{.ViewerURL}}" data-model="{{.Model}}" width="320" height="420"></canvas>{{end}}
       </div>
       <dl class="meta">
-        <div><dt>类型</dt><dd>{{if eq .Type "cape"}}披风{{else if eq .Model "slim"}}皮肤（Alex 瘦臂）{{else}}皮肤（Steve 常规）{{end}}</dd></div>
-        <div><dt>材质 ID</dt><dd>#{{.TID}}</dd></div>
-        <div><dt>收藏</dt><dd><span id="like-count">{{.Likes}}</span> 人</dd></div>
-        {{if .UploadAt}}<div><dt>上传时间</dt><dd>{{.UploadAt}}</dd></div>{{end}}
-        <div><dt>可见性</dt><dd>{{if .Public}}公开{{else}}私密{{end}}</dd></div>
+        <div><dt>{{t .Lang "detail.metaType"}}</dt><dd>{{if eq .Type "cape"}}{{t .Lang "detail.kindCape"}}{{else if eq .Model "slim"}}{{t .Lang "detail.typeSkinSlim"}}{{else}}{{t .Lang "detail.typeSkinDefault"}}{{end}}</dd></div>
+        <div><dt>{{t .Lang "detail.metaId"}}</dt><dd>#{{.TID}}</dd></div>
+        <div><dt>{{t .Lang "detail.metaLikes"}}</dt><dd><span id="like-count">{{.Likes}}</span> {{t .Lang "detail.likesUnit"}}</dd></div>
+        {{if .UploadAt}}<div><dt>{{t .Lang "detail.metaUploadAt"}}</dt><dd>{{.UploadAt}}</dd></div>{{end}}
+        <div><dt>{{t .Lang "detail.metaVisibility"}}</dt><dd>{{if .Public}}{{t .Lang "detail.visibilityPublic"}}{{else}}{{t .Lang "detail.visibilityPrivate"}}{{end}}</dd></div>
       </dl>
       {{if or .DetailHTML .SourceLabel}}
       <section class="detail-block">
-        <h2>材质描述</h2>
-        {{if .SourceLabel}}<p class="source-line">来源：{{if .SourceURL}}<a href="{{.SourceURL}}" target="_blank" rel="nofollow noopener">{{.SourceLabel}}</a>{{else}}{{.SourceLabel}}{{end}}</p>{{end}}
+        <h2>{{t .Lang "detail.descTitle"}}</h2>
+        {{if .SourceLabel}}<p class="source-line">{{t .Lang "detail.sourceLine"}}{{if .SourceURL}}<a href="{{.SourceURL}}" target="_blank" rel="nofollow noopener">{{.SourceLabel}}</a>{{else}}{{.SourceLabel}}{{end}}</p>{{end}}
         {{if .DetailHTML}}<div class="md md-wide">{{.DetailHTML}}</div>{{end}}
       </section>
       {{end}}
       <div class="actions">
-        <button class="alt like-btn{{if .Liked}} liked{{end}}" data-like="{{.TID}}" data-liked="{{if .Liked}}1{{else}}0{{end}}">♥ <span>收藏 / 加入衣柜</span></button>
-        <a class="primary" href="{{.TextureURL}}" download>下载材质 PNG</a>
-        <a class="alt" href="/register">注册使用同款</a>
-        {{if .CanEdit}}<button class="alt" id="edit-btn">编辑资料</button>{{end}}
-        {{if .Public}}<button class="alt report-btn" id="report-btn" data-tid="{{.TID}}">举报</button>{{end}}
+        <button class="alt like-btn{{if .Liked}} liked{{end}}" data-like="{{.TID}}" data-liked="{{if .Liked}}1{{else}}0{{end}}">♥ <span>{{t .Lang "detail.likeLabel"}}</span></button>
+        <a class="primary" href="{{.TextureURL}}" download>{{t .Lang "detail.download"}}</a>
+        <a class="alt" href="/register">{{t .Lang "detail.registerToUse"}}</a>
+        {{if .CanEdit}}<button class="alt" id="edit-btn">{{t .Lang "detail.edit"}}</button>{{end}}
+        {{if .Public}}<button class="alt report-btn" id="report-btn" data-tid="{{.TID}}">{{t .Lang "detail.report"}}</button>{{end}}
       </div>
     </article>
     {{.PluginSlot}}
@@ -237,48 +249,49 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
   {{if .CanEdit}}
   <dialog id="edit-dialog" class="report-dialog">
     <form id="edit-form" method="dialog">
-      <h2>编辑材质资料</h2>
-      <label>名称<input id="edit-name" maxlength="50" value="{{.Name}}" /></label>
-      <label>来源
+      <h2>{{t .Lang "edit.title"}}</h2>
+      <label>{{t .Lang "edit.name"}}<input id="edit-name" maxlength="50" value="{{.Name}}" /></label>
+      <label>{{t .Lang "edit.source"}}
         <select id="edit-source">
-          <option value="original"{{if eq .Source "original"}} selected{{end}}>原创</option>
-          <option value="derivative"{{if eq .Source "derivative"}} selected{{end}}>二创</option>
-          <option value="repost"{{if eq .Source "repost"}} selected{{end}}>转载</option>
+          <option value="original"{{if eq .Source "original"}} selected{{end}}>{{t .Lang "edit.sourceOriginal"}}</option>
+          <option value="derivative"{{if eq .Source "derivative"}} selected{{end}}>{{t .Lang "edit.sourceDerivative"}}</option>
+          <option value="repost"{{if eq .Source "repost"}} selected{{end}}>{{t .Lang "edit.sourceRepost"}}</option>
         </select>
       </label>
-      <label>原始发布地址<input id="edit-source-url" type="url" value="{{.SourceURL}}" placeholder="https://" /></label>
-      <label>描述（Markdown）<textarea id="edit-detail" rows="5" maxlength="4000">{{.DetailRaw}}</textarea></label>
+      <label>{{t .Lang "edit.sourceUrl"}}<input id="edit-source-url" type="url" value="{{.SourceURL}}" placeholder="https://" /></label>
+      <label>{{t .Lang "edit.detail"}}<textarea id="edit-detail" rows="5" maxlength="4000">{{.DetailRaw}}</textarea></label>
       <p class="report-error" id="edit-error" hidden></p>
       <div class="report-actions">
-        <button type="button" class="alt" id="edit-cancel">取消</button>
-        <button type="submit">保存</button>
+        <button type="button" class="alt" id="edit-cancel">{{t .Lang "common.cancel"}}</button>
+        <button type="submit">{{t .Lang "common.save"}}</button>
       </div>
     </form>
   </dialog>
   {{end}}
   <dialog id="report-dialog" class="report-dialog">
     <form id="report-form" method="dialog">
-      <h2>举报材质</h2>
-      <label>原因
+      <h2>{{t .Lang "report.title"}}</h2>
+      <label>{{t .Lang "report.reason"}}
         <select id="report-reason">
-          <option value="copyright">侵权 / 无授权转载</option>
-          <option value="sexual">色情或擦边内容</option>
-          <option value="violence">暴力或血腥</option>
-          <option value="hate">仇恨或歧视</option>
-          <option value="spam">垃圾或误导信息</option>
-          <option value="other">其他</option>
+          <option value="copyright">{{t .Lang "report.reasonCopyright"}}</option>
+          <option value="sexual">{{t .Lang "report.reasonSexual"}}</option>
+          <option value="violence">{{t .Lang "report.reasonViolence"}}</option>
+          <option value="hate">{{t .Lang "report.reasonHate"}}</option>
+          <option value="spam">{{t .Lang "report.reasonSpam"}}</option>
+          <option value="other">{{t .Lang "report.reasonOther"}}</option>
         </select>
       </label>
-      <label>补充说明（选填）
+      <label>{{t .Lang "report.detail"}}
         <textarea id="report-detail" rows="3" maxlength="500"></textarea>
       </label>
       <p class="report-error" id="report-error" hidden></p>
       <div class="report-actions">
-        <button type="button" class="alt" id="report-cancel">取消</button>
-        <button type="submit" value="submit">提交举报</button>
+        <button type="button" class="alt" id="report-cancel">{{t .Lang "common.cancel"}}</button>
+        <button type="submit" value="submit">{{t .Lang "report.submit"}}</button>
       </div>
     </form>
   </dialog>
+  <script>window.__SKIN_I18N__={{viewer .Lang}};</script>
   <script type="module" src="/assets/viewer.js?v=1"></script>
   {{.BodyAnchor}}
 </body>
@@ -287,12 +300,12 @@ var texDetailTmpl = template.Must(template.New("texdetail").Parse(`<!DOCTYPE htm
 
 // texNotFoundTmpl is the minimal branded 404 for missing/private textures —
 // a plain http.NotFound would drop the theme and look like a server fault.
-var texNotFoundTmpl = template.Must(template.New("tex404").Parse(`<!DOCTYPE html>
-<html lang="zh-CN">
+var texNotFoundTmpl = template.Must(template.New("tex404").Funcs(tmplFuncs).Parse(`<!DOCTYPE html>
+<html lang="{{.Lang}}">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>材质不存在 - {{.SiteName}}</title>
+<title>{{f .Lang "notfound.title" "site" .SiteName}}</title>
 <meta name="robots" content="noindex, nofollow" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <style>
@@ -307,7 +320,7 @@ var texNotFoundTmpl = template.Must(template.New("tex404").Parse(`<!DOCTYPE html
 <!--skin-theme-->
 <!--skin-custom-head-->
 </head>
-<body><div class="box"><h1>404</h1><p>{{.Msg}}</p><p><a href="/">返回首页</a></p></div></body>
+<body><div class="box"><h1>404</h1><p>{{.Msg}}</p><p><a href="/">{{t .Lang "notfound.back"}}</a></p></div></body>
 </html>
 `))
 
@@ -345,9 +358,10 @@ func texJSONLD(d texDetailData, canonical string) string {
 func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearance.Engine, siteName, baseURL string, texURL func(ctx context.Context, hash, url, typ string) string, slotHTML func(string, map[string]string) string) http.HandlerFunc {
 	base := strings.TrimRight(baseURL, "/")
 	return func(w http.ResponseWriter, r *http.Request) {
+		lang := webi18n.ResolveLang(r)
 		tid, err := strconv.ParseInt(r.PathValue("tid"), 10, 64)
 		if err != nil || tid <= 0 {
-			writeTexNotFound(r.Context(), w, siteName, appearEng, "材质不存在，或已被设为私密。")
+			writeTexNotFound(r.Context(), w, siteName, appearEng, lang, "notfound.texture")
 			return
 		}
 		// viewer identity: session cookie → owner/admin visibility
@@ -363,7 +377,7 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 		}
 		row, err := st.SkinlibOne(r.Context(), tid, uid, admin)
 		if err == store.ErrNotFound {
-			writeTexNotFound(r.Context(), w, siteName, appearEng, "材质不存在，或已被设为私密。")
+			writeTexNotFound(r.Context(), w, siteName, appearEng, lang, "notfound.texture")
 			return
 		}
 		if err != nil {
@@ -372,6 +386,7 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 		}
 
 		d := texDetailData{
+			Lang:        lang,
 			SiteName:    siteName,
 			TID:         row.TID,
 			Name:        row.Name,
@@ -385,7 +400,7 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 			SourceURL:   row.SourceURL,
 			DetailHTML:  template.HTML(texturemd.Render(row.DetailMD)),
 			Summary:     texturemd.Excerpt(row.DetailMD, 160),
-			SourceLabel: sourceLabel(row.Source),
+			SourceLabel: sourceLabel(lang, row.Source),
 			DetailRaw:   row.DetailMD,
 			CanEdit:     uid != 0 && (uid == row.UID || admin),
 			LoggedIn:    uid != 0,
@@ -397,7 +412,7 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 			}
 		}
 		if d.Name == "" {
-			d.Name = "材质 #" + strconv.FormatInt(row.TID, 10)
+			d.Name = webi18n.F(lang, "detail.untitled", "tid", strconv.FormatInt(row.TID, 10))
 		}
 		if row.UploadAt.Valid {
 			d.UploadAt = row.UploadAt.Time.UTC().Format("2006-01-02")
@@ -425,7 +440,7 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 
 		canonical := base + "/skinlib/" + strconv.FormatInt(row.TID, 10)
 		pm := seo.PageMeta{
-			TitleSuffix: d.Name + " 的 Minecraft " + texKindLabel(row.Type),
+			TitleSuffix: webi18n.F(d.Lang, "seo.titleSuffix", "name", d.Name, "kind", kindLabel(d.Lang, d.Type)),
 			Description: texDescription(d),
 			Path:        "/skinlib/" + strconv.FormatInt(row.TID, 10),
 			OGImage:     d.PreviewAbsURL,
@@ -461,38 +476,44 @@ func absURL(base, rel string) string {
 	return strings.TrimRight(base, "/") + rel
 }
 
-func texKindLabel(t string) string {
-	if t == "cape" {
-		return "披风"
+// kindLabel names the texture type in the reader's language. The catalog holds
+// it because the same word shows up in the title, the subtitle, the alt text
+// and the meta description — four places that must not disagree.
+func kindLabel(lang, typ string) string {
+	if typ == "cape" {
+		return webi18n.T(lang, "detail.kindCape")
 	}
-	return "皮肤"
+	return webi18n.T(lang, "detail.kindSkin")
 }
 
 func texDescription(d texDetailData) string {
-	kind := texKindLabel(d.Type)
+	kind := kindLabel(d.Lang, d.Type)
 	model := ""
 	if d.Type == "skin" {
 		if d.Model == "slim" {
-			model = "，Alex 瘦臂模型"
+			model = webi18n.T(d.Lang, "seo.modelSlim")
 		} else {
-			model = "，Steve 常规模型"
+			model = webi18n.T(d.Lang, "seo.modelDefault")
 		}
 	}
 	intro := d.Name
 	if d.Summary != "" {
-		intro += "：" + d.Summary
+		intro = webi18n.F(d.Lang, "seo.introWithSummary", "name", d.Name, "summary", d.Summary)
 	}
-	return intro + " — " + d.SiteName + "皮肤库中的 Minecraft " + kind + model +
-		"，由 " + d.Nickname + " 上传，" + strconv.FormatInt(d.Likes, 10) +
-		" 人收藏。注册账号即可一键使用。"
+	return webi18n.F(d.Lang, "seo.description",
+		"intro", intro, "site", d.SiteName, "kind", kind, "model", model,
+		"who", d.Nickname, "likes", strconv.FormatInt(d.Likes, 10))
 }
 
 // writeTexNotFound renders the branded 404 with theme/custom-css injection
-// (the anchors above feed appearEng.Render) and a true 404 status. msg is the
-// situation line (texture vs generic page wording).
-func writeTexNotFound(ctx context.Context, w http.ResponseWriter, siteName string, appearEng *appearance.Engine, msg string) {
+// (the anchors above feed appearEng.Render) and a true 404 status. key is the
+// catalog message (a missing texture and a missing page read differently), and
+// the wording follows the resolved language like the rest of the page.
+func writeTexNotFound(ctx context.Context, w http.ResponseWriter, siteName string, appearEng *appearance.Engine, lang, key string) {
 	var sb strings.Builder
-	_ = texNotFoundTmpl.Execute(&sb, map[string]string{"SiteName": siteName, "Msg": msg})
+	_ = texNotFoundTmpl.Execute(&sb, map[string]string{
+		"SiteName": siteName, "Lang": lang, "Msg": webi18n.T(lang, key),
+	})
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)
 	html := sb.String()
@@ -502,14 +523,17 @@ func writeTexNotFound(ctx context.Context, w http.ResponseWriter, siteName strin
 	_, _ = w.Write([]byte(html))
 }
 
-func sourceLabel(source string) string {
+// sourceLabel renders the uploader's declared origin in the reader's language,
+// or the empty string when the row carries no source at all (older rows and
+// imported ones — the section then stays hidden entirely).
+func sourceLabel(lang, source string) string {
 	switch source {
 	case "original":
-		return "原创"
+		return webi18n.T(lang, "edit.sourceOriginal")
 	case "derivative":
-		return "二创"
+		return webi18n.T(lang, "edit.sourceDerivative")
 	case "repost":
-		return "转载"
+		return webi18n.T(lang, "edit.sourceRepost")
 	default:
 		return ""
 	}

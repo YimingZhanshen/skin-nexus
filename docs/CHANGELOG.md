@@ -4,6 +4,28 @@
 
 ## 2026-11-02
 
+- **服务端渲染的页面有了第二种语言**：新建 `internal/webi18n`（两份目录 JSON + `T/F` + `ResolveLang`），
+  皮肤详情页 `/skinlib/{tid}` 与它的 404 页整体入表——模板 40 余条中文、Go 里的类型词/来源词/
+  兜底名称/SEO 标题与摘要全部走查表，`<html lang>` 随语言变。没有放进 `internal/i18n`：那个包自陈是
+  leaf（只有码、无查表、还有 go/ast 读它自己的测试），加数据表会破坏它声明的性质。
+  语言判定顺序 = `skin_lang` cookie → `Accept-Language`（按 q 值排序、前缀匹配 `en*`/`zh*`）→ `zh-CN`；
+  cookie 里出现我们不发的值当没写过，继续读 header，免得一个手改的值把语言钉死。
+  SPA 侧 `setLocale` 与启动时把当前语言镜像进 cookie（显示偏好，非机密：不 HttpOnly、`SameSite=Lax`
+  好让启动器顶层跳 `/device.html` 也带着、https 下才 Secure、一年有效对齐 localStorage），
+  否则「在应用里切了英文、每个可被抓取的页面还是中文」。
+  `viewer-src.js` 的 7 条运行时文案不再硬写中文，改读 SSR 注入的 `window.__SKIN_I18N__`——
+  注入值类型是 `template.JS`：在 `<script>` 里 html/template 会把别的类型当字符串值加引号转义，
+  页面拿到的就是一个字符串而不是对象。目录 key 一律不带 `errors.` 前缀（那是错误码的命名空间，
+  `check-locales` 的反向孤儿闸会把没有对应码的 `errors.*` 判 fail）。
+  实测：`Accept-Language: en` → `<html lang="en">` + "Download the PNG"/"Texture ID"/"uploaded by"，
+  注入 `__SKIN_I18N__={"lang":"en"…}`；无 hint → 中文照旧；`Cookie: skin_lang=zh-CN` 压过 `en` header；
+  英文 404 页给 "Texture not found - Rig U1 / This texture does not exist…"；
+  剥掉 `<style>` 与注释后英文页面零残留中文。浏览器里 SPA 切英文 → cookie 由 `zh-CN` 变 `en` →
+  重新加载详情页整页英文，♥ 取消收藏再收藏都正常（计数 1↔0，无错误提示），canvas 照常升级。
+  回归证据：详情页原有测试钉的是中文原文（`下载材质 PNG`/`材质 ID`/`7 人收藏`/`Alex 瘦臂`），
+  入表后不改断言仍然通过，说明中文渲染逐字未变。新增测试：`webi18n`（查表兜底、占位符、
+  九种语言判定组合、目录平价、注入载荷形状与 `</script>` 逃逸）+ 英文渲染与 CJK 残留闸。
+
 - **管理端「角色管理」四条路由从来没通过（真 bug）**：路由绑的是 `{pid}`，handler 用的是读 `"id"` 的
   `idParam`——Go 的 ServeMux 不会发现这种错配，`PathValue` 一律答空串，于是改名、换主、换肤、删除
   对任何调用方都返回 `400 common.bad_id`。本轮改换肤链路时用 curl 打管理端才撞见：修复前四条全 `400 bad_id`，

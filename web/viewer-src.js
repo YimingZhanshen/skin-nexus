@@ -10,6 +10,13 @@
 // skinview3d is dynamically imported only when a canvas is actually present
 // (i.e. a skin, not a cape) and WebGL is available, so the ~500 KB chunk
 // never loads on cape pages or legacy browsers.
+//
+// Wording comes from the page, not from this file: texturepage.go injects
+// `window.__SKIN_I18N__ = {lang, strings}` from the same catalog that rendered
+// the surrounding HTML, so a message cannot come out in the wrong language and
+// this module carries no translation table of its own.
+const STR = (window.__SKIN_I18N__ && window.__SKIN_I18N__.strings) || {}
+const msg = (key) => STR[key] || ''
 
 async function upgradeViewer() {
   const wrap = document.getElementById('tex-viewer')
@@ -70,14 +77,14 @@ function wireLikeButton() {
         location.href = '/login?next=' + encodeURIComponent(location.pathname)
         return
       }
-      if (!res.ok) { tip('操作失败，请稍后重试'); return }
+      if (!res.ok) { tip(msg('likeFailed')); return }
       const data = await res.json().catch(() => null)
       btn.setAttribute('data-liked', liked ? '0' : '1')
       btn.classList.toggle('liked', !liked)
       if (data && typeof data.likes === 'number' && countEl) {
         countEl.textContent = String(data.likes)
       }
-    } catch { tip('网络异常，请稍后重试') }
+    } catch { tip(msg('network')) }
     finally { btn.disabled = false }
   })
 }
@@ -114,13 +121,15 @@ function wireReportButton() {
       if (res.ok) {
         form.replaceChildren(Object.assign(document.createElement('p'), {
           className: 'muted',
-          textContent: '举报已提交，管理员会尽快处理。',
+          textContent: msg('reportDone'),
         }))
         return
       }
-      show(data.message || (res.status === 409 ? '你已经举报过该材质。' : '提交失败，请稍后重试。'))
+      // data.message stays first: the API answers with its own prose for codes
+      // this page does not carry a table entry for.
+      show(data.message || (res.status === 409 ? msg('reportDuplicate') : msg('reportFailed')))
     } catch {
-      show('网络异常，请稍后重试。')
+      show(msg('network'))
     } finally {
       submit.disabled = false
     }
@@ -149,7 +158,7 @@ function wireEditButton() {
       sourceUrl,
     }
     if ((src === 'derivative' || src === 'repost') && !/^https?:\/\//i.test(sourceUrl)) {
-      show('二创/转载必须填写 http(s) 原始发布地址')
+      show(msg('sourceUrlRequired'))
       return
     }
     const submit = form.querySelector('button[type="submit"]')
@@ -160,9 +169,9 @@ function wireEditButton() {
       })
       if (res.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.pathname); return }
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) { show(data.message || '保存失败，请稍后重试'); return }
+      if (!res.ok) { show(data.message || msg('saveFailed')); return }
       location.reload()
-    } catch { show('网络异常，请稍后重试') }
+    } catch { show(msg('network')) }
     finally { submit.disabled = false }
   })
 }

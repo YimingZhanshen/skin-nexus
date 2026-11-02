@@ -7,8 +7,12 @@ package main
 
 import (
 	"html/template"
+	"regexp"
 	"strings"
 	"testing"
+	"unicode/utf8"
+
+	"skin-nexus/server/internal/webi18n"
 )
 
 func detailFixture() texDetailData {
@@ -64,6 +68,92 @@ func TestTexDetailTemplateRenders(t *testing.T) {
 	// anchors must NOT be stripped by html/template (2026-10-25 regression
 	// class: comments in template source get eaten — anchors are injected
 	// as template.HTML trusted values, assert that stays true here)
+}
+
+// The same page, in English: every label the catalog carries must come from the
+// catalog, and no Chinese copy may survive in the rendered output. Data (site
+// name, texture name) stays whatever the uploader typed, so the fixture uses
+// latin data and the CJK scan only has to strip style blocks and comments —
+// the same rule scripts/check-locales.mjs applies to the templates.
+func TestTexDetailTemplateRendersEnglish(t *testing.T) {
+	d := detailFixture()
+	d.Lang = "en"
+	d.SiteName = "Rig Station"
+	d.Name = "Big HD skin"
+	d.Nickname = "Alice"
+	d.PluginSlot = template.HTML("<!--PLUGIN-SLOT-MARKER-->")
+	var sb strings.Builder
+	if err := texDetailTmpl.Execute(&sb, d); err != nil {
+		t.Fatal(err)
+	}
+	body := sb.String()
+	for _, want := range []string{
+		`<html lang="en">`,
+		"Download the PNG",
+		"Texture ID",
+		"Skin (Alex slim)",
+		"uploaded by",
+		"Skip to main content",
+		"Collect into your closet",
+		`<span id="like-count">7</span> `, // the English unit is empty by design
+		`window.__SKIN_I18N__={"lang":"en"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("english detail page missing %q", want)
+		}
+	}
+	// The plugin slot anchor and the injection anchors still survive — the
+	// signed skin-importer consumes the first, themes the others.
+	for _, keep := range []string{"<!--PLUGIN-SLOT-MARKER-->", landingHeadAnchors, landingBodyAnchor} {
+		if !strings.Contains(body, keep) {
+			t.Fatalf("render dropped %q", keep)
+		}
+	}
+	if left := visibleCJK(body); left != "" {
+		t.Errorf("english page still renders Chinese copy: %q", left)
+	}
+
+	// The 404 page follows the same language.
+	var nf strings.Builder
+	if err := texNotFoundTmpl.Execute(&nf, map[string]string{
+		"SiteName": "Rig Station", "Lang": "en", "Msg": webi18n.T("en", "notfound.texture"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := nf.String(); !strings.Contains(got, "Texture not found - Rig Station") ||
+		!strings.Contains(got, "This texture does not exist") || visibleCJK(got) != "" {
+		t.Errorf("english 404 = %s", got)
+	}
+}
+
+// visibleCJK returns the first run of CJK runes outside <style>, CSS comments
+// and HTML comments — the leftovers that mean copy was not catalogued.
+var (
+	styleRE       = regexp.MustCompile(`(?s)<style.*?</style>`)
+	cssCommentRE  = regexp.MustCompile(`(?s)/\*.*?\*/`)
+	htmlCommentRE = regexp.MustCompile(`(?s)<!--.*?-->`)
+)
+
+func visibleCJK(html string) string {
+	s := styleRE.ReplaceAllString(html, "")
+	s = cssCommentRE.ReplaceAllString(s, "")
+	s = htmlCommentRE.ReplaceAllString(s, "")
+	isCJK := func(r rune) bool { return r >= 0x4E00 && r <= 0x9FFF }
+	for i, r := range s {
+		if !isCJK(r) {
+			continue
+		}
+		end := i
+		for end < len(s) {
+			rn, size := utf8.DecodeRuneInString(s[end:])
+			if size <= 1 || !isCJK(rn) {
+				break
+			}
+			end += size
+		}
+		return s[i:end]
+	}
+	return ""
 }
 
 func TestTexDetailConfiguredFooter(t *testing.T) {
