@@ -274,6 +274,9 @@ v2 的 UI 采用**固定插槽 + iframe/schema 页面**，不允许第三方直�
     `theme` 提供 `{bg,panel,border,text,muted,accent,link,danger,ok,dark}`，插件页面应把它写入自己的 CSS 变量，
     不要硬编码浅色文字/透明背景（iframe 不继承宿主样式）；页面型 iframe 的背景应与宿主卡片一致（`panel`），
     输入框可用 `bg` 形成层次；
+    `init` 的投递时机是「frame 文档启动」（子页重新 `ready` 一次即再投一次，插件自己 reload 亦然），
+    **处理 `init` 的代码必须可重入**：列表与下拉要先清后建，别用 `appendChild` 追加——
+    追加写法在宿主重投握手时会把每一项渲染两遍（官方 skin-importer 1.1.0 就中过一次）；
   - frame→宿主：`ready`、`resize`、`toast`、`navigate`、`confirm`、`request`。
   - `resize` 的 `height` 必须是**内容高度**（不是 iframe 视口高度），并建议在 `ResizeObserver`/提交状态变化时上报；
     宿主 clamp 80–2000，页面型 iframe 不再依赖固定 420/520 高度。
