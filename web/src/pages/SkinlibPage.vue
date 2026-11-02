@@ -139,7 +139,11 @@ async function renameItem(it) {
 // year-long immutable cache re-fetches after a rasterizer fix.
 // Capes have no body render; serve the flat texture instead.
 function previewURL(it) {
-  return it.type === 'skin' ? (it.previewURL || `/preview/${it.tid}`) : it.textureURL
+  // The versioned preview URL comes from the server; a hand-written
+  // `/preview/{tid}` here would ignore the renderer version and serve a
+  // year-cached stale image after a rasterizer bump. The content-addressed
+  // original is the honest fallback (its URL already is its bytes).
+  return it.type === 'skin' ? (it.previewURL || it.textureURL) : it.textureURL
 }
 
 onMounted(() => { load() })

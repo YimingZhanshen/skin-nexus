@@ -7,25 +7,37 @@ import (
 	"strings"
 
 	"skin-nexus/server/internal/account"
+	"skin-nexus/server/internal/avatargen"
 	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/ygg"
 )
+
+// previewThumb is the server-rendered body view with the renderer's version
+// stamp, matching the player-facing lists (webapi's previewThumbURL) so both
+// surfaces invalidate together after a rasterizer change.
+func previewThumb(tid int64) string {
+	return "/preview/" + strconv.FormatInt(tid, 10) + "?v=" + avatargen.RenderVersion + "&small=1"
+}
 
 type reportView struct {
 	ID          int64  `json:"id"`
 	TextureID   int64  `json:"textureId"`
 	TextureName string `json:"textureName"`
 	TextureType string `json:"textureType"`
-	Uploader    string `json:"uploader"`
-	Reporter    string `json:"reporter"`
-	Reason      string `json:"reason"`
-	Detail      string `json:"detail,omitempty"`
-	Status      string `json:"status"`
-	Public      bool   `json:"public"`
-	Moderation  string `json:"moderation,omitempty"`
-	CreatedAt   string `json:"createdAt"`
-	HandledAt   string `json:"handledAt,omitempty"`
+	// PreviewURL is built here rather than in the page: the version stamp is the
+	// renderer's, and a literal in the SPA would keep pointing at a stale cached
+	// image after every rasterizer bump.
+	PreviewURL string `json:"previewURL,omitempty"`
+	Uploader   string `json:"uploader"`
+	Reporter   string `json:"reporter"`
+	Reason     string `json:"reason"`
+	Detail     string `json:"detail,omitempty"`
+	Status     string `json:"status"`
+	Public     bool   `json:"public"`
+	Moderation string `json:"moderation,omitempty"`
+	CreatedAt  string `json:"createdAt"`
+	HandledAt  string `json:"handledAt,omitempty"`
 }
 
 func reportToView(r store.ReportRow) reportView {
@@ -35,6 +47,9 @@ func reportToView(r store.ReportRow) reportView {
 		Reason: r.Reason, Detail: r.Detail, Status: r.Status, Public: r.Public,
 		Moderation: r.Moderation,
 		CreatedAt:  r.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+	}
+	if r.TextureType == "skin" {
+		v.PreviewURL = previewThumb(r.TextureID)
 	}
 	if r.HandledAt.Valid {
 		v.HandledAt = r.HandledAt.Time.UTC().Format("2006-01-02T15:04:05Z")

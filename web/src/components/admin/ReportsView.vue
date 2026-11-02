@@ -172,7 +172,7 @@ onMounted(load)
           <td>
             <div class="report-tex">
               <a :href="'/skinlib/' + r.textureId" target="_blank" rel="noopener">
-                <img v-if="r.textureType === 'skin'" :src="`/preview/${r.textureId}?v=5&small=1`" alt="" loading="lazy" decoding="async" />
+                <img v-if="r.textureType === 'skin'" :src="r.previewURL" alt="" loading="lazy" decoding="async" />
                 <span v-else class="muted">#{{ r.textureId }}</span>
               </a>
               <div>
