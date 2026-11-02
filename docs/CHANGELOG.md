@@ -4,6 +4,14 @@
 
 ## 2026-11-02
 
+- **插件 iframe 的 `init` 只发一次**：宿主在收到子页 `ready` 与 iframe `load` 时各发一条握手，
+  同一个 frame 文档因此被 init 两遍；靠 `appendChild` 建列表的插件 UI 于是把每一项渲染两次
+  （皮肤导入页「应用到角色」下拉里 1 个角色显示成 2 行）。现在 `ready` 是权威握手、`load`
+  只在从未收到 `ready` 时兜底，`retry()` 换 frame 时重置。本地实例 + 真浏览器实测：修复前
+  `/api/plugins/skin-importer/_csrf` 与 `/players` 在资源计时里各出现 2 次、下拉出现 3 项
+  （占位 + 同一角色两遍），修复后各 1 次。插件侧同步把角色下拉改成先清后建（skin-importer 1.1.1），
+  停在旧宿主上的安装也不会再重复。
+
 - **数据库引擎扩到三种（MySQL/MariaDB、SQLite、PostgreSQL）**：连接层与方言层各就一位
   （`internal/dbx` 统一占位符改写、时间参数归一与连接池设置，`internal/dialect` 收全部引擎差异），
   建表 DDL 拆成 `migrations/mysql|sqlite|postgres/` 三套等形树（30 张表、列与索引逐棵比对由测试把关），

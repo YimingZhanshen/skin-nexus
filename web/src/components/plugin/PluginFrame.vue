@@ -27,6 +27,9 @@ let csrf = ''
 let user = null
 let ready = false
 let readyTimer = null
+// One `init` per frame document: a second init made append-style plugin UIs
+// (e.g. a player <select>) render every entry twice.
+let inited = false
 
 function cssVar(name, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
@@ -79,13 +82,20 @@ function send(type, payload, id) {
 }
 
 async function init() {
-  if (!frame.value) return
+  if (!frame.value || inited) return
+  inited = true
   await loadContext()
   send('init', {
     plugin: props.plugin, src: props.src, origin: location.origin,
     path: location.pathname + location.search,
     locale: document.documentElement.lang || 'zh-CN', user: plain(user), csrf, theme: themePayload(),
   })
+}
+
+// Fallback only: a child that announces itself owns the handshake.
+function onLoad() {
+  if (ready) return
+  init()
 }
 
 async function loadContext() {
@@ -142,6 +152,7 @@ function onMessage(ev) {
     ready = true
     state.value = 'ready'
     if (readyTimer) { clearTimeout(readyTimer); readyTimer = null }
+    inited = false // a fresh `ready` means a fresh (or reloaded) document
     init()
     return
   }
@@ -175,6 +186,7 @@ function armReadyTimeout() {
 
 function retry() {
   ready = false
+  inited = false
   state.value = 'loading'
   frameKey.value++
   armReadyTimeout()
@@ -203,7 +215,7 @@ onBeforeUnmount(() => {
     <iframe :key="frameKey" ref="frame" :src="assetURL(plugin, src)" :title="title || plugin"
             sandbox="allow-scripts allow-forms"
             :style="{ width: '100%', height: height + 'px', border: 0 }"
-            @load="init" />
+            @load="onLoad" />
   </div>
 </template>
 
