@@ -2,9 +2,10 @@
 --   * the raw token NEVER touches disk — only its SHA-256 hex digest (a DB
 --     leak must not yield usable reset links);
 --   * single-use is enforced by the atomic consume UPDATE (used_at IS NULL);
---   * the TTL deadline is written and compared with the SAME DB clock
---     (DATE_ADD(NOW(3) …) on write, NOW(3) on validate) so Go/MySQL timezone
---     drift can never extend or shorten a link's life;
+--   * the TTL deadline is written and compared with ONE clock — the Go process
+--     binds m.now().UTC() as a parameter on both sides (see
+--     internal/store/password_reset.go), so no engine-side NOW()/DATE_ADD is
+--     used and Go/DB timezone drift can never extend or shorten a link's life;
 --   * no FK to users: tokens expire in minutes anyway, and audit-style rows
 --     surviving an account deletion costs nothing (reset then finds no user).
 CREATE TABLE IF NOT EXISTS password_reset_tokens (

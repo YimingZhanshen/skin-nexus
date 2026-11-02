@@ -5,6 +5,7 @@
 ## 2026-11-03
 
 - **文档有了对外镜像**：仓库内生成的 Repo Wiki 全量同步到 [skin-nexus/wiki](https://github.com/YimingZhanshen/skin-nexus/wiki)，mermaid 图与目录锚点在 wiki 侧照常渲染。同步时把生成产物里的 `file://server/...` 引用改写成 `blob/<生成基准 commit>/...`——相对路径在 wiki 上是死链，跟 `main` 的绝对链接又会在文件挪动后失效，锁基准 commit 才能让每条 `文件:行` 永久解析到它对应的那一版。基准取自 `repowiki-metadata.json`，每条被引路径都要在该 commit 存在才放行（`git cat-file -e` 逐条核，核不到就降级成纯文本路径），本轮 200 条引用零缺失；生成器偶尔会把目录前缀写重（`server/server/internal/...`），这类同样按真实文件树纠正。wiki 是与代码仓库分离的另一个仓库：默认分支 `master`，页名里的空格按 GitHub 规范写成连字符，而且必须先在网页上建出一页才拿得到可推的地址。生成物与同步脚本都留在 `.qoder/` 下，不入仓。
+- **修掉三处会把文档再次带偏的源码注释**：`migrations/mysql/0010_password_reset.sql`、`migrations/mysql/0020_email_verify_tokens.sql`、`migrations/postgres/0010_password_reset.sql` 的文件头都写着「TTL 用 DB 时钟 `NOW(3)` / `NOW()` 写入与校验」，而实现是把 `m.now().UTC()` 当参数绑进去（`internal/store/password_reset.go`、`internal/store/email_verify.go`），`NOW(3)`/`DATE_ADD` 还正是可移植性门控（`internal/dialect/portability_gate_test.go`）明令禁用的写法——注释是错的，代码是对的，而生成的文档会照抄注释。同类的还有 `internal/webapi/password.go` 里 `POST /api/v1/password/reset {token, newPassword}` 的 doc 注（真实 tag 是 `password`，`newPassword` 只属于改密端）。三处均只改注释，DDL 与行为未动。
 
 ## 2026-11-02
 

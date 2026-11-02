@@ -2,8 +2,9 @@
 -- (0010) because the threat model is identical — a bearer link that must be
 -- single-use, short-lived, and unreadable if the DB leaks.
 --   * only the SHA-256 hex digest is stored;
---   * write and validate on the same DB clock (NOW(3)) so Go/MySQL timezone
---     drift can never lengthen a link's life;
+--   * write and validate on ONE clock: the Go process binds m.now().UTC() as a
+--     parameter on both sides (internal/store/email_verify.go), so no
+--     engine-side NOW()/DATE_ADD is used and drift cannot lengthen a link's life;
 --   * a new request marks that uid's unused tokens used, so the last email
 --     sent is the only one that works;
 --   * no FK to users: the account can be deleted while a link is still live,

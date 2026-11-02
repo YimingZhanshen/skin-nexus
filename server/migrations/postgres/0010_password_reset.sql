@@ -1,6 +1,7 @@
 -- Password reset tokens: the raw token never touches disk (SHA-256 hex digest
 -- only), single use is enforced by the atomic consume UPDATE, and the TTL
--- deadline is written and validated on one clock (NOW() on PG).
+-- deadline is written and compared with ONE clock — the Go process binds
+-- m.now().UTC() as a parameter on both sides, so no engine-side NOW() is used.
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id         BIGSERIAL PRIMARY KEY,
   uid        BIGINT NOT NULL,

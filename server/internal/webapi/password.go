@@ -200,7 +200,7 @@ func (b *Backend) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// handleResetPassword: POST /api/v1/password/reset {token, newPassword}
+// handleResetPassword: POST /api/v1/password/reset {token, password}
 func (b *Backend) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Token    string `json:"token"`
