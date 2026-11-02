@@ -5,6 +5,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
+import { promptDialog } from '../dialog.js'
 import EmptyState from '../components/EmptyState.vue'
 import Pager from '../components/Pager.vue'
 import { shortHash } from '../textureLabel.js'
@@ -59,7 +60,7 @@ async function setAsAvatar(c) {
 }
 
 async function renameEntry(c) {
-  const next = prompt(t('closet.renamePrompt'), c.itemName || '')
+  const next = await promptDialog(t('closet.renamePrompt'), c.itemName || '')
   if (next === null) return
   err.value = ''
   try {

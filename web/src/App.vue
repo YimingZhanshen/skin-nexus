@@ -6,6 +6,7 @@ import { api } from './api.js'
 import { transportError } from './errors.js'
 import PageLoading from './components/PageLoading.vue'
 import ToastHub from './components/ToastHub.vue'
+import ModalHost from './components/ModalHost.vue'
 import PluginSlot from './components/plugin/PluginSlot.vue'
 import PluginFields from './components/plugin/PluginFields.vue'
 // Route-level chunks: the login card must not download the admin tables,
@@ -724,6 +725,7 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
     </footer>
   </div><!-- /app-shell -->
   <ToastHub />
+  <ModalHost />
 </template>
 
 <style scoped>
