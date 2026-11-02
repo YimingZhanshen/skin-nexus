@@ -87,5 +87,6 @@
   "viewer.reportDuplicate": "You already reported this texture.",
   "viewer.reportFailed": "Could not submit — please try again.",
   "viewer.saveFailed": "Could not save — please try again.",
-  "viewer.sourceUrlRequired": "Derivative and repost need the original http(s) URL."
+  "viewer.sourceUrlRequired": "Derivative and repost need the original http(s) URL.",
+  "landing.help": "Help"
 }

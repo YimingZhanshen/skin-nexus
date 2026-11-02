@@ -25,6 +25,7 @@ const ClosetPage = asyncPage(() => import('./pages/ClosetPage.vue'))
 const SkinlibPage = asyncPage(() => import('./pages/SkinlibPage.vue'))
 const PlayersPage = asyncPage(() => import('./pages/PlayersPage.vue'))
 const ProfilePage = asyncPage(() => import('./pages/ProfilePage.vue'))
+const HelpPage = asyncPage(() => import('./pages/HelpPage.vue'))
 const PluginPage = asyncPage(() => import('./components/plugin/PluginPage.vue'))
 import { loadPluginUI, navPages, pageByPath, pluginLabel } from './pluginUI.js'
 import { setLocale } from './i18n.js'
@@ -139,6 +140,7 @@ const navIcons = {
   apps: '<path d="M14 7a4 4 0 1 1 3 6.9L12 18l-3 3-2-2 3-3-4.1-5A4 4 0 0 1 14 7z"/>',
   union: '<path d="M12 3a9 9 0 1 0 9 9M12 3a9 9 0 0 1 9 9M12 8a4 4 0 1 0 4 4"/>',
   notifications: '<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7v.5M12 17h.01"/>',
   admin: '<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3zM9.5 12l2 2 3.5-4"/>',
 }
 const navGroups = computed(() => {
@@ -159,6 +161,7 @@ const navGroups = computed(() => {
         badge: Number(user.value.unreadNotifications || 0),
       },
       { id: 'apps', labelKey: 'nav.apps', icon: navIcons.apps },
+      { id: 'help', labelKey: 'nav.help', icon: navIcons.help },
       ...(unionEnabled.value ? [{ id: 'union', labelKey: 'nav.union', icon: navIcons.union }] : []),
       ...pluginItems,
     ],
@@ -199,6 +202,7 @@ function goHome() {
 // /skinlib 为皮肤库唯一规范地址；/user/skinlib 仅作 PCL/旧链接深链兼容。
 const viewURLs = {
   skinlib: '/skinlib',
+  help: '/help',
   closet: '/user/closet',
   profile: '/user/profile',
   players: '/user/players',
@@ -246,6 +250,9 @@ const legacyRoutes = {
   '/user/skinlib': 'skinlib',
   '/user/dashboard': 'dashboard',
   '/skinlib': 'skinlib',
+  // Readable without a session: the page exists for the player who is stuck
+  // outside, so it must be reachable from a shared link before login.
+  '/help': 'help',
 }
 // Deep-linked view held for after login (open /user/closet logged-out → login
 // card first, then drop straight into the closet).
@@ -285,9 +292,11 @@ function applyInitialRoute() {
   else if (!user.value && location.pathname === '/register') view.value = 'register'
   else if (legacyRoutes[location.pathname]) {
     // launcher deep link: logged in → straight there; logged out → login card,
-    // resume into the target view after authentication. /skinlib is public.
+    // resume into the target view after authentication. /skinlib and /help are
+    // public: an anonymous visitor must be able to read them, not be bounced
+    // into a login wall (help exists precisely for people stuck outside).
     if (user.value) view.value = legacyRoutes[location.pathname]
-    else if (location.pathname === '/skinlib') view.value = 'skinlib'
+    else if (location.pathname === '/skinlib' || location.pathname === '/help') view.value = legacyRoutes[location.pathname]
     else pendingView.value = legacyRoutes[location.pathname]
   }
   else view.value = user.value ? 'dashboard' : 'login'
@@ -540,8 +549,11 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
       <input id="f-identifier" v-model="identifier" autocomplete="username" />
       <label for="f-password">{{ t('auth.password') }}</label>
       <input id="f-password" v-model="password" type="password" autocomplete="current-password" @keyup.enter="doLogin" />
-      <div style="margin-top: 8px; text-align: right;" v-if="mailEnabled">
-        <a href="/forgot-password" class="muted" @click.prevent="forgotSent = false; view = 'forgot'">{{ t('auth.forgotLink') }}</a>
+      <!-- The two ways out of a failed sign-in: reset the password by mail, or
+           read why the account cannot get in. Both are reachable logged out. -->
+      <div class="row auth-links" style="margin-top: 8px; justify-content: space-between;">
+        <a href="/help" class="muted" @click.prevent="view = 'help'">{{ t('nav.help') }}</a>
+        <a href="/forgot-password" class="muted" v-if="mailEnabled" @click.prevent="forgotSent = false; view = 'forgot'">{{ t('auth.forgotLink') }}</a>
       </div>
       <div class="error" role="alert" v-if="authErr || locked">{{ locked ? waitText() : authErr }}</div>
       <div class="row" style="margin-top: 16px;">
@@ -680,6 +692,11 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
       <SkinlibPage :user="user" @login="skinlibLogin" />
     </template>
 
+    <!-- help is public too — see applyInitialRoute -->
+    <template v-else-if="!user && view === 'help'">
+      <HelpPage />
+    </template>
+
     <!-- logged-in shell: sidebar + page (blessing 用户中心布局) -->
     <template v-else-if="user">
       <div class="user-shell">
@@ -709,6 +726,7 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
           <ProfilePage v-else-if="view === 'profile'" :mail-enabled="mailEnabled" />
           <NotificationsPage v-else-if="view === 'notifications'" @read="onInboxRead" />
           <AuthorizedAppsPage v-else-if="view === 'apps'" />
+          <HelpPage v-else-if="view === 'help'" />
           <UnionBindPage v-else-if="view === 'union'" />
           <PluginPage v-else-if="view === 'ext'" :path="extPath" />
           <AdminPanel v-else-if="view === 'admin'" :user="user" :site-conf="siteConf" :conf-loaded="confLoaded" />

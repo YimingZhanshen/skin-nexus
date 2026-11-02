@@ -87,5 +87,6 @@
   "viewer.reportDuplicate": "你已经举报过该材质。",
   "viewer.reportFailed": "提交失败，请稍后重试。",
   "viewer.saveFailed": "保存失败，请稍后重试",
-  "viewer.sourceUrlRequired": "二创/转载必须填写 http(s) 原始发布地址"
+  "viewer.sourceUrlRequired": "二创/转载必须填写 http(s) 原始发布地址",
+  "landing.help": "帮助中心"
 }

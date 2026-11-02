@@ -305,6 +305,9 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
     </section>
     <div class="divider" aria-hidden="true"></div>
     <section class="intro"><p>{{.Intro}}</p></section>
+    <!-- The most common first question is "why is my skin not showing"; the
+         answer page is public, so the way to it is on the public front door. -->
+    <p class="more"><a href="/help">{{t .Lang "landing.help"}}</a></p>
     {{if .Featured}}
     <section class="feat">
       <h2>{{t .Lang "landing.featured"}}</h2>

@@ -198,7 +198,8 @@
     "adminPanel": "Admin panel",
     "apps": "Authorized apps",
     "union": "Union binding",
-    "backToDashboard": "Back to dashboard"
+    "backToDashboard": "Back to dashboard",
+    "help": "Help"
   },
   "skinlib": {
     "title": "Skin library",
@@ -867,5 +868,35 @@
     "schemaUnsupported": "This plugin page uses host-rendered schema pages, not available in this release.",
     "loading": "Loading plugin UI…",
     "loadFailed": "Failed to load the plugin UI"
+  },
+  "help": {
+    "title": "Help",
+    "lead": "The things players get stuck on, in the order that matters: get in, get wearing, get seen in game.",
+    "notShownTitle": "Skin not showing in game — check these in order",
+    "notShownLead": "The first two cover almost every case. Each one says whether the fix is on your side or on the server.",
+    "notShownLauncher": "The launcher must connect through external login, not treat this account as a paid account",
+    "notShownLauncherBody": "In HMCL / PCL2 choose external login and paste this site as the server URL. Signing in with a Microsoft account never asks this site for the skin.",
+    "notShownName": "The name you join with must be one of your profiles",
+    "notShownNameBody": "A skin applies to a profile created on the profiles page. Joining under another name is a different character and shows the default look.",
+    "notShownServer": "The server has to accept this site identity",
+    "notShownServerBody": "A server with online-mode=true and no external-login support will refuse this account outright, so the skin never gets a chance. That part belongs to the server admin.",
+    "notShownDomain": "Texture URLs must be reachable from your machine",
+    "notShownDomainBody": "Skins are served from this site address. If it is set to a LAN IP, has an untrusted certificate, or the domain is blocked, the client falls back to the default look — the site address is set in the admin panel.",
+    "notShownVerify": "This site requires a verified email",
+    "notShownVerifyBody": "With it on, an account whose address is not verified cannot sign in through a launcher — the website itself still works. Fill in the address on the profile page and send the verification mail; the link arrives by email, not from this page.",
+    "goPlayers": "Go to profiles",
+    "goProfile": "Go to the profile page",
+    "launcherTitle": "Connecting a launcher",
+    "launcherBody": "The dashboard card \"quick launcher setup\" shows this site external-login URL — copy it, or drag the button onto the launcher window. HMCL: Settings → external login → paste as the server URL. PCL2 / PCL: login screen → external login → add server and paste. Then sign in with a name from the profiles page.",
+    "uploadTitle": "Size and dimensions for uploads",
+    "uploadSizes": "Skins 64×64 or 64×32; capes 64×32 or 22×17 — both accept evenly scaled HD versions.",
+    "uploadSize": "One file may not exceed {size}; anything larger is refused with the reason.",
+    "uploadName": "The texture name you type at upload is what everyone sees; the closet alias is only your own label.",
+    "closetTitle": "The closet is everything you can wear",
+    "closetBody": "Uploads land in your closet automatically, and ♥ in the skin library collects somebody else work into it. Only closet entries can be worn: removing one stops it being wearable but never deletes the texture.",
+    "nameTitle": "Naming rules",
+    "nameBody": "Nickname: 2–24 characters — letters, digits, underscore or Chinese — used to sign in and displayed here. Profile name: by default 3–16 letters, digits or underscore (admins can widen it), and it is the name you show in game. Renaming never changes the UUID and does not revoke existing grants.",
+    "passwordTitle": "Forgotten or changed passwords",
+    "passwordBody": "\"Forgot password\" on the sign-in card sends a reset mail (the site needs a configured mail service) and the link works for half an hour. Changing a password invalidates every launcher grant, so the next start needs a fresh login. If mail never arrives, check spam, then ask the site admin."
   }
 }

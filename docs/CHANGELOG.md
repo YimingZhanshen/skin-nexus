@@ -4,6 +4,25 @@
 
 ## 2026-11-02
 
+- **玩家帮助中心 `/help`（U14）**：新建 `web/src/pages/HelpPage.vue`，只写本站能答对的部分——皮肤不显示的排查顺序
+  （启动器要走外置登录 → 进服名字必须是自己「角色管理」里的角色名 → 服务器要接受本站身份 → 材质地址要从你这边可达 →
+  开了邮箱验证门时启动器登录会被拒），接启动器的 HMCL/PCL2 步骤复用个人页既有口径，上传尺寸与实际文件大小上限
+  从 `/site-config` 的 `max_upload_kb` 取真值，衣柜语义一句话说清（能穿的就是衣柜里的，移出不再可穿但不删材质），
+  名字规则与改密码/找回密码的后果各自一条。**未登录可读**：最卡的人正是还没进门的人。
+  接线七处：`App.vue` 的 asyncPage、navIcons、navGroups、viewURLs、legacyRoutes、applyInitialRoute（公开路径与
+  `/skinlib` 同等待遇，不再被登录墙挡回去）、模板两个分支；`main.go` 的 `isKnownSPAPath` 加 `help`（不加就是
+  硬 404）；`handleSiteConfig` 补 `verify_gate_enabled`（新增 `ygg.Service.VerificationRequired` 转发既有 resolver，
+  门开着才显示那一条）。入口两处：登录卡原「忘记密码」那一行改成「帮助中心 / 忘记密码」并列（后者仍按邮件服务
+  是否配置出现），落地页 CTA 下加一个进帮助中心的入口。
+  一处偏离计划的判断：帮助链接没有塞进默认页脚——页脚是站长可增删的内容，往里注入一条删不掉的站内链接是
+  越俎代庖，而玩家真正卡住的地方是登录卡与落地页，就在那两处给入口。
+  邮箱验证那句文案改到能站得住：只说「启动器登录被拒（网页登录本身不受影响）」，不说成全站封死。
+  实测（浏览器，登录/未登录 + 中英）：侧栏出现「帮助中心/Help」、六个小节全渲染、验证门那条随
+  `verify_gate_enabled` 出现（rig 开 `SKIN_REQUIRE_VERIFICATION=true` 后 in=true）、上传那句显示
+  「One file may not exceed 1.0 MB」（跟站点旋钮）、`去角色管理` 跳到 `/user/players` 且地址栏同步；
+  退出登录后登录卡有「Help」链接，点进去未登录可读；切中文整页中文、`skin_lang` cookie 同步。
+  `curl /help` 由 404 变 200；落地页渲染 `href="/help">帮助中心`。词典 804 key、SSR 目录 90 key 双语平价。
+
 - **双语门禁扩到服务端渲染（U13）**：`scripts/check-locales.mjs` 在原有三条（中英键集平价、每个后端码有词、
   不许留已退役码的孤儿词）之外加四条 SSR 检查——`internal/webi18n` 两份目录键集相等且必须是平表、
   SSR 键禁止落在 `errors.` 命名空间（那是错误码的，反向孤儿闸会误杀）、目录里不许有没人引用的死文案、

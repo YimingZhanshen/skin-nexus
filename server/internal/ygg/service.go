@@ -273,6 +273,11 @@ func (s *Service) requireVerification(ctx context.Context) bool {
 	return s.RequireVerification
 }
 
+// VerificationRequired exposes the same decision to the user-facing API, so the
+// help page can tell an unverified account "this site requires verification"
+// instead of leaving them with a bare login refusal.
+func (s *Service) VerificationRequired(ctx context.Context) bool { return s.requireVerification(ctx) }
+
 func (s *Service) verifyGrace(ctx context.Context) time.Duration {
 	if s.VerifyGraceResolver != nil {
 		return s.VerifyGraceResolver(ctx)

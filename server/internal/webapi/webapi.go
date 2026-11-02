@@ -495,7 +495,11 @@ func (b *Backend) handleSiteConfig(w http.ResponseWriter, r *http.Request) {
 		"mail_configured": b.smtpConfig(r.Context()) != nil,
 		"union_enabled":   b.union != nil && b.union.Enabled(),
 		"max_upload_kb":   b.Store.MaxUploadKB(r.Context(), texture.MaxUploadBytes>>10),
-		"footer":          footer,
+		// The help page states the email-verification step only when the gate is
+		// actually on; without this it would either guess or stay silent on the
+		// one reason a player gets refused at the door.
+		"verify_gate_enabled": b.Ygg != nil && b.Ygg.VerificationRequired(r.Context()),
+		"footer":              footer,
 	})
 }
 
