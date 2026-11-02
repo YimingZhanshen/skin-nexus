@@ -5,6 +5,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
+import { confirmDialog } from '../dialog.js'
 import PluginSlot from '../components/plugin/PluginSlot.vue'
 
 const { t } = useI18n()
@@ -99,8 +100,8 @@ async function resetAvatar() {
 // 删除账号：密码复核 + 双重确认（服务端还有 permission>0 硬门）。
 // 成功后后端清 cookie；前端回登录页。
 async function deleteAccount() {
-  if (!confirm(t('profile.deleteConfirm'))) return
-  if (!confirm(t('profile.deleteDouble', { name: me.value?.nickname || '' }))) return
+  if (!(await confirmDialog(t('profile.deleteConfirm'), { danger: true }))) return
+  if (!(await confirmDialog(t('profile.deleteDouble', { name: me.value?.nickname || '' }), { danger: true }))) return
   if (delBusy.value) return
   err.value = ''; delBusy.value = true
   try {

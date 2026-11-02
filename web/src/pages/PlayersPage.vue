@@ -5,6 +5,7 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
+import { confirmDialog, promptDialog } from '../dialog.js'
 import SkinPreview from '../components/SkinPreview.vue'
 import PluginSlot from '../components/plugin/PluginSlot.vue'
 
@@ -44,7 +45,7 @@ async function createPlayer() {
 }
 
 async function renamePlayer(p) {
-  const next = prompt(t('players.renamePrompt', { name: pname(p) }), pname(p))
+  const next = await promptDialog(t('players.renamePrompt', { name: pname(p) }), pname(p))
   if (next === null || next.trim() === '' || next.trim() === pname(p)) return
   err.value = ''; ok.value = ''
   try {
@@ -57,8 +58,8 @@ async function renamePlayer(p) {
 // Double-confirm (blessing parity for irreversible actions): identity echo
 // on the second prompt.
 async function deletePlayer(p) {
-  if (!confirm(t('players.deleteConfirm', { name: pname(p), id: pid(p) }))) return
-  if (!confirm(t('players.deleteDouble', { name: pname(p) }))) return
+  if (!(await confirmDialog(t('players.deleteConfirm', { name: pname(p), id: pid(p) }), { danger: true }))) return
+  if (!(await confirmDialog(t('players.deleteDouble', { name: pname(p) }), { danger: true }))) return
   err.value = ''; ok.value = ''
   try {
     await api.deletePlayer(pid(p))

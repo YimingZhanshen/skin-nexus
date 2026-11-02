@@ -4,6 +4,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
+import { promptDialog } from '../../dialog.js'
 
 const { t } = useI18n()
 const invFree = ref([])
@@ -33,7 +34,7 @@ async function invGenerate() {
 }
 
 async function invEdit(ic) {
-  const next = prompt(t('admin.invitationDescPrompt'), ic.description || '')
+  const next = await promptDialog(t('admin.invitationDescPrompt'), ic.description || '')
   if (next === null) return
   invError.value = ''
   try {

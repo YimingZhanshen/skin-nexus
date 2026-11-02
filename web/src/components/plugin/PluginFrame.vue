@@ -8,6 +8,7 @@
 import { inject, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { assetURL } from '../../pluginUI.js'
+import { confirmDialog } from '../../dialog.js'
 
 const props = defineProps({
   plugin: { type: String, required: true },
@@ -169,7 +170,11 @@ function onMessage(ev) {
       if (typeof p.path === 'string' && p.path.startsWith('/') && !p.path.startsWith('//')) location.assign(p.path)
       break
     case 'confirm':
-      send('confirm-result', { ok: window.confirm(String(p.message || '')) }, msg.id)
+      // A sandboxed frame cannot open a dialog of its own (no allow-modals), so
+      // the host answers on its behalf. Doing it with window.confirm was not
+      // neutral: in a background tab the browser suppresses the prompt and the
+      // call returns false, which the plugin reads as "the user declined".
+      confirmDialog(String(p.message || '')).then((ok) => send('confirm-result', { ok }, msg.id))
       break
     case 'toast':
       window.dispatchEvent(new CustomEvent('skin-toast', { detail: { message: String(p.message || ''), level: p.level || 'info' } }))

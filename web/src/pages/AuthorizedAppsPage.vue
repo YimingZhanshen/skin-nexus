@@ -6,6 +6,7 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { oidc } from '../api.js'
 import { guard401 } from '../session.js'
+import { confirmDialog } from '../dialog.js'
 import EmptyState from '../components/EmptyState.vue'
 
 const { t } = useI18n()
@@ -24,7 +25,7 @@ async function load() {
 }
 
 async function revoke(jti) {
-  if (!confirm(t('apps.revokeConfirm'))) return
+  if (!(await confirmDialog(t('apps.revokeConfirm'), { danger: true }))) return
   loading.value = true; error.value = ''; success.value = ''
   try {
     const d = await oidc.revokeToken({ jti })
@@ -35,7 +36,7 @@ async function revoke(jti) {
 }
 
 async function revokeAll() {
-  if (!confirm(t('apps.revokeAllConfirm'))) return
+  if (!(await confirmDialog(t('apps.revokeAllConfirm'), { danger: true }))) return
   loading.value = true; error.value = ''; success.value = ''
   try {
     const d = await oidc.revokeToken({ all: true })

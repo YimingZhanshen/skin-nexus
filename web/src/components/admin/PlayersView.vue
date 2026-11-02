@@ -6,6 +6,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
+import { promptDialog } from '../../dialog.js'
 import Pager from '../Pager.vue'
 
 const { t } = useI18n()
@@ -50,13 +51,13 @@ async function put(path, body) {
 }
 
 async function renamePlayer(p) {
-  const next = prompt(t('admin.renamePrompt', { name: p.name }), p.name)
+  const next = await promptDialog(t('admin.renamePrompt', { name: p.name }), p.name)
   if (next === null || next.trim() === '' || next.trim() === p.name) return
   if (await put(`/api/admin/v1/players/${p.id}/name`, { name: next.trim() })) await load()
 }
 
 async function changeOwner(p) {
-  const next = prompt(t('admin.ownerPrompt', { name: p.name, uid: p.uid }), String(p.uid))
+  const next = await promptDialog(t('admin.ownerPrompt', { name: p.name, uid: p.uid }), String(p.uid))
   if (next === null) return
   const uid = Number(next)
   if (!Number.isInteger(uid) || uid <= 0) { error.value = t('admin.ownerInvalid'); return }
@@ -69,7 +70,7 @@ async function changeOwner(p) {
 // shows the row's current hashes; admins curate from the texture list.
 async function swapTexture(p, kind) {
   const current = kind === 'skin' ? p.skinHash : p.capeHash
-  const input = prompt(
+  const input = await promptDialog(
     t('admin.texturePrompt', { name: p.name, kind: t(`admin.kind${kind === 'skin' ? 'Skin' : 'Cape'}`), current: current || '—' }),
     '',
   )

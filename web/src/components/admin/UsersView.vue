@@ -9,6 +9,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
+import { alertDialog, promptDialog } from '../../dialog.js'
 import Pager from '../Pager.vue'
 
 const { t } = useI18n()
@@ -44,7 +45,7 @@ function goPage(p) {
 }
 
 async function adminResetPassword(u) {
-  const pw = prompt(t('admin.resetPwPrompt', { name: u.nickname, id: u.id }), '')
+  const pw = await promptDialog(t('admin.resetPwPrompt', { name: u.nickname, id: u.id }), '')
   if (!pw) return
   error.value = ''
   try {
@@ -52,7 +53,7 @@ async function adminResetPassword(u) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: pw }),
     })
-    alert(t('admin.resetPwDone'))
+    await alertDialog(t('admin.resetPwDone'))
   } catch (e) { error.value = e.message }
 }
 

@@ -5,7 +5,7 @@ import { ref, computed, onMounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
-import { promptDialog } from '../dialog.js'
+import { confirmDialog, promptDialog } from '../dialog.js'
 import EmptyState from '../components/EmptyState.vue'
 import Pager from '../components/Pager.vue'
 import WearTargetPicker from '../components/WearTargetPicker.vue'
@@ -75,7 +75,8 @@ async function renameEntry(c) {
 }
 
 async function removeEntry(c) {
-  if (!confirm(t('closet.removeConfirm', { name: c.itemName || c.hash?.slice(0, 10) || '?' }))) return
+  const okToRemove = await confirmDialog(t('closet.removeConfirm', { name: c.itemName || c.hash?.slice(0, 10) || '?' }))
+  if (!okToRemove) return
   err.value = ''
   try {
     await api.closetRemove(c.id)

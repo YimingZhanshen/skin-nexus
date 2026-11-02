@@ -6,6 +6,7 @@ import { ref, computed, onMounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
+import { promptDialog } from '../dialog.js'
 import PluginSlot from '../components/plugin/PluginSlot.vue'
 import Pager from '../components/Pager.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -117,7 +118,7 @@ async function togglePublic(it) {
 }
 
 async function renameItem(it) {
-  const next = prompt(t('skinlib.renamePrompt'), it.name || '')
+  const next = await promptDialog(t('skinlib.renamePrompt'), it.name || '')
   if (next === null) return
   err.value = ''
   ok.value = ''

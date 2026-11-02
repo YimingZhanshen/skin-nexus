@@ -16,6 +16,7 @@ import { api, uploadTexture } from '../api.js'
 import { detectSkinModel } from '../skinModel.js'
 import { shortHash, textureLabel, nameFromFile } from '../textureLabel.js'
 import { guard401 } from '../session.js'
+import { confirmDialog } from '../dialog.js'
 
 const { t } = useI18n()
 
@@ -191,7 +192,7 @@ async function addToCloset(tx) {
 
 // 删除自己的材质：先不带 force，409 会带回「谁还在用它」，用户确认后再解绑删除。
 async function removeTexture(tx) {
-  if (!window.confirm(t('dashboard.deleteConfirm', { name: tx.description || ('#' + tx.id) }))) return
+  if (!(await confirmDialog(t('dashboard.deleteConfirm', { name: tx.description || ('#' + tx.id) }), { danger: true }))) return
   pageErr.value = ''
   try {
     try {
@@ -203,7 +204,10 @@ async function removeTexture(tx) {
         closets: e.data.closets || 0,
         avatars: e.data.avatars || 0,
       })
-      if (!window.confirm(`${detail}\n${t('dashboard.deleteForceConfirm')}`)) return
+      // The blocker list is the heading, the consequence is the question: the
+      // native version stuffed both into one window.confirm string with a \n
+      // that no longer survives a real dialog.
+      if (!(await confirmDialog(t('dashboard.deleteForceConfirm'), { title: detail, danger: true }))) return
       await api.textureDelete(tx.id, true)
     }
     await load()

@@ -7,6 +7,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api, union } from '../api.js'
 import { guard401 } from '../session.js'
+import { confirmDialog } from '../dialog.js'
 
 const { t } = useI18n()
 
@@ -144,7 +145,7 @@ async function doBindTo() {
 async function doUnbind() {
   const p = selectedPlayer.value
   if (!p) return
-  if (!confirm(t('union.unbindConfirm', { name: playerName(p) }))) return
+  if (!(await confirmDialog(t('union.unbindConfirm', { name: playerName(p) }), { danger: true }))) return
   loading.value = true; error.value = ''; success.value = ''
   try {
     const d = await union.unbind(playerUUID(p))
@@ -159,7 +160,7 @@ async function doRemap() {
   if (!p || !target) { error.value = t('union.remapMissing'); return }
   if (target === normUUID(playerUUID(p))) { error.value = t('union.remapSelf'); return }
   if (!isHex32(target)) { error.value = t('union.remapTargetInvalid'); return }
-  if (!confirm(t('union.remapConfirm', { name: playerName(p), target: target.slice(0, 16) + '…' }))) return
+  if (!(await confirmDialog(t('union.remapConfirm', { name: playerName(p), target: target.slice(0, 16) + '…' }), { danger: true }))) return
   loading.value = true; error.value = ''; success.value = ''
   try {
     const d = await union.remapuuid(playerUUID(p), target)
