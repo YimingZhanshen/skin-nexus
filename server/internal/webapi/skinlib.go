@@ -20,6 +20,14 @@ import (
 	"skin-nexus/server/internal/ygg"
 )
 
+// previewThumbURL is the small server-rendered skin preview. The renderer
+// version rides in the URL because previews are immutable-cached for a year —
+// a rasterizer fix must change the URL or browsers keep serving the old render.
+// Capes have no body render, so callers must not ask for one.
+func previewThumbURL(tid int64) string {
+	return "/preview/" + strconv.FormatInt(tid, 10) + "?v=" + avatargen.RenderVersion + "&small=1"
+}
+
 // GET /api/v1/skinlib?filter=&keyword=&uploader=&sort=&page=
 // Public endpoint: anonymous sees public textures only; the store layer
 // applies visibility from the session (absent = anonymous).
@@ -74,7 +82,7 @@ func (b *Backend) handleSkinlibList(w http.ResponseWriter, r *http.Request) {
 		// year, so a rasterizer fix (e.g. HD-sheet sampling, v2) must change
 		// the URL or browsers keep serving the old render.
 		if row.Type == "skin" {
-			item["previewURL"] = "/preview/" + strconv.FormatInt(row.TID, 10) + "?v=" + avatargen.RenderVersion + "&small=1"
+			item["previewURL"] = previewThumbURL(row.TID)
 		}
 		items = append(items, item)
 	}

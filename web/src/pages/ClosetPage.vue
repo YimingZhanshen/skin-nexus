@@ -87,12 +87,14 @@ onMounted(load)
         <th></th>
       </tr>
       <tr v-for="c in filtered" :key="c.id">
-        <td><img v-if="c.url" :src="c.url" class="thumb" alt="" /><span v-else class="muted">—</span></td>
+        <td><img v-if="c.previewURL || c.url" :src="c.previewURL || c.url" class="thumb" alt="" loading="lazy" decoding="async" /><span v-else class="muted">—</span></td>
         <td>{{ c.type || '—' }}</td>
         <td>{{ c.itemName || '—' }}</td>
         <td class="muted"><code class="hash">{{ shortHash(c.hash) }}</code></td>
         <td class="nowrap">
-          <button class="secondary" @click="setAsAvatar(c)">{{ t('closet.setAvatar') }}</button>
+          <!-- The avatar endpoint rejects capes (422); offering the button on a
+               cape row was a dead click. -->
+          <button class="secondary" v-if="c.type === 'skin'" @click="setAsAvatar(c)">{{ t('closet.setAvatar') }}</button>
           <button class="secondary" style="margin-left: 6px;" @click="renameEntry(c)">{{ t('closet.rename') }}</button>
           <button class="secondary danger-outline" style="margin-left: 6px;" @click="removeEntry(c)">{{ t('closet.remove') }}</button>
         </td>

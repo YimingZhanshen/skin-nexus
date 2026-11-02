@@ -144,10 +144,10 @@ onMounted(load)
         </div>
         <div class="pc-body">
           <h3 class="pc-name" :title="pname(p)">{{ pname(p) }}</h3>
-          <p class="pc-meta">
+          <div class="pc-meta">
             <span class="muted">PID {{ pid(p) }}</span>
             <code class="uuid" :title="puuid(p)">{{ puuid(p) }}</code>
-          </p>
+          </div>
           <label class="pc-field">
             <span>{{ t('dashboard.colSkin') }}</span>
             <select :value="currentTid(p, 'skin')" @change="swapTexture(p, 'skin', $event)">
@@ -192,8 +192,10 @@ onMounted(load)
 .pc-preview :deep(canvas) { width: 160px; height: 240px; display: block; }
 .pc-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
 .pc-name { margin: 0; font-size: var(--fs-m); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pc-meta { margin: 0; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.uuid { font-size: var(--fs-xs); word-break: break-all; }
+.pc-meta { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-xs); }
+/* A 32-char UUID has no break points; side by side with PID it wrapped into
+   "PID 1 / 2". Stacked plus break-all keeps both readable. */
+.uuid { font-size: var(--fs-xs); word-break: break-all; line-height: 1.35; }
 .pc-field { display: flex; flex-direction: column; gap: 4px; margin: 0; font-size: var(--fs-xs); color: var(--muted); }
 .pc-field select { width: 100%; padding: 4px 6px; font-size: var(--fs-s); }
 .pc-actions { display: flex; gap: 8px; margin-top: 2px; }

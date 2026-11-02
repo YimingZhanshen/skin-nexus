@@ -36,6 +36,11 @@ func (b *Backend) handleClosetList(w http.ResponseWriter, r *http.Request) {
 		} else {
 			item["url"] = "" // orphan legacy row — visible, removable
 		}
+		if c.Type == "skin" {
+			item["previewURL"] = previewThumbURL(c.TextureID)
+		} else {
+			item["previewURL"] = ""
+		}
 		out = append(out, item)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"closet": out})

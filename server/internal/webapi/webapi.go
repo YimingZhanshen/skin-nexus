@@ -777,16 +777,22 @@ func (b *Backend) handleListTextures(w http.ResponseWriter, r *http.Request) {
 		Source      string `json:"source,omitempty"`
 		SourceURL   string `json:"sourceUrl,omitempty"`
 		URL         string `json:"url"`
+		PreviewURL  string `json:"previewURL"`
 		UploadAt    string `json:"uploadAt"`
 	}
 	out := make([]item, 0, len(rows))
 	for _, t := range rows {
+		preview := ""
+		if t.Type == "skin" {
+			preview = previewThumbURL(t.ID)
+		}
 		out = append(out, item{
 			ID: t.ID, Type: t.Type, Hash: t.Hash, Model: t.Model,
 			Description: t.Description, Detail: t.DetailMD,
 			Source: t.Source, SourceURL: t.SourceURL,
-			URL:      b.textureURL(r.Context(), t.Hash, t.Type),
-			UploadAt: t.UploadAt.Format(time.RFC3339),
+			URL:        b.textureURL(r.Context(), t.Hash, t.Type),
+			PreviewURL: preview,
+			UploadAt:   t.UploadAt.Format(time.RFC3339),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"textures": out})
