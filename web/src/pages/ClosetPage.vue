@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
 import EmptyState from '../components/EmptyState.vue'
+import { shortHash } from '../textureLabel.js'
 
 const { t } = useI18n()
 
@@ -89,7 +90,7 @@ onMounted(load)
         <td><img v-if="c.url" :src="c.url" class="thumb" alt="" /><span v-else class="muted">—</span></td>
         <td>{{ c.type || '—' }}</td>
         <td>{{ c.itemName || '—' }}</td>
-        <td class="muted"><code class="hash">{{ (c.hash || '—').slice(0, 16) }}</code></td>
+        <td class="muted"><code class="hash">{{ shortHash(c.hash) }}</code></td>
         <td class="nowrap">
           <button class="secondary" @click="setAsAvatar(c)">{{ t('closet.setAvatar') }}</button>
           <button class="secondary" style="margin-left: 6px;" @click="renameEntry(c)">{{ t('closet.rename') }}</button>

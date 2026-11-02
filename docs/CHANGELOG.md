@@ -4,6 +4,12 @@
 
 ## 2026-11-02
 
+- **纹理命名与显示对齐 blessing（第一片）**：「我的纹理」此前只有 hash 没有名称列，同一件材质在
+  皮肤库有名字、在自己列表里却只是一串字符；hash 在三个界面分别截成 12/16/10 位。现在列表加
+  「材质名称」列，hash 截断收敛到一个 helper（`web/src/textureLabel.js`），选完文件后名称框自动
+  填文件名去扩展名（bs 的 `Upload.tsx` 就是这么做的，我们此前要求手打）。实测：列表显示
+  `Named Skin Alpha` / `Cape Beta`，选 `skin-real.png` 后名称框得到 `skin-real`。
+
 - **角色管理改成卡片网格，预览里能看到披风**：预览此前是表格里被 CSS 压到 48×72 的小图，
   而 `SkinPreview` 只调 `loadSkin`——服务端渲染器不画披风，所以换没换披风只能「打开页面发现变了」。
   现在 `SkinPreview` 多一个 `capeUrl`（空值走 `loadCape(null)`，是真摘下来而不是留着上一件），

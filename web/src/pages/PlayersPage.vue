@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
 import SkinPreview from '../components/SkinPreview.vue'
+import { textureLabel } from '../textureLabel.js'
 import PluginSlot from '../components/plugin/PluginSlot.vue'
 
 const { t } = useI18n()
@@ -78,7 +79,7 @@ const capes = computed(() => textures.value.filter(x => x.type === 'cape'))
 // The picker used to show only a hash prefix, which nobody can read. The
 // texture description is the label the uploader chose; the hash stays as title.
 function txLabel(tx) {
-  return tx.description || ((tx.hash || '').slice(0, 10) + '…')
+  return textureLabel(tx)
 }
 
 // The preview must agree with the mounted skin: an Alex (slim) skin rendered on

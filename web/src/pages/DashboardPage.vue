@@ -13,6 +13,7 @@ import SkinPreview from '../components/SkinPreview.vue'
 import EmptyState from '../components/EmptyState.vue'
 import { api, uploadTexture } from '../api.js'
 import { detectSkinModel } from '../skinModel.js'
+import { shortHash, textureLabel, nameFromFile } from '../textureLabel.js'
 import { guard401 } from '../session.js'
 
 const { t } = useI18n()
@@ -76,6 +77,7 @@ function onDrop(e) {
   }
   uploadFile.value = f
   setPreviewFile(f)
+  if (!uploadName.value.trim()) uploadName.value = nameFromFile(f.name)
 }
 
 // ---- announcement: client sanitization layer ----
@@ -240,6 +242,7 @@ function onPick(e) {
   uploadFile.value = f
   setPreviewFile(f)
   modelChecked.value = false
+  if (f && !uploadName.value.trim()) uploadName.value = nameFromFile(f.name)
   if (f) {
     detectSkinModel(f).then((m) => {
       // The file may have been swapped or cleared while decoding.
@@ -369,8 +372,9 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
     <h2>{{ t('dashboard.texturesTitle', { count: textures.length }) }}</h2>
     <div class="table-scroll" v-if="textures.length">
     <table>
-      <tr><th>{{ t('dashboard.colType') }}</th><th>{{ t('dashboard.colModel') }}</th><th>{{ t('dashboard.colPreview') }}</th><th>{{ t('dashboard.colHash') }}</th><th></th></tr>
+      <tr><th>{{ t('dashboard.materialName') }}</th><th>{{ t('dashboard.colType') }}</th><th>{{ t('dashboard.colModel') }}</th><th>{{ t('dashboard.colPreview') }}</th><th>{{ t('dashboard.colHash') }}</th><th></th></tr>
       <tr v-for="tx in textures" :key="tx.id">
+        <td class="tx-name" :title="tx.description || tx.hash">{{ textureLabel(tx) }}</td>
         <td>{{ tx.type }}</td>
         <td>
           <!-- 64×32 旧格式没有可判定的像素，识别只会给出 default；这里保留纠正入口 -->
@@ -382,7 +386,7 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
           <span v-else>{{ tx.model || '—' }}</span>
         </td>
         <td><img :src="tx.url" :alt="t('dashboard.colPreview')" style="height: 48px; image-rendering: pixelated;" /></td>
-        <td class="muted">{{ tx.hash.slice(0, 12) }}…</td>
+        <td class="muted">{{ shortHash(tx.hash) }}</td>
         <td>
           <div class="row" style="gap: 6px; flex-wrap: wrap;">
             <button class="secondary" v-if="!closetIds.has(tx.id)" @click="addToCloset(tx)">{{ t('dashboard.closetAdd') }}</button>
@@ -455,6 +459,7 @@ h3 { font-size: var(--fs-s); margin: 16px 0 4px; color: var(--muted); font-weigh
 .drop-zone:hover, .drop-zone.over { border-color: var(--gold); background: var(--ink-3); }
 .file-hidden { display: none; }
 .file-name { font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx-name { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .file-clear { min-height: 28px; padding: 0 8px; font-size: var(--fs-xs); margin-left: auto; flex: none; }
 .prev-box {
   display: flex; align-items: center; justify-content: center;
