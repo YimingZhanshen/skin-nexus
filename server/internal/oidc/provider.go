@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -15,6 +16,8 @@ import (
 	"time"
 
 	"github.com/zitadel/oidc/v3/pkg/op"
+
+	"skin-nexus/server/internal/webi18n"
 )
 
 // Config is the provider bootstrap configuration (SKIN_OIDC_* env vars).
@@ -245,10 +248,40 @@ func (p *Provider) UserinfoHandler() http.Handler {
 // DeviceFormHandler serves the no-JS-fallback verification page (moved from
 // /device to /device.html when the SPA DevicePage took over /device). Its
 // buttons now fetch() the JSON submit endpoint in place.
+//
+// The launcher opens THIS url, so a reader who never reaches the SPA still
+// needs the page in their own language: the labels come from the same catalog
+// the texture pages use, resolved from the request.
 func (p *Provider) DeviceFormHandler() http.Handler {
-	const page = `<!doctype html><html><head><meta charset="utf-8"><title>设备授权</title></head><body>
-<div id="app">加载中…</div>
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var sb strings.Builder
+		if err := deviceFormTmpl.Execute(&sb, map[string]string{"Lang": webi18n.ResolveLang(r)}); err != nil {
+			http.Error(w, "device page", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(sb.String()))
+	})
+}
+
+var deviceFormTmpl = template.Must(template.New("device").Funcs(template.FuncMap{
+	"t": webi18n.T,
+}).Parse(`<!doctype html><html lang="{{.Lang}}"><head><meta charset="utf-8"><title>{{t .Lang "device.title"}}</title></head><body>
+<div id="app">{{t .Lang "device.loading"}}</div>
 <script>
+const L = {
+  done: {{t .Lang "device.done"}},
+  failed: {{t .Lang "device.failed"}},
+  unknown: {{t .Lang "device.unknown"}},
+  submitFailed: {{t .Lang "device.submitFailed"}},
+  loadFailed: {{t .Lang "device.loadFailed"}},
+  authorize: {{t .Lang "device.authorize"}},
+  userCode: {{t .Lang "device.userCode"}},
+  scopes: {{t .Lang "device.scopes"}},
+  approve: {{t .Lang "device.approve"}},
+  deny: {{t .Lang "device.deny"}},
+};
+const fill = (s, err) => s.replace("{err}", err);
 const code = new URLSearchParams(location.search).get("user_code") || "";
 function esc(s){return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function submit(decision){
@@ -257,24 +290,19 @@ function submit(decision){
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify({user_code:code,decision:decision,pid:sel?Number(sel.value):0})})
    .then(r=>r.json()).then(d=>{
-     document.getElementById("app").textContent = d.ok ? "已处理，可返回启动器。" : ("失败："+(d.error||"未知错误"));
-   }).catch(e=>{document.getElementById("app").textContent="提交失败："+e;});
+     document.getElementById("app").textContent = d.ok ? L.done : fill(L.failed, d.error || L.unknown);
+   }).catch(e=>{document.getElementById("app").textContent = fill(L.submitFailed, e);});
 }
 fetch("/api/v1/oidc/device/info?user_code="+encodeURIComponent(code),{credentials:"include"})
  .then(r=>r.json()).then(d=>{
    if(d.error){document.getElementById("app").textContent=d.error;return;}
    const players=(d.players||[]).map(p=>'<label><input type="radio" name="pid" value="'+p.id+'" '+(p.id===d.default_pid?'checked':'')+'>'+esc(p.name)+' ('+esc(p.uuid)+')</label><br>').join("");
-   document.getElementById("app").innerHTML='<h2>授权 '+esc(d.client_name||d.client_id)+'</h2>'
-     +'<p>用户码：<b>'+esc(d.user_code)+'</b></p><p>请求权限：'+(d.scopes||[]).map(esc).join(", ")+'</p>'
+   document.getElementById("app").innerHTML='<h2>'+esc(L.authorize.replace("{client}", esc(d.client_name||d.client_id)))+'</h2>'
+     +'<p>'+L.userCode+'<b>'+esc(d.user_code)+'</b></p><p>'+L.scopes+(d.scopes||[]).map(esc).join(", ")+'</p>'
      +players
-     +'<button onclick="submit(\'approve\')">同意</button> <button onclick="submit(\'deny\')">拒绝</button>';
- }).catch(e=>{document.getElementById("app").textContent="加载失败："+e;});
-</script></body></html>`
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte(page))
-	})
-}
+     +'<button onclick="submit(\'approve\')">'+L.approve+'</button> <button onclick="submit(\'deny\')">'+L.deny+'</button>';
+ }).catch(e=>{document.getElementById("app").textContent = fill(L.loadFailed, e);});
+</script></body></html>`))
 
 // DeviceAPIHandler serves the approval JSON/API surface used by the
 // verification page. Session auth is injected (SessionResolver).

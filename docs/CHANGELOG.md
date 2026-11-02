@@ -4,6 +4,25 @@
 
 ## 2026-11-02
 
+## 2026-11-02
+
+- **落地页与设备授权页接上同一套语言机制（U12）**：`landing.go` 的 tag、四个 CTA、三张统计卡、
+  「皮肤库精选」与进库按钮、以及当 SEO description 用的那句话简介全部入表；
+  `oidc/provider.go` 的无 JS 设备授权页（启动器在跑不动 SPA 时打开的就是这一页）同样入表——
+  它的标签是以 JS 字符串送进 `const L = {...}` 的，`html/template` 在 JS 上下文里会自动加引号转义，
+  测试 `TestDeviceFormLabelsAreValidJS` 钉住这一点：漏引号会让整页卡在「加载中…」而不报任何错。
+  `landingIntro` 那条 Go 常量随之删除（否则它是第二份真源）。顺带修一个既有文案缺陷：
+  通用 404 的 `<title>` 借用「材质不存在」——未知 URL 现在给「页面不存在 - 站点名 / Page not found」，
+  标题键与正文键分开。
+  实测（curl，落地页/设备页/404）：英文落地页 `<html lang="en">` + "Registered users"/"From the skin library"/
+  "Create an account"，meta description 换成英文那句；中文落地页逐字照旧；
+  `device.html` 英文给 "Device authorization"/"Loading…"/`done: "Done — you can return…"`，
+  中文仍给 设备授权/加载中…/同意/拒绝/用户码：；`/nope-xyz` 英文标题 `Page not found - Rig U1`
+  正文 `This page does not exist.`。目录 89 key 中英平价；新增 9 个渲染测试（中英各一遍 + 无语言兜底），
+  中文侧的断言一字未改，构成「渲染逐字不变」的回归证据。
+  演示用本地 rig 起 OIDC 需要注意：issuer 必须是 https（`oidc: scheme for issuer must be 'https'`
+  会让启动直接失败），本地验证要显式给 `SKIN_OIDC_ISSUER=https://…`。
+
 - **服务端渲染的页面有了第二种语言**：新建 `internal/webi18n`（两份目录 JSON + `T/F` + `ResolveLang`），
   皮肤详情页 `/skinlib/{tid}` 与它的 404 页整体入表——模板 40 余条中文、Go 里的类型词/来源词/
   兜底名称/SEO 标题与摘要全部走查表，`<html lang>` 随语言变。没有放进 `internal/i18n`：那个包自陈是

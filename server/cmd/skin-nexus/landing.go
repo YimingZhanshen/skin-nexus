@@ -20,6 +20,7 @@ import (
 
 	"skin-nexus/server/internal/appearance"
 	"skin-nexus/server/internal/seo"
+	"skin-nexus/server/internal/webi18n"
 )
 
 //go:embed theme-base.css
@@ -48,6 +49,7 @@ type landingTexture struct {
 
 // landingData feeds the landing template.
 type landingData struct {
+	Lang       string // resolved per request: "zh-CN" | "en"
 	SiteName   string
 	SiteURL    string
 	Intro      string
@@ -64,10 +66,8 @@ type landingData struct {
 	Unread int
 }
 
-const landingIntro = "Minecraft 皮肤站：上传皮肤/披风、管理角色衣柜、逛皮肤库；配合 Yggdrasil 外置登录，启动器与服务器之间直接换装。"
-
-var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
-<html lang="zh-CN">
+var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`<!DOCTYPE html>
+<html lang="{{.Lang}}">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -291,29 +291,29 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!DOCTYPE html>
 </svg>
       </div>
       <h1>{{.SiteName}}</h1>
-      <p class="tag">Minecraft 皮肤站，支持 Yggdrasil 外置登录</p>
+      <p class="tag">{{t .Lang "landing.tag"}}</p>
       <div class="cta">
-        {{if .LoggedIn}}<a class="primary" href="/user/dashboard">进入用户中心{{if .Unread}}<span class="unread-badge">{{.Unread}}</span>{{end}}</a>
-        <a class="alt" href="/skinlib">浏览皮肤库</a>{{else}}<a class="primary" href="/register">注册账号</a>
-        <a class="alt" href="/login">登录</a>{{end}}
+        {{if .LoggedIn}}<a class="primary" href="/user/dashboard">{{t .Lang "landing.enterUserCenter"}}{{if .Unread}}<span class="unread-badge">{{.Unread}}</span>{{end}}</a>
+        <a class="alt" href="/skinlib">{{t .Lang "landing.browseSkinlib"}}</a>{{else}}<a class="primary" href="/register">{{t .Lang "landing.registerAccount"}}</a>
+        <a class="alt" href="/login">{{t .Lang "page.login"}}</a>{{end}}
       </div>
     </header>
     <section class="stats">
-      <div><b>{{.Users}}</b><span>注册用户</span></div>
-      <div><b>{{.Players}}</b><span>游戏角色</span></div>
-      <div><b>{{.Textures}}</b><span>皮肤材质</span></div>
+      <div><b>{{.Users}}</b><span>{{t .Lang "landing.statUsers"}}</span></div>
+      <div><b>{{.Players}}</b><span>{{t .Lang "landing.statPlayers"}}</span></div>
+      <div><b>{{.Textures}}</b><span>{{t .Lang "landing.statTextures"}}</span></div>
     </section>
     <div class="divider" aria-hidden="true"></div>
     <section class="intro"><p>{{.Intro}}</p></section>
     {{if .Featured}}
     <section class="feat">
-      <h2>皮肤库精选</h2>
+      <h2>{{t .Lang "landing.featured"}}</h2>
       <div class="grid">
         {{range .Featured}}
         <figure><img src="{{.URL}}" alt="{{.Name}}" loading="lazy" /><figcaption>{{.Name}}</figcaption></figure>
         {{end}}
       </div>
-      <p class="more"><a href="/skinlib">进入皮肤库</a></p>
+      <p class="more"><a href="/skinlib">{{t .Lang "landing.enterSkinlib"}}</a></p>
     </section>
     {{end}}
   </div>
@@ -348,9 +348,15 @@ type landingView struct {
 // renderLanding renders the landing page through the same SEO + appearance
 // injection layers as the SPA shell.
 func renderLanding(ctx context.Context, seoEng *seo.Engine, appearEng *appearance.Engine, d landingData) string {
+	// A missing language means a call site forgot to resolve one, not that the
+	// reader wants zh-CN — fall back loudly in the code, quietly in the page.
+	if d.Lang == "" {
+		d.Lang = webi18n.ZhCN
+	}
 	d.Year = time.Now().Year()
 	d.FooterHTML = appearEng.FooterData(ctx, d.SiteName, d.SiteURL, d.Year).HTML()
-	d.Intro = landingIntro
+	intro := webi18n.T(d.Lang, "landing.intro")
+	d.Intro = intro
 	if d.ThemeBase == "" {
 		d.ThemeBase = themeBaseCSS
 	}
@@ -363,6 +369,6 @@ func renderLanding(ctx context.Context, seoEng *seo.Engine, appearEng *appearanc
 	if err := landingTmpl.Execute(&sb, v); err != nil {
 		return "<!DOCTYPE html><html><body><h1>landing render error</h1></body></html>"
 	}
-	html := seoEng.RenderHeadWith(ctx, sb.String(), seo.PageMeta{Description: landingIntro})
+	html := seoEng.RenderHeadWith(ctx, sb.String(), seo.PageMeta{Description: intro})
 	return appearEng.Render(ctx, html)
 }

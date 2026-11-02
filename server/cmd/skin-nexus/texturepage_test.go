@@ -6,13 +6,14 @@ package main
 // gate is covered by the store-layer SkinlibOne integration test.
 
 import (
+	"context"
 	"html/template"
+	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"strings"
 	"testing"
 	"unicode/utf8"
-
-	"skin-nexus/server/internal/webi18n"
 )
 
 func detailFixture() texDetailData {
@@ -113,16 +114,24 @@ func TestTexDetailTemplateRendersEnglish(t *testing.T) {
 		t.Errorf("english page still renders Chinese copy: %q", left)
 	}
 
-	// The 404 page follows the same language.
-	var nf strings.Builder
-	if err := texNotFoundTmpl.Execute(&nf, map[string]string{
-		"SiteName": "Rig Station", "Lang": "en", "Msg": webi18n.T("en", "notfound.texture"),
-	}); err != nil {
-		t.Fatal(err)
+	// The 404 page follows the same language — through the real helper, so the
+	// title/body pairing (a missing texture and a missing page title
+	// differently) is covered too.
+	rec := httptest.NewRecorder()
+	writeTexNotFound(context.Background(), rec, "Rig Station", nil, "en", "notfound.title", "notfound.texture")
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("404 status = %d", rec.Code)
 	}
-	if got := nf.String(); !strings.Contains(got, "Texture not found - Rig Station") ||
+	if got := rec.Body.String(); !strings.Contains(got, "Texture not found - Rig Station") ||
 		!strings.Contains(got, "This texture does not exist") || visibleCJK(got) != "" {
 		t.Errorf("english 404 = %s", got)
+	}
+	// The generic page 404 must not borrow the texture wording in its title.
+	rec2 := httptest.NewRecorder()
+	writeTexNotFound(context.Background(), rec2, "Rig Station", nil, "en", "notfound.titlePage", "notfound.page")
+	if got := rec2.Body.String(); !strings.Contains(got, "Page not found - Rig Station") ||
+		!strings.Contains(got, "This page does not exist") {
+		t.Errorf("english page 404 = %s", got)
 	}
 }
 

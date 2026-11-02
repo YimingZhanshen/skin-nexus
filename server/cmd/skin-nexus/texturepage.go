@@ -305,7 +305,7 @@ var texNotFoundTmpl = template.Must(template.New("tex404").Funcs(tmplFuncs).Pars
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>{{f .Lang "notfound.title" "site" .SiteName}}</title>
+<title>{{.Title}}</title>
 <meta name="robots" content="noindex, nofollow" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <style>
@@ -361,7 +361,7 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 		lang := webi18n.ResolveLang(r)
 		tid, err := strconv.ParseInt(r.PathValue("tid"), 10, 64)
 		if err != nil || tid <= 0 {
-			writeTexNotFound(r.Context(), w, siteName, appearEng, lang, "notfound.texture")
+			writeTexNotFound(r.Context(), w, siteName, appearEng, lang, "notfound.title", "notfound.texture")
 			return
 		}
 		// viewer identity: session cookie → owner/admin visibility
@@ -377,7 +377,7 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 		}
 		row, err := st.SkinlibOne(r.Context(), tid, uid, admin)
 		if err == store.ErrNotFound {
-			writeTexNotFound(r.Context(), w, siteName, appearEng, lang, "notfound.texture")
+			writeTexNotFound(r.Context(), w, siteName, appearEng, lang, "notfound.title", "notfound.texture")
 			return
 		}
 		if err != nil {
@@ -506,13 +506,15 @@ func texDescription(d texDetailData) string {
 }
 
 // writeTexNotFound renders the branded 404 with theme/custom-css injection
-// (the anchors above feed appearEng.Render) and a true 404 status. key is the
-// catalog message (a missing texture and a missing page read differently), and
-// the wording follows the resolved language like the rest of the page.
-func writeTexNotFound(ctx context.Context, w http.ResponseWriter, siteName string, appearEng *appearance.Engine, lang, key string) {
+// (the anchors above feed appearEng.Render) and a true 404 status. The two keys
+// are the window title and the body line: a missing texture and a missing page
+// read differently, and the title used to say 材质不存在 even for an unknown URL.
+func writeTexNotFound(ctx context.Context, w http.ResponseWriter, siteName string, appearEng *appearance.Engine, lang, titleKey, msgKey string) {
 	var sb strings.Builder
 	_ = texNotFoundTmpl.Execute(&sb, map[string]string{
-		"SiteName": siteName, "Lang": lang, "Msg": webi18n.T(lang, key),
+		"SiteName": siteName, "Lang": lang,
+		"Title": webi18n.F(lang, titleKey, "site", siteName),
+		"Msg":   webi18n.T(lang, msgKey),
 	})
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)

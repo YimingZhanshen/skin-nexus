@@ -831,7 +831,7 @@ func main() {
 	// Public landing page data (counts + featured library cards + login state).
 	landingFn := func(r *http.Request) landingData {
 		ctx := r.Context()
-		d := landingData{SiteName: cfg.SiteName, SiteURL: cfg.BaseURL}
+		d := landingData{Lang: webi18n.ResolveLang(r), SiteName: cfg.SiteName, SiteURL: cfg.BaseURL}
 		// 已登录访客的 hero CTA 换成进站动作（2026-10-27 逻辑修复）
 		if c, err := r.Cookie("skin_session"); err == nil {
 			if id, err := st.SessionUser(ctx, c.Value); err == nil {
@@ -1064,7 +1064,7 @@ func spaHandler(dir string, seoEng *seo.Engine, appearEng *appearance.Engine, si
 			// Known shell routes: auth flows, device verification, the public
 			// skinlib list and the /user/* launcher-deep-link family.
 			if inject && !isKnownSPAPath(p, uiPath) {
-				writeTexNotFound(r.Context(), w, siteName, appearEng, webi18n.ResolveLang(r), "notfound.page")
+				writeTexNotFound(r.Context(), w, siteName, appearEng, webi18n.ResolveLang(r), "notfound.titlePage", "notfound.page")
 				return
 			}
 			if inject {
