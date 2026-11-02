@@ -245,6 +245,7 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 		return TextureView{}, false, errf(CodeInternal, failMsg, lockErr)
 	}
 	if written.reused {
+		s.autoCloset(ctx, uid, written.reuse.ID)
 		return s.textureRowView(ctx, written.reuse), false, nil
 	}
 	if written.dupped {
@@ -266,7 +267,18 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 	s.audit(ctx, uid, meta, "", "plugin_texture_upload", map[string]any{
 		"tid": tid, "hash": res.Hash, "type": typ,
 	})
+	s.autoCloset(ctx, uid, tid)
 	return s.textureView(ctx, tid, typ, res.Hash, res.Model, desc, detail, source, sourceURL, time.Now()), true, nil
+}
+
+// autoCloset keeps blessing's invariant that an upload is immediately wearable:
+// the closet is what the skin picker reads, so an upload that never lands there
+// can only be worn through the ownership fallback. A failed closet write must
+// not fail the upload — the texture row is the thing the user asked for.
+func (s *Service) autoCloset(ctx context.Context, uid, tid int64) {
+	if _, err := s.Store.AddClosetEntry(ctx, uid, tid, ""); err != nil {
+		log.Printf("closet auto-add: uid=%d tid=%d: %v", uid, tid, err)
+	}
 }
 
 func (s *Service) duplicatePublic(pub store.TextureRow) *Error {

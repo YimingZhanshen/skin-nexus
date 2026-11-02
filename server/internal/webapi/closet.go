@@ -28,7 +28,8 @@ func (b *Backend) handleClosetList(w http.ResponseWriter, r *http.Request) {
 		item := map[string]any{
 			"id": c.ID, "textureId": c.TextureID,
 			"itemName": c.ItemName, "type": c.Type,
-			"model": c.Model, "hash": c.Hash, // hash: closet search + dedupe hints
+			"description": c.Description,           // the texture's own name, for pickers
+			"model":       c.Model, "hash": c.Hash, // hash: closet search + dedupe hints
 		}
 		if c.Hash != "" {
 			item["url"] = b.textureURL(r.Context(), c.Hash, c.Type)

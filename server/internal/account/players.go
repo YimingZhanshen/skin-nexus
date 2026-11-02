@@ -246,8 +246,20 @@ func (s *Service) SetTexture(ctx context.Context, uid, pid int64, kind string, t
 		return PlayerView{}, e
 	}
 	if tid != 0 {
+		// Wearable = own it, or have it in the closet. Blessing only lets the
+		// picker offer closet entries (PlayerController), and the closet is where
+		// a favourited community texture lands — without this leg there is no
+		// way to wear anything but one's own uploads.
 		owner, err := s.Store.TextureOwner(ctx, tid)
-		if err != nil || owner != uid {
+		wearable := err == nil && owner == uid
+		if !wearable {
+			inCloset, cerr := s.Store.InCloset(ctx, uid, tid)
+			if cerr != nil {
+				return PlayerView{}, errf(CodeInternal, "could not check the closet", cerr)
+			}
+			wearable = inCloset
+		}
+		if !wearable {
 			return PlayerView{}, errf(CodeNotOwned, "you do not own this texture", err)
 		}
 		typ, err := s.Store.TextureType(ctx, tid)

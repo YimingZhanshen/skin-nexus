@@ -16,13 +16,17 @@ type ClosetRow struct {
 	Type      string
 	Hash      string
 	Model     string
+	// Description is the texture's own name. The player picker needs it to label
+	// favourited textures the user does not own, where ItemName is usually empty.
+	Description string
 }
 
 // ListCloset returns the user's closet, newest entry first.
 func (m *Mysql) ListCloset(ctx context.Context, uid int64) ([]ClosetRow, error) {
 	rows, err := m.db.QueryContext(ctx,
 		`SELECT c.id, c.texture_tid, COALESCE(c.item_name, ''),
-		        COALESCE(t.type, ''), COALESCE(t.hash, ''), COALESCE(t.model, '')
+		        COALESCE(t.type, ''), COALESCE(t.hash, ''), COALESCE(t.model, ''),
+		        COALESCE(t.description, '')
 		 FROM user_closet c
 		 LEFT JOIN textures t ON t.id = c.texture_tid
 		 WHERE c.user_uid = ?
@@ -34,7 +38,7 @@ func (m *Mysql) ListCloset(ctx context.Context, uid int64) ([]ClosetRow, error) 
 	out := make([]ClosetRow, 0)
 	for rows.Next() {
 		var c ClosetRow
-		if err := rows.Scan(&c.ID, &c.TextureID, &c.ItemName, &c.Type, &c.Hash, &c.Model); err != nil {
+		if err := rows.Scan(&c.ID, &c.TextureID, &c.ItemName, &c.Type, &c.Hash, &c.Model, &c.Description); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -103,6 +107,24 @@ func (m *Mysql) SetClosetItemName(ctx context.Context, uid, id int64, name strin
 		return err
 	}
 	return nil
+}
+
+// InCloset reports whether the user collected this texture. Wearing a texture
+// is allowed when the user owns it or has it in their closet: blessing gates
+// the skin picker on the closet, and the closet is where favouriting a
+// community texture puts it.
+func (m *Mysql) InCloset(ctx context.Context, uid, tid int64) (bool, error) {
+	var one int
+	err := m.db.QueryRowContext(ctx,
+		`SELECT id FROM user_closet WHERE user_uid = ? AND texture_tid = ? LIMIT 1`,
+		uid, tid).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // RemoveClosetEntry deletes one entry (ownership scoped by uid).

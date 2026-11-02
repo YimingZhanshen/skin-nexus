@@ -724,6 +724,22 @@ func TestIntegrationCloset(t *testing.T) {
 	if err != nil || len(list) != 1 || list[0].ItemName != "my-skin" || list[0].Hash != "abc123hash" {
 		t.Fatalf("list = %+v %v", list, err)
 	}
+	// The picker labels a favourited texture the user does not own with the
+	// texture's own name, so the join has to carry it.
+	if list[0].Description != "seed" {
+		t.Fatalf("closet description = %q, want the texture name", list[0].Description)
+	}
+
+	// InCloset is the wearability fallback in account.SetTexture.
+	if ok, err := m.InCloset(ctx, uid, tid); err != nil || !ok {
+		t.Fatalf("InCloset(collected) = %v %v", ok, err)
+	}
+	if ok, err := m.InCloset(ctx, owner, tid); err != nil || ok {
+		t.Fatalf("InCloset(other user) = %v %v, want false", ok, err)
+	}
+	if ok, err := m.InCloset(ctx, uid, 999999); err != nil || ok {
+		t.Fatalf("InCloset(unknown texture) = %v %v, want false", ok, err)
+	}
 
 	if err := m.SetClosetItemName(ctx, uid, list[0].ID, "renamed"); err != nil {
 		t.Fatalf("rename: %v", err)

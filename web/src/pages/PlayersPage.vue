@@ -6,13 +6,14 @@ import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
 import SkinPreview from '../components/SkinPreview.vue'
-import { textureLabel } from '../textureLabel.js'
+import { textureLabel, shortHash } from '../textureLabel.js'
 import PluginSlot from '../components/plugin/PluginSlot.vue'
 
 const { t } = useI18n()
 
 const players = ref([])
 const textures = ref([])
+const closet = ref([])
 const newName = ref('')
 const err = ref('')
 const ok = ref('')
@@ -20,9 +21,10 @@ const ok = ref('')
 async function load() {
   err.value = ''
   try {
-    const [p, tx] = await Promise.all([api.players(), api.textures()])
+    const [p, tx, cl] = await Promise.all([api.players(), api.textures(), api.closet()])
     players.value = p.players || []
     textures.value = tx.textures || []
+    closet.value = cl.closet || []
   } catch (e) { if (!guard401(e)) err.value = e.message }
 }
 
@@ -64,23 +66,37 @@ async function deletePlayer(p) {
   } catch (e) { if (!guard401(e)) err.value = e.message }
 }
 
+// The wearable set — blessing's rule: what you uploaded plus what you put in
+// the closet. The backend accepts either, so the picker has to offer both;
+// without the closet half a favourited community texture can never be worn.
+const wearable = computed(() => {
+  const byId = new Map()
+  for (const tx of textures.value) {
+    byId.set(tx.id, { id: tx.id, hash: tx.hash, type: tx.type, model: tx.model, label: textureLabel(tx) })
+  }
+  for (const c of closet.value) {
+    if (!c.textureId || !c.type) continue // orphan legacy row: nothing to wear
+    const prev = byId.get(c.textureId)
+    if (prev) { if (c.itemName) prev.label = c.itemName; continue }
+    byId.set(c.textureId, {
+      id: c.textureId, hash: c.hash, type: c.type, model: c.model,
+      label: c.itemName || c.description || shortHash(c.hash),
+    })
+  }
+  return [...byId.values()]
+})
+
 // currentTid mirrors the player's mounted texture in the <select> (review
 // B P2: without it the picker always showed 无皮肤).
 function currentTid(p, kind) {
   const url = (kind === 'skin' ? (p.SkinURL || p.skinurl) : (p.CapeURL || p.capeurl)) || ''
   if (!url) return ''
-  const tx = textures.value.find(x => url.endsWith(x.hash))
+  const tx = wearable.value.find(x => x.hash && url.endsWith(x.hash))
   return tx ? String(tx.id) : ''
 }
 
-const skins = computed(() => textures.value.filter(x => x.type === 'skin'))
-const capes = computed(() => textures.value.filter(x => x.type === 'cape'))
-
-// The picker used to show only a hash prefix, which nobody can read. The
-// texture description is the label the uploader chose; the hash stays as title.
-function txLabel(tx) {
-  return textureLabel(tx)
-}
+const skins = computed(() => wearable.value.filter(x => x.type === 'skin'))
+const capes = computed(() => wearable.value.filter(x => x.type === 'cape'))
 
 // The preview must agree with the mounted skin: an Alex (slim) skin rendered on
 // the Steve model looks wrong and used to be indistinguishable from a broken
@@ -90,7 +106,7 @@ function currentModel(p) {
   const fromPlayer = p.SkinModel || p.skinModel || ''
   if (fromPlayer) return fromPlayer === 'slim' ? 'slim' : 'default'
   const tid = currentTid(p, 'skin')
-  const tx = textures.value.find(x => String(x.id) === tid)
+  const tx = wearable.value.find(x => String(x.id) === tid)
   return tx && tx.model === 'slim' ? 'slim' : 'default'
 }
 
@@ -136,14 +152,14 @@ onMounted(load)
             <span>{{ t('dashboard.colSkin') }}</span>
             <select :value="currentTid(p, 'skin')" @change="swapTexture(p, 'skin', $event)">
               <option value="">{{ t('dashboard.noSkin') }}</option>
-              <option v-for="tx in skins" :key="tx.id" :value="String(tx.id)" :title="tx.hash">{{ txLabel(tx) }}</option>
+              <option v-for="tx in skins" :key="tx.id" :value="String(tx.id)" :title="tx.hash">{{ tx.label }}</option>
             </select>
           </label>
           <label class="pc-field">
             <span>{{ t('dashboard.colCape') }}</span>
             <select :value="currentTid(p, 'cape')" @change="swapTexture(p, 'cape', $event)">
               <option value="">{{ t('dashboard.noCape') }}</option>
-              <option v-for="tx in capes" :key="tx.id" :value="String(tx.id)" :title="tx.hash">{{ txLabel(tx) }}</option>
+              <option v-for="tx in capes" :key="tx.id" :value="String(tx.id)" :title="tx.hash">{{ tx.label }}</option>
             </select>
           </label>
           <div class="pc-actions">
