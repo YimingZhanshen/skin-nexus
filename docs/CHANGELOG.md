@@ -4,6 +4,21 @@
 
 ## 2026-11-02
 
+- **安装向导不再把站点地址写进面板看不见的键（U15）**：向导原先写 option `base_url`，而解析顺序是
+  `site_url → base_url → SKIN_BASE_URL`——`base_url` 不在面板设置白名单里，于是安装时用了一个局域网 IP，
+  它就会长期压住 env，而管理员在面板里既看不到也改不掉（要修得进数据库）。现在向导写面板的 `site_url`，
+  校验与面板同规（必须是 http(s) 绝对地址）且**放在建号之前**：一次性门不容许留下「账号建了、地址被拒」的半成品。
+  完成页把刚填的地址与 `SKIN_BASE_URL` 并排显示，不一致就红字警告 + 说清后果（材质链接/页面链接/sitemap 都用它）
+  + 给出处置（当场改，或面板改完重启）。优先级一字未改：旧库的 `base_url` 照旧生效，`main_test.go`
+  的表驱动用例本就钉着这条回退。**新实现场证据**（空库 second rig，env=`https://skin.example.test`）：
+  无 scheme 的输入 → `400 common.invalid_value` 且 `needs_setup` 仍为 true（旧二进制同一请求直接 200 写库）；
+  填 `http://192.168.1.50:8098` → 响应带 `site_url / env_base_url / mismatch:true`；重启后 `sitemap.xml`
+  确实用了该地址（优先级不变）；面板 settings 里出现 `site_url` 行（含 value/default/restart 标记），
+  而旧实现写进去的那条在面板里根本查不到。浏览器实测向导四步：地址栏缺 scheme 时前端先拦（留在步骤 1）、
+  改对后进步骤 2、第 4 步显示写入结果与不一致警告。
+  `deploy.md` 三处同步：`SKIN_BASE_URL` 行说明向导写哪个键、`base_url` 仍夹在中间；§2.4 补完成页警告与
+  「改完重启」；§四 补 options 是「先到先得」——老站带来的 `site_url`/`base_url` 会盖住 env，迁移后要核对。
+
 - **玩家帮助中心 `/help`（U14）**：新建 `web/src/pages/HelpPage.vue`，只写本站能答对的部分——皮肤不显示的排查顺序
   （启动器要走外置登录 → 进服名字必须是自己「角色管理」里的角色名 → 服务器要接受本站身份 → 材质地址要从你这边可达 →
   开了邮箱验证门时启动器登录会被拒），接启动器的 HMCL/PCL2 步骤复用个人页既有口径，上传尺寸与实际文件大小上限

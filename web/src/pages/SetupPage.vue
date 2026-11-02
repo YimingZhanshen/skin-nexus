@@ -20,6 +20,7 @@ const password = ref('')
 const password2 = ref('')
 const skinDomains = ref('')
 const done = ref(false)
+const result = ref({ site_url: '', env_base_url: '', mismatch: false })
 
 onMounted(async () => {
   try {
@@ -33,6 +34,11 @@ function next() {
   error.value = ''
   if (step.value === 1 && !siteName.value.trim()) {
     error.value = '站点名必填'; return
+  }
+  // Same rule the API enforces (and the panel's site_url setting uses), so a
+  // typo like skin.example.com does not cost a submit round trip.
+  if (step.value === 1 && baseURL.value.trim() && !/^https?:\/\//i.test(baseURL.value.trim())) {
+    error.value = '站点地址要以 http:// 或 https:// 开头'; return
   }
   if (step.value === 2) {
     if (!nickname.value.trim() || password.value.length < 8) {
@@ -53,7 +59,7 @@ async function finish() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         site_name: siteName.value.trim(),
-        base_url: baseURL.value.trim(),
+        site_url: baseURL.value.trim(),
         nickname: nickname.value.trim(),
         email: email.value.trim(),
         password: password.value,
@@ -62,6 +68,11 @@ async function finish() {
     })
     const d = await r.json()
     if (!r.ok) { error.value = describe(d, r.status); return }
+    result.value = {
+      site_url: d.site_url || '',
+      env_base_url: d.env_base_url || '',
+      mismatch: d.mismatch === true,
+    }
     done.value = true
     step.value = 4
   } catch (e) {
@@ -87,6 +98,10 @@ function goHome() {
       <input id="s-site-name" v-model="siteName" placeholder="例如：示例皮肤站" />
       <label for="s-base-url">站点地址（Base URL）</label>
       <input id="s-base-url" v-model="baseURL" placeholder="https://skin.example.com" />
+      <div class="muted" style="font-size: var(--fs-xs); margin-top: 6px;">
+        默认取当前地址。它会被写进「管理 → 设置 → 站点地址」，材质与预览链接都以它为前缀：
+        请用玩家能访问到的域名，不要用局域网 IP 或 http://localhost。
+      </div>
     </template>
 
     <!-- step 2: admin account -->
@@ -113,6 +128,15 @@ function goHome() {
     <!-- step 4: done -->
     <template v-else>
       <div class="success" role="status">初始化完成！请用刚才创建的管理员账号登录。</div>
+      <p class="muted" style="margin-top: 10px;">
+        站点地址已写入设置：
+        <b>{{ result.site_url || '（未填，沿用环境变量 SKIN_BASE_URL）' }}</b>
+      </p>
+      <div class="error" role="alert" v-if="result.mismatch">
+        它与环境变量 SKIN_BASE_URL（{{ result.env_base_url }}）不一致：站点以你刚填的地址为准，
+        材质链接、页面链接与 sitemap 都会用它。如果这是安装时随手用的局域网地址，
+        请现在去「管理 → 设置 → 站点地址」改成玩家能访问的域名，改完重启容器。
+      </div>
     </template>
 
     <div class="error" role="alert" v-if="error">{{ error }}</div>

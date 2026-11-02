@@ -117,7 +117,7 @@ environment:
 
 | 变量 | 说明 |
 |---|---|
-| `SKIN_BASE_URL` | 站点公开地址，如 `https://skin.example.com`，也是面板 `site_url` 为空时的回退。**建议在首次 `up -d` 前定成最终访问地址**：签名密钥与已分发的材质地址不会随改地址而失效，但地址一变，新旧材质 URL 会同时存在。纹理 URL 与页面链接在**启动时**解析一次（option `site_url` → 本 env），改面板值要重启才全量生效；`SKIN_OIDC_ISSUER` 默认跟本 env、不跟 `site_url`。ALI 响应头与此无关（按请求 Host + `X-Forwarded-Proto` 现算） |
+| `SKIN_BASE_URL` | 站点公开地址，如 `https://skin.example.com`，也是面板 `site_url` 为空时的回退。**建议在首次 `up -d` 前定成最终访问地址**：签名密钥与已分发的材质地址不会随改地址而失效，但地址一变，新旧材质 URL 会同时存在。纹理 URL 与页面链接在**启动时**解析一次（option `site_url` → 本 env），改面板值要重启才全量生效；`SKIN_OIDC_ISSUER` 默认跟本 env、不跟 `site_url`。ALI 响应头与此无关（按请求 Host + `X-Forwarded-Proto` 现算）。安装向导写的就是面板 `site_url`（早于本版本的向导写的是 `base_url`，它仍夹在 `site_url` 与本 env 之间生效，见 migration.md） |
 | `SKIN_DATABASE_DSN` | 外部库模式必改；内置库模式保持默认。前缀决定引擎（见 §2.2），MySQL/MariaDB 形式**必须带 `parseTime=true`**（缺失直接启动失败） |
 | `SKIN_ADMIN_TOKEN` | `openssl rand -hex 32` 生成；机器/API 调用管理接口的回退凭据（管理面板本身用管理员账号登录即可，无需此 token；留空 = 机器 token 通道关闭） |
 
@@ -263,6 +263,11 @@ curl -s http://127.0.0.1:8080/api/yggdrasil/ | head -c 300   # 元数据 JSON
 需在导入前用向导创建，或导入后用 SQL/管理接口补建——顺序详见 [migration.md](migration.md)。
 旧版本建的站点若只有 `permission=1` 管理员、没有任何超管，启动时会幂等提升最老的管理员为超管并记录 uid。
 
+> 向导最后一步会把你填的**站点地址**与环境变量 `SKIN_BASE_URL` 摆在一起，不一致时会明确警告。
+> 该地址写进面板 `site_url`（管理 → 设置 → 站点地址），优先级高于 env：用局域网 IP 或
+> `http://localhost:8080` 完成向导，站点就会用它拼所有材质链接——客户端多半取不到图，
+> 表现是「皮肤站正常、进服没皮肤」。当场改最省事，事后在面板里改完**重启容器**即可。
+
 > 端口收敛建议：8080 只对反代放开（ports 写 `127.0.0.1:8080:8080` 或防火墙收敛）——
 > 同宿主/同网桥的其它容器处于 XFF 信任区，可伪造最后一跳绕过限流。
 
@@ -395,6 +400,10 @@ docker compose exec skin-nexus /app/skin-nexus migrate preflight \
 #   - ./legacy.env:/data/legacy.env:ro
 #   - /老站/storage/textures:/data/legacy-textures:ro
 ```
+
+导入把老站的 options 全表原样搬过来，写法是「先到先得」（同键已存在就跳过，不覆盖）。因此老站若带着
+`site_url` / `base_url`，它们会盖在你的 `SKIN_BASE_URL` 之上——迁移完成后到「管理 → 设置 → 站点地址」核对，
+改成最终域名或直接留空回退 env，改完重启容器。细节与断言见 [migration.md](migration.md)。
 
 ## 五、备选：源码构建 + systemd（无 Docker 环境）
 

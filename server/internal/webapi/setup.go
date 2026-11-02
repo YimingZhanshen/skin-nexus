@@ -43,7 +43,7 @@ func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		SiteName    string   `json:"site_name"`
-		BaseURL     string   `json:"base_url"`
+		SiteURL     string   `json:"site_url"`
 		Nickname    string   `json:"nickname"`
 		Email       string   `json:"email"`
 		Password    string   `json:"password"`
@@ -57,8 +57,16 @@ func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 	req.SiteName = strings.TrimSpace(req.SiteName)
 	req.Nickname = strings.TrimSpace(req.Nickname)
 	req.Email = strings.TrimSpace(req.Email)
+	siteURL := strings.TrimRight(strings.TrimSpace(req.SiteURL), "/")
 	if req.Nickname == "" || len(req.Password) < 8 {
 		writeErrCode(w, http.StatusBadRequest, "nickname is required and the password needs 8+ characters", i18n.MsgSetupBadInput)
+		return
+	}
+	// Same rule as the panel's site_url setting, checked BEFORE anything is
+	// written: a half-finished setup (admin created, address refused) is the
+	// one state this one-way door cannot recover from.
+	if siteURL != "" && !strings.HasPrefix(siteURL, "http://") && !strings.HasPrefix(siteURL, "https://") {
+		writeErrCode(w, http.StatusBadRequest, "site_url must be an absolute http(s) URL", i18n.MsgInvalidValue)
 		return
 	}
 	if req.Email == "" {
@@ -83,8 +91,14 @@ func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 	if req.SiteName != "" {
 		_ = b.Store.SetOption(r.Context(), "site_name", req.SiteName)
 	}
-	if req.BaseURL != "" {
-		_ = b.Store.SetOption(r.Context(), "base_url", strings.TrimRight(req.BaseURL, "/"))
+	if siteURL != "" {
+		// `site_url` is what the panel reads and writes. The wizard used to
+		// write the legacy `base_url` key instead: same precedence over
+		// SKIN_BASE_URL, but invisible in the settings table — so an address
+		// typed as a LAN IP during install silently outrank the env forever and
+		// nobody could find the row to fix. Old `base_url` values keep working
+		// (resolveBaseURL falls back to them); only new writes move.
+		_ = b.Store.SetOption(r.Context(), "site_url", siteURL)
 	}
 	if len(req.SkinDomains) > 0 {
 		_ = b.Store.SetOption(r.Context(), "skin_domains", strings.Join(req.SkinDomains, ","))
@@ -96,5 +110,14 @@ func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 	b.Store.InsertAudit(r.Context(), uid, "setup_completed", map[string]interface{}{
 		"site_name": req.SiteName,
 	})
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "uid": uid})
+	// The completion screen has to say which address the site will actually use
+	// and whether it disagrees with the env the operator set — that is the one
+	// moment where a wrong (LAN-IP) value is still cheap to fix.
+	envBase := strings.TrimRight(b.BaseURL, "/")
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok": true, "uid": uid,
+		"site_url":     siteURL,
+		"env_base_url": envBase,
+		"mismatch":     siteURL != "" && envBase != "" && !strings.EqualFold(siteURL, envBase),
+	})
 }
