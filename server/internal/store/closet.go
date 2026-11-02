@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 )
 
 // ClosetRow is one衣柜 entry joined with its texture metadata. Orphan legacy
@@ -21,16 +22,49 @@ type ClosetRow struct {
 	Description string
 }
 
+const closetCols = `c.id, c.texture_tid, COALESCE(c.item_name, ''),
+		        COALESCE(t.type, ''), COALESCE(t.hash, ''), COALESCE(t.model, ''),
+		        COALESCE(t.description, '')`
+
 // ListCloset returns the user's closet, newest entry first.
 func (m *Mysql) ListCloset(ctx context.Context, uid int64) ([]ClosetRow, error) {
-	rows, err := m.db.QueryContext(ctx,
-		`SELECT c.id, c.texture_tid, COALESCE(c.item_name, ''),
-		        COALESCE(t.type, ''), COALESCE(t.hash, ''), COALESCE(t.model, ''),
-		        COALESCE(t.description, '')
+	return m.queryCloset(ctx,
+		`SELECT `+closetCols+`
 		 FROM user_closet c
 		 LEFT JOIN textures t ON t.id = c.texture_tid
 		 WHERE c.user_uid = ?
 		 ORDER BY c.id DESC`, uid)
+}
+
+// ListClosetPage returns one page of the closet plus the full count, optionally
+// filtered by type and by alias / texture name / hash. Uploads auto-collect
+// now, so a heavy uploader's closet is as long as their texture list.
+func (m *Mysql) ListClosetPage(ctx context.Context, uid int64, q, typ string, limit, offset int) ([]ClosetRow, int64, error) {
+	where := "c.user_uid = ?"
+	args := []any{uid}
+	if typ == "skin" || typ == "cape" {
+		where += ` AND t.type = ?`
+		args = append(args, typ)
+	}
+	if s := strings.TrimSpace(q); s != "" {
+		d := m.db.Dialect()
+		where += ` AND (` + d.CIContains("COALESCE(c.item_name, '')") + ` OR ` +
+			d.CIContains("COALESCE(t.description, '')") + ` OR ` + d.CIContains("COALESCE(t.hash, '')") + `)`
+		like := "%" + s + "%"
+		args = append(args, like, like, like)
+	}
+	from := ` FROM user_closet c LEFT JOIN textures t ON t.id = c.texture_tid WHERE ` + where
+	var total int64
+	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*)`+from, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	page := append(append([]any{}, args...), limit, offset)
+	rows, err := m.queryCloset(ctx, `SELECT `+closetCols+from+` ORDER BY c.id DESC LIMIT ? OFFSET ?`, page...)
+	return rows, total, err
+}
+
+func (m *Mysql) queryCloset(ctx context.Context, query string, args ...any) ([]ClosetRow, error) {
+	rows, err := m.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -42,6 +76,50 @@ func (m *Mysql) ListCloset(ctx context.Context, uid int64) ([]ClosetRow, error) 
 			return nil, err
 		}
 		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// WearableRow is one entry of what a user may put on a player.
+type WearableRow struct {
+	ID    int64
+	Hash  string
+	Model string
+	Alias string // the user's own closet name for it, may be empty
+	Name  string // the texture's own description
+}
+
+// WearableTextures is the set a player may wear: the user's own uploads plus
+// everything they collected. Blessing gates the skin picker on the closet
+// (PlayerController); own uploads stay in the set so a site that predates
+// auto-collect keeps what it could already wear.
+//
+// The union is grouped in SQL rather than deduped in Go, and the non-closet
+// branch contributes ” instead of NULL: MAX() over ” picks a real alias on
+// every engine, while a bare NULL in a UNION is a type the three engines
+// resolve differently.
+func (m *Mysql) WearableTextures(ctx context.Context, uid int64, typ string) ([]WearableRow, error) {
+	rows, err := m.db.QueryContext(ctx, `
+		SELECT x.id, x.hash, x.model, MAX(x.item_name), MAX(x.description)
+		FROM (
+			SELECT t.id, t.hash, COALESCE(t.model, '') AS model, '' AS item_name, COALESCE(t.description, '') AS description
+			  FROM textures t WHERE t.uid = ? AND t.type = ?
+			UNION ALL
+			SELECT t.id, t.hash, COALESCE(t.model, '') AS model, COALESCE(c.item_name, ''), COALESCE(t.description, '')
+			  FROM user_closet c JOIN textures t ON t.id = c.texture_tid
+			 WHERE c.user_uid = ? AND t.type = ?
+		) x GROUP BY x.id, x.hash, x.model ORDER BY x.id DESC`, uid, typ, uid, typ)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]WearableRow, 0)
+	for rows.Next() {
+		var w WearableRow
+		if err := rows.Scan(&w.ID, &w.Hash, &w.Model, &w.Alias, &w.Name); err != nil {
+			return nil, err
+		}
+		out = append(out, w)
 	}
 	return out, rows.Err()
 }

@@ -11,6 +11,7 @@ import PluginFields from '../components/plugin/PluginFields.vue'
 import DOMPurify from 'dompurify'
 import SkinPreview from '../components/SkinPreview.vue'
 import EmptyState from '../components/EmptyState.vue'
+import Pager from '../components/Pager.vue'
 import { api, uploadTexture } from '../api.js'
 import { detectSkinModel } from '../skinModel.js'
 import { shortHash, textureLabel, nameFromFile } from '../textureLabel.js'
@@ -20,7 +21,12 @@ const { t } = useI18n()
 
 const me = ref(null)
 const textures = ref([])
-const closetIds = ref(new Set())
+// The texture list is paginated server-side: an account with 700 uploads used to
+// render every row at once. `inCloset` rides along per row, so the 入柜 state no
+// longer needs the whole closet in memory.
+const TEX_PAGE_SIZE = 50
+const texPage = ref(1)
+const texTotal = ref(0)
 const announcement = ref('')
 
 const uploadType = ref('skin')
@@ -137,15 +143,21 @@ function onDragLauncher(e) {
 
 async function load() {
   try {
-    const [u, tx, cl] = await Promise.all([api.me(), api.textures(), api.closet()])
+    const [u, tx] = await Promise.all([api.me(), api.textures(texPage.value, TEX_PAGE_SIZE)])
     me.value = u
     textures.value = tx.textures || []
-    closetIds.value = new Set((cl.closet || []).map((c) => c.textureId))
+    texTotal.value = tx.total || 0
   } catch (e) { if (!guard401(e)) pageErr.value = e.message } // 数据加载失败≠上传失败
 }
 
-async function loadAnnouncement() {
-  try {
+const texPages = computed(() => Math.max(1, Math.ceil(texTotal.value / TEX_PAGE_SIZE)))
+function goTexPage(p) {
+  if (p < 1 || p > texPages.value || p === texPage.value) return
+  texPage.value = p
+  load()
+}
+
+async function loadAnnouncement() {  try {
     const d = await fetch('/api/v1/announcement').then((r) => r.json())
     announcement.value = d.announcement || ''
   } catch { announcement.value = '' }
@@ -155,8 +167,7 @@ async function addToCloset(tx) {
   pageErr.value = ''
   try {
     await api.closetAdd(tx.id)
-    const cl = await api.closet()
-    closetIds.value = new Set((cl.closet || []).map((c) => c.textureId))
+    tx.inCloset = true // the list row carries its own state; no full closet fetch
   } catch (e) { if (!guard401(e)) pageErr.value = e.message } // 入柜失败显示在纹理卡区（页级横幅）
 }
 
@@ -369,7 +380,7 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
 
   <!-- textures -->
   <div class="card">
-    <h2>{{ t('dashboard.texturesTitle', { count: textures.length }) }}</h2>
+    <h2>{{ t('dashboard.texturesTitle', { count: texTotal }) }}</h2>
     <div class="table-scroll" v-if="textures.length">
     <table>
       <tr><th>{{ t('dashboard.materialName') }}</th><th>{{ t('dashboard.colType') }}</th><th>{{ t('dashboard.colModel') }}</th><th>{{ t('dashboard.colPreview') }}</th><th>{{ t('dashboard.colHash') }}</th><th></th></tr>
@@ -389,13 +400,14 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
         <td class="muted">{{ shortHash(tx.hash) }}</td>
         <td>
           <div class="row" style="gap: 6px; flex-wrap: wrap;">
-            <button class="secondary" v-if="!closetIds.has(tx.id)" @click="addToCloset(tx)">{{ t('dashboard.closetAdd') }}</button>
+            <button class="secondary" v-if="!tx.inCloset" @click="addToCloset(tx)">{{ t('dashboard.closetAdd') }}</button>
             <span class="muted" v-else style="font-size: var(--fs-xs);">{{ t('dashboard.closetIn') }}</span>
             <button class="danger-outline" @click="removeTexture(tx)">{{ t('dashboard.textureDelete') }}</button>
           </div>
         </td>
       </tr>
     </table>
+    <Pager :page="texPage" :pages="texPages" :total="texTotal" @update:page="goTexPage" />
     </div>
     <EmptyState v-else :text="t('dashboard.texturesEmpty')" />
   </div>

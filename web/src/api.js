@@ -43,13 +43,18 @@ export const api = {
   notifications: (page, perPage, unread) =>
     req('GET', `/api/v1/me/notifications?page=${Number(page) || 1}&perPage=${Number(perPage) || 20}${unread ? '&unread=1' : ''}`),
   markNotificationsRead: (body) => req('POST', '/api/v1/me/notifications/read', body),
-  closet: () => req('GET', '/api/v1/me/closet'),
+  closet: (page = 1, pageSize = 50, q = '', type = '') => req('GET',
+    `/api/v1/me/closet?page=${Number(page) || 1}&pageSize=${Number(pageSize) || 50}`
+    + (q ? `&q=${encodeURIComponent(q)}` : '') + (type ? `&type=${type}` : '')),
+  // The set a player may wear: own uploads plus the closet.
+  wearable: (type) => req('GET', `/api/v1/me/wearable?type=${type === 'cape' ? 'cape' : 'skin'}`),
   closetAdd: (textureId, itemName = '') => req('POST', '/api/v1/me/closet', { textureId, itemName }),
   closetRename: (id, itemName) => req('PUT', `/api/v1/me/closet/${id}`, { itemName }),
   closetRemove: (id) => req('DELETE', `/api/v1/me/closet/${id}`),
   players: () => req('GET', '/api/v1/me/players'),
   createPlayer: (name) => req('POST', '/api/v1/me/players', { name }),
-  textures: () => req('GET', '/api/v1/me/textures'),
+  textures: (page = 1, pageSize = 50) => req('GET',
+    `/api/v1/me/textures?page=${Number(page) || 1}&pageSize=${Number(pageSize) || 50}`),
   // 彻底删除自己的材质：不带 force 时若仍被角色/衣柜/头像引用会返回 409 并
   // 附上引用清单，由用户在确认后带 force 重试。
   textureDelete: (tid, force = false) => req('DELETE', `/api/v1/me/textures/${tid}${force ? '?force=1' : ''}`),

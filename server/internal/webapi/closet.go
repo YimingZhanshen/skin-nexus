@@ -18,7 +18,9 @@ func (b *Backend) handleClosetList(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
-	rows, err := b.Store.ListCloset(r.Context(), uid)
+	limit, offset := pageParams(r)
+	rows, total, err := b.Store.ListClosetPage(r.Context(), uid,
+		r.URL.Query().Get("q"), r.URL.Query().Get("type"), limit, offset)
 	if err != nil {
 		writeInternal(r, w, err)
 		return
@@ -43,7 +45,42 @@ func (b *Backend) handleClosetList(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, item)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"closet": out})
+	writeJSON(w, http.StatusOK, map[string]any{"closet": out, "total": total})
+}
+
+// GET /api/v1/me/wearable?type=skin|cape — the compact set a player may wear.
+// The picker used to read /me/textures, which both carried fields it never
+// shows and missed the closet half of what is wearable.
+func (b *Backend) handleMyWearable(w http.ResponseWriter, r *http.Request) {
+	uid, err := b.currentUser(r)
+	if err != nil {
+		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
+		return
+	}
+	typ := r.URL.Query().Get("type")
+	if typ != "skin" && typ != "cape" {
+		writeErrCode(w, http.StatusBadRequest, "type must be skin|cape", i18n.MsgInvalidValue)
+		return
+	}
+	rows, err := b.Store.WearableTextures(r.Context(), uid, typ)
+	if err != nil {
+		writeInternal(r, w, err)
+		return
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for _, x := range rows {
+		label := x.Name
+		if x.Alias != "" {
+			label = x.Alias // the user's own name for it wins, as in blessing
+		}
+		if label == "" {
+			label = x.Hash
+		}
+		out = append(out, map[string]any{
+			"id": x.ID, "hash": x.Hash, "model": x.Model, "label": label,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"textures": out})
 }
 
 // POST /api/v1/me/closet {textureId, itemName?} — idempotent add.

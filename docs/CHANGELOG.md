@@ -4,6 +4,17 @@
 
 ## 2026-11-02
 
+- **两个列表改服务端分页与搜索，换肤下拉改读「可穿集合」接口**：`/me/textures` 此前无 LIMIT，
+  738 条材质一次渲染；衣柜的 tab 与搜索是客户端在整份列表上做的，分页后会静默漏掉不在当前页的命中。
+  现在 `/me/textures?page=&pageSize=`（默认 50、上限 200）带 `total`，每行带 `inCloset`
+  （EXISTS 子查询，走 `user_closet` 已有的 user 索引），仪表盘的「入柜/已入柜」不再需要把整个衣柜拉到前端；
+  `/me/closet` 的 `q`/`type`/分页全部下推 SQL（大小写折叠用 `LOWER() LIKE`，三家一致）；
+  新增 `/me/wearable?type=skin|cape` 返回「自己上传 ∪ 衣柜收藏」的并集（别名优先做 label），
+  角色页下拉改读它。衣柜表补「材质名称」列——备注名为空时整行原本没有任何可读名字。
+  实测：`pageSize=1` 时 `total=2` 且两页各一条、`inCloset` 分别为 true/false；`?q=BOBS` 命中
+  `Bobs Public Skin`、`?q=zzz` 返回 0；角色下拉给出 `Bobs Public Skin` + `Named Skin Alpha`
+  且已挂载值 3 正确回填。
+
 - **预览与操作口径收口（衣柜/我的纹理/角色卡）**：预览 URL 此前有两套拼法、且只有皮肤库用服务端渲染的
   小图，「我的纹理」和衣柜直接拿原图当缩略（64×64 摊在行里既糊又看不出画了什么）。现在
   `/me/textures` 与 `/me/closet` 都带 `previewURL`（皮肤给 `/preview/<tid>?v=<渲染版本>&small=1`，

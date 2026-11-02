@@ -251,6 +251,7 @@ func (b *Backend) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/v1/me/players/{id}/name", b.handlePlayerRename)
 	mux.HandleFunc("DELETE /api/v1/me/players/{id}", b.handlePlayerDeleteSelf)
 	mux.HandleFunc("GET /api/v1/me/closet", b.handleClosetList)
+	mux.HandleFunc("GET /api/v1/me/wearable", b.handleMyWearable)
 	mux.HandleFunc("POST /api/v1/me/closet", b.handleClosetAdd)
 	mux.HandleFunc("PUT /api/v1/me/closet/{id}", b.handleClosetRename)
 	mux.HandleFunc("DELETE /api/v1/me/closet/{id}", b.handleClosetRemove)
@@ -762,7 +763,8 @@ func (b *Backend) handleListTextures(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
-	rows, err := b.Store.ListTextures(r.Context(), uid)
+	limit, offset := pageParams(r)
+	rows, total, err := b.Store.ListTexturesPage(r.Context(), uid, limit, offset)
 	if err != nil {
 		writeInternal(r, w, err)
 		return
@@ -778,6 +780,7 @@ func (b *Backend) handleListTextures(w http.ResponseWriter, r *http.Request) {
 		SourceURL   string `json:"sourceUrl,omitempty"`
 		URL         string `json:"url"`
 		PreviewURL  string `json:"previewURL"`
+		InCloset    bool   `json:"inCloset"`
 		UploadAt    string `json:"uploadAt"`
 	}
 	out := make([]item, 0, len(rows))
@@ -792,10 +795,11 @@ func (b *Backend) handleListTextures(w http.ResponseWriter, r *http.Request) {
 			Source: t.Source, SourceURL: t.SourceURL,
 			URL:        b.textureURL(r.Context(), t.Hash, t.Type),
 			PreviewURL: preview,
+			InCloset:   t.InCloset,
 			UploadAt:   t.UploadAt.Format(time.RFC3339),
 		})
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"textures": out})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"textures": out, "total": total})
 }
 
 func (b *Backend) handleUploadTexture(w http.ResponseWriter, r *http.Request) {
@@ -856,6 +860,25 @@ func (b *Backend) handleUploadTexture(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---- players ----
+
+// pageParams reads ?page=&pageSize= for the user's own lists. Page 1 is the
+// default and the size is capped: these lists used to render every row of a
+// 700-texture account at once.
+func pageParams(r *http.Request) (limit, offset int) {
+	const maxPage = 200
+	limit = 50
+	if v, err := strconv.Atoi(r.URL.Query().Get("pageSize")); err == nil && v > 0 {
+		limit = v
+	}
+	if limit > maxPage {
+		limit = maxPage
+	}
+	page := 1
+	if v, err := strconv.Atoi(r.URL.Query().Get("page")); err == nil && v > 0 {
+		page = v
+	}
+	return limit, (page - 1) * limit
+}
 
 // textureURL resolves a texture URL and lets plugin URL filters rewrite it
 // (fail-open: a plugin error keeps the host-built URL).

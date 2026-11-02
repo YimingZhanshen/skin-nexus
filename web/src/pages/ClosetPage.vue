@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
 import EmptyState from '../components/EmptyState.vue'
+import Pager from '../components/Pager.vue'
 import { shortHash } from '../textureLabel.js'
 
 const { t } = useI18n()
@@ -15,20 +16,34 @@ const tab = ref('all') // all | skin | cape
 const query = ref('')
 const err = ref('')
 const ok = ref('')
+const page = ref(1)
+const total = ref(0)
+const PAGE_SIZE = 50
+let searchTimer = null
 
-const filtered = computed(() => closet.value.filter((c) => {
-  if (tab.value !== 'all' && c.type !== tab.value) return false
-  if (!query.value.trim()) return true
-  const q = query.value.trim().toLowerCase()
-  return (c.itemName || '').toLowerCase().includes(q) || (c.hash || '').toLowerCase().includes(q)
-}))
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 
 async function load() {
   err.value = ''
   try {
-    const d = await api.closet()
+    const d = await api.closet(page.value, PAGE_SIZE, query.value.trim(), tab.value === 'all' ? '' : tab.value)
     closet.value = d.closet || []
+    total.value = d.total || 0
   } catch (e) { if (!guard401(e)) err.value = e.message }
+}
+
+// Filtering and paging are the server's job now: uploads auto-collect, so a
+// busy account's closet is as long as its texture list and a client-side
+// filter over one page would silently hide matches.
+function setTab(v) { tab.value = v; page.value = 1; load() }
+function onQuery() {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { page.value = 1; load() }, 300)
+}
+function goPage(p) {
+  if (p < 1 || p > totalPages.value || p === page.value) return
+  page.value = p
+  load()
 }
 
 // 设为头像: the closet texture must still exist (hash present); orphan
@@ -58,7 +73,7 @@ async function removeEntry(c) {
   err.value = ''
   try {
     await api.closetRemove(c.id)
-    closet.value = closet.value.filter((x) => x.id !== c.id)
+    await load() // the page shifted; refetch rather than splice the row out
   } catch (e) { if (!guard401(e)) err.value = e.message }
 }
 
@@ -67,29 +82,34 @@ onMounted(load)
 
 <template>
   <div class="card">
-    <h2 style="margin-top: 0;">{{ t('closet.title', { count: closet.length }) }}</h2>
+    <h2 style="margin-top: 0;">{{ t('closet.title', { count: total }) }}</h2>
     <div class="row">
       <div class="tabs">
-        <button class="tab" :class="{ active: tab === 'all' }" @click="tab = 'all'">{{ t('closet.tabAll') }}</button>
-        <button class="tab" :class="{ active: tab === 'skin' }" @click="tab = 'skin'">{{ t('dashboard.typeSkin') }}</button>
-        <button class="tab" :class="{ active: tab === 'cape' }" @click="tab = 'cape'">{{ t('dashboard.typeCape') }}</button>
-      </div>      <input v-model="query" :placeholder="t('closet.searchPlaceholder')" style="max-width: 240px;" />
+        <button class="tab" :class="{ active: tab === 'all' }" @click="setTab('all')">{{ t('closet.tabAll') }}</button>
+        <button class="tab" :class="{ active: tab === 'skin' }" @click="setTab('skin')">{{ t('dashboard.typeSkin') }}</button>
+        <button class="tab" :class="{ active: tab === 'cape' }" @click="setTab('cape')">{{ t('dashboard.typeCape') }}</button>
+      </div>      <input :value="query" @input="query = $event.target.value; onQuery()" :placeholder="t('closet.searchPlaceholder')" style="max-width: 240px;" />
     </div>
     <div class="error" v-if="err">{{ err }}</div>
     <div class="success" v-if="ok">{{ ok }}</div>
-    <div class="table-scroll" v-if="filtered.length">
+    <div class="table-scroll" v-if="closet.length">
     <table style="margin-top: 10px;">
       <tr>
         <th>{{ t('dashboard.colPreview') }}</th>
         <th>{{ t('dashboard.colType') }}</th>
         <th>{{ t('closet.colName') }}</th>
+        <th>{{ t('dashboard.materialName') }}</th>
         <th>{{ t('closet.colHash') }}</th>
         <th></th>
       </tr>
-      <tr v-for="c in filtered" :key="c.id">
+      <tr v-for="c in closet" :key="c.id">
         <td><img v-if="c.previewURL || c.url" :src="c.previewURL || c.url" class="thumb" alt="" loading="lazy" decoding="async" /><span v-else class="muted">—</span></td>
         <td>{{ c.type || '—' }}</td>
         <td>{{ c.itemName || '—' }}</td>
+        <!-- Two different names, deliberately shown side by side: the alias is
+             this user's own label, the texture name is shared by everyone. An
+             empty alias used to leave the row with no readable name at all. -->
+        <td class="tx-name">{{ c.description || shortHash(c.hash) }}</td>
         <td class="muted"><code class="hash">{{ shortHash(c.hash) }}</code></td>
         <td class="nowrap">
           <!-- The avatar endpoint rejects capes (422); offering the button on a
@@ -100,6 +120,7 @@ onMounted(load)
         </td>
       </tr>
     </table>
+    <Pager :page="page" :pages="totalPages" :total="total" @update:page="goPage" />
     </div>
     <EmptyState v-else :text="query || tab !== 'all' ? t('closet.emptyFiltered') : t('closet.empty')" />
   </div>
@@ -108,5 +129,6 @@ onMounted(load)
 <style scoped>
 .thumb { height: 48px; image-rendering: pixelated; vertical-align: middle; border-radius: 4px; }
 .hash { font-size: var(--fs-xs); }
+.tx-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nowrap { white-space: nowrap; }
 </style>

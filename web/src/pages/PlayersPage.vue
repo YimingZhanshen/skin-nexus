@@ -1,19 +1,20 @@
 <script setup>
 // PlayersPage (A 级批次): 用户侧角色管理 —— 卡片网格（大预览 + 披风同框）
 // + 改名 + 删除（双确认）+ 皮肤/披风更换。UUID 零漂移由后端保证（改名不碰 uuid_map.uuid）。
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
 import SkinPreview from '../components/SkinPreview.vue'
-import { textureLabel, shortHash } from '../textureLabel.js'
 import PluginSlot from '../components/plugin/PluginSlot.vue'
 
 const { t } = useI18n()
 
 const players = ref([])
-const textures = ref([])
-const closet = ref([])
+// The picker reads the wearable set (own uploads ∪ closet) from the server,
+// split by type — not /me/textures, which never contained the closet half.
+const skins = ref([])
+const capes = ref([])
 const newName = ref('')
 const err = ref('')
 const ok = ref('')
@@ -21,10 +22,10 @@ const ok = ref('')
 async function load() {
   err.value = ''
   try {
-    const [p, tx, cl] = await Promise.all([api.players(), api.textures(), api.closet()])
+    const [p, s, c] = await Promise.all([api.players(), api.wearable('skin'), api.wearable('cape')])
     players.value = p.players || []
-    textures.value = tx.textures || []
-    closet.value = cl.closet || []
+    skins.value = s.textures || []
+    capes.value = c.textures || []
   } catch (e) { if (!guard401(e)) err.value = e.message }
 }
 
@@ -66,37 +67,16 @@ async function deletePlayer(p) {
   } catch (e) { if (!guard401(e)) err.value = e.message }
 }
 
-// The wearable set — blessing's rule: what you uploaded plus what you put in
-// the closet. The backend accepts either, so the picker has to offer both;
-// without the closet half a favourited community texture can never be worn.
-const wearable = computed(() => {
-  const byId = new Map()
-  for (const tx of textures.value) {
-    byId.set(tx.id, { id: tx.id, hash: tx.hash, type: tx.type, model: tx.model, label: textureLabel(tx) })
-  }
-  for (const c of closet.value) {
-    if (!c.textureId || !c.type) continue // orphan legacy row: nothing to wear
-    const prev = byId.get(c.textureId)
-    if (prev) { if (c.itemName) prev.label = c.itemName; continue }
-    byId.set(c.textureId, {
-      id: c.textureId, hash: c.hash, type: c.type, model: c.model,
-      label: c.itemName || c.description || shortHash(c.hash),
-    })
-  }
-  return [...byId.values()]
-})
-
 // currentTid mirrors the player's mounted texture in the <select> (review
-// B P2: without it the picker always showed 无皮肤).
+// B P2: without it the picker always showed 无皮肤). The payload gives a URL,
+// so the match goes through the hash the picker rows carry.
 function currentTid(p, kind) {
   const url = (kind === 'skin' ? (p.SkinURL || p.skinurl) : (p.CapeURL || p.capeurl)) || ''
   if (!url) return ''
-  const tx = wearable.value.find(x => x.hash && url.endsWith(x.hash))
+  const list = kind === 'skin' ? skins.value : capes.value
+  const tx = list.find(x => x.hash && url.endsWith(x.hash))
   return tx ? String(tx.id) : ''
 }
-
-const skins = computed(() => wearable.value.filter(x => x.type === 'skin'))
-const capes = computed(() => wearable.value.filter(x => x.type === 'cape'))
 
 // The preview must agree with the mounted skin: an Alex (slim) skin rendered on
 // the Steve model looks wrong and used to be indistinguishable from a broken
@@ -106,7 +86,7 @@ function currentModel(p) {
   const fromPlayer = p.SkinModel || p.skinModel || ''
   if (fromPlayer) return fromPlayer === 'slim' ? 'slim' : 'default'
   const tid = currentTid(p, 'skin')
-  const tx = wearable.value.find(x => String(x.id) === tid)
+  const tx = skins.value.find(x => String(x.id) === tid)
   return tx && tx.model === 'slim' ? 'slim' : 'default'
 }
 

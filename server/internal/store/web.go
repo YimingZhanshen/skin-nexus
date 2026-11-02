@@ -338,10 +338,30 @@ func (m *Mysql) TextureByHash(ctx context.Context, hash string) (id, uid int64, 
 
 // ListTextures returns a user's textures.
 func (m *Mysql) ListTextures(ctx context.Context, uid int64) ([]TextureRow, error) {
-	rows, err := m.db.QueryContext(ctx,
+	return m.queryTextures(ctx,
 		`SELECT id, type, hash, COALESCE(model,''), COALESCE(description,''),
-		        COALESCE(detail_md,''), COALESCE(source,''), COALESCE(source_url,''), upload_at
-		 FROM textures WHERE uid = ? ORDER BY id DESC`, uid)
+		        COALESCE(detail_md,''), COALESCE(source,''), COALESCE(source_url,''), upload_at,
+		        EXISTS (SELECT 1 FROM user_closet c WHERE c.user_uid = t.uid AND c.texture_tid = t.id)
+		 FROM textures t WHERE t.uid = ? ORDER BY t.id DESC`, uid)
+}
+
+// ListTexturesPage returns one page plus the full count. An uploader with
+// hundreds of textures used to get every row rendered at once.
+func (m *Mysql) ListTexturesPage(ctx context.Context, uid int64, limit, offset int) ([]TextureRow, int64, error) {
+	var total int64
+	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM textures WHERE uid = ?`, uid).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := m.queryTextures(ctx,
+		`SELECT id, type, hash, COALESCE(model,''), COALESCE(description,''),
+		        COALESCE(detail_md,''), COALESCE(source,''), COALESCE(source_url,''), upload_at,
+		        EXISTS (SELECT 1 FROM user_closet c WHERE c.user_uid = t.uid AND c.texture_tid = t.id)
+		 FROM textures t WHERE t.uid = ? ORDER BY t.id DESC LIMIT ? OFFSET ?`, uid, limit, offset)
+	return rows, total, err
+}
+
+func (m *Mysql) queryTextures(ctx context.Context, query string, args ...any) ([]TextureRow, error) {
+	rows, err := m.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +370,7 @@ func (m *Mysql) ListTextures(ctx context.Context, uid int64) ([]TextureRow, erro
 	for rows.Next() {
 		var t TextureRow
 		if err := rows.Scan(&t.ID, &t.Type, &t.Hash, &t.Model, &t.Description,
-			&t.DetailMD, &t.Source, &t.SourceURL, &t.UploadAt); err != nil {
+			&t.DetailMD, &t.Source, &t.SourceURL, &t.UploadAt, &t.InCloset); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
@@ -368,6 +388,9 @@ type TextureRow struct {
 	Source      string
 	SourceURL   string
 	UploadAt    time.Time
+	// InCloset marks whether the owner already collected it, so their own list
+	// can say so without shipping the whole closet to the browser.
+	InCloset bool
 }
 
 // TextureMeta carries the user-editable fields written on upload/import.
