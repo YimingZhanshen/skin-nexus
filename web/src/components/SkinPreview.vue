@@ -7,10 +7,13 @@
 // v3 (2026-11-01): the no-WebGL fallback lives here. Every consumer used to
 // re-implement "canvas is empty, show a flat PNG" — or, worse, left a blank box
 // that looked like a broken skin.
+// v4 (2026-11-02): capeUrl. The server renderer does not draw capes, so the
+// only place a cape can show is here.
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 
 const props = defineProps({
   url: { type: String, default: '' },
+  capeUrl: { type: String, default: '' },
   modelType: { type: String, default: 'default' },
   width: { type: Number, default: 128 },
   height: { type: Number, default: 192 },
@@ -53,6 +56,15 @@ async function apply() {
   if (props.url) {
     try { await viewer.loadSkin(props.url) } catch { /* broken url */ }
   }
+  await showCape()
+}
+
+// loadCape(null) is the documented "hide it": a player whose cape was just
+// taken off must not keep wearing the previous one.
+async function showCape() {
+  if (!viewer) return
+  if (!props.capeUrl) { viewer.loadCape(null); return }
+  try { await viewer.loadCape(props.capeUrl) } catch { /* broken url */ }
 }
 
 function applyModel() {
@@ -61,6 +73,7 @@ function applyModel() {
 
 onMounted(apply)
 watch(() => props.url, apply)
+watch(() => props.capeUrl, showCape)
 watch(() => props.modelType, applyModel)
 onBeforeUnmount(() => { if (viewer) { viewer.dispose(); viewer = null } })
 </script>

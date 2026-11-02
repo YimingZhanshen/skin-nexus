@@ -355,8 +355,6 @@
   "players": {
     "title": "角色管理（{count}）",
     "hint": "你可以使用你所拥有的角色名来登录皮肤站；改名后 UUID 保持不变。",
-    "colPreview": "预览",
-    "colName": "角色名",
     "rename": "改名",
     "renamePrompt": "「{name}」的新角色名（UUID 不变）：",
     "renamed": "已改名（UUID 未变）",

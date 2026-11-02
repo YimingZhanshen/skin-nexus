@@ -1,7 +1,7 @@
 <script setup>
-// PlayersPage (A 级批次): 用户侧角色管理 —— PID 列 + 改名 + 删除（双确认）
-// + 皮肤/披风更换。UUID 零漂移由后端保证（改名不碰 uuid_map.uuid）。
-import { ref, onMounted } from 'vue'
+// PlayersPage (A 级批次): 用户侧角色管理 —— 卡片网格（大预览 + 披风同框）
+// + 改名 + 删除（双确认）+ 皮肤/披风更换。UUID 零漂移由后端保证（改名不碰 uuid_map.uuid）。
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
@@ -72,6 +72,27 @@ function currentTid(p, kind) {
   return tx ? String(tx.id) : ''
 }
 
+const skins = computed(() => textures.value.filter(x => x.type === 'skin'))
+const capes = computed(() => textures.value.filter(x => x.type === 'cape'))
+
+// The picker used to show only a hash prefix, which nobody can read. The
+// texture description is the label the uploader chose; the hash stays as title.
+function txLabel(tx) {
+  return tx.description || ((tx.hash || '').slice(0, 10) + '…')
+}
+
+// The preview must agree with the mounted skin: an Alex (slim) skin rendered on
+// the Steve model looks wrong and used to be indistinguishable from a broken
+// upload. /me/players carries SkinModel; the texture lookup is the fallback for
+// older payloads.
+function currentModel(p) {
+  const fromPlayer = p.SkinModel || p.skinModel || ''
+  if (fromPlayer) return fromPlayer === 'slim' ? 'slim' : 'default'
+  const tid = currentTid(p, 'skin')
+  const tx = textures.value.find(x => String(x.id) === tid)
+  return tx && tx.model === 'slim' ? 'slim' : 'default'
+}
+
 async function swapTexture(p, kind, e) {
   const v = parseInt(e.target.value || '0', 10)
   err.value = ''; ok.value = ''
@@ -98,40 +119,38 @@ onMounted(load)
     </div>
     <div class="error" v-if="err">{{ err }}</div>
     <div class="success" v-if="ok">{{ ok }}</div>
-    <div class="table-scroll" v-if="players.length">
-    <table class="p-table" style="margin-top: 12px;">
-      <tr>
-        <th>PID</th>
-        <th>{{ t('players.colPreview') }}</th>
-        <th>{{ t('players.colName') }}</th>
-        <th>UUID</th>
-        <th>{{ t('dashboard.colSkin') }}</th>
-        <th>{{ t('dashboard.colCape') }}</th>
-        <th></th>
-      </tr>
-      <tr v-for="p in players" :key="pid(p)">
-        <td class="muted">{{ pid(p) }}</td>
-        <td class="prev-cell"><SkinPreview :url="p.SkinURL || p.skinurl" /></td>
-        <td class="pname">{{ pname(p) }}</td>
-        <td><code class="uuid">{{ puuid(p).slice(0, 18) }}…</code></td>
-        <td>
-          <select class="cell-sel" :value="currentTid(p, 'skin')" @change="swapTexture(p, 'skin', $event)">
-            <option value="">{{ t('dashboard.noSkin') }}</option>
-            <option v-for="tx in textures.filter(x => x.type === 'skin')" :key="tx.id" :value="String(tx.id)">{{ tx.hash.slice(0, 10) }}…</option>
-          </select>
-        </td>
-        <td>
-          <select class="cell-sel" :value="currentTid(p, 'cape')" @change="swapTexture(p, 'cape', $event)">
-            <option value="">{{ t('dashboard.noCape') }}</option>
-            <option v-for="tx in textures.filter(x => x.type === 'cape')" :key="tx.id" :value="String(tx.id)">{{ tx.hash.slice(0, 10) }}…</option>
-          </select>
-        </td>
-        <td class="nowrap">
-          <button class="secondary" @click="renamePlayer(p)">{{ t('players.rename') }}</button>
-          <button class="secondary danger-outline" style="margin-left: 6px;" @click="deletePlayer(p)">{{ t('common.delete') }}</button>
-        </td>
-      </tr>
-    </table>
+    <div class="player-grid" v-if="players.length">
+      <article class="player-card" v-for="p in players" :key="pid(p)">
+        <div class="pc-preview">
+          <SkinPreview :url="p.SkinURL || p.skinurl" :cape-url="p.CapeURL || p.capeurl"
+                       :model-type="currentModel(p)" :width="160" :height="240" />
+        </div>
+        <div class="pc-body">
+          <h3 class="pc-name" :title="pname(p)">{{ pname(p) }}</h3>
+          <p class="pc-meta">
+            <span class="muted">PID {{ pid(p) }}</span>
+            <code class="uuid" :title="puuid(p)">{{ puuid(p) }}</code>
+          </p>
+          <label class="pc-field">
+            <span>{{ t('dashboard.colSkin') }}</span>
+            <select :value="currentTid(p, 'skin')" @change="swapTexture(p, 'skin', $event)">
+              <option value="">{{ t('dashboard.noSkin') }}</option>
+              <option v-for="tx in skins" :key="tx.id" :value="String(tx.id)" :title="tx.hash">{{ txLabel(tx) }}</option>
+            </select>
+          </label>
+          <label class="pc-field">
+            <span>{{ t('dashboard.colCape') }}</span>
+            <select :value="currentTid(p, 'cape')" @change="swapTexture(p, 'cape', $event)">
+              <option value="">{{ t('dashboard.noCape') }}</option>
+              <option v-for="tx in capes" :key="tx.id" :value="String(tx.id)" :title="tx.hash">{{ txLabel(tx) }}</option>
+            </select>
+          </label>
+          <div class="pc-actions">
+            <button class="secondary" @click="renamePlayer(p)">{{ t('players.rename') }}</button>
+            <button class="secondary danger-outline" @click="deletePlayer(p)">{{ t('common.delete') }}</button>
+          </div>
+        </div>
+      </article>
     </div>
     <p class="muted" v-else>{{ t('players.empty') }}</p>
     <PluginSlot slot="player.card.footer" />
@@ -139,18 +158,27 @@ onMounted(load)
 </template>
 
 <style scoped>
-/* narrow viewports scroll via the global .table-scroll wrapper */
-.p-table { min-width: 860px; }
-.p-table th:nth-child(1), .p-table td:nth-child(1) { width: 48px; }
-.p-table th:nth-child(2), .p-table td:nth-child(2) { width: 72px; text-align: center; }
-.p-table th:nth-child(3), .p-table td:nth-child(3) { width: 130px; }
-.p-table th:nth-child(5), .p-table td:nth-child(5) { width: 160px; }
-.p-table th:nth-child(6), .p-table td:nth-child(6) { width: 160px; }
-/* SkinPreview renders a 128×192 canvas — scale it down to row height or
-   it stretches the table far past the card (screenshot bug) */
-.prev-cell :deep(canvas) { width: 48px !important; height: 72px !important; }
-.pname { font-weight: 600; }
-.uuid { font-size: var(--fs-xs); }
-.cell-sel { width: 100%; padding: 4px 6px; font-size: var(--fs-xs); }
-.nowrap { white-space: nowrap; }
+.player-grid {
+  display: grid; gap: 12px; margin-top: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+.player-card {
+  border: 1px solid var(--border); border-radius: var(--r-m);
+  background: var(--panel); overflow: hidden; display: flex; flex-direction: column;
+}
+.pc-preview {
+  display: flex; justify-content: center; align-items: center;
+  background: var(--bg); padding: 8px 0;
+}
+/* 160×240 is what SkinPreview is told to render; pinning the display size keeps
+   the backing store and the box equal, so the skin is not resampled. */
+.pc-preview :deep(canvas) { width: 160px; height: 240px; display: block; }
+.pc-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.pc-name { margin: 0; font-size: var(--fs-m); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-meta { margin: 0; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.uuid { font-size: var(--fs-xs); word-break: break-all; }
+.pc-field { display: flex; flex-direction: column; gap: 4px; margin: 0; font-size: var(--fs-xs); color: var(--muted); }
+.pc-field select { width: 100%; padding: 4px 6px; font-size: var(--fs-s); }
+.pc-actions { display: flex; gap: 8px; margin-top: 2px; }
+.pc-actions button { flex: 1; }
 </style>

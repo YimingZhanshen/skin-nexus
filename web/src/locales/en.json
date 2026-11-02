@@ -355,8 +355,6 @@
   "players": {
     "title": "Profiles ({count})",
     "hint": "You can sign in to the skin site with any profile name you own; the UUID never changes on rename.",
-    "colPreview": "Preview",
-    "colName": "Profile name",
     "rename": "Rename",
     "renamePrompt": "New name for “{name}” (UUID stays):",
     "renamed": "Renamed (UUID unchanged)",
