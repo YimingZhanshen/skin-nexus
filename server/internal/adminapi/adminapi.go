@@ -79,6 +79,9 @@ type Backend struct {
 	// the textures dir — the textures table has no size column and the
 	// schema is frozen; nil = storage card shows "—").
 	StorageBytes func() (int64, error)
+	// Diagnostics feeds the deployment self-check (GET /diagnostics): the
+	// paths and probes only the boot knows. Zero values report `skip`.
+	Diagnostics DiagnosticsDeps
 }
 
 func New(st *store.Mysql, yggSvc *ygg.Service) *Backend {
@@ -94,6 +97,9 @@ func (b *Backend) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/admin/v1/overview", b.auth(b.handleOverview))
 	mux.HandleFunc("GET /api/admin/v1/status", b.auth(b.handleStatus))
+	// Deployment self-check (U16): mutable configuration + filesystem + a real
+	// preview render, so it is a separate handler from the /status snapshot.
+	mux.HandleFunc("GET /api/admin/v1/diagnostics", b.auth(b.handleDiagnostics))
 	mux.HandleFunc("GET /api/admin/v1/users", b.auth(b.handleUsers))
 	mux.HandleFunc("GET /api/admin/v1/textures", b.auth(b.handleTextures))
 	mux.HandleFunc("GET /api/admin/v1/audit", b.auth(b.handleAudit))

@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
 	"log"
@@ -337,4 +338,34 @@ func writePNG(w http.ResponseWriter, img image.Image, cache string) {
 	if err := png.Encode(w, img); err != nil {
 		log.Printf("avatar: encode: %v", err)
 	}
+}
+
+// smokePreview runs the preview pipeline on real data: the newest public skin,
+// opened through the file layer and rendered exactly the way /preview renders
+// it. The admin self-check calls this because the failure that bites operators
+// is never "the renderer is missing from the binary" — it is "the texture row
+// exists and its file does not" (a data volume that moved, an import that
+// skipped files). The bool reports whether anything was rendered at all: an
+// empty library is not a fault, but it is not a passed test either.
+func (d *avatarDeps) smokePreview(ctx context.Context) (bool, error) {
+	hash, tid, slim, err := d.st.NewestPublicSkin(ctx)
+	if errors.Is(err, store.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	f, err := d.ts.Open(hash)
+	if err != nil {
+		return true, fmt.Errorf("texture %d: %w", tid, err)
+	}
+	defer f.Close()
+	skin, err := avatargen.LoadSkinReader(f)
+	if err != nil {
+		return true, fmt.Errorf("texture %d: %w", tid, err)
+	}
+	if img := avatargen.RenderPreviewAt(skin, slim, 5); img == nil || img.Bounds().Dx() < 64 {
+		return true, fmt.Errorf("texture %d: the renderer produced an empty preview", tid)
+	}
+	return true, nil
 }

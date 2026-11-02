@@ -459,6 +459,24 @@ func (m *Mysql) TextureByTID(ctx context.Context, tid int64) (hash, typ string, 
 	return
 }
 
+// NewestPublicSkin picks the most recent skin the library actually serves, for
+// the admin self-check's preview probe. One real row is the point: it exercises
+// the file layer and the renderer with actual data, where a built-in sample
+// could never fail. ErrNotFound just means the library is still empty.
+func (m *Mysql) NewestPublicSkin(ctx context.Context) (hash string, tid int64, slim bool, err error) {
+	var model sql.NullString
+	err = m.db.QueryRowContext(ctx,
+		`SELECT hash, id, model FROM textures
+		  WHERE type = 'skin' AND public = 1 AND moderation <> 'violation'
+		  ORDER BY id DESC LIMIT 1`).
+		Scan(&hash, &tid, &model)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = ErrNotFound
+	}
+	slim = model.Valid && model.String == "slim"
+	return
+}
+
 // TextureMetaByHash is TextureByTID keyed by content hash (preview/hash route).
 func (m *Mysql) TextureMetaByHash(ctx context.Context, hash string) (typ string, slim bool, err error) {
 	var model sql.NullString

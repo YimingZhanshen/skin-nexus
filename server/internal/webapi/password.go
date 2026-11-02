@@ -11,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -125,39 +124,14 @@ const resetTokenTTL = 30 * time.Minute
 // Hot by design — save on the settings panel and the next forgot-password
 // already uses it; no restart.
 func (b *Backend) smtpConfig(ctx context.Context) *mailer.Config {
-	get := func(key string) string {
+	// The rule itself lives in mailer.ConfigFrom so the admin panel's mail
+	// status answers the same question the same way.
+	return mailer.ConfigFrom(func(key string) string {
 		if v, ok, err := b.Store.GetOption(ctx, key); err == nil && ok {
 			return v
 		}
 		return b.SMTPDefaults[key]
-	}
-	host := strings.TrimSpace(get("smtp_host"))
-	if host == "" {
-		return nil
-	}
-	port := 465
-	if p, err := strconv.Atoi(strings.TrimSpace(get("smtp_port"))); err == nil && p > 0 && p < 65536 {
-		port = p
-	}
-	cfg := &mailer.Config{
-		Host:     host,
-		Port:     port,
-		User:     strings.TrimSpace(get("smtp_user")),
-		Pass:     get("smtp_pass"),
-		From:     strings.TrimSpace(get("smtp_from")),
-		SiteName: b.SiteName,
-	}
-	// A From address is mandatory (header + envelope), and it falls back to
-	// smtp_user — with NEITHER set there is nothing to send FROM, so the
-	// config is as unusable as a missing host. Treat it as unconfigured so
-	// the user gets the honest 503 instead of a 200 that mails nothing
-	// (live finding: host-only flip answered 200 while every send died on
-	// "empty address" in the log). Config state is address-independent, so
-	// the 503 leaks no user existence.
-	if cfg.From == "" && cfg.User == "" {
-		return nil
-	}
-	return cfg
+	}, b.SiteName)
 }
 
 // handleForgotPassword: POST /api/v1/password/forgot {email}

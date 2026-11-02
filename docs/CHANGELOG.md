@@ -4,6 +4,30 @@
 
 ## 2026-11-02
 
+- **后台运行状态页多了「部署自检」（U16）**：`GET /api/admin/v1/diagnostics` 不塞进 `/status`——快照
+  是可缓存的事实清单，自检读的是可变配置、文件系统和渲染器，两者的缓存与写域都不同。检查项**钉死 6 条**
+  （站点地址 / 迁移水位 / 邮件 / 预览渲染 / 前端资源 / 插件签名密钥），少一条就少一个支持问题，多一条就会
+  长成一个愿望清单。**服务端只发 id、状态和数据**（路径、水位、host:port、密钥数），句子全在面板词典
+  `admin.diag*` / `admin.diagFix.*` 里——和通知 kinds 同一套做法，中文面板不会拿到半英半中的散文。
+  两处刻意不做「绿」：探针没注入 → `skip` 而不是 ok；皮肤库空 → `skip/previewNothing`，因为「没东西可渲染」
+  不是通过，把假绿写进自检面等于教站长不信任它。
+  `site` 一行把四个真源并排吐出（进程解析值 / option `site_url` / option `base_url` / env `SKIN_BASE_URL`），
+  因为「到底哪个赢」就是站长问的那个问题；顺带发现一个必须区分的状态：**option 已存成对外地址、进程仍在用
+  启动时解析到的局域网地址**（`site_url` 要重启才生效，`siteurl` 只在 boot 写一次）。这一行早期版本直接套
+  `siteLan`，等于当场指责站长刚刚做过的那件事，现在给独立的 `siteNeedsRestart`。
+  预览探针走真数据：取库里最新一张公开皮肤 → `ts.Open` → `avatargen.LoadSkinReader` → `RenderPreviewAt`，
+  因此它抓的是「材质记录在库里、文件不在磁盘上」（数据卷搬家、导入漏文件）这类真会发生的坏法，内置样本永远
+  不会失败也就永远测不到。检查目录用 `spaDistDir` 常量与静态处理器共享同一个路径，否则自检指着一个没人服务
+  的目录也能报绿。SMTP 判定抽成 `mailer.ConfigFrom`（option 优先 env 的语义不变），webapi 找回密码与
+  adminapi 自检从此不可能漂开。
+  实测：局域网基线站给 `warn/siteLan`，其余五条 ok；只填 `smtp_host` → `fail/mailNoSender`（面板原先保存成功
+  却一封不发的那个坑）；另起实例（自己的库、`SKIN_AUTO_MIGRATE=false`、迁移树比库新）→
+  `warn/migrationsPending` 且值写清 `0021_notifications.sql → 0022_closet_backfill.sql`，同一实例在没有
+  `web/dist` 的 cwd 启动 → `fail/assetsMissing`；公开皮肤上传前后 preview 由 `skip` 变 `ok`；面板设成
+  `https://skin.example.test` 后重启，`site` 从 `warn/siteNeedsRestart` 变 ok。浏览器里中英两套逐项复核，
+  18 个 fix key 无一到裸键；连点三次「重新检查」只发一个请求（`diagBusy` 挡住）。
+  自检端点认 `X-Admin-Token`（与 `/status` 同档），机器接法也拿得到。
+
 - **安装向导不再把站点地址写进面板看不见的键（U15）**：向导原先写 option `base_url`，而解析顺序是
   `site_url → base_url → SKIN_BASE_URL`——`base_url` 不在面板设置白名单里，于是安装时用了一个局域网 IP，
   它就会长期压住 env，而管理员在面板里既看不到也改不掉（要修得进数据库）。现在向导写面板的 `site_url`，

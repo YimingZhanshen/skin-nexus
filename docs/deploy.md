@@ -438,6 +438,7 @@ Nginx 反代与 §三完全相同。日志 `journalctl -u skin-nexus -f`。
 ## 六、运维周期检查
 
 - **弱哈希看板**：管理面板仪表盘 `weakHashUsers` 归零前保持关注（用户登录即惰性换 argon2id）
+- **部署自检**：管理面板「运行状态 → 部署自检」六项（站点地址 / 迁移水位 / 邮件 / 预览渲染 / 前端资源 / 插件签名密钥），改完配置点「重新检查」即可，不用重启也不用翻日志；机器接法 `GET /api/admin/v1/diagnostics`（带 `X-Admin-Token`）
 - **Union 开关**：管理面板「站点设置」热切换——关 = 全 union 路由 404 + 纹理签名回本地密钥；开 = 即时恢复。开启前须已有成员密钥；面板展示信任声明（Union 模式下纹理签名私钥全网共享）
 - **主题/外观**：主题包放 `skin-data` 卷的 `themes/`（规范见 [theme-spec.md](theme-spec.md)）；自定义 CSS/JS 与 SEO 在管理面板对应区块
 - **定期**：备份任务跑 §2.6 两条命令；证书到期前续期；`docker compose pull` 后看 CHANGELOG 再升级
@@ -462,7 +463,7 @@ Nginx 反代与 §三完全相同。日志 `journalctl -u skin-nexus -f`。
 ```bash
 docker build --pull -t skin-nexus:audit .        # 用最新 base 重建一次，看是否报错
 docker run --rm skin-nexus:audit --version       # 版本号
-# 面板「运行状态」核对 goVersion / mysqlVersion / migration
+# 面板「运行状态」核对 goVersion / mysqlVersion / migration，再看「部署自检」六项是否全绿
 ```
 
 再对照上游：Go 的 release notes、Alpine 安全公告、`cd web && npm audit --audit-level=high`

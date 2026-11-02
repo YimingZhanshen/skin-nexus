@@ -1,6 +1,8 @@
 <script setup>
 // StatusView: read-only runtime facts (运行状态, blessing parity B1) —
-// build metadata, runtime/environment, site paths, dependencies and modules.
+// build metadata, runtime/environment, site paths, dependencies and modules —
+// plus the deployment self-check (U16), which reads live configuration rather
+// than the boot snapshot and is therefore fetched separately.
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
@@ -10,6 +12,10 @@ const { t } = useI18n()
 const status = ref(null)
 const error = ref('')
 
+const diag = ref(null)
+const diagError = ref('')
+const diagBusy = ref(false)
+
 const build = computed(() => {
   const s = status.value || {}
   return s.build || { version: s.version || '', commit: '', time: '', branch: '' }
@@ -17,6 +23,9 @@ const build = computed(() => {
 const runtime = computed(() => (status.value && status.value.runtime) || {})
 const environment = computed(() => (status.value && status.value.environment) || {})
 const modules = computed(() => (status.value && status.value.modules) || {})
+
+const diagClass = { ok: 'ok', warn: 'gold', fail: 'danger', skip: 'dim' }
+const diagStateClass = (s) => diagClass[s] || 'dim'
 
 const shortCommit = (v) => (v && v !== 'unknown' ? String(v).slice(0, 12) : '—')
 const show = (v) => (v === undefined || v === null || v === '' ? '—' : String(v))
@@ -39,11 +48,21 @@ function formatUptime(sec) {
   return `${s}s`
 }
 
+async function loadDiag() {
+  if (diagBusy.value) return
+  diagBusy.value = true
+  diagError.value = ''
+  try {
+    diag.value = await fetchJSON('/api/admin/v1/diagnostics')
+  } catch (e) { diagError.value = e.message } finally { diagBusy.value = false }
+}
+
 onMounted(async () => {
   error.value = ''
   try {
     status.value = await fetchJSON('/api/admin/v1/status')
   } catch (e) { error.value = e.message }
+  loadDiag()
 })
 </script>
 
@@ -108,6 +127,28 @@ onMounted(async () => {
         </div>
       </section>
     </template>
+
+    <section class="status-section">
+      <div class="diag-head">
+        <h3>{{ t('admin.diagTitle') }}</h3>
+        <button class="secondary" :disabled="diagBusy" @click="loadDiag">
+          {{ diagBusy ? t('admin.diagChecking') : t('admin.diagRecheck') }}
+        </button>
+      </div>
+      <div class="muted diag-intro">{{ t('admin.diagIntro') }}</div>
+      <div class="error" role="alert" v-if="diagError">{{ diagError }}</div>
+      <template v-if="diag && diag.items">
+        <div class="diag-row" v-for="it in diag.items" :key="it.id">
+          <span class="badge" :class="diagStateClass(it.state)">{{ t('admin.diagState.' + it.state) }}</span>
+          <div class="diag-body">
+            <div class="diag-name">{{ t('admin.diag.' + it.id) }}</div>
+            <div class="diag-value" v-if="it.value">{{ it.value }}</div>
+            <div class="diag-fix" v-if="it.state !== 'ok' && it.fix">{{ t('admin.diagFix.' + it.fix) }}</div>
+          </div>
+        </div>
+        <div class="muted diag-at">{{ t('admin.diagCheckedAt') }} {{ formatTime(diag.checked_at) }}</div>
+      </template>
+    </section>
   </div>
 </template>
 
@@ -120,4 +161,15 @@ onMounted(async () => {
 .status-item .k { color: var(--muted); font-size: var(--fs-xs); }
 .status-item .v { color: var(--text); font-size: var(--fs-s); overflow-wrap: anywhere; }
 .status-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.diag-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.diag-head h3 { margin: 0; }
+.diag-intro { font-size: var(--fs-xs); margin: 6px 0 14px; }
+.diag-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); }
+.diag-row:first-of-type { border-top: 0; }
+.diag-row .badge { flex: 0 0 auto; min-width: 5.5em; text-align: center; }
+.diag-body { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.diag-name { font-size: var(--fs-s); color: var(--text); }
+.diag-value { font-size: var(--fs-xs); color: var(--muted); overflow-wrap: anywhere; }
+.diag-fix { font-size: var(--fs-xs); color: var(--text); }
+.diag-at { font-size: var(--fs-xs); margin-top: 12px; }
 </style>

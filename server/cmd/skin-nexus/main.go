@@ -810,6 +810,17 @@ func main() {
 	// parity): avatars + previews. Registered at the root mux so they
 	// beat the SPA catch-all below.
 	av := &avatarDeps{st: st, ts: ts, redirect: pluginHost.AvatarURL}
+	// Deployment self-check inputs (U16): only the boot knows where the bundle
+	// is, what SKIN_BASE_URL said before any option overrode it, and whether a
+	// signing keyring loaded. The preview probe reuses the live renderer.
+	admin.Diagnostics = adminapi.DiagnosticsDeps{
+		WebDist: spaDistDir,
+		EnvBase: os.Getenv("SKIN_BASE_URL"),
+		Preview: av.smokePreview,
+		KeyringStatus: func() (int, string) {
+			return len(trustKeys), cfg.PluginMarketURL
+		},
+	}
 	root.HandleFunc("GET /avatar/player/{name}", av.handleAvatarPlayer)
 	root.HandleFunc("GET /avatar/user/{uid}", av.handleAvatarUser)
 	root.HandleFunc("GET /avatar/hash/{hash}", av.handleAvatarHash)
@@ -867,7 +878,7 @@ func main() {
 		}
 		return d
 	}
-	spa := spaHandler("web/dist", seoEng, appearEng, cfg.SiteName, landingFn, pluginHost.HasUIPath)
+	spa := spaHandler(spaDistDir, seoEng, appearEng, cfg.SiteName, landingFn, pluginHost.HasUIPath)
 	if oidcProvider != nil {
 		spa = oidcProvider.Wrap(spa)
 	}
@@ -985,6 +996,11 @@ func textureHandler(ts *texture.Store) http.HandlerFunc {
 		http.ServeContent(w, r, "", zeroTime(), f)
 	}
 }
+
+// spaDistDir is the bundle the SPA is served from. One constant, because the
+// static handler and the deployment self-check must look at the same directory
+// — a check pointing at a path nothing serves would report green forever.
+const spaDistDir = "web/dist"
 
 // spaHandler serves web/dist if present, else a placeholder page. Every HTML
 // serve passes through the SEO + appearance injection layers (phase 3).
