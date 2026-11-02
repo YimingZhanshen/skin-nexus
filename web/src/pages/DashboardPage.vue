@@ -3,7 +3,7 @@
 // markdown-it 渲染 + DOMPurify 消毒后才 v-html；服务端已 bluemonday 一层）、
 // 使用情况（角色 n/limit + 存储字节）、启动器快速配置（API 地址复制/
 // 可拖拽链接/HMCL PCL 引导）、上传、纹理列表。
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import MarkdownIt from 'markdown-it'
 import PluginSlot from '../components/plugin/PluginSlot.vue'
@@ -72,10 +72,28 @@ function clearPreview() {
 const previewIsCape = computed(() => uploadType.value === 'cape')
 const sourceNeedsURL = computed(() => uploadSource.value === 'derivative' || uploadSource.value === 'repost')
 
+// The server states the size its upload check will actually apply
+// (`max_upload_kb` from /site-config). Refusing here rather than there is the
+// difference between "your file is too large" and a metered connection spent on
+// bytes that were never going to land.
+const siteConf = inject('siteConfig', null)
+const maxUploadBytes = computed(() => {
+  const kb = Number(siteConf && siteConf.value ? siteConf.value.max_upload_kb : 0)
+  return kb > 0 ? kb * 1024 : 0
+})
+const uploadLimitText = computed(() => (maxUploadBytes.value ? formatBytes(maxUploadBytes.value) : ''))
+function oversize(f) {
+  return maxUploadBytes.value > 0 && f.size > maxUploadBytes.value
+}
+
 function onDrop(e) {
   dragging.value = false
   const f = e.dataTransfer.files && e.dataTransfer.files[0]
   if (!f) return
+  if (oversize(f)) {
+    uploadErr.value = t('dashboard.fileTooLarge', { size: uploadLimitText.value })
+    return
+  }
   if (fileInput.value) {
     const dt = new DataTransfer()
     dt.items.add(f)
@@ -250,6 +268,11 @@ async function doUpload() {
 
 function onPick(e) {
   const f = e.target.files[0] || null
+  if (f && oversize(f)) {
+    uploadErr.value = t('dashboard.fileTooLarge', { size: uploadLimitText.value })
+    if (fileInput.value) fileInput.value.value = ''
+    return
+  }
   uploadFile.value = f
   setPreviewFile(f)
   modelChecked.value = false
@@ -364,7 +387,7 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
         </div>
         <div class="success" v-if="uploadOk">{{ uploadOk }}</div>
         <PluginFields form="texture.upload" v-model="uploadPluginData" />
-        <div class="muted">{{ t('dashboard.uploadHint') }}</div>
+        <div class="muted">{{ t('dashboard.uploadHint') }}{{ uploadLimitText ? t('dashboard.uploadLimit', { size: uploadLimitText }) : '' }}</div>
       </div>
       <div class="prev-box">
         <template v-if="previewURL">

@@ -142,6 +142,11 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 			}
 		}
 	}
+	// The knob is in KiB and can only come down (hardMaxKB is the pipeline's
+	// anti-bomb ceiling). handleUploadTexture caps the whole body at
+	// MaxUploadBytes plus frame slack, so every value this knob can take is
+	// actually reachable — the transport layer never arrives first with a
+	// different number.
 	limitKB := s.Store.MaxUploadKB(ctx, texture.MaxUploadBytes>>10)
 	if int64(len(png)) > int64(limitKB)<<10 {
 		return TextureView{}, false, errf(CodeTooLarge, "the file exceeds the upload size limit", texture.ErrTooLarge)

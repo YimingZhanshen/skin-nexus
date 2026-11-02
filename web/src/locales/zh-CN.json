@@ -270,6 +270,8 @@
     "upload": "上传",
     "uploading": "上传中…",
     "uploadHint": "皮肤 64×64 / 64×32，披风 64×32 / 22×17（或等比放大）",
+    "uploadLimit": "；单个文件不超过 {size}",
+    "fileTooLarge": "文件太大，本站单个文件上限 {size}",
     "dropHint": "将 PNG 拖入此处，或点击选择",
     "clearFile": "清除已选文件",
     "previewEmpty": "选中文件后在此预览",

@@ -315,13 +315,34 @@ func (b *Backend) Handler() http.Handler {
 
 // maxBody caps request bodies at 1 MiB (review B P2: unbounded JSON fed
 // argon2 over arbitrarily large inputs — cheap CPU/memory amplification).
+// The texture upload is the one exemption: a skin PNG is not JSON, and holding
+// the body to 1 MiB while the admin-configured file ceiling reaches 2 MiB only
+// turned "your file is too large" into an unparseable-request error (and made
+// the knob unturnable). Exempting it does not make it unbounded —
+// handleUploadTexture applies its own bound (file ceiling + multipart frame
+// slack), which is the larger but still finite limit.
 func maxBody(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Body != nil {
+		if r.Body != nil && !isUploadRoute(r) {
 			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isUploadRoute matches the one multipart route mounted above (exact path: the
+// registration in Handler has no wildcard segment).
+func isUploadRoute(r *http.Request) bool {
+	return r.Method == http.MethodPost && r.URL.Path == "/api/v1/me/textures"
+}
+
+// bodyTooLarge reports a read stopped by a MaxBytesReader cap. Callers use it
+// to answer "the file is too big" instead of "I could not parse your request" —
+// the truncation looks like a malformed body to the parser, but the player
+// cannot act on that.
+func bodyTooLarge(err error) bool {
+	var mbe *http.MaxBytesError
+	return errors.As(err, &mbe)
 }
 
 // statusRecorder captures the response status for the union inbound log.
@@ -420,6 +441,9 @@ func randomToken() string {
 //   - mail_configured: smtpConfig != nil (same resolution as forgot: panel
 //     option wins over env default). false → the register email field and
 //     the whole forgot-password flow are unavailable in the UI.
+//   - max_upload_kb: the size knob the upload check will actually apply, so the
+//     form can state the real limit and refuse an oversized file before it
+//     costs the player an upload.
 //
 // handlePluginUI exposes enabled plugin pages/slots/i18n plus the host's
 // additive capability list. It is public and contains no secrets; pages are
@@ -455,6 +479,7 @@ func (b *Backend) handleSiteConfig(w http.ResponseWriter, r *http.Request) {
 		"invite_required": b.inviteRequired(r.Context()),
 		"mail_configured": b.smtpConfig(r.Context()) != nil,
 		"union_enabled":   b.union != nil && b.union.Enabled(),
+		"max_upload_kb":   b.Store.MaxUploadKB(r.Context(), texture.MaxUploadBytes>>10),
 		"footer":          footer,
 	})
 }
@@ -802,13 +827,31 @@ func (b *Backend) handleListTextures(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"textures": out, "total": total})
 }
 
+// uploadBodySlack is the room left in the multipart body for the framing that
+// is not file bytes: the boundary, the field names, the filename, and the
+// metadata fields the upload form carries.
+const uploadBodySlack = 1 << 20
+
 func (b *Backend) handleUploadTexture(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
 		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
 		return
 	}
+	// maxBody lets this route through (a PNG is not argon2 bait), so the bound
+	// lives here instead: file ceiling + frame slack. Any larger, and the body
+	// stops being read rather than filling a temp file.
+	if r.Body != nil {
+		r.Body = http.MaxBytesReader(w, r.Body, texture.MaxUploadBytes+uploadBodySlack)
+	}
 	if err := r.ParseMultipartForm(4 << 20); err != nil {
+		if bodyTooLarge(err) {
+			// Same sentence the file-size check in the account service gives: the
+			// player's action is the same (pick a smaller file), and "I could not
+			// parse your request" is not something anyone can act on.
+			writeErrCode(w, http.StatusRequestEntityTooLarge, "upload body exceeds the site limit", account.CodeTooLarge)
+			return
+		}
 		writeErrCode(w, http.StatusBadRequest, "multipart parse failed", i18n.MsgBadBody)
 		return
 	}

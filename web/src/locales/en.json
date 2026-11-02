@@ -270,6 +270,8 @@
     "upload": "Upload",
     "uploading": "Uploading…",
     "uploadHint": "Skins 64×64 / 64×32, capes 64×32 / 22×17 (or scaled up)",
+    "uploadLimit": "; one file up to {size}",
+    "fileTooLarge": "That file is too large — this site accepts up to {size}",
     "dropHint": "Drop a PNG here, or click to choose",
     "clearFile": "Clear selected file",
     "previewEmpty": "Pick a file to preview it here",

@@ -74,7 +74,10 @@ function normalizeFooter(raw) {
   const f = raw && typeof raw === 'object' ? raw : {}
   return { ...defaultFooter(), ...f, links: Array.isArray(f.links) ? f.links : [] }
 }
-const siteConf = ref({ site_name: '', invite_required: false, mail_configured: false, union_enabled: false, footer: defaultFooter() })
+const siteConf = ref({ site_name: '', invite_required: false, mail_configured: false, union_enabled: false, max_upload_kb: 0, footer: defaultFooter() })
+// Pages read the deployment's real limits off the same boot fetch instead of
+// hardcoding them (the upload form states the byte ceiling it will enforce).
+provide('siteConfig', siteConf)
 const siteFooter = computed(() => normalizeFooter(siteConf.value.footer))
 const siteName = computed(() => siteConf.value.site_name || siteFooter.value.siteName || t('site.name'))
 const confLoaded = ref(false)
