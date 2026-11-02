@@ -6,6 +6,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
+import { confirmDialog } from '../../dialog.js'
 import Pager from '../Pager.vue'
 import EmptyState from '../EmptyState.vue'
 
@@ -48,7 +49,7 @@ async function load() {
 }
 
 async function resumeRotation() {
-  if (!confirm(t('admin.unionResumeConfirm'))) return
+  if (!(await confirmDialog(t('admin.unionResumeConfirm'), { danger: true }))) return
   try {
     await fetchJSON('/api/admin/v1/union/rotation/resume', { method: 'POST' })
     await load()
@@ -56,7 +57,7 @@ async function resumeRotation() {
 }
 
 async function runOp(name, path, confirmMsg) {
-  if (confirmMsg && !confirm(confirmMsg)) return
+  if (confirmMsg && !(await confirmDialog(confirmMsg, { danger: true }))) return
   opBusy.value = true
   opResult.value = ''
   error.value = ''
@@ -178,7 +179,7 @@ async function blAdd() {
 }
 
 async function blRelease(row) {
-  if (!confirm(t('admin.unionBlReleaseConfirm', { email: row.email || row.id }))) return
+  if (!(await confirmDialog(t('admin.unionBlReleaseConfirm', { email: row.email || row.id }), { danger: true }))) return
   error.value = ''
   try {
     await fetchJSON(`/api/admin/v1/union/blacklist/${encodeURIComponent(row.id)}/invalidate`, { method: 'PUT' })
@@ -187,8 +188,8 @@ async function blRelease(row) {
 }
 
 async function blDelete(row) {
-  if (!confirm(t('admin.unionBlDeleteConfirm1', { email: row.email || row.id }))) return
-  if (!confirm(t('admin.unionBlDeleteConfirm2'))) return
+  if (!(await confirmDialog(t('admin.unionBlDeleteConfirm1', { email: row.email || row.id }), { danger: true }))) return
+  if (!(await confirmDialog(t('admin.unionBlDeleteConfirm2'), { danger: true }))) return
   error.value = ''
   try {
     await fetchJSON(`/api/admin/v1/union/blacklist/${encodeURIComponent(row.id)}`, { method: 'DELETE' })

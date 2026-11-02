@@ -5,6 +5,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
+import { confirmDialog } from '../../dialog.js'
 import Pager from '../Pager.vue'
 import EmptyState from '../EmptyState.vue'
 
@@ -58,7 +59,7 @@ function setStatus(s) {
 }
 
 async function act(r, action) {
-  if (action === 'hide' && !window.confirm(t('admin.reportsHideConfirm', { name: r.textureName || r.textureId }))) return
+  if (action === 'hide' && !(await confirmDialog(t('admin.reportsHideConfirm', { name: r.textureName || r.textureId }), { danger: true }))) return
   busy.value = r.id
   error.value = ''
   ok.value = ''
@@ -112,7 +113,7 @@ function removeTexture(tid, force, reason) {
 
 async function purge(r) {
   const name = r.textureName || ('#' + r.textureId)
-  if (!window.confirm(t('admin.reportsDeleteConfirm', { name }))) return
+  if (!(await confirmDialog(t('admin.reportsDeleteConfirm', { name }), { danger: true }))) return
   busy.value = r.id
   error.value = ''
   ok.value = ''
@@ -128,7 +129,8 @@ async function purge(r) {
         closets: e.data.closets || 0,
         avatars: e.data.avatars || 0,
       })
-      if (!window.confirm(`${detail}\n${t('admin.reportsDeleteForceConfirm')}`)) return
+      // the blockers as the heading, the consequence as the question
+      if (!(await confirmDialog(t('admin.reportsDeleteForceConfirm'), { title: detail, danger: true }))) return
       await removeTexture(r.textureId, true, reportReason(r))
     }
     ok.value = t('admin.reportsDeleted')

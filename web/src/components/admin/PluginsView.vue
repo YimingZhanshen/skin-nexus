@@ -4,6 +4,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON, needToken } from '../../adminApi.js'
+import { confirmDialog } from '../../dialog.js'
 import { api } from '../../api.js'
 import { loadPluginUI } from '../../pluginUI.js'
 import SchemaForm from '../SchemaForm.vue'
@@ -82,7 +83,7 @@ async function saveConfig() {
 
 async function rollback(p) {
   actionError.value = ''
-  if (!window.confirm(t('admin.pluginsRollbackConfirm', { name: p.title || p.name }))) return
+  if (!(await confirmDialog(t('admin.pluginsRollbackConfirm', { name: p.title || p.name }), { danger: true }))) return
   try {
     await fetchJSON(`/api/admin/v1/plugins/${encodeURIComponent(p.name)}/rollback`, { method: 'POST' })
     await load()
@@ -92,7 +93,7 @@ async function rollback(p) {
 
 async function uninstall(p) {
   actionError.value = ''
-  if (!window.confirm(t('admin.pluginsUninstallConfirm', { name: p.title || p.name }))) return
+  if (!(await confirmDialog(t('admin.pluginsUninstallConfirm', { name: p.title || p.name }), { danger: true }))) return
   try {
     await fetchJSON(`/api/admin/v1/plugins/${encodeURIComponent(p.name)}`, { method: 'DELETE' })
     await load()
@@ -103,7 +104,7 @@ async function uninstall(p) {
 async function toggleBypass() {
   actionError.value = ''
   const next = !guardsBypassed.value
-  if (next && !window.confirm(t('admin.pluginsGuardBypassConfirm'))) return
+  if (next && !(await confirmDialog(t('admin.pluginsGuardBypassConfirm'), { danger: true }))) return
   try {
     const d = await fetchJSON('/api/admin/v1/plugins/guards/bypass', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -115,7 +116,7 @@ async function toggleBypass() {
 
 async function act(p, action) {
   actionError.value = ''
-  if (action === 'enable' && !window.confirm(t('admin.pluginsEnableConfirm'))) return
+  if (action === 'enable' && !(await confirmDialog(t('admin.pluginsEnableConfirm'), { danger: true }))) return
   try {
     await fetchJSON(`/api/admin/v1/plugins/${encodeURIComponent(p.name)}/${action}`, { method: 'POST' })
     await load()

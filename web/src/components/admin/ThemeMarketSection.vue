@@ -6,6 +6,7 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
+import { confirmDialog } from '../../dialog.js'
 import { api } from '../../api.js'
 
 const emit = defineEmits(['changed'])
@@ -67,7 +68,7 @@ async function install(p) {
 }
 
 async function uninstall(p) {
-  if (!confirm(t('admin.themeUninstallConfirm', { name: label(p.title, p.name) }))) return
+  if (!(await confirmDialog(t('admin.themeUninstallConfirm', { name: label(p.title, p.name) }), { danger: true }))) return
   actionError.value = ''
   busy.value = p.name
   try {

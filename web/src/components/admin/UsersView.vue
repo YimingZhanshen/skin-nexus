@@ -9,7 +9,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
-import { alertDialog, promptDialog } from '../../dialog.js'
+import { alertDialog, confirmDialog, promptDialog } from '../../dialog.js'
 import Pager from '../Pager.vue'
 
 const { t } = useI18n()
@@ -58,7 +58,7 @@ async function adminResetPassword(u) {
 }
 
 async function adminDeleteUser(u) {
-  if (!confirm(t('admin.deleteConfirm', { name: u.nickname, id: u.id }))) return
+  if (!(await confirmDialog(t('admin.deleteConfirm', { name: u.nickname, id: u.id }), { danger: true }))) return
   error.value = ''
   try {
     await fetchJSON(`/api/admin/v1/users/${u.id}`, { method: 'DELETE' })
@@ -124,9 +124,9 @@ async function changePermission(u, ev) {
   const prev = Number(u.permission)
   if (next === prev) return
   const label = (p) => t(`admin.perm${p}`)
-  if (!confirm(t('admin.permChangeConfirm', {
+  if (!(await confirmDialog(t('admin.permChangeConfirm', {
     name: u.nickname, id: u.id, from: label(prev), to: label(next),
-  }))) {
+  }), { danger: true }))) {
     ev.target.value = String(prev)
     return
   }

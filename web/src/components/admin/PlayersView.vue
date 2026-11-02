@@ -6,7 +6,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
-import { promptDialog } from '../../dialog.js'
+import { confirmDialog, promptDialog } from '../../dialog.js'
 import Pager from '../Pager.vue'
 
 const { t } = useI18n()
@@ -62,7 +62,7 @@ async function changeOwner(p) {
   const uid = Number(next)
   if (!Number.isInteger(uid) || uid <= 0) { error.value = t('admin.ownerInvalid'); return }
   if (uid === p.uid) return
-  if (!confirm(t('admin.ownerConfirm', { name: p.name, from: p.uid, to: uid }))) return
+  if (!(await confirmDialog(t('admin.ownerConfirm', { name: p.name, from: p.uid, to: uid }), { danger: true }))) return
   if (await put(`/api/admin/v1/players/${p.id}/owner`, { uid })) await load()
 }
 
@@ -81,10 +81,10 @@ async function swapTexture(p, kind) {
 }
 
 async function deletePlayer(p) {
-  if (!confirm(t('admin.playerDeleteConfirm', { name: p.name, id: p.id }))) return
+  if (!(await confirmDialog(t('admin.playerDeleteConfirm', { name: p.name, id: p.id }), { danger: true }))) return
   // second gate: identity check (blessing-style double confirm for the
   // irreversible action — uuid_map row + hub announcement go with it)
-  if (!confirm(t('admin.playerDeleteDouble', { name: p.name }))) return
+  if (!(await confirmDialog(t('admin.playerDeleteDouble', { name: p.name }), { danger: true }))) return
   if (busy.value) return
   busy.value = true
   error.value = ''

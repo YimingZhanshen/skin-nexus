@@ -5,6 +5,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
+import { confirmDialog } from '../../dialog.js'
 import ThemeMarketSection from './ThemeMarketSection.vue'
 
 const { t } = useI18n()
@@ -98,7 +99,7 @@ function secretHint(s) {
   return s.set ? t('admin.settingsSecretSet') : t('admin.settingsSecretUnset')
 }
 async function clearSetting(s) {
-  if (!confirm(t('admin.settingsClearConfirm', { key: s.key }))) return
+  if (!(await confirmDialog(t('admin.settingsClearConfirm', { key: s.key }), { danger: true }))) return
   setError.value = ''
   try {
     await fetchJSON('/api/admin/v1/settings', {
@@ -200,7 +201,7 @@ async function createClient() {
   } catch (e) { oidcError.value = e.message }
 }
 async function deleteClient(id) {
-  if (!confirm(t('admin.oidcDeleteConfirm', { id }))) return
+  if (!(await confirmDialog(t('admin.oidcDeleteConfirm', { id }), { danger: true }))) return
   oidcError.value = ''
   try {
     await fetchJSON(`/api/admin/v1/oidc/clients/${encodeURIComponent(id)}`, { method: 'DELETE' })

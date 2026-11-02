@@ -26,16 +26,28 @@ const page = ref(1)
 const total = ref(0)
 const PAGE_SIZE = 50
 let searchTimer = null
+const loading = ref(false)
+// Tab + search + paging all trigger the same fetch; without a sequence stamp a
+// slow response can land after a fast one and repaint the old list.
+let reqSeq = 0
+const busyId = ref(0) // one row in flight at a time (avatar / rename / remove)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 
 async function load() {
+  const seq = ++reqSeq
   err.value = ''
+  loading.value = true
   try {
     const d = await api.closet(page.value, PAGE_SIZE, query.value.trim(), tab.value === 'all' ? '' : tab.value)
+    if (seq !== reqSeq) return
     closet.value = d.closet || []
     total.value = d.total || 0
-  } catch (e) { if (!guard401(e)) err.value = e.message }
+  } catch (e) {
+    if (seq === reqSeq && !guard401(e)) err.value = e.message
+  } finally {
+    if (seq === reqSeq) loading.value = false
+  }
 }
 
 // Filtering and paging are the server's job now: uploads auto-collect, so a
@@ -58,30 +70,36 @@ function goPage(p) {
 async function setAsAvatar(c) {
   err.value = ''; ok.value = ''
   if (!c.textureId) { err.value = t('closet.orphanNoAvatar'); return }
+  if (busyId.value) return
+  busyId.value = c.id
   try {
     await api.setAvatar(c.textureId)
     ok.value = t('closet.avatarSet')
-  } catch (e) { if (!guard401(e)) err.value = e.message }
+  } catch (e) { if (!guard401(e)) err.value = e.message } finally { busyId.value = 0 }
 }
 
 async function renameEntry(c) {
+  if (busyId.value) return
   const next = await promptDialog(t('closet.renamePrompt'), c.itemName || '')
   if (next === null) return
   err.value = ''
+  busyId.value = c.id
   try {
     await api.closetRename(c.id, next)
     await load()
-  } catch (e) { if (!guard401(e)) err.value = e.message }
+  } catch (e) { if (!guard401(e)) err.value = e.message } finally { busyId.value = 0 }
 }
 
 async function removeEntry(c) {
+  if (busyId.value) return
   const okToRemove = await confirmDialog(t('closet.removeConfirm', { name: c.itemName || c.hash?.slice(0, 10) || '?' }))
   if (!okToRemove) return
   err.value = ''
+  busyId.value = c.id
   try {
     await api.closetRemove(c.id)
     await load() // the page shifted; refetch rather than splice the row out
-  } catch (e) { if (!guard401(e)) err.value = e.message }
+  } catch (e) { if (!guard401(e)) err.value = e.message } finally { busyId.value = 0 }
 }
 
 // The wear dialog is state on the page rather than a route: opening it must not
@@ -112,7 +130,18 @@ onMounted(load)
     </div>
     <div class="error" v-if="err">{{ err }}</div>
     <div class="success" v-if="ok">{{ ok }}</div>
-    <div class="table-scroll" v-if="closet.length">
+    <!-- First paint has nothing to show rows against, so it gets the same
+         skeleton the skin library uses; later fetches keep the old rows rather
+         than blanking the page under the cursor. -->
+    <div class="table-scroll" v-if="loading && !closet.length" aria-hidden="true">
+      <table>
+        <tr v-for="n in 4" :key="n">
+          <td><span class="skeleton" style="display:block; width:48px; height:48px;"></span></td>
+          <td colspan="5"><span class="skeleton" style="display:block; height:14px;"></span></td>
+        </tr>
+      </table>
+    </div>
+    <div class="table-scroll" v-else-if="closet.length">
     <table style="margin-top: 10px;">
       <tr>
         <th>{{ t('dashboard.colPreview') }}</th>
@@ -134,10 +163,10 @@ onMounted(load)
         <td class="nowrap">
           <!-- The avatar endpoint rejects capes (422); offering the button on a
                cape row was a dead click. -->
-          <button class="secondary" v-if="c.type === 'skin'" @click="setAsAvatar(c)">{{ t('closet.setAvatar') }}</button>
-          <button class="secondary" style="margin-left: 6px;" @click="openWear(c)">{{ t('wear.button') }}</button>
-          <button class="secondary" style="margin-left: 6px;" @click="renameEntry(c)">{{ t('closet.rename') }}</button>
-          <button class="secondary danger-outline" style="margin-left: 6px;" @click="removeEntry(c)">{{ t('closet.remove') }}</button>
+          <button class="secondary" v-if="c.type === 'skin'" :disabled="busyId === c.id" @click="setAsAvatar(c)">{{ t('closet.setAvatar') }}</button>
+          <button class="secondary" style="margin-left: 6px;" :disabled="busyId === c.id" @click="openWear(c)">{{ t('wear.button') }}</button>
+          <button class="secondary" style="margin-left: 6px;" :disabled="busyId === c.id" @click="renameEntry(c)">{{ t('closet.rename') }}</button>
+          <button class="secondary danger-outline" style="margin-left: 6px;" :disabled="busyId === c.id" @click="removeEntry(c)">{{ t('closet.remove') }}</button>
         </td>
       </tr>
     </table>

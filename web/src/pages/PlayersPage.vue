@@ -19,53 +19,67 @@ const capes = ref([])
 const newName = ref('')
 const err = ref('')
 const ok = ref('')
+// Cards hold a dropdown each: without one-in-flight and a response stamp, a
+// double-click sent two texture changes and a slow /me list could overwrite a
+// fresher one.
+const creating = ref(false)
+const busyId = ref(0)
+let reqSeq = 0
 
 async function load() {
+  const seq = ++reqSeq
   err.value = ''
   try {
     const [p, s, c] = await Promise.all([api.players(), api.wearable('skin'), api.wearable('cape')])
+    if (seq !== reqSeq) return
     players.value = p.players || []
     skins.value = s.textures || []
     capes.value = c.textures || []
-  } catch (e) { if (!guard401(e)) err.value = e.message }
+  } catch (e) { if (seq === reqSeq && !guard401(e)) err.value = e.message }
+}
+
+async function createPlayer() {
+  if (creating.value) return
+  err.value = ''; ok.value = ''
+  creating.value = true
+  try {
+    await api.createPlayer(newName.value)
+    newName.value = ''
+    ok.value = t('players.created')
+    await load()
+  } catch (e) { if (!guard401(e)) err.value = e.message } finally { creating.value = false }
 }
 
 function pid(p) { return p.ID ?? p.id }
 function pname(p) { return p.Name || p.name }
 function puuid(p) { return p.UUID || p.uuid || '' }
 
-async function createPlayer() {
-  err.value = ''; ok.value = ''
-  try {
-    await api.createPlayer(newName.value)
-    newName.value = ''
-    ok.value = t('players.created')
-    await load()
-  } catch (e) { if (!guard401(e)) err.value = e.message }
-}
-
 async function renamePlayer(p) {
+  if (busyId.value) return
   const next = await promptDialog(t('players.renamePrompt', { name: pname(p) }), pname(p))
   if (next === null || next.trim() === '' || next.trim() === pname(p)) return
   err.value = ''; ok.value = ''
+  busyId.value = pid(p)
   try {
     await api.renamePlayer(pid(p), next.trim())
     ok.value = t('players.renamed')
     await load()
-  } catch (e) { if (!guard401(e)) err.value = e.message }
+  } catch (e) { if (!guard401(e)) err.value = e.message } finally { busyId.value = 0 }
 }
 
 // Double-confirm (blessing parity for irreversible actions): identity echo
 // on the second prompt.
 async function deletePlayer(p) {
+  if (busyId.value) return
   if (!(await confirmDialog(t('players.deleteConfirm', { name: pname(p), id: pid(p) }), { danger: true }))) return
   if (!(await confirmDialog(t('players.deleteDouble', { name: pname(p) }), { danger: true }))) return
   err.value = ''; ok.value = ''
+  busyId.value = pid(p)
   try {
     await api.deletePlayer(pid(p))
     ok.value = t('players.deleted')
     await load()
-  } catch (e) { if (!guard401(e)) err.value = e.message }
+  } catch (e) { if (!guard401(e)) err.value = e.message } finally { busyId.value = 0 }
 }
 
 // currentTid mirrors the player's mounted texture in the <select> (review
@@ -94,15 +108,15 @@ function currentModel(p) {
 
 async function swapTexture(p, kind, e) {
   const v = parseInt(e.target.value || '0', 10)
+  if (busyId.value) { e.target.value = currentTid(p, kind); return }
   err.value = ''; ok.value = ''
+  busyId.value = pid(p)
   try {
     if (kind === 'skin') await api.setSkin(pid(p), v)
     else await api.setCape(pid(p), v)
     ok.value = t('players.textureSet')
   } catch (ex) { if (!guard401(ex)) err.value = ex.message }
-  finally {
-    try { await load() } catch (ex) { if (!guard401(ex)) err.value = ex.message }
-  }
+  finally { busyId.value = 0; try { await load() } catch (ex) { if (!guard401(ex)) err.value = ex.message } }
 }
 
 onMounted(load)
@@ -114,7 +128,7 @@ onMounted(load)
     <p class="muted">{{ t('players.hint') }}</p>
     <div class="row">
       <input v-model="newName" :placeholder="t('dashboard.newPlayerName')" style="max-width: 220px;" @keyup.enter="createPlayer" />
-      <button @click="createPlayer">{{ t('dashboard.createPlayer') }}</button>
+      <button :disabled="creating" @click="createPlayer">{{ creating ? t('common.pleaseWait') : t('dashboard.createPlayer') }}</button>
     </div>
     <div class="error" v-if="err">{{ err }}</div>
     <div class="success" v-if="ok">{{ ok }}</div>
@@ -132,21 +146,21 @@ onMounted(load)
           </div>
           <label class="pc-field">
             <span>{{ t('dashboard.colSkin') }}</span>
-            <select :value="currentTid(p, 'skin')" @change="swapTexture(p, 'skin', $event)">
+            <select :disabled="busyId === pid(p)" :value="currentTid(p, 'skin')" @change="swapTexture(p, 'skin', $event)">
               <option value="">{{ t('dashboard.noSkin') }}</option>
               <option v-for="tx in skins" :key="tx.id" :value="String(tx.id)" :title="tx.hash">{{ tx.label }}</option>
             </select>
           </label>
           <label class="pc-field">
             <span>{{ t('dashboard.colCape') }}</span>
-            <select :value="currentTid(p, 'cape')" @change="swapTexture(p, 'cape', $event)">
+            <select :disabled="busyId === pid(p)" :value="currentTid(p, 'cape')" @change="swapTexture(p, 'cape', $event)">
               <option value="">{{ t('dashboard.noCape') }}</option>
               <option v-for="tx in capes" :key="tx.id" :value="String(tx.id)" :title="tx.hash">{{ tx.label }}</option>
             </select>
           </label>
           <div class="pc-actions">
-            <button class="secondary" @click="renamePlayer(p)">{{ t('players.rename') }}</button>
-            <button class="secondary danger-outline" @click="deletePlayer(p)">{{ t('common.delete') }}</button>
+            <button class="secondary" :disabled="busyId === pid(p)" @click="renamePlayer(p)">{{ t('players.rename') }}</button>
+            <button class="secondary danger-outline" :disabled="busyId === pid(p)" @click="deletePlayer(p)">{{ t('common.delete') }}</button>
           </div>
         </div>
       </article>
