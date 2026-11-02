@@ -31,7 +31,8 @@ server/         Go 后端（模块 skin-nexus/server）
   internal/ratelimit  认证限流（滑动窗口 + 失败锁定）
   internal/plugin     goja 宿主 v2（manifest/config/secrets/KV/docs/事件/guard/UI/三档路由/签名安装）+ signedpkg/marketfmt/outbound
   cmd/skin-plugin     离线打包/签名/registry/校验 CLI（私钥不入仓）
-  migrations/         DDL（InnoDB utf8mb4；0001 基础 … 0017 材质元数据/举报，追踪式逐文件记标）
+  migrations/         DDL 三套引擎树（mysql 0001 基础…0022 衣柜回灌，sqlite/postgres 同号对齐；
+                      逐文件记标于 schema_migrations，改一处必须三处同步）
 web/            Vue 3 + Vite（npm ci && npm run build → web/dist）
 docs/           仓库内公开文档（构建 / 部署 / 迁移 / 兼容矩阵 / 竞品证据 / 插件规范与发布 /
                 主题规范 / 启动器 API 入口 / CHANGELOG）

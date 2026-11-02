@@ -280,10 +280,11 @@ mysql -N -e "SELECT v FROM skin_nexus.options WHERE k='union_member_key'"
      curl -s https://你的域名/api/yggdrasil/ | python3 -c "import sys,json,base64,hashlib;print(hashlib.sha256(base64.b64decode(''.join(json.load(sys.stdin)['signaturePublickey'].splitlines()[1:-1]))).hexdigest())"
      ```
 
-2. 改 `SKIN_BASE_URL` 与 nginx `server_name`、证书（`SKIN_BASE_URL` 改后需重启容器
-   才影响纹理 URL——见 deploy.md §2.3）；
-3. 管理面板改 `site_url`（options 优先于 env；重启后才生效，纹理 URL 只随
-   `SKIN_BASE_URL` 变）；
+2. 换域名后有**一个**真源：进程启动时把地址解析一次（option `site_url` → 老 option `base_url` →
+   `SKIN_BASE_URL`），纹理 URL、页面链接、sitemap 全部读这个解析结果。所以改 env 只在两个 option 都空时才
+   影响纹理 URL；option 非空时它压在 env 上面，改 env 不生效（见 deploy.md §2.3）；
+3. 管理面板改 `site_url` 是同一真源的正道：写它、重启容器，纹理 URL 随之整体切换（`SKIN_BASE_URL` 只是
+   没人配 option 时的默认值）；
 4. yggdrasil 客户端的服务器地址需随域名更新（老玩家改一次启动器配置）；
 5. 联盟（Union）成员站注册信息若含域名，需在 hub 侧同步。
 

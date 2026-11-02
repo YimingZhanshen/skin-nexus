@@ -8,7 +8,7 @@
 
 | 方式 | 适合 | 说明 |
 |---|---|---|
-| **A. Docker Compose（推荐）** | 绝大多数站长 | 拉镜像 → 改环境变量 → `up -d`；升级 `pull && up -d`；内置 MySQL 可选 |
+| **A. Docker Compose（推荐）** | 绝大多数站长 | 拉镜像 → 改环境变量 → `up -d`；升级 `pull && up -d`；内置 MySQL 可选。机器上是宝塔面板的话走同一套，见 §2.8 |
 | B. 源码构建 + systemd | 无 Docker 的主机（如已有主机面板/内网机） | 单二进制 + web/dist，见 §五 |
 
 ## 二、Docker Compose 部署（主线）
@@ -121,7 +121,7 @@ environment:
 | `SKIN_DATABASE_DSN` | 外部库模式必改；内置库模式保持默认。前缀决定引擎（见 §2.2），MySQL/MariaDB 形式**必须带 `parseTime=true`**（缺失直接启动失败） |
 | `SKIN_ADMIN_TOKEN` | `openssl rand -hex 32` 生成；机器/API 调用管理接口的回退凭据（管理面板本身用管理员账号登录即可，无需此 token；留空 = 机器 token 通道关闭） |
 
-其余变量**默认值即可跑通**，逐项列全（46 个进程变量 + 4 个 compose 变量，与代码逐条对齐）：
+其余变量**默认值即可跑通**，逐项列全（与代码逐条对齐；条数不写在这里，`check-docs` 会双向比对环境变量集合，写死的数字只会漂）：
 
 **监听与运行标签**
 
@@ -202,7 +202,7 @@ environment:
 
 | 变量 | 默认（源码 / 镜像内） | 说明 |
 |---|---|---|
-| `SKIN_AUTO_MIGRATE` | `false` / `true` | 追踪式建表/补表：`schema_migrations` 逐文件记标，空库全量、既有库自动补新文件（当前 0001–0021） |
+| `SKIN_AUTO_MIGRATE` | `false` / `true` | 追踪式建表/补表：`schema_migrations` 逐文件记标，空库全量、既有库自动补新文件（树里最新一号见 `migrations/<引擎>/`，三套引擎同号对齐） |
 | `SKIN_MIGRATIONS_DIR` | `./migrations` / `/app/migrations` | 迁移树根目录，启动时按连接引擎取 `<目录>/<mysql\|sqlite\|postgres>/` |
 
 **插件市场与主题市场**（语义一致：默认值编译内置，零配置即可用）
@@ -246,7 +246,8 @@ Union 八键），但生效优先级按键区分：
 
 散点变量说明：`SKIN_ADMIN_TOKEN`、`SKIN_SMTP_*`、`SKIN_MOJANG_FALLBACK`、`SKIN_LEGACY_ENV`、
 `SKIN_PLUGIN_SECRET_KEY` **不在 `config.go`**（分别在 `adminapi`、`main.go` 里直接 `os.Getenv`）——
-`config.go` 是主入口但不是唯一清单，完整真源以本节表为准（与代码逐条对齐，共 50 个变量）。
+`config.go` 是主入口但不是唯一清单，完整真源以本节表为准（与代码逐条对齐；集合由 `check-docs` 双向比对，
+所以这里不写「共几个」这种一改就漂的数字）。
 
 ### 2.4 启动与验收
 
@@ -331,6 +332,54 @@ docker compose logs --tail 50 db          # 内置库日志
 | 启动报 migration 失败 | 非空库但缺表/结构漂移时追踪式迁移会报错退出——先备份再看日志定位文件，勿手改 `schema_migrations` |
 | 外部库连不上 | 网络模式与 DSN 主机对不上（host 模式配 `127.0.0.1`、桥接模式配 `172.17.0.1` 或内网 IP）；MySQL 账号需有建表权限（自动迁移用） |
 | 页面是占位页 | `web/dist` 缺失——确认拉的是 GHCR 镜像而非残缺自构建 |
+| 玩家说游戏里没有皮肤，网页上一切正常 | 先按顺序排三件事：①启动器有没有接外置登录（地址填的是 `/api/yggdrasil`）②站点地址是不是对外可访问的（面板「运行状态 → 部署自检」的「站点地址」一行会把进程值 / option / env 并排吐出来）③该账号是否还没通过邮箱验证（开了验证门时 join 会被拒，网页登录不受影响）。玩家侧的同一份说明在 `/help` |
+| 注册/登录突然全量被拒 | 认证限流与失败锁定按 IP 与账号分别计数（`SKIN_RATE_LIMIT_AUTH`、`SKIN_LOGIN_FAIL_LIMIT`）。**反代后没转发真实 IP 时，所有玩家共享网关那一个 IP**——先按 §三 CDN/反代小节把头交付回去，再看是否被限；「请 N 秒后再试」是账号锁定，等或让管理员重置 |
+| 找回密码邮件收不到 | 面板「运行状态 → 部署自检 → 邮件服务」：没配 SMTP 会直说「站点未配置邮件服务」；只填了服务器地址、没填发件地址会报红（这一种最坑：面板能保存成功，但一封都发不出去）。同处点「发送测试邮件」真发一封到你自己账号的邮箱；失败的原始原因写进服务日志与审计 |
+
+### 2.8 用宝塔面板管这一套（Docker 管理器）
+
+面板的「Docker」菜单只是 `docker` + `docker compose` 的一层壳，**镜像与卷与 §2.1~§2.5 完全同一套**，
+不存在「面板版」与「命令行版」两种部署。已经用面板装好 Docker 的机器，直接照下面走。
+
+1. **放文件**：目录自己定，示例用 `/opt/skin-nexus`。把 §2.1 的
+   `docker-compose.yml` 与该文件同目录的 `.env` 放进去（`.env` 里至少写 `SKIN_BASE_URL`、`SKIN_IMAGE_TAG`、
+   数据库口令）。
+2. **起服务**：面板「Docker → Compose」里**只列在面板中创建的项目**；命令行建的目录不会出现在列表里，
+   这不是故障。在项目目录里执行一次即可，之后仍然可以用面板启停容器：
+
+   ```bash
+   cd /opt/skin-nexus && docker compose up -d
+   docker compose ps                       # 应用是 Up，内置 db 是 Up (healthy)
+   ```
+
+   （镜像里没给应用容器挂 healthcheck，健康检查只加在 db 上；验证应用本身用
+   `docker compose exec skin-nexus wget -qO- http://127.0.0.1:8080/healthz`，见 §2.7。）
+
+3. **域名与证书**：面板「网站 → 添加站点」建一个**纯静态**站点绑域名，然后在站点设置里
+   「反向代理 → 添加反向代理」，目标 URL `http://127.0.0.1:8080`，发送域名 `$host`。
+   证书走站点设置「SSL → Let's Encrypt」，需要域名已解析到本机且 80 端口可达；签完再打开「强制 HTTPS」。
+   反代头与真实 IP 的写法与 §三 完全一致（`X-Forwarded-Proto` 决定 Ali-Texture 地址是否 https）。
+4. **反代之后不要把 8080 摊在公网**：仓库自带的 `docker-compose.yml` 默认写的是 `'8080:8080'`（所有网卡），
+   文件里那行注释给的就是面板场景的写法——把它改成 `'127.0.0.1:8080:8080'` 再 `up -d`，玩家只从 443 进来。
+   否则玩家实际拿到的是无 TLS 的站点，而且绕过反代会让 `SKIN_CDN_*` 那组设置失效。
+   面板的系统防火墙/安全组里放行的也只需要 80/443。
+5. **更新与回退**：`.env` 里把 `SKIN_IMAGE_TAG` 钉成 `sha-<完整提交号>` 而不是 `latest`，
+   出问题时能说清线上是哪个提交（CI 只在 `main` 推送时构建镜像，打 tag 不触发，所以 `latest` 只反映提交）。
+
+   ```bash
+   cd /opt/skin-nexus
+   cp .env .env.bak                                    # 改配置前先备份
+   sed -i 's/^SKIN_IMAGE_TAG=.*/SKIN_IMAGE_TAG=sha-新提交号/' .env
+   docker compose pull skin-nexus && docker compose up -d
+   docker compose logs --tail 30 skin-nexus            # 迁移水位有无报错
+   ```
+
+   升级后先到管理面板「运行状态 → 部署自检」看六项是否全绿，尤其是「数据库迁移」；
+   回退只需把 tag 改回旧提交号再 `up -d`（数据在 named volume 里，跟镜像无关）。
+6. **日志**：面板「Docker → 容器 → 日志」等价于 `docker compose logs -f skin-nexus`。
+
+> 注意 `.env` 的行尾：面板编辑器保存下来的文件可能没有行尾换行，用 `echo 'K=V' >> .env` 会把上一条粘进同
+> 一行（`sed -i` 改单行不受影响）。改完 `cat -A .env | tail -5` 确认一眼，省一次启动失败。
 
 ## 三、Nginx 反代（前置 HTTPS 证书）
 
@@ -432,7 +481,7 @@ WantedBy=multi-user.target
 ```
 
 要点：工作目录须能读到 `web/dist` 与 `migrations/`（或用 `SKIN_MIGRATIONS_DIR` 指定）；
-手动建表按序执行 `migrations/<引擎>/0001…0021`（以目录实际文件为准），或设 `SKIN_AUTO_MIGRATE=true` 让启动时自动应用。
+手动建表按序执行 `migrations/<引擎>/0001…` 直到目录里最后一个文件（以 `ls migrations/<引擎>` 实际输出为准），或设 `SKIN_AUTO_MIGRATE=true` 让启动时自动应用。
 Nginx 反代与 §三完全相同。日志 `journalctl -u skin-nexus -f`。
 
 ## 六、运维周期检查
