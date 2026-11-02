@@ -382,6 +382,21 @@ func writeErrCode(w http.ResponseWriter, status int, msg, code string) {
 	})
 }
 
+// writeErrExtras is writeErrCode with machine-readable fields beside the code —
+// the same channel `texture.duplicate_public` uses. It exists for the failures
+// where the answer contains information the caller can only use as a number:
+// a lockout without a remaining time is a message that says "later" and leaves
+// the player hammering the button until the lock resets itself.
+func writeErrExtras(w http.ResponseWriter, status int, msg, code string, extra map[string]any) {
+	body := map[string]any{
+		"error": code, "message": msg, "code": code,
+	}
+	for k, v := range extra {
+		body[k] = v
+	}
+	writeJSON(w, status, body)
+}
+
 // writeLogged answers a failure the caller is not supposed to see and puts the
 // reason in the log. Without this half, `message` would have to carry the Go
 // error to keep the site debuggable — which is how credentials reach a client.
@@ -637,12 +652,20 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Retry-After", strconv.Itoa(ra))
 			b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 				Outcome: accesslog.OutcomeDenied, Who: req.Identifier, Detail: "locked"})
-			writeErrCode(w, http.StatusTooManyRequests, "too many attempts, try again later", i18n.MsgRateLimited)
+			// The header is for HTTP clients; the body field is for the SPA,
+			// which never sees response headers (fetch/XHR wrappers hand the
+			// page a parsed body and a status).
+			writeErrExtras(w, http.StatusTooManyRequests, "too many attempts, try again later",
+				i18n.MsgRateLimited, map[string]any{"retry_after_seconds": ra})
 			return
 		}
 		if !b.Limiter.Allow(ipKey) {
 			b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
 				Outcome: accesslog.OutcomeDenied, Who: req.Identifier, Detail: "rate_limited"})
+			// No seconds here: the sliding-window counter (Limiter.Allow) does
+			// not record a lockout time the way the failure box does, so
+			// RetryAfter would only ever answer 0. "slow down" is the honest
+			// message for a per-minute burst.
 			writeErrCode(w, http.StatusTooManyRequests, "too many requests, please slow down", i18n.MsgRateLimited)
 			return
 		}

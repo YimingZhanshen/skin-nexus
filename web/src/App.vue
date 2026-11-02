@@ -1,8 +1,9 @@
 <script setup>
 // SkinNexus · Copyright (C) 2026 SkinNexus contributors · AGPL-3.0
-import { ref, computed, watch, onMounted, defineAsyncComponent, provide } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from './api.js'
+import { transportError } from './errors.js'
 import PageLoading from './components/PageLoading.vue'
 import ToastHub from './components/ToastHub.vue'
 import PluginSlot from './components/plugin/PluginSlot.vue'
@@ -44,6 +45,32 @@ const pendingExt = ref('')
 // mobile topbar drawer (≤640px hamburger)
 const menuOpen = ref(false)
 const authErr = ref('') // login + register cards
+// One in-flight guard for the four auth cards (only one is ever on screen), and
+// the lockout countdown the server's 429 carries. Both exist for the same
+// failure mode: a slow or impatient player double-clicking, which used to fire a
+// second request and then lock the account with no way to see why.
+const authBusy = ref(false)
+// A deadline, not a counter: a backgrounded tab gets its timer throttled to one
+// tick a minute, and a counter would then show a frozen "804 seconds" that has
+// long since expired. Reading the clock each tick stays correct whenever the
+// page does get to run, and switching language re-renders the sentence at once.
+const lockUntil = ref(0)
+const nowTick = ref(Date.now())
+let tickTimer = null
+const locked = computed(() => lockUntil.value > nowTick.value)
+const lockSecondsLeft = computed(() => Math.max(0, Math.ceil((lockUntil.value - nowTick.value) / 1000)))
+function waitText() { return t('auth.lockedSeconds', { n: lockSecondsLeft.value }) }
+function startWait(sec) {
+  const until = Date.now() + sec * 1000
+  if (until <= lockUntil.value) return // never shorten a lock the page already knows
+  lockUntil.value = until
+  nowTick.value = Date.now()
+  if (tickTimer) return
+  tickTimer = setInterval(() => {
+    nowTick.value = Date.now()
+    if (lockUntil.value <= nowTick.value) { clearInterval(tickTimer); tickTimer = null }
+  }, 1000)
+}
 // Host-rendered plugin fields on the register card (ui.forms "auth.register").
 const pluginFormData = ref({})
 
@@ -223,9 +250,9 @@ const pendingView = ref('')
 function withBootTimeout(promise, ms) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      const err = new Error('timeout')
-      err.code = 'timeout'
-      reject(err)
+      // Translated like every other transport failure: this one used to put
+      // the bare word "timeout" inside the boot error sentence.
+      reject(new Error(transportError('networkTimeout')))
     }, ms)
     promise.then((v) => { clearTimeout(timer); resolve(v) },
       (e) => { clearTimeout(timer); reject(e) })
@@ -335,6 +362,8 @@ function skinlibLogin() { pendingView.value = 'skinlib'; view.value = 'login' }
 
 async function doLogin() {
   authErr.value = ''
+  if (locked.value) return
+  authBusy.value = true
   try {
     user.value = await api.login(identifier.value, password.value)
     // New backends return `permission` on login; fall back to /me only for
@@ -342,21 +371,33 @@ async function doLogin() {
     if (user.value && user.value.permission === undefined) {
       try { user.value = await api.me() } catch { /* keep login payload */ }
     }
-  } catch (e) { authErr.value = e.message; return }
+  } catch (e) {
+    // A lockout answers with the seconds left in the body: without it the
+    // player only learns "too many attempts" and keeps clicking, which is how
+    // a typo turns into being shut out for fifteen minutes.
+    if (e.status === 429 && e.data && e.data.retry_after_seconds > 0) {
+      startWait(Number(e.data.retry_after_seconds))
+    } else {
+      authErr.value = e.message
+    }
+    return
+  } finally { authBusy.value = false }
   finishAuth()
 }
 
 async function doRegister() {
   authErr.value = ''
+  if (authBusy.value) return
   // Invite required → fail fast client-side with a clear message instead of
   // letting the server 400 the whole submission.
   if (inviteIsRequired.value && !invitationCode.value.trim()) {
     authErr.value = t('auth.inviteRequiredErr'); return
   }
+  authBusy.value = true
   try {
     user.value = await api.register(email.value, nickname.value, password.value, invitationCode.value.trim(), pluginFormData.value)
     if (user.value && user.value.permission === undefined) user.value = { ...user.value, permission: 0 }
-  } catch (e) { authErr.value = e.message; return }
+  } catch (e) { authErr.value = e.message; return } finally { authBusy.value = false }
   finishAuth()
 }
 
@@ -364,19 +405,23 @@ async function doRegister() {
 // enumeration-safe); reset validates the two fields client-side first.
 async function doForgot() {
   authErr.value = ''
+  if (authBusy.value) return
+  authBusy.value = true
   try {
     await api.forgotPassword(forgotEmail.value.trim())
     forgotSent.value = true
-  } catch (e) { authErr.value = e.message }
+  } catch (e) { authErr.value = e.message } finally { authBusy.value = false }
 }
 
 async function doReset() {
   authErr.value = ''
+  if (authBusy.value) return
   if (resetPw1.value !== resetPw2.value) { authErr.value = t('auth.resetMismatch'); return }
+  authBusy.value = true
   try {
     await api.resetPassword(resetToken.value, resetPw1.value)
     resetDone.value = true
-  } catch (e) { authErr.value = e.message }
+  } catch (e) { authErr.value = e.message } finally { authBusy.value = false }
 }
 
 // 邮箱验证 (2026-11-02): the link is single-use, so the landing page consumes
@@ -414,6 +459,7 @@ onMounted(() => {
   window.addEventListener('popstate', onPopState)
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape') menuOpen.value = false })
 })
+onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
 </script>
 
 <template>
@@ -493,9 +539,9 @@ onMounted(() => {
       <div style="margin-top: 8px; text-align: right;" v-if="mailEnabled">
         <a href="/forgot-password" class="muted" @click.prevent="forgotSent = false; view = 'forgot'">{{ t('auth.forgotLink') }}</a>
       </div>
-      <div class="error" v-if="authErr">{{ authErr }}</div>
+      <div class="error" v-if="authErr || locked">{{ locked ? waitText() : authErr }}</div>
       <div class="row" style="margin-top: 16px;">
-        <button @click="doLogin">{{ t('common.login') }}</button>
+        <button :disabled="authBusy || locked" @click="doLogin">{{ authBusy ? t('common.pleaseWait') : t('common.login') }}</button>
         <button class="secondary" @click="view = 'register'">{{ t('common.register') }}</button>
       </div>
       <PluginSlot slot="auth.login.after" />
@@ -519,7 +565,7 @@ onMounted(() => {
       <PluginFields form="auth.register" v-model="pluginFormData" />
       <div class="error" v-if="authErr">{{ authErr }}</div>
       <div class="row" style="margin-top: 16px;">
-        <button @click="doRegister">{{ t('common.register') }}</button>
+        <button :disabled="authBusy" @click="doRegister">{{ authBusy ? t('common.pleaseWait') : t('common.register') }}</button>
         <button class="secondary" @click="view = 'login'">{{ t('auth.toLogin') }}</button>
       </div>
       <PluginSlot slot="auth.register.after" />
@@ -541,7 +587,7 @@ onMounted(() => {
         <input id="f-forgot-email" v-model="forgotEmail" type="email" autocomplete="email" @keyup.enter="doForgot" />
         <div class="error" v-if="authErr">{{ authErr }}</div>
         <div class="row" style="margin-top: 16px;">
-          <button @click="doForgot">{{ t('auth.forgotSubmit') }}</button>
+          <button :disabled="authBusy" @click="doForgot">{{ authBusy ? t('common.pleaseWait') : t('auth.forgotSubmit') }}</button>
           <button class="secondary" @click="view = 'login'">{{ t('auth.toLogin') }}</button>
         </div>
       </template>
@@ -569,7 +615,7 @@ onMounted(() => {
         <input id="f-reset2" v-model="resetPw2" type="password" autocomplete="new-password" @keyup.enter="doReset" />
         <div class="error" v-if="authErr">{{ authErr }}</div>
         <div class="row" style="margin-top: 16px;">
-          <button @click="doReset">{{ t('auth.resetSubmit') }}</button>
+          <button :disabled="authBusy" @click="doReset">{{ authBusy ? t('common.pleaseWait') : t('auth.resetSubmit') }}</button>
           <button class="secondary" @click="view = 'login'">{{ t('auth.toLogin') }}</button>
         </div>
       </template>

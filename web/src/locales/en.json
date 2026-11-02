@@ -1,7 +1,7 @@
 {
   "errors": {
     "network": "Network problem, please try again",
-    "networkTimeout": "Upload timed out, please retry",
+    "networkTimeout": "The request timed out, please try again",
     "internal": "Internal server error, see the site log",
     "account": {
       "forbidden": "This operation is not allowed"
@@ -164,6 +164,7 @@
     "saved": "Saved",
     "register": "Sign up",
     "loading": "Loading…",
+    "pleaseWait": "Please wait…",
     "skipToContent": "Skip to content",
     "prevPage": "Previous",
     "nextPage": "Next",
@@ -220,6 +221,7 @@
   },
   "auth": {
     "loginTitle": "Sign in",
+    "lockedSeconds": "Too many attempts — try again in {n} seconds",
     "identifier": "Email or nickname",
     "password": "Password",
     "registerTitle": "Sign up",

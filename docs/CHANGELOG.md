@@ -4,6 +4,33 @@
 
 ## 2026-11-02
 
+- **上传限额理顺 + 失败原因分码 + 登录锁定倒计时（降低上手门槛第一轮）**：
+  `maxBody` 把整个 `/api/v1` 的请求体一律截到 1 MiB，而纹理上传允许 2 MiB、像素上限 1M——
+  1 MiB 以上的皮肤 PNG 在 multipart 解析阶段就被截，玩家读到的是「请求内容无法解析」，
+  管理员把 `max_upload_file_size` 调到 2048 也完全无效（闸在传输层，先到先杀）。
+  现在照管理端已有的做法给上传路由单独放行，并由 handler 自己收口（文件硬顶 + multipart 帧余量），
+  其余 JSON 路由的 1 MiB 防线不变；`/site-config` 新增 `max_upload_kb`，上传表单直接报出实际生效的
+  上限并在本地先拦一次。实测（HEAD 二进制为对照）：同一张 1,230,047 B 的 640×640 皮肤，
+  修复前 `400 common.bad_body`、把旋钮调到 2048 仍是 `400`；修复后 `201 created`；
+  旋钮降回 1024 时 1,983,432 B 的文件得到 `413 texture.too_large`；
+  3,148,217 B 触发新的体积闸，同样是 `413 texture.too_large`（不再是 bad_body）；
+  2 MB 的 JSON 打 `/login` 依旧 `400 common.bad_body`。
+  失败原因不再四因一果：尺寸不合法 / 像素炸弹 / 元数据填错 / 非 PNG 原先共用 `texture.invalid`，
+  现在拆出 `texture.dimensions_invalid`（宽高作为字段下发，词典直接插值进句子）、
+  `texture.pixel_bomb`、`texture.metadata_invalid`，`texture.invalid` 回归「不是 PNG」本义；
+  `texture.model_invalid`/`source_invalid` 的所属权从 `i18n` 移到 `account`——状态表在 account，
+  查不到的码会兜底 500，等于把玩家笔误算成服务器故障。注册冲突同样拆开：原先一律报
+  「昵称或邮箱已被占用」，现在分别报 `auth.nickname_taken` / `auth.email_taken`，
+  且非冲突的建号失败不再被误报成重名。
+  前端三条：登录失败锁定的 429 现在带 `retry_after_seconds`（响应头之外再放一份到 body——
+  页面的 fetch 层拿不到响应头），登录卡按截止时间戳渲染「请 N 秒后再试」并把按钮置灰，
+  四张认证卡统一加 in-flight 守卫防连点；传输超时不再写死中文，改走词典
+  `errors.networkTimeout`（文案同步改成与上传无关的「请求超时」）。
+  实测：连续 5 次错密码后第 6 次得 `429`，界面显示「尝试次数已达上限，请 681 秒后再试」且
+  `disabled=true`、期间零请求；切英文立即变「Too many attempts — try again in 680 seconds」；
+  人为注入 AbortError 后中/英分别显示「请求超时，请重试」/「The request timed out, please try again」。
+  错误码目录 109 条 × 双语，界面文案 748 key，中英平价。
+
 - **两个列表改服务端分页与搜索，换肤下拉改读「可穿集合」接口**：`/me/textures` 此前无 LIMIT，
   738 条材质一次渲染；衣柜的 tab 与搜索是客户端在整份列表上做的，分页后会静默漏掉不在当前页的命中。
   现在 `/me/textures?page=&pageSize=`（默认 50、上限 200）带 `total`，每行带 `inCloset`

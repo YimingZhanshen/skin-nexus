@@ -1,7 +1,7 @@
 {
   "errors": {
     "network": "网络异常，请稍后重试",
-    "networkTimeout": "上传超时，请重试",
+    "networkTimeout": "请求超时，请重试",
     "internal": "服务器内部错误，请查看站点日志",
     "account": {
       "forbidden": "该操作不被允许"
@@ -164,6 +164,7 @@
     "saved": "已保存",
     "register": "注册",
     "loading": "加载中…",
+    "pleaseWait": "请稍候…",
     "skipToContent": "跳到主内容",
     "prevPage": "上一页",
     "nextPage": "下一页",
@@ -220,6 +221,7 @@
   },
   "auth": {
     "loginTitle": "登录",
+    "lockedSeconds": "尝试次数已达上限，请 {n} 秒后再试",
     "identifier": "邮箱或昵称",
     "password": "密码",
     "registerTitle": "注册",
