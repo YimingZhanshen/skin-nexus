@@ -1,16 +1,21 @@
 <script setup>
 // ClosetPage (A 级批次): blessing 衣柜 parity —— 皮肤/披风分 tab、即输即搜、
 // 每目操作（设为头像 / 改名 / 移出）。数据自取自管（挂载即拉）。
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
 import { promptDialog } from '../dialog.js'
 import EmptyState from '../components/EmptyState.vue'
 import Pager from '../components/Pager.vue'
+import WearTargetPicker from '../components/WearTargetPicker.vue'
 import { shortHash } from '../textureLabel.js'
 
 const { t } = useI18n()
+// "I have this texture, put it on my character" is asked from the closet, but
+// the answer lives on the players page. Handing the player over is better than
+// duplicating the picker here.
+const goto = inject('gotoView', null)
 
 const closet = ref([])
 const tab = ref('all') // all | skin | cape
@@ -78,6 +83,19 @@ async function removeEntry(c) {
   } catch (e) { if (!guard401(e)) err.value = e.message }
 }
 
+// The wear dialog is state on the page rather than a route: opening it must not
+// lose the closet's filters or the row the player was looking at.
+const wear = ref(null)
+const wearOpen = ref(false)
+function openWear(c) {
+  wear.value = c
+  wearOpen.value = true
+}
+async function onWorn(info) {
+  ok.value = t('wear.done', { texture: info.textureName || info.type, player: info.name })
+  await load()
+}
+
 onMounted(load)
 </script>
 
@@ -116,6 +134,7 @@ onMounted(load)
           <!-- The avatar endpoint rejects capes (422); offering the button on a
                cape row was a dead click. -->
           <button class="secondary" v-if="c.type === 'skin'" @click="setAsAvatar(c)">{{ t('closet.setAvatar') }}</button>
+          <button class="secondary" style="margin-left: 6px;" @click="openWear(c)">{{ t('wear.button') }}</button>
           <button class="secondary" style="margin-left: 6px;" @click="renameEntry(c)">{{ t('closet.rename') }}</button>
           <button class="secondary danger-outline" style="margin-left: 6px;" @click="removeEntry(c)">{{ t('closet.remove') }}</button>
         </td>
@@ -125,6 +144,16 @@ onMounted(load)
     </div>
     <EmptyState v-else :text="query || tab !== 'all' ? t('closet.emptyFiltered') : t('closet.empty')" />
   </div>
+
+  <WearTargetPicker
+    :open="wearOpen"
+    :type="wear ? wear.type : 'skin'"
+    :texture-id="wear ? (wear.textureId || 0) : 0"
+    :texture-name="wear ? (wear.itemName || wear.description || '') : ''"
+    @close="wearOpen = false"
+    @worn="onWorn"
+    @need-player="wearOpen = false; goto && goto('players')"
+  />
 </template>
 
 <style scoped>

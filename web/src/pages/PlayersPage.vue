@@ -68,14 +68,15 @@ async function deletePlayer(p) {
 }
 
 // currentTid mirrors the player's mounted texture in the <select> (review
-// B P2: without it the picker always showed 无皮肤). The payload gives a URL,
-// so the match goes through the hash the picker rows carry.
+// B P2: without it the picker always showed 无皮肤). The payload now carries the
+// mounted texture's own id, so the match is exact — the earlier URL-suffix
+// compare broke silently whenever a plugin URL filter rewrote the address.
 function currentTid(p, kind) {
-  const url = (kind === 'skin' ? (p.SkinURL || p.skinurl) : (p.CapeURL || p.capeurl)) || ''
-  if (!url) return ''
+  const raw = kind === 'cape' ? (p.CapeTID ?? p.capeTID) : (p.SkinTID ?? p.skinTID)
+  const tid = Number(raw || 0)
+  if (!tid) return ''
   const list = kind === 'skin' ? skins.value : capes.value
-  const tx = list.find(x => x.hash && url.endsWith(x.hash))
-  return tx ? String(tx.id) : ''
+  return list.some(x => Number(x.id) === tid) ? String(tid) : ''
 }
 
 // The preview must agree with the mounted skin: an Alex (slim) skin rendered on

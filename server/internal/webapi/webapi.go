@@ -978,6 +978,21 @@ func (b *Backend) textureURL(ctx context.Context, hash, typ string) string {
 	return u
 }
 
+// playerView is the web-facing projection of one player. The launcher protocol
+// (ygg.Player) deliberately keeps the raw texture hashes out of JSON — they are
+// pre-rewrite content addresses, useful to plugin URL filters but not to a
+// launcher. The web page needs exactly that value: to say "this player is
+// already wearing this texture" it must compare content addresses, not the
+// rewritten URL, which any filter may have reshaped. The embedded type keeps
+// every existing key name, so this is additive for clients.
+type playerView struct {
+	ygg.Player
+	SkinTID  int64  `json:"SkinTID"`
+	CapeTID  int64  `json:"CapeTID"`
+	SkinHash string `json:"SkinHash"`
+	CapeHash string `json:"CapeHash"`
+}
+
 func (b *Backend) handleListPlayers(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
@@ -1024,7 +1039,19 @@ func (b *Backend) handleListPlayers(w http.ResponseWriter, r *http.Request) {
 			p.CapeURL = pf.TexturesURL["CAPE"]
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"players": players})
+	// `rows` and `players` are built in the same order, one entry per player, so
+	// the projection can pair the launcher-shaped view with the store-side ids.
+	views := make([]playerView, 0, len(players))
+	for i := range players {
+		views = append(views, playerView{
+			Player:   players[i],
+			SkinTID:  rows[i].SkinTID,
+			CapeTID:  rows[i].CapeTID,
+			SkinHash: rows[i].SkinHash,
+			CapeHash: rows[i].CapeHash,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"players": views})
 }
 
 func (b *Backend) handleCreatePlayer(w http.ResponseWriter, r *http.Request) {

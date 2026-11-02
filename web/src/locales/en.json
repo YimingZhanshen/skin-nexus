@@ -212,7 +212,8 @@
     "makePrivate": "Make private",
     "makePublic": "Make public",
     "renamePrompt": "New name:",
-    "likeTip": "Like (adds to your closet)"
+    "likeTip": "Like (adds to your closet)",
+    "closetNow": "{name} is in your closet"
   },
   "site": {
     "name": "SkinNexus",
@@ -357,6 +358,18 @@
     "orphanNoAvatar": "This entry's texture no longer exists (orphan legacy row) — cannot be an avatar",
     "empty": "The closet is empty — upload a texture on the dashboard first",
     "emptyFiltered": "No matching entries"
+  },
+  "wear": {
+    "title": "Wear on a character",
+    "button": "Wear on a character",
+    "skinHint": "Which character should wear “{name}”?",
+    "capeHint": "Which character should wear this cape?",
+    "avatarAlt": "Character's current avatar",
+    "already": "Already worn",
+    "pick": "Wear it",
+    "noPlayers": "You have no characters yet. A character's name is your in-game name — the skin applies to that name.",
+    "goPlayers": "Create one first",
+    "done": "Wore “{texture}” on {player}"
   },
   "players": {
     "title": "Profiles ({count})",

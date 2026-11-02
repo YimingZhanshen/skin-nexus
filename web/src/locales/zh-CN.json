@@ -212,7 +212,8 @@
     "makePrivate": "设为私有",
     "makePublic": "设为公开",
     "renamePrompt": "新的名称：",
-    "likeTip": "喜欢（加入衣柜）"
+    "likeTip": "喜欢（加入衣柜）",
+    "closetNow": "「{name}」已收进衣柜"
   },
   "site": {
     "name": "SkinNexus",
@@ -357,6 +358,18 @@
     "orphanNoAvatar": "该条目的纹理已不存在（遗留孤儿行），无法设为头像",
     "empty": "衣柜空空如也——先在仪表盘上传纹理再入柜",
     "emptyFiltered": "没有匹配的条目"
+  },
+  "wear": {
+    "title": "穿到角色",
+    "button": "穿到角色",
+    "skinHint": "把「{name}」穿到哪个角色？",
+    "capeHint": "把这件披风戴到哪个角色？",
+    "avatarAlt": "角色当前头像",
+    "already": "已在穿",
+    "pick": "穿上",
+    "noPlayers": "你还没有角色。角色名就是你进服时的游戏名，皮肤只对这个名字生效。",
+    "goPlayers": "去角色管理建一个",
+    "done": "已把「{texture}」穿到 {player}"
   },
   "players": {
     "title": "角色管理（{count}）",

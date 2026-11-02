@@ -2,19 +2,21 @@
 // Skinlib — public texture library (blessing skinlib.index parity).
 // Like heart = closet add/remove (legacy semantics). Owner sees rename /
 // visibility toggle on their own entries.
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
 import PluginSlot from '../components/plugin/PluginSlot.vue'
 import Pager from '../components/Pager.vue'
 import EmptyState from '../components/EmptyState.vue'
+import WearTargetPicker from '../components/WearTargetPicker.vue'
 
 const { t } = useI18n()
 const emit = defineEmits(['login'])
 // App.vue already resolved /me during boot; re-fetching here cost every
 // visitor an extra RTT on high-latency links.
 const props = defineProps({ user: { type: Object, default: null } })
+const goto = inject('gotoView', null)
 
 const items = ref([])
 const total = ref(0)
@@ -27,6 +29,8 @@ const mine = ref(false)
 const loading = ref(false)
 const err = ref('')
 const ok = ref('')
+const justLiked = ref(null)  // the ♥ that just landed, so the page can offer the next step
+const wearOpen = ref(false)
 const me = computed(() => props.user)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage)))
@@ -85,10 +89,15 @@ async function toggleLike(it) {
       const res = await api.skinlibUnlike(it.tid)
       it.liked = false
       it.likes = res.likes
+      justLiked.value = null
     } else {
       const res = await api.skinlibLike(it.tid)
       it.liked = true
       it.likes = res.likes
+      // ♥ is how a player finds something they want to wear. Stopping at "the
+      // heart turned red" left the next step — the one they wanted it for —
+      // undiscoverable.
+      justLiked.value = it
     }
   } catch (e) {
     if (!guard401(e)) err.value = e.message
@@ -161,6 +170,11 @@ onMounted(() => { load() })
 
     <div class="error" v-if="err">{{ err }}</div>
     <div class="success" v-if="ok">{{ ok }}</div>
+    <div class="row wear-next" v-if="justLiked">
+      <span class="muted">{{ t('skinlib.closetNow', { name: justLiked.name || ('#' + justLiked.tid) }) }}</span>
+      <button class="secondary" @click="wearOpen = true">{{ t('wear.button') }}</button>
+      <button class="secondary" @click="justLiked = null">✕</button>
+    </div>
 
     <div class="skinlib-grid" v-if="loading" aria-hidden="true">
       <div class="skin-card" v-for="n in 8" :key="n">
@@ -213,9 +227,20 @@ onMounted(() => { load() })
 
     <Pager :page="page" :pages="totalPages" :total="total" @update:page="goPage" />
   </div>
+
+  <WearTargetPicker
+    :open="wearOpen"
+    :type="justLiked ? justLiked.type : 'skin'"
+    :texture-id="justLiked ? justLiked.tid : 0"
+    :texture-name="justLiked ? (justLiked.name || '') : ''"
+    @close="wearOpen = false"
+    @worn="justLiked = null; wearOpen = false"
+    @need-player="wearOpen = false; justLiked = null; goto && goto('players')"
+  />
 </template>
 
 <style scoped>
+.wear-next { align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
 .mine-on { border-color: var(--accent) !important; color: var(--accent) !important; }
 .source-badge { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
 .source-original { color: var(--jade, #7dd3a0); border-color: currentColor; }

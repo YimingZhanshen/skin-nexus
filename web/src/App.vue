@@ -106,6 +106,9 @@ const siteConf = ref({ site_name: '', invite_required: false, mail_configured: f
 // Pages read the deployment's real limits off the same boot fetch instead of
 // hardcoding them (the upload form states the byte ceiling it will enforce).
 provide('siteConfig', siteConf)
+// Pages hand the player to another page (an empty closet points at the players
+// page) through the shell, instead of a full reload that drops the boot state.
+provide('gotoView', (v) => { view.value = v })
 const siteFooter = computed(() => normalizeFooter(siteConf.value.footer))
 const siteName = computed(() => siteConf.value.site_name || siteFooter.value.siteName || t('site.name'))
 const confLoaded = ref(false)
