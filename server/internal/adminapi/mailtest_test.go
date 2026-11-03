@@ -67,7 +67,7 @@ func TestMailTestReportsUnconfiguredSite(t *testing.T) {
 	if w.Code != 503 {
 		t.Fatalf("unconfigured site = %d %s, want 503", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "mail.not_configured") {
+	if !strings.Contains(w.Body.String(), "mail.admin_not_configured") {
 		t.Errorf("body %s should say the site has no mail account", w.Body.String())
 	}
 }
@@ -80,8 +80,8 @@ func TestMailTestChecksConfigBeforeAddress(t *testing.T) {
 	b, uid := mailTestBackend(t, false)
 	w := httptest.NewRecorder()
 	b.handleMailTest(w, mailTestRequest(uid))
-	if w.Code != 503 || !strings.Contains(w.Body.String(), "mail.not_configured") {
-		t.Fatalf("no config + no address = %d %s, want 503 mail.not_configured", w.Code, w.Body.String())
+	if w.Code != 503 || !strings.Contains(w.Body.String(), "mail.admin_not_configured") {
+		t.Fatalf("no config + no address = %d %s, want 503 mail.admin_not_configured", w.Code, w.Body.String())
 	}
 	// With a mail account configured, the same caller learns about the address.
 	if err := b.Store.SetOption(ctx, "smtp_host", "127.0.0.1"); err != nil {

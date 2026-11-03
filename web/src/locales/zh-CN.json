@@ -69,6 +69,7 @@
       "not_found": "皮肤库条目不存在"
     },
     "mail": {
+      "admin_not_configured": "站点还没有配置发信账号，请先在设置里填好 SMTP",
       "not_configured": "站点未配置邮件服务，请联系管理员",
       "send_failed": "测试邮件没能发出去，请核对 SMTP 设置并查看服务日志"
     },

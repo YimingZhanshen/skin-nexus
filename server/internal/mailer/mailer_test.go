@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // fakeSMTP is a minimal in-process RFC5322-ish server: it captures the
@@ -255,5 +256,65 @@ func TestImplicitTLS(t *testing.T) {
 		if implicitTLS(p) {
 			t.Errorf("port %d must not be implicit TLS", p)
 		}
+	}
+}
+
+// The panel's test-send sits behind an HTTP client that gives up at 20s, so the
+// default 10s dial + 30s session (40s worst case) can never answer the operator:
+// the button shows a network error while the message is still being attempted.
+// Budget is the knob that one route turns; every other caller keeps the old window.
+func TestSessionBudgetSplitsTheWindow(t *testing.T) {
+	var zero Config
+	dial, session := zero.sessionBudget()
+	if dial != 10*time.Second || session != 30*time.Second {
+		t.Errorf("default budget = (%v, %v), want the historical 10s dial / 30s session", dial, session)
+	}
+	short := Config{Budget: 12 * time.Second}
+	dial, session = short.sessionBudget()
+	if dial != 4*time.Second || session != 12*time.Second {
+		t.Errorf("12s budget = (%v, %v), want a 4s dial window inside that same 12s session", dial, session)
+	}
+	if dial+session > 20*time.Second {
+		t.Errorf("dial %v plus session %v outlasts the panel client's 20s", dial, session)
+	}
+}
+
+// A black-holed SMTP server is what the budget exists for: without it Send holds a
+// request for the full 30s after the greeting never arrives.
+func TestSendGivesUpWithinItsBudget(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			// Accept and never speak: the client blocks on the greeting.
+			defer conn.Close()
+		}
+	}()
+
+	host, portStr, err := net.SplitHostPort(ln.Addr().String())
+	if err != nil {
+		t.Fatalf("addr: %v", err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		t.Fatalf("port: %v", err)
+	}
+	c := &Config{Host: host, Port: port, User: "site@example.test", Budget: 800 * time.Millisecond}
+
+	start := time.Now()
+	sendErr := c.Send("player@example.test", "subject", "body")
+	elapsed := time.Since(start)
+	if sendErr == nil {
+		t.Fatal("a server that never greeted returned success")
+	}
+	if elapsed > 4*time.Second {
+		t.Errorf("Send took %v against an 800ms budget, want it to stop on its own clock", elapsed)
 	}
 }

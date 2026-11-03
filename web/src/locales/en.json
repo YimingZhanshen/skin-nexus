@@ -69,6 +69,7 @@
       "not_found": "Skin library entry not found"
     },
     "mail": {
+      "admin_not_configured": "This site has no sender account yet — set up SMTP in Settings first",
       "not_configured": "Mail is not configured, contact the site owner",
       "send_failed": "The test mail could not be sent — check the SMTP settings and the server log"
     },

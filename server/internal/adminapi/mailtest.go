@@ -18,6 +18,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/mailer"
@@ -36,10 +37,17 @@ func (b *Backend) handleMailTest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	cfg := b.mailConfig(ctx)
 	if cfg == nil {
-		// The honest answer to "why did no player ever get a reset link".
-		writeErrCode(w, http.StatusServiceUnavailable, "this site has no mail account configured", i18n.MsgMailNotConfigured)
+		// A separate code from the player-facing mail.not_configured: the reader here
+		// is the operator who has to fix it, so the sentence names the setting instead
+		// of telling them to contact an admin.
+		writeErrCode(w, http.StatusServiceUnavailable, "this site has no mail account yet; configure SMTP in Settings", i18n.MsgMailAdminNotConfigured)
 		return
 	}
+	// The panel's own client gives up at 20s, so this route may not spend the default
+	// 10s dial + 30s session: the operator would see a network error while the send was
+	// still running, and no answer is worse than a late one. Every other caller keeps
+	// the wide window.
+	cfg.Budget = 12 * time.Second
 	brief, err := b.Store.UserBrief(ctx, uid)
 	if err != nil {
 		writeInternal(r, w, err)

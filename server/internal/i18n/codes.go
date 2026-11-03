@@ -110,6 +110,10 @@ const (
 
 	// mail
 	MsgMailNotConfigured = "mail.not_configured"
+	// The panel's own copy of the same state (U17 follow-up): "contact the
+	// administrator" is addressed to a player, and the reader here IS the
+	// administrator. Two audiences, two sentences, one shared cause.
+	MsgMailAdminNotConfigured = "mail.admin_not_configured"
 	// The panel's test send (U17) names the transport failure itself. It cannot
 	// reuse email.verification_failed: that sentence promises a retry will
 	// deliver the verification link, which is not what an operator testing an

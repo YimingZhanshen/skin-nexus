@@ -26,6 +26,21 @@ type Config struct {
 	From string // RFC5322 mailbox: "a@b.c" or "Name <a@b.c>"; empty falls back to User
 	// SiteName prefixes the Subject ("{Site} 密码重置").
 	SiteName string
+	// Budget caps the whole exchange for callers that answer a browser. Zero keeps
+	// the default window; see sessionBudget.
+	Budget time.Duration
+}
+
+// sessionBudget splits the wall clock into a dial window and a session deadline.
+// The default is the historical 10s dial + 30s session. The panel's test-send sets
+// Budget because its own HTTP client gives up at 20s: a 40s worst case means the
+// button reports a network error while the message is still being attempted, which
+// is the one answer an operator cannot act on.
+func (c *Config) sessionBudget() (dial, session time.Duration) {
+	if c.Budget <= 0 {
+		return 10 * time.Second, 30 * time.Second
+	}
+	return c.Budget / 3, c.Budget
 }
 
 // Enabled reports whether mail can be attempted at all.
@@ -86,9 +101,8 @@ func buildMessage(from, to, subject, body string) string {
 	return b.String()
 }
 
-// Send delivers one plain-text message. Dial budget is a hard 30s deadline
-// over the whole session so a black-holed SMTP server cannot pin a request
-// handler forever.
+// Send delivers one plain-text message. Its clock is sessionBudget: a 10s dial and
+// a 30s session by default, or the caller's Budget when a browser is waiting.
 func (c *Config) Send(to, subject, body string) error {
 	if !c.Enabled() {
 		return fmt.Errorf("mailer: disabled (smtp_host empty)")
@@ -115,16 +129,17 @@ func (c *Config) Send(to, subject, body string) error {
 	tlsCfg := &tls.Config{ServerName: c.Host}
 
 	var conn net.Conn
+	dialWindow, sessionWindow := c.sessionBudget()
 	if implicitTLS(port) {
-		conn, err = tls.DialWithDialer(&net.Dialer{Timeout: 10 * time.Second}, "tcp", addr, tlsCfg)
+		conn, err = tls.DialWithDialer(&net.Dialer{Timeout: dialWindow}, "tcp", addr, tlsCfg)
 	} else {
-		conn, err = net.DialTimeout("tcp", addr, 10*time.Second)
+		conn, err = net.DialTimeout("tcp", addr, dialWindow)
 	}
 	if err != nil {
 		return fmt.Errorf("mailer: dial %s: %w", addr, err)
 	}
 	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
+	_ = conn.SetDeadline(time.Now().Add(sessionWindow))
 
 	client, err := smtp.NewClient(conn, c.Host)
 	if err != nil {
