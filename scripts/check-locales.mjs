@@ -185,7 +185,7 @@ for (const [key, where] of ssrReferenced) {
 // Rendered templates must carry no untranslated copy. CSS blocks and comments
 // keep their Chinese (design notes, 月下仙山 token comments), so they are
 // stripped first — that is what makes landing.go's style block a non-hit.
-const CJK = /[㐀-䶿一-鿿豈-﫿]/
+const CJK = /\p{Script=Han}/u
 for (const rel of SSR_PAGE_DIRS.flatMap((dir) => goSources(dir))) {
   const src = readFileSync(resolve(root, rel), 'utf8')
   for (const raw of src.matchAll(/`([^`]*)`/gs)) {
@@ -197,7 +197,9 @@ for (const rel of SSR_PAGE_DIRS.flatMap((dir) => goSources(dir))) {
       .replace(/\/\*[\s\S]*?\*\//g, '')
     const m = visible.match(CJK)
     if (m) {
-      const offset = raw.index + 1 + body.indexOf(m[0].charAt(0))
+      // Match on the whole hit: with /u a Han code point above the BMP is two UTF-16
+      // units, and slicing the string at a lone surrogate locates the wrong place.
+      const offset = raw.index + 1 + body.indexOf(m[0])
       const line = 1 + src.slice(0, offset).split('\n').length - 1
       errors.push(`${rel}:${line}: Chinese left inside a rendered template (${JSON.stringify(visible.slice(visible.indexOf(m[0]), visible.indexOf(m[0]) + 24))}) — add a catalog key`)
     }
