@@ -4,6 +4,22 @@
 
 ## 2026-11-03
 
+- **违规内容地址在上传处硬拦，SQLite 不再回收行 id**：两条都是上一轮「材质生命周期」留下的。
+  ① 强制删除把 `moderation` 一起抄进墓碑，但上传收口点只读 `textures` 表（同人幂等 + 公共查重），
+  而判定违规又会把 `public_dedupe` 置 NULL 让唯一约束失效——所以「违规不能再转公开」只在行还活着时
+  成立，同一份字节原样再传就重新入库。现在拦截落在 `WithHashLock` 闭包内、写文件之前，一处覆盖
+  web 表单、插件桥、私有导入、launcher-api 四条上传路径；只拦删除时带 `violation` 判定的墓碑，
+  普通自删与撤销判定后的删除一律放行。新错误码 `texture.violation_reupload`（403）。
+  ② 驱动 ① 的测试连删两次即失败：`migrations/sqlite/0001_init.sql` 的行 id 是裸 rowid，硬删后立刻
+  被下一行拿走，于是墓碑主键（就是 `texture_id`）撞 UNIQUE、删除 500，而举报与墓碑都按 `texture_id`
+  关联——回收的 id 会把别人的处置历史挂到无辜的新材质上。新装库改 DDL 加 `AUTOINCREMENT`，已装库由
+  启动路径做一次幂等重建（单连接事务、行数校验、索引名原样恢复、计数器抬到历史仍引用过的最高 id，
+  任一表失败即回滚并停在那里）。重建不落进 SQL 树，所以跨引擎表形门禁与整树重跑门禁都不需要放宽。
+  真机（本地 SQLite 实例）实测：行 id 走完 1→2→3 不回退、被判定违规并删除的字节在中文与英文界面各出
+  一句人话、上传者本人与其他账号同传都吃 403、干净删除的同一份字节可正常重传。
+- **新增 `skin-nexus fsck`**：材质目录与库对账，报孤儿文件、悬空引用、只被墓碑引用的违规文件、
+  以及 `AUTOINCREMENT` 之前留下的行 id 错配格；缺省只报不删，`--fix` 仅 unlink 既无行也无墓碑的地址，
+  `--deep` 重哈希验内容。错配格只报不修——该留哪一个只有站长说得清。
 - **文档有了对外镜像**：仓库内生成的 Repo Wiki 全量同步到 [skin-nexus/wiki](https://github.com/YimingZhanshen/skin-nexus/wiki)，mermaid 图与目录锚点在 wiki 侧照常渲染。同步时把生成产物里的 `file://server/...` 引用改写成 `blob/<生成基准 commit>/...`——相对路径在 wiki 上是死链，跟 `main` 的绝对链接又会在文件挪动后失效，锁基准 commit 才能让每条 `文件:行` 永久解析到它对应的那一版。基准取自 `repowiki-metadata.json`，每条被引路径都要在该 commit 存在才放行（`git cat-file -e` 逐条核，核不到就降级成纯文本路径），本轮 200 条引用零缺失；生成器偶尔会把目录前缀写重（`server/server/internal/...`），这类同样按真实文件树纠正。wiki 是与代码仓库分离的另一个仓库：默认分支 `master`，页名里的空格按 GitHub 规范写成连字符，而且必须先在网页上建出一页才拿得到可推的地址。生成物与同步脚本都留在 `.qoder/` 下，不入仓。
 - **修掉三处会把文档再次带偏的源码注释**：`migrations/mysql/0010_password_reset.sql`、`migrations/mysql/0020_email_verify_tokens.sql`、`migrations/postgres/0010_password_reset.sql` 的文件头都写着「TTL 用 DB 时钟 `NOW(3)` / `NOW()` 写入与校验」，而实现是把 `m.now().UTC()` 当参数绑进去（`internal/store/password_reset.go`、`internal/store/email_verify.go`），`NOW(3)`/`DATE_ADD` 还正是可移植性门控（`internal/dialect/portability_gate_test.go`）明令禁用的写法——注释是错的，代码是对的，而生成的文档会照抄注释。同类的还有 `internal/webapi/password.go` 里 `POST /api/v1/password/reset {token, newPassword}` 的 doc 注（真实 tag 是 `password`，`newPassword` 只属于改密端）。三处均只改注释，DDL 与行为未动。
 

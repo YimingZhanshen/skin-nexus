@@ -294,6 +294,21 @@ docker compose pull && docker compose up -d    # 只换容器，卷不动，数�
 >
 > 命令幂等，可反复执行；大库可先 `--limit 500` 试一段。文件缺失或不可解码的材质只计数、不猜测。
 
+> **材质目录对账 `fsck`**（缺省只读）：报「有文件无行」的孤儿字节、「有行无文件」的悬空引用、
+> 只被墓碑引用的违规文件，以及 `AUTOINCREMENT` 之前留下的行 id 错配格。`--fix` 只 unlink
+> **既无行也无墓碑**的地址——被墓碑引用的是违规判定的最后一份物证，不自动删；`--deep`
+> 再把每个文件重哈希与文件名比对：
+>
+> ```bash
+> docker compose run --rm skin-nexus fsck          # 只报告
+> docker compose run --rm skin-nexus fsck --fix    # 只清无引用的孤儿文件
+> docker compose run --rm skin-nexus fsck --deep   # 连内容是否与文件名相符一起验
+> ```
+>
+> ⚠️ SQLite 没有跨进程 advisory lock，跑 `--fix` 前先停服：命令内部会「在锁内重读一次确认仍无
+> 行引用」，而并发上传进程看不见这把锁（MySQL / PostgreSQL 走引擎级 advisory lock，不受此限）。
+> 回收过的行 id 只报不修——墓碑与活行不可能都对，该留哪一个只有站长说得清。
+
 ### 2.6 备份与恢复
 
 数据全在两个命名卷（`docker volume ls | grep skin`）：
