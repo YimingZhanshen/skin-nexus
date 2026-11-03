@@ -110,6 +110,13 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "fsck" {
+		if err := runFSCK(os.Args[2:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "fsck:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	cfg, err := config.Load()
 	if err != nil {

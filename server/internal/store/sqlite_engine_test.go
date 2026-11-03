@@ -608,3 +608,75 @@ func TestSQLiteEngineViolationTombstoneKeepsContentBlocked(t *testing.T) {
 		t.Errorf("content deleted after its verdict was lifted blocked = %v (%v), want false", blocked, err)
 	}
 }
+
+// The fsck queries have to see what the library actually holds: which addresses are
+// reachable, which ones only survive as deletion evidence, and the one mismatch a
+// database can prove — a tombstone citing an id that a different texture now owns.
+func TestSQLiteEngineFSCKSeesReachableAndStruckContent(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid, err := st.CreateUser(ctx, "fsck@example.com", "fscker", "x", 3, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	live, err := st.AddTexture(ctx, uid, "skin", hashOf("live"), "default", TextureMeta{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	struck, err := st.AddTexture(ctx, uid, "skin", hashOf("struck"), "default", TextureMeta{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DeleteTexture(ctx, struck, uid, uid, true, "moderation verdict"); err != nil {
+		t.Fatalf("delete the struck one: %v", err)
+	}
+
+	usage, err := st.FSCKHashUsage(ctx)
+	if err != nil {
+		t.Fatalf("hash usage: %v", err)
+	}
+	if usage[hashOf("live")] != 1 {
+		t.Errorf("live address counted %d times, want 1", usage[hashOf("live")])
+	}
+	if _, ok := usage[hashOf("struck")]; ok {
+		t.Error("a deleted address is still reported as reachable")
+	}
+
+	tombstoned, err := st.FSCKTombstonedHashes(ctx)
+	if err != nil {
+		t.Fatalf("tombstoned: %v", err)
+	}
+	if !tombstoned[hashOf("struck")] {
+		t.Error("the deleted content is missing from the evidence set")
+	}
+	if tombstoned[hashOf("live")] {
+		t.Error("a live texture is reported as deleted evidence")
+	}
+
+	// AUTOINCREMENT stops new collisions, so a recycled slot can only arrive from a
+	// database that predates the fix. Both halves of such a pair must show up.
+	if _, err := st.DB().ExecContext(ctx,
+		`INSERT INTO texture_tombstones (texture_id, uid, type, hash, deleted_by, upload_at)
+		 VALUES (?, ?, 'skin', ?, ?, '2026-01-01 00:00:00')`, live, uid, hashOf("ghost"), uid); err != nil {
+		t.Fatalf("plant a recycled slot: %v", err)
+	}
+	slots, err := st.FSCKRecycledSlots(ctx)
+	if err != nil {
+		t.Fatalf("recycled slots: %v", err)
+	}
+	if len(slots) != 1 {
+		t.Fatalf("recycled slots = %d, want exactly 1", len(slots))
+	}
+	if slots[0].TextureID != live || slots[0].TombstoneHash != hashOf("ghost") || slots[0].LiveHash != hashOf("live") {
+		t.Errorf("recycled slot = %+v, want the planted id with both addresses", slots[0])
+	}
+
+	textures, tombs, openReports, err := st.FSCKCounts(ctx)
+	if err != nil {
+		t.Fatalf("counts: %v", err)
+	}
+	if textures != 1 || tombs != 2 || openReports != 0 {
+		t.Errorf("counts = textures %d tombstones %d open reports %d, want 1/2/0", textures, tombs, openReports)
+	}
+}

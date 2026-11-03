@@ -84,6 +84,10 @@ func (s *Store) Path(hash string) (string, error) {
 	return filepath.Join(s.dir, hash), nil
 }
 
+// IsContentAddress reports whether a directory entry could be one of this store's
+// files. It sits beside Path so the two checks cannot drift apart.
+func IsContentAddress(name string) bool { return hashRe.MatchString(name) }
+
 // Save writes re-encoded bytes; idempotent for identical content.
 func (s *Store) Save(r *Result) error {
 	p, err := s.Path(r.Hash)
