@@ -345,6 +345,23 @@ func (m *Mysql) TextureIsPublicByHash(ctx context.Context, hash string) (bool, e
 	return pub, err
 }
 
+// ViolationTombstoned reports whether this content address was hard-deleted while
+// carrying a violation verdict. The verdict is the discriminator, not the deletion:
+// an owner who removed their own skin must be able to upload it again, and only bytes
+// a moderator struck are refused. Callers hold the hash lock, since a delete racing
+// the check could move the verdict the answer is based on.
+func (m *Mysql) ViolationTombstoned(ctx context.Context, typ, hash string) (bool, error) {
+	var struck int
+	err := m.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM texture_tombstones
+		  WHERE type = ? AND hash = ? AND moderation = 'violation'`,
+		typ, hash).Scan(&struck)
+	if err != nil {
+		return false, err
+	}
+	return struck > 0, nil
+}
+
 // TextureByID returns texture row (for serving raw bytes later).
 func (m *Mysql) TextureByHash(ctx context.Context, hash string) (id, uid int64, typ string, err error) {
 	err = m.db.QueryRowContext(ctx,

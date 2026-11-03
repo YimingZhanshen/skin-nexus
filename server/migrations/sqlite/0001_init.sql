@@ -14,7 +14,8 @@
 --     utf8mb4_general_ci folded email, nickname and player name implicitly.
 
 CREATE TABLE users (
-  id            INTEGER PRIMARY KEY,
+  -- AUTOINCREMENT, not bare rowid: history records actors by id.
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
   email         VARCHAR(100) NULL,
   nickname      VARCHAR(50)  NOT NULL,
   password      VARCHAR(255) NOT NULL,
@@ -29,7 +30,8 @@ CREATE UNIQUE INDEX uq_users_email ON users (LOWER(email));
 CREATE UNIQUE INDEX uq_users_nickname ON users (LOWER(nickname));
 
 CREATE TABLE players (
-  id          INTEGER PRIMARY KEY,
+  -- Same reason as users: uuid_map.player_id outlives the row.
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
   uid         INTEGER NOT NULL,
   name        VARCHAR(16) NOT NULL,
   tid_skin    INTEGER NULL,
@@ -42,7 +44,8 @@ CREATE UNIQUE INDEX uq_players_name ON players (LOWER(name));
 CREATE INDEX idx_players_uid ON players (uid);
 
 CREATE TABLE textures (
-  id          INTEGER PRIMARY KEY,
+  -- Reports and tombstones key on this id, so a recycled one re-attributes history.
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
   uid         INTEGER NOT NULL,
   type        TEXT NOT NULL CHECK (type IN ('skin','cape')),
   hash        CHAR(64) NOT NULL,

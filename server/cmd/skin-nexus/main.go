@@ -152,6 +152,11 @@ func main() {
 		if err := migrate.ApplySQLDirTracked(st.DB(), cfg.MigrationsDir, st.Engine()); err != nil {
 			log.Fatalf("schema: %v", err)
 		}
+		// Databases built before the DDL declared AUTOINCREMENT still hand a freed
+		// rowid to the next insert, and reports and tombstones cite those ids.
+		if err := migrate.EnsureNoRowIDReuse(st.DB(), st.Engine()); err != nil {
+			log.Fatalf("rowid: %v", err)
+		}
 	}
 	if n, err := st.BackfillPublicDedupe(context.Background()); err != nil {
 		log.Printf("dedupe: backfill public hashes: %v", err)

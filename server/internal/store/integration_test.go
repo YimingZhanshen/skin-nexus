@@ -1785,3 +1785,41 @@ func TestIntegrationHashLockMutualExclusion(t *testing.T) {
 		t.Fatalf("lock after inner error: %v", err)
 	}
 }
+
+// TestIntegrationTextureIDsAreNeverRecycled states the cross-engine half of the
+// promise internal/migrate/rowid.go enforces on SQLite: after a hard delete the
+// next texture must not inherit the id that reports and tombstones still cite.
+// MySQL and PostgreSQL satisfy it through AUTO_INCREMENT and BIGSERIAL; if a future
+// engine or a restart-resets-the-counter quirk breaks it, this is where it surfaces.
+func TestIntegrationTextureIDsAreNeverRecycled(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+
+	uid, err := m.CreateUser(ctx, "recycle@example.com", "recycler", "x", 3, "")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	first, err := m.AddTexture(ctx, uid, "skin", hashOf("recycle-a"), "default", TextureMeta{Description: "first"})
+	if err != nil {
+		t.Fatalf("AddTexture: %v", err)
+	}
+	if _, err := m.DeleteTexture(ctx, first, uid, uid, true, "no longer wanted"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	second, err := m.AddTexture(ctx, uid, "skin", hashOf("recycle-b"), "default", TextureMeta{Description: "second"})
+	if err != nil {
+		t.Fatalf("AddTexture after delete: %v", err)
+	}
+	if second <= first {
+		t.Fatalf("texture id %d did not move past the deleted %d", second, first)
+	}
+	// The deleted slot's tombstone still cites its id; a new row must not occupy it.
+	var cited int64
+	if err := m.db.QueryRowContext(ctx,
+		`SELECT texture_id FROM texture_tombstones WHERE texture_id = ?`, second).Scan(&cited); err == nil {
+		t.Fatalf("tombstone for %d already existed, so the id was reused", cited)
+	}
+	if _, err := m.DeleteTexture(ctx, second, uid, uid, true, ""); err != nil {
+		t.Fatalf("second delete (this is where a recycled id fails on the tombstone key): %v", err)
+	}
+}

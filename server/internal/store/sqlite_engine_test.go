@@ -501,3 +501,110 @@ func TestSQLiteEngineClosetDropsOneCopy(t *testing.T) {
 		t.Errorf("remove from an empty closet = %v, want ErrNotFound", err)
 	}
 }
+
+// A hard-deleted texture must not hand its id to a later row. Reports and
+// tombstones key on texture_id, so a reused id silently re-attributes someone
+// else's moderation history — and the second tombstone insert refuses outright.
+func TestSQLiteEngineTextureIDsAreNeverReused(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid, err := st.CreateUser(ctx, "ids@example.com", "ids", "x", 3, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := st.AddTexture(ctx, uid, "skin", hashOf("first"), "default", TextureMeta{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DeleteTexture(ctx, first, uid, uid, true, ""); err != nil {
+		t.Fatalf("delete first: %v", err)
+	}
+	second, err := st.AddTexture(ctx, uid, "skin", hashOf("second"), "default", TextureMeta{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second == first {
+		t.Fatalf("texture id %d was handed to a new row after the old one was hard-deleted", first)
+	}
+	// The reused id is also what makes a second deletion of the same slot fail.
+	if _, err := st.DeleteTexture(ctx, second, uid, uid, true, ""); err != nil {
+		t.Fatalf("delete second: %v", err)
+	}
+}
+
+// The moderation verdict outlives the row: bytes struck as a violation and then
+// hard-deleted must not re-enter the library as a fresh upload. Deletions that
+// carried no verdict must stay re-uploadable, or a player who removed a skin could
+// never put it back.
+func TestSQLiteEngineViolationTombstoneKeepsContentBlocked(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+
+	uid, err := st.CreateUser(ctx, "uploader@example.com", "uploader", "x", 3, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := st.CreateUser(ctx, "handler@example.com", "handler", "x", 3, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	struck, err := st.AddTexture(ctx, uid, "skin", hashOf("struck"), "default", TextureMeta{Description: "doomed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reportID, err := st.CreateReport(ctx, struck, handler, "offensive", "take it down")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.StrikeTexture(ctx, struck, reportID, handler); err != nil {
+		t.Fatalf("strike: %v", err)
+	}
+	if _, err := st.DeleteTexture(ctx, struck, 0, handler, true, "moderation verdict"); err != nil {
+		t.Fatalf("forced delete of the struck texture: %v", err)
+	}
+	if blocked, err := st.ViolationTombstoned(ctx, "skin", hashOf("struck")); err != nil || !blocked {
+		t.Errorf("struck content blocked = %v (%v), want true", blocked, err)
+	}
+	// The verdict is about these bytes as a skin. The same pixels as a cape are a
+	// different content address in this schema, so a ban must not widen itself
+	// across types just because the hash matches.
+	if blocked, err := st.ViolationTombstoned(ctx, "cape", hashOf("struck")); err != nil || blocked {
+		t.Errorf("same hash as a cape blocked = %v (%v), want false", blocked, err)
+	}
+
+	clean, err := st.AddTexture(ctx, uid, "skin", hashOf("clean"), "default", TextureMeta{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DeleteTexture(ctx, clean, uid, uid, true, ""); err != nil {
+		t.Fatalf("owner delete: %v", err)
+	}
+	if blocked, err := st.ViolationTombstoned(ctx, "skin", hashOf("clean")); err != nil || blocked {
+		t.Errorf("clean deletion blocked = %v (%v), want false", blocked, err)
+	}
+
+	// The false-positive path: the verdict was lifted before the row went away, so
+	// nothing about this content is banned any more.
+	lifted, err := st.AddTexture(ctx, uid, "skin", hashOf("lifted"), "default", TextureMeta{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	liftReport, err := st.CreateReport(ctx, lifted, handler, "offensive", "wrongly reported")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.StrikeTexture(ctx, lifted, liftReport, handler); err != nil {
+		t.Fatalf("strike before lift: %v", err)
+	}
+	if err := st.LiftTextureModeration(ctx, lifted); err != nil {
+		t.Fatalf("lift: %v", err)
+	}
+	if _, err := st.DeleteTexture(ctx, lifted, 0, handler, true, ""); err != nil {
+		t.Fatalf("delete after lift: %v", err)
+	}
+	if blocked, err := st.ViolationTombstoned(ctx, "skin", hashOf("lifted")); err != nil || blocked {
+		t.Errorf("content deleted after its verdict was lifted blocked = %v (%v), want false", blocked, err)
+	}
+}
