@@ -376,12 +376,17 @@ func (b *Backend) handleTextures(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b *Backend) handleAudit(w http.ResponseWriter, r *http.Request) {
-	rows, err := b.Store.RecentAudit(r.Context(), 100)
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	const auditPerPage = 100
+	rows, total, err := b.Store.AdminAudit(r.Context(), page, auditPerPage)
 	if err != nil {
 		writeInternal(r, w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"audit": rows})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"audit": rows, "total": total, "page": page})
 }
 
 // handleAccessLogs pages the observability table (access_logs): web +

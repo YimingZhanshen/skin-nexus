@@ -206,6 +206,58 @@ for (const rel of SSR_PAGE_DIRS.flatMap((dir) => goSources(dir))) {
   }
 }
 
+// 5. every key a view asks for must exist. vue-i18n renders the raw path when a
+//    lookup misses, and parity between the two dictionaries cannot catch it: a key
+//    missing from *both* files is perfectly "equal". This scans the literals, plus
+//    the prefix of every template-literal key like `admin.kind.${row.kind}` (whose
+//    enumerated values are checked by rules 1 and the enum itself at runtime).
+const UI_DIRS = ['web/src']
+
+function walk(dir) {
+  const out = []
+  for (const item of readdirSync(join(root, dir), { withFileTypes: true })) {
+    if (item.name === 'node_modules' || item.name === 'dist') continue
+    const rel = `${dir}/${item.name}`
+    if (item.isDirectory()) out.push(...walk(rel))
+    else if (/\.(?:vue|js)$/.test(item.name)) out.push(rel)
+  }
+  return out
+}
+
+function at(obj, path) {
+  let node = obj
+  for (const part of path.split('.')) {
+    if (!node || typeof node !== 'object' || !(part in node)) return undefined
+    node = node[part]
+  }
+  return node
+}
+
+const LITERAL_KEY = /\bt\(\s*['"]([a-z][\w-]*(?:\.[\w-]+)+)['"]/g
+const TEMPLATE_PREFIX = /\bt\(\s*`([a-z][\w-]*(?:\.[\w-]+)*)\.\$\{/g
+
+for (const rel of UI_DIRS.flatMap(walk)) {
+  if (rel.endsWith('locales/i18n.js') || rel.endsWith('errors.js')) {
+    // errors.js builds `errors.${code}` from the server payload; rule 2 covers those.
+    continue
+  }
+  const text = readFileSync(resolve(root, rel), 'utf8')
+  const lineOf = (index) => 1 + text.slice(0, index).split('\n').length - 1
+  for (const m of text.matchAll(LITERAL_KEY)) {
+    const missing = LOCALES.filter((l, i) => !sets[i].has(m[1]))
+    if (missing.length) {
+      errors.push(`${rel}:${lineOf(m.index)}: t('${m[1]}') has no entry in ${missing.join('/')}`)
+    }
+  }
+  for (const m of text.matchAll(TEMPLATE_PREFIX)) {
+    const missing = LOCALES.filter((l) => typeof at(loaded[l], m[1]) !== 'object')
+    if (missing.length) {
+      errors.push(`${rel}:${lineOf(m.index)}: t(\`${m[1]}.\${…}\`) has no '${m[1]}' group in ${missing.join('/')}`)
+    }
+  }
+}
+
+
 if (errors.length) {
   console.error('check-locales: FAILED')
   for (const e of errors) console.error('  - ' + e)

@@ -680,3 +680,126 @@ func TestSQLiteEngineFSCKSeesReachableAndStruckContent(t *testing.T) {
 		t.Errorf("counts = textures %d tombstones %d open reports %d, want 1/2/0", textures, tombs, openReports)
 	}
 }
+
+// The panel's material list is the only place an operator can see what the site
+// holds. Two facts must travel with each row: whether it is public, and whether a
+// moderation verdict sits on it — otherwise「已下架」and「还在库里」look identical.
+func TestSQLiteEngineAdminTexturesReportsVisibilityAndVerdict(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid, err := st.CreateUser(ctx, "panel@example.com", "panellist", "x", 3, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := st.CreateUser(ctx, "panelmod@example.com", "panelmod", "x", 3, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	visible, err := st.AddTexture(ctx, uid, "skin", hashOf("p-visible"), "default", TextureMeta{Description: "in library"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	private, err := st.AddTexturePrivate(ctx, uid, "skin", hashOf("p-private"), "default", TextureMeta{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	struck, err := st.AddTexture(ctx, uid, "cape", hashOf("p-struck"), "", TextureMeta{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reportID, err := st.CreateReport(ctx, struck, handler, "violence", "gore")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.StrikeTexture(ctx, struck, reportID, handler); err != nil {
+		t.Fatalf("strike: %v", err)
+	}
+
+	rows, total, err := st.AdminTextures(ctx, 1, 50)
+	if err != nil {
+		t.Fatalf("admin textures: %v", err)
+	}
+	if total != 3 {
+		t.Errorf("total = %d, want 3 rows in the library", total)
+	}
+	byID := map[int64]map[string]interface{}{}
+	for _, m := range rows {
+		byID[m["id"].(int64)] = m
+	}
+	for _, tc := range []struct {
+		name       string
+		tid        int64
+		wantPublic bool
+		wantMod    string
+		wantName   string
+	}{
+		{"public", visible, true, "", "in library"},
+		{"private", private, false, "", ""},
+		{"struck", struck, false, "violation", ""},
+	} {
+		row, ok := byID[tc.tid]
+		if !ok {
+			t.Fatalf("%s row missing from the admin list", tc.name)
+		}
+		if got, isBool := row["public"].(bool); !isBool || got != tc.wantPublic {
+			t.Errorf("%s public = %#v, want %v", tc.name, row["public"], tc.wantPublic)
+		}
+		if tc.wantName != "" {
+			if got, _ := row["name"].(string); got != tc.wantName {
+				t.Errorf("%s name = %q, want %q (a hash-only list is unreadable to an operator)", tc.name, got, tc.wantName)
+			}
+		}
+		if got, isStr := row["moderation"].(string); !isStr || got != tc.wantMod {
+			t.Errorf("%s moderation = %#v, want %q", tc.name, row["moderation"], tc.wantMod)
+		}
+	}
+
+	// Paging must report the whole count while returning one page of rows.
+	page2, total2, err := st.AdminTextures(ctx, 2, 2)
+	if err != nil {
+		t.Fatalf("admin textures page 2: %v", err)
+	}
+	if len(page2) != 1 || total2 != 3 {
+		t.Errorf("page 2 = %d rows of total %d, want 1 of 3", len(page2), total2)
+	}
+}
+
+// The audit log is where an operator checks what the panel did. Fixed at the last
+// 100 entries, it silently stops showing anything older with no hint that more
+// exists, so the list needs a total and a page the way every other table has one.
+func TestSQLiteEngineAdminAuditPagesWithTotal(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid, err := st.CreateUser(ctx, "auditor@example.com", "auditor", "x", 3, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range []string{"first", "second", "third"} {
+		st.InsertAudit(ctx, uid, action, map[string]any{"why": action})
+	}
+
+	rows, total, err := st.AdminAudit(ctx, 1, 2)
+	if err != nil {
+		t.Fatalf("admin audit page 1: %v", err)
+	}
+	if total != 3 {
+		t.Errorf("total = %d, want 3 audit rows", total)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("page 1 = %d rows, want 2", len(rows))
+	}
+	if newest, ok := rows[0]["action"].(string); !ok || newest != "third" {
+		t.Errorf("newest entry = %#v, want third (rows must come back newest first)", rows[0])
+	}
+	older, total2, err := st.AdminAudit(ctx, 2, 2)
+	if err != nil {
+		t.Fatalf("admin audit page 2: %v", err)
+	}
+	if len(older) != 1 || total2 != 3 {
+		t.Errorf("page 2 = %d rows of total %d, want 1 of 3", len(older), total2)
+	}
+	if action, _ := older[0]["action"].(string); action != "first" {
+		t.Errorf("page 2 holds %q, want the oldest entry", action)
+	}
+}

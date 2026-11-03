@@ -15,6 +15,9 @@ import StatusView from './admin/StatusView.vue'
 import UnionView from './admin/UnionView.vue'
 import AccessLogsView from './admin/AccessLogsView.vue'
 import ReportsView from './admin/ReportsView.vue'
+import TexturesView from './admin/TexturesView.vue'
+import AuditView from './admin/AuditView.vue'
+import JobsView from './admin/JobsView.vue'
 import PluginsView from './admin/PluginsView.vue'
 import MarketView from './admin/MarketView.vue'
 import PluginPage from './plugin/PluginPage.vue'
@@ -36,6 +39,9 @@ const adminIcons = {
   union: '<path d="M12 3a9 9 0 1 0 9 9M12 3a9 9 0 0 1 9 9M12 8a4 4 0 1 0 4 4"/>',
   plugins: '<path d="M4 8h4a2 2 0 1 0 4 0h4v4a2 2 0 1 0 0 4v4h-4a2 2 0 1 1-4 0H4v-4a2 2 0 1 1 0-4z"/>',
   market: '<path d="M3 9l2-5h14l2 5M4 9h16v11H4zM9 13h6"/>',
+  textures: '<path d="M9 4l3 2 3-2 4 3-2 3v9H7v-9L5 7z"/>',
+  audit: '<path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+  jobs: '<path d="M4 6h10M4 12h10M4 18h7"/><circle cx="18" cy="16" r="4"/><path d="M18 14.2v2l1.6 1.4"/>',
 }
 const nav = [
   { id: 'dashboard', labelKey: 'admin.navDashboard', comp: DashboardView, icon: adminIcons.dashboard },
@@ -46,6 +52,9 @@ const nav = [
   { id: 'status', labelKey: 'admin.navStatus', comp: StatusView, icon: adminIcons.status },
   { id: 'access', labelKey: 'admin.navAccess', comp: AccessLogsView, icon: adminIcons.access },
   { id: 'reports', labelKey: 'admin.navReports', comp: ReportsView, icon: adminIcons.reports },
+  { id: 'textures', labelKey: 'admin.navTextures', comp: TexturesView, icon: adminIcons.textures },
+  { id: 'audit', labelKey: 'admin.navAudit', comp: AuditView, icon: adminIcons.audit },
+  { id: 'jobs', labelKey: 'admin.navJobs', comp: JobsView, icon: adminIcons.jobs },
   { id: 'union', labelKey: 'admin.navUnion', comp: UnionView, icon: adminIcons.union },
   { id: 'plugins', labelKey: 'admin.navPlugins', comp: PluginsView, icon: adminIcons.plugins },
   { id: 'market', labelKey: 'admin.navMarket', comp: MarketView, icon: adminIcons.market },

@@ -624,7 +624,8 @@ func (m *Mysql) AdminTextures(ctx context.Context, page, size int) ([]map[string
 		return nil, 0, err
 	}
 	rows, err := m.db.QueryContext(ctx,
-		`SELECT t.id, t.uid, t.type, t.hash, COALESCE(t.model,''), t.upload_at
+		`SELECT t.id, t.uid, t.type, t.hash, COALESCE(t.model,''), COALESCE(t.description,''),
+		        t.public, t.moderation, t.upload_at
 		 FROM textures t ORDER BY t.id DESC LIMIT ? OFFSET ?`, size, (page-1)*size)
 	if err != nil {
 		return nil, 0, err
@@ -632,27 +633,39 @@ func (m *Mysql) AdminTextures(ctx context.Context, page, size int) ([]map[string
 	defer rows.Close()
 	var out []map[string]interface{}
 	for rows.Next() {
-		var id, uid int64
-		var typ, hash, model string
+		var id, uid, pub int64
+		var typ, hash, model, name, moderation string
 		var up time.Time
-		if err := rows.Scan(&id, &uid, &typ, &hash, &model, &up); err != nil {
+		if err := rows.Scan(&id, &uid, &typ, &hash, &model, &name, &pub, &moderation, &up); err != nil {
 			return nil, 0, err
 		}
+		// Visibility and verdict travel together: with only the hash on screen,
+		// a struck texture that is still listed looks exactly like a live one.
 		out = append(out, map[string]interface{}{
-			"id": id, "uid": uid, "type": typ, "hash": hash, "model": model,
+			"id": id, "uid": uid, "type": typ, "hash": hash, "model": model, "name": name,
+			"public": pub == 1, "moderation": moderation,
 			"uploadAt": up.Format(time.RFC3339),
 		})
 	}
 	return out, total, rows.Err()
 }
 
-// RecentAudit returns latest audit entries.
-func (m *Mysql) RecentAudit(ctx context.Context, limit int) ([]map[string]interface{}, error) {
+// AdminAudit pages the audit log and reports the whole count. It replaced
+// RecentAudit(limit), which silently stopped showing history at the cap and gave
+// the operator no way to know more rows exist.
+func (m *Mysql) AdminAudit(ctx context.Context, page, size int) ([]map[string]interface{}, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	var total int
+	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM audit_log`).Scan(&total); err != nil {
+		return nil, 0, err
+	}
 	rows, err := m.db.QueryContext(ctx,
 		`SELECT id, COALESCE(actor_uid,0), action, COALESCE(detail,'{}'), created_at
-		 FROM audit_log ORDER BY id DESC LIMIT ?`, limit)
+		 FROM audit_log ORDER BY id DESC LIMIT ? OFFSET ?`, size, (page-1)*size)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 	var out []map[string]interface{}
@@ -661,14 +674,14 @@ func (m *Mysql) RecentAudit(ctx context.Context, limit int) ([]map[string]interf
 		var action, detail string
 		var created time.Time
 		if err := rows.Scan(&id, &actor, &action, &detail, &created); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		out = append(out, map[string]interface{}{
 			"id": id, "actorUid": actor, "action": action, "detail": detail,
 			"createdAt": created.Format(time.RFC3339),
 		})
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 // ---- players ----

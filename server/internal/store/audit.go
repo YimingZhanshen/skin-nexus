@@ -10,7 +10,7 @@ import (
 )
 
 // InsertAudit appends one audit row. actorUID 0 = system/union event (the
-// column stays NULL, matching RecentAudit's COALESCE(actor_uid,0)).
+// column stays NULL, matching AdminAudit's COALESCE(actor_uid,0)).
 // detail is marshalled to JSON; marshal failures degrade to a plain string
 // so an audit write never breaks the calling flow.
 func (m *Mysql) InsertAudit(ctx context.Context, actorUID int64, action string, detail any) {
