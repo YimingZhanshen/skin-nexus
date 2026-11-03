@@ -43,7 +43,6 @@
       "invalid_value": "Value is not in the allowed range",
       "missing_field": "A required field is missing",
       "no_fields": "Nothing to update",
-      "not_found": "Not found",
       "rate_limited": "Too many requests, please slow down",
       "session_failed": "Session could not be created, sign in again",
       "too_long": "Content exceeds the length limit",
@@ -146,7 +145,6 @@
     },
     "theme": {
       "active": "The active theme cannot be uninstalled",
-      "bad_id": "Theme id is not valid",
       "not_found": "Theme not found"
     },
     "union": {

@@ -41,6 +41,19 @@ func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusNotFound, "setup already completed", i18n.MsgSetupDone)
 		return
 	}
+	// `needs_setup` is true for two very different sites: tables built and nobody
+	// registered yet, versus no tables at all (a bare binary started without
+	// SKIN_AUTO_MIGRATE). The second one used to fail on the first INSERT and the
+	// operator was told the nickname or email was already taken.
+	ok, err := b.Store.TableExists(r.Context(), "users")
+	if err != nil {
+		writeInternal(r, w, err)
+		return
+	}
+	if !ok {
+		writeErrCode(w, http.StatusServiceUnavailable, "the database has no tables yet; start once with SKIN_AUTO_MIGRATE=true or run skin-nexus migrate", i18n.MsgSetupDBMissing)
+		return
+	}
 	var req struct {
 		SiteName    string   `json:"site_name"`
 		SiteURL     string   `json:"site_url"`

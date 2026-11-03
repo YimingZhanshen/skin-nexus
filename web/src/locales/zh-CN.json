@@ -43,7 +43,6 @@
       "invalid_value": "取值不在允许范围内",
       "missing_field": "缺少必填字段",
       "no_fields": "没有需要更新的字段",
-      "not_found": "内容不存在",
       "rate_limited": "请求过于频繁，请稍后再试",
       "session_failed": "会话创建失败，请重新登录",
       "too_long": "内容超出长度限制",
@@ -146,7 +145,6 @@
     },
     "theme": {
       "active": "正在使用的主题不能卸载",
-      "bad_id": "主题编号不合法",
       "not_found": "主题不存在"
     },
     "union": {

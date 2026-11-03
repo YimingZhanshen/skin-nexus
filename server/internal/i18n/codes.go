@@ -27,7 +27,6 @@ const (
 	MsgNoFields      = "common.no_fields"     // PATCH with nothing to change
 	MsgInvalidValue  = "common.invalid_value" // enum/format a setting rejects
 	MsgTooLong       = "common.too_long"      // length limit exceeded
-	MsgNotFound      = "common.not_found"
 	MsgForbidden     = "common.forbidden"
 	MsgUnauthorized  = "common.unauthorized"
 	MsgConflict      = "common.conflict"
@@ -132,7 +131,6 @@ const (
 	// appearance / themes / plugins
 	MsgThemeNotFound    = "theme.not_found"
 	MsgThemeActive      = "theme.active" // cannot uninstall the live theme
-	MsgThemeBadID       = "theme.bad_id"
 	MsgPluginNotFound   = "plugin.not_found"
 	MsgPluginNoConfig   = "plugin.no_config"
 	MsgPluginNoRollback = "plugin.no_rollback"
