@@ -3,8 +3,6 @@ package account
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"image"
 	"image/color"
 	"image/png"
@@ -56,9 +54,20 @@ func uploadPNG(t *testing.T, seed byte) []byte {
 	return buf.Bytes()
 }
 
-func contentAddress(png []byte) string {
-	sum := sha256.Sum256(png)
-	return hex.EncodeToString(sum[:])
+// listFiles is the observable the refusal is judged on. The stored content address
+// is the hash of the *re-encoded* PNG, which a test cannot name in advance, so the
+// claim is about the directory being empty rather than about one path missing.
+func listFiles(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read %s: %v", dir, err)
+	}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, e.Name())
+	}
+	return out
 }
 
 func TestUploadRefusesContentThatWasStruckAndDeleted(t *testing.T) {
@@ -79,6 +88,11 @@ func TestUploadRefusesContentThatWasStruckAndDeleted(t *testing.T) {
 	if aerr != nil || !created || view.ID == 0 {
 		t.Fatalf("first upload = %+v created=%v err=%v", view, created, aerr)
 	}
+	// Positive control for everything below: a stored texture really is one file, so
+	// "the directory is still empty" is a claim about the refusal, not about the disk.
+	if got := listFiles(t, dir); len(got) != 1 {
+		t.Fatalf("after a successful upload the directory holds %v, want exactly one file", got)
+	}
 	reportID, err := svc.Store.CreateReport(ctx, view.ID, handler, "offensive", "please take it down")
 	if err != nil {
 		t.Fatalf("report: %v", err)
@@ -88,6 +102,9 @@ func TestUploadRefusesContentThatWasStruckAndDeleted(t *testing.T) {
 	}
 	if aerr := svc.DeleteTexture(ctx, handler, view.ID, 0, true, "moderation verdict", CallMeta{IP: "127.0.0.1"}); aerr != nil {
 		t.Fatalf("forced delete: %v", aerr)
+	}
+	if got := listFiles(t, dir); len(got) != 0 {
+		t.Fatalf("the forced delete left %v on disk, want nothing sharing that address", got)
 	}
 
 	// The bytes are gone from the library, so re-uploading them must be refused —
@@ -115,8 +132,8 @@ func TestUploadRefusesContentThatWasStruckAndDeleted(t *testing.T) {
 		}
 		// The refusal happens before the file is written, so it leaves nothing behind
 		// for the orphan sweep to find.
-		if _, err := os.Stat(filepath.Join(dir, contentAddress(pngBytes))); err == nil {
-			t.Errorf("%s re-upload wrote the rejected file to disk", attempt.name)
+		if got := listFiles(t, dir); len(got) != 0 {
+			t.Errorf("%s re-upload wrote %v to disk; a refusal must not store bytes", attempt.name, got)
 		}
 	}
 }
