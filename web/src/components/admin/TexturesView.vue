@@ -67,7 +67,7 @@ onMounted(load)
     <h2 style="margin-top: 0;">{{ t('admin.texTitle') }}</h2>
     <p class="muted" style="margin-top: -6px;">{{ t('admin.texHint') }}</p>
     <div class="row">
-      <button class="secondary" @click="load">{{ t('admin.load') }}</button>
+      <button class="secondary" @click="load">{{ t('admin.reload') }}</button>
       <span class="muted">{{ t('admin.texTotal', { total }) }}</span>
       <span class="muted" v-if="loading">{{ t('common.loading') }}</span>
     </div>

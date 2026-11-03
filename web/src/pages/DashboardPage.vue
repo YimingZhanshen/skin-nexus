@@ -40,7 +40,10 @@ const uploadName = ref('')
 const uploadDetail = ref('')
 const uploadSource = ref('original')
 const uploadSourceUrl = ref('')
-const uploadPublic = ref(true)
+// The box is labelled "set as private", so the state carries that meaning:
+// binding the label to the public flag made the default tick read as "private"
+// while it actually meant "public", and un-ticking it made uploads private.
+const uploadPrivate = ref(false)
 const detailTab = ref('edit')
 const uploadProgress = ref(0)
 const uploadFile = ref(null)
@@ -238,18 +241,18 @@ async function doUpload() {
       name, uploadPluginData.value,
       {
         detail: uploadDetail.value, source: uploadSource.value,
-        sourceUrl: uploadSourceUrl.value.trim(), public: uploadPublic.value,
+        sourceUrl: uploadSourceUrl.value.trim(), public: !uploadPrivate.value,
         onProgress: (p) => { uploadProgress.value = p },
       },
     )
     uploadOk.value = d.created === false
       ? t('dashboard.uploadAlreadyOwned')
-      : (uploadPublic.value ? t('dashboard.uploadSuccess') : t('dashboard.uploadPrivateSuccess'))
+      : (uploadPrivate.value ? t('dashboard.uploadPrivateSuccess') : t('dashboard.uploadSuccess'))
     uploadName.value = ''
     uploadDetail.value = ''
     uploadSource.value = 'original'
     uploadSourceUrl.value = ''
-    uploadPublic.value = true
+    uploadPrivate.value = false
     detailTab.value = 'edit'
     clearPreview()
     await load()
@@ -374,7 +377,7 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
             <span v-else class="muted">{{ t('dashboard.detailEmpty') }}</span>
           </div>
         </div>
-        <label class="check-line"><input type="checkbox" v-model="uploadPublic" /> {{ t('dashboard.privateUpload') }}</label>
+        <label class="check-line"><input type="checkbox" v-model="uploadPrivate" /> {{ t('dashboard.privateUpload') }}</label>
         <div class="row">
           <button :disabled="uploading || !uploadFile" @click="doUpload">
             {{ uploading ? t('dashboard.uploading') : t('dashboard.upload') }}

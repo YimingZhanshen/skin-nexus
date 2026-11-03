@@ -524,6 +524,7 @@
     "title": "Admin panel",
     "tokenPlaceholder": "X-Admin-Token",
     "load": "Load",
+    "reload": "Reload",
     "overviewTitle": "Overview",
     "users": "Users",
     "players": "Profiles",

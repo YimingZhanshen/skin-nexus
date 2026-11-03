@@ -524,6 +524,7 @@
     "title": "管理面板",
     "tokenPlaceholder": "X-Admin-Token",
     "load": "加载",
+    "reload": "刷新",
     "overviewTitle": "总览",
     "users": "用户",
     "players": "角色",
