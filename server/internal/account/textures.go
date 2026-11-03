@@ -20,6 +20,11 @@ import (
 	"skin-nexus/server/internal/texture"
 )
 
+// errStruckContent is how the locked region reports a moderation refusal through
+// WithHashLock, which only carries an error out. It never reaches a response body:
+// the answer the player gets is the code and its dictionary sentence.
+var errStruckContent = errors.New("account: texture content was struck as a violation")
+
 func validSourceURL(raw string) bool {
 	if len(raw) > 512 {
 		return false
@@ -198,6 +203,17 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 	}
 	failMsg := ""
 	lockErr := s.Store.WithHashLock(ctx, res.Hash, func(ctx context.Context) error {
+		// The verdict has to outlive the row it was written about. Once a struck
+		// texture is hard-deleted there is nothing left in `textures` to refuse these
+		// bytes, so the tombstone is what says no — and it says no before the file is
+		// written, so a refusal leaves nothing for an orphan sweep to find.
+		struck, err := s.Store.ViolationTombstoned(ctx, typ, res.Hash)
+		if err != nil {
+			return err
+		}
+		if struck {
+			return errStruckContent
+		}
 		if err := s.Textures.Save(res); err != nil {
 			failMsg = "could not save the texture file"
 			return err
@@ -254,6 +270,12 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 		return nil
 	})
 	if lockErr != nil {
+		if errors.Is(lockErr, errStruckContent) {
+			// A refusal, not a fault: it gets its own log line because the moderator
+			// who struck this content is the only person who can undo it.
+			log.Printf("texture upload refused: uid=%d type=%s hash=%s (content was struck)", uid, typ, res.Hash[:12])
+			return TextureView{}, false, errf(CodeViolationReupload, "this texture content was ruled a violation and may not be uploaded again", nil)
+		}
 		if failMsg == "" {
 			failMsg = "could not write the texture"
 		}

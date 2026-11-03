@@ -141,7 +141,8 @@
       "source_url_invalid": "原始发布地址必须是 http(s) 链接",
       "source_url_required": "二创或转载必须填写原始发布地址",
       "too_large": "文件超出大小限制",
-      "type_mismatch": "材质类型与该操作不匹配"
+      "type_mismatch": "材质类型与该操作不匹配",
+      "violation_reupload": "这份材质内容曾被判定违规并已删除，不能再次上传"
     },
     "theme": {
       "active": "正在使用的主题不能卸载",

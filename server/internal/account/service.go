@@ -40,7 +40,7 @@ func (e *Error) Status() int {
 	switch e.Code {
 	case CodeNotFound, CodeLibraryNotFnd:
 		return http.StatusNotFound
-	case CodeLimit, CodeNotOwned, CodeForbidden:
+	case CodeLimit, CodeNotOwned, CodeForbidden, CodeViolationReupload:
 		return http.StatusForbidden
 	case CodeNameTaken, CodeDuplicatePub, CodeInUse, CodeBusy:
 		return http.StatusConflict
@@ -95,7 +95,10 @@ const (
 	CodeSourceURLBad  = "texture.source_url_invalid"
 	CodeInUse         = "texture.in_use"
 	CodeBusy          = "texture.busy"
-	CodeInternal      = "internal"
+	// Not texture.moderation_ban ("may not be made public"): these bytes were struck
+	// and hard-deleted, so re-uploading them is refused publicly and privately both.
+	CodeViolationReupload = "texture.violation_reupload"
+	CodeInternal          = "internal"
 )
 
 func errf(code, msg string, err error) *Error {

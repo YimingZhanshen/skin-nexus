@@ -141,7 +141,8 @@
       "source_url_invalid": "The original URL must be an http(s) link",
       "source_url_required": "Reposts and derivative works need the original URL",
       "too_large": "The file exceeds the size limit",
-      "type_mismatch": "Texture type does not match this operation"
+      "type_mismatch": "Texture type does not match this operation",
+      "violation_reupload": "This texture's content was ruled a violation and deleted; it may not be uploaded again"
     },
     "theme": {
       "active": "The active theme cannot be uninstalled",
