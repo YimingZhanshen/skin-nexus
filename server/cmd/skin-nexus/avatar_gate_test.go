@@ -6,9 +6,13 @@ package main
 // chose as its public face and are deliberately ungated; these tests pin both
 // halves of that boundary so a future change cannot quietly widen it.
 import (
+	"bytes"
 	"context"
+	"image"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"skin-nexus/server/internal/store"
@@ -22,9 +26,26 @@ type fakeAvatarStore struct {
 	byTID        map[int64]string
 	publicByHash map[string]bool
 	metaByHash   map[string]string
+	visibility   map[string]fakeVisibility
 	avatarByUID  map[int64]int64
 	playerByName map[string]ygg.Player
 	playerByPID  map[int64]ygg.Player
+}
+
+// fakeVisibility mirrors the two answers TextureHashVisibility gives: a shared
+// content address is public if any row is, and the private rows may belong to
+// several accounts.
+type fakeVisibility struct {
+	public bool
+	owners []int64
+}
+
+func (f fakeAvatarStore) TextureHashVisibility(_ context.Context, hash string) (bool, []int64, error) {
+	v, ok := f.visibility[hash]
+	if !ok {
+		return false, nil, store.ErrNotFound
+	}
+	return v.public, v.owners, nil
 }
 
 func (f fakeAvatarStore) TextureIsPublic(_ context.Context, tid int64) (bool, error) {
@@ -88,6 +109,24 @@ func newAvatarDeps(t *testing.T, st avatarStore) *avatarDeps {
 	return &avatarDeps{st: st, ts: ts}
 }
 
+// putSkin gives the temp texture store a real, decodable 64×64 sheet, so a
+// handler that reaches the file layer answers 200 and the tests can tell an
+// authorization 404 apart from a missing-file 404.
+func putSkin(t *testing.T, d *avatarDeps, hash string) {
+	t.Helper()
+	p, err := d.ts.Path(hash)
+	if err != nil {
+		t.Fatalf("texture path: %v", err)
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewNRGBA(image.Rect(0, 0, 64, 64))); err != nil {
+		t.Fatalf("encode skin: %v", err)
+	}
+	if err := os.WriteFile(p, buf.Bytes(), 0o644); err != nil {
+		t.Fatalf("write skin: %v", err)
+	}
+}
+
 func requestAs(path, cookie string) *http.Request {
 	r := httptest.NewRequest(http.MethodGet, path, nil)
 	if cookie != "" {
@@ -102,6 +141,12 @@ func requestAs(path, cookie string) *http.Request {
 func tidRequest(tid, cookie string) *http.Request {
 	r := requestAs("/avatar/"+tid, cookie)
 	r.SetPathValue("tid", tid)
+	return r
+}
+
+func hashRequest(hash, cookie string) *http.Request {
+	r := requestAs("/texture-render/"+hash, cookie)
+	r.SetPathValue("hash", hash)
 	return r
 }
 
@@ -167,6 +212,95 @@ func TestAvatarTIDHonoursVisibility(t *testing.T) {
 		}
 		if cc := rec.Header().Get("Cache-Control"); cc != "public, max-age=86400" {
 			t.Fatalf("public avatar cache-control = %q", cc)
+		}
+	})
+}
+
+// The same hole existed on the other side: the detail-page WebGL viewer is
+// addressed by content hash, and a private sheet handed out to anyone with a
+// `public, immutable` directive — which a CDN in front of the site would then
+// hold for every visitor. Unlike /preview/{hash}, this route has to keep the
+// owner's own viewer working, so private means "session may look", not "404".
+func TestViewerTextureHonoursVisibility(t *testing.T) {
+	const priv = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	const alsoPriv = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	const pub = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	st := fakeAvatarStore{
+		fakePreviewAuthStore: fakePreviewAuthStore{sessionUID: 7, owner: 7},
+		metaByHash:           map[string]string{priv: "skin", alsoPriv: "skin", pub: "skin"},
+		visibility: map[string]fakeVisibility{
+			priv:     {owners: []int64{7}},
+			alsoPriv: {owners: []int64{42}},
+			pub:      {public: true},
+		},
+	}
+	d := newAvatarDeps(t, st)
+	putSkin(t, d, priv)
+
+	t.Run("anonymous may not fetch a private sheet", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		d.handleViewerTexture(rec, hashRequest(priv, ""))
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("anonymous private hash = %d, want 404", rec.Code)
+		}
+		if cc := rec.Header().Get("Cache-Control"); cc != "" {
+			t.Fatalf("a 404 must not carry a cache directive, got %q", cc)
+		}
+	})
+
+	t.Run("a stranger with a session may not either", func(t *testing.T) {
+		st2 := st
+		st2.fakePreviewAuthStore = fakePreviewAuthStore{sessionUID: 99, owner: 7}
+		rec := httptest.NewRecorder()
+		newAvatarDeps(t, st2).handleViewerTexture(rec, hashRequest(priv, "s"))
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("stranger session private hash = %d, want 404", rec.Code)
+		}
+	})
+
+	t.Run("another owner of the same bytes may not", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		d.handleViewerTexture(rec, hashRequest(alsoPriv, "s"))
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("session 7 is not in owners{42}; private hash = %d, want 404", rec.Code)
+		}
+	})
+
+	t.Run("the owner gets the sheet, uncacheable", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		d.handleViewerTexture(rec, hashRequest(priv, "s"))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("owner private hash = %d, want 200 — the owner's own viewer must keep working", rec.Code)
+		}
+		if cc := rec.Header().Get("Cache-Control"); cc != "private, no-store" {
+			t.Fatalf("private viewer cache-control = %q, want %q", cc, "private, no-store")
+		}
+		if rec.Header().Get("Vary") != "Cookie" {
+			t.Fatal("a session-dependent render must vary on Cookie")
+		}
+	})
+
+	t.Run("an admin may", func(t *testing.T) {
+		st2 := st
+		st2.fakePreviewAuthStore = fakePreviewAuthStore{sessionUID: 8, permission: 2, owner: 7}
+		d2 := newAvatarDeps(t, st2)
+		putSkin(t, d2, priv)
+		rec := httptest.NewRecorder()
+		d2.handleViewerTexture(rec, hashRequest(priv, "s"))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("admin private hash = %d, want 200", rec.Code)
+		}
+	})
+
+	t.Run("a public sheet stays anonymously immutable", func(t *testing.T) {
+		putSkin(t, d, pub)
+		rec := httptest.NewRecorder()
+		d.handleViewerTexture(rec, hashRequest(pub, ""))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("public hash = %d, want 200", rec.Code)
+		}
+		if cc := rec.Header().Get("Cache-Control"); cc != "public, max-age=31536000, immutable" {
+			t.Fatalf("public viewer cache-control = %q", cc)
 		}
 	})
 }

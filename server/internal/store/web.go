@@ -337,6 +337,32 @@ func (m *Mysql) TextureIsPublicByHash(ctx context.Context, hash string) (bool, e
 	return pub, err
 }
 
+// TextureHashVisibility answers both halves of the visibility question for a
+// content address in one pass: is any row public, and which accounts hold
+// private rows. A shared hash can be claimed privately by more than one
+// uploader, so "the owner" is a set — a route that authorises by hash has to
+// check membership, not a single uid.
+func (m *Mysql) TextureHashVisibility(ctx context.Context, hash string) (public bool, privateOwners []int64, err error) {
+	rows, err := m.db.QueryContext(ctx, `SELECT public, uid FROM textures WHERE hash = ?`, hash)
+	if err != nil {
+		return false, nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var pub bool
+		var uid int64
+		if err := rows.Scan(&pub, &uid); err != nil {
+			return false, nil, err
+		}
+		if pub {
+			public = true
+			continue
+		}
+		privateOwners = append(privateOwners, uid)
+	}
+	return public, privateOwners, rows.Err()
+}
+
 // ViolationTombstoned reports whether this content address was hard-deleted while
 // carrying a violation verdict. The verdict is the discriminator, not the deletion:
 // an owner who removed their own skin must be able to upload it again, and only bytes

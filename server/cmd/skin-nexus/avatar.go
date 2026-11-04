@@ -49,6 +49,7 @@ type avatarStore interface {
 	TextureMetaByHash(ctx context.Context, hash string) (typ string, slim bool, err error)
 	TextureIsPublic(ctx context.Context, tid int64) (bool, error)
 	TextureIsPublicByHash(ctx context.Context, hash string) (bool, error)
+	TextureHashVisibility(ctx context.Context, hash string) (public bool, privateOwners []int64, err error)
 	NewestPublicSkin(ctx context.Context) (hash string, tid int64, slim bool, err error)
 }
 
@@ -66,22 +67,56 @@ type previewAuthStore interface {
 	TextureOwner(ctx context.Context, tid int64) (int64, error)
 }
 
-// privatePreviewAllowed mirrors the skinlib detail page visibility rule:
-// the owner or an admin (permission > 0) may see a private texture.
-func privatePreviewAllowed(st previewAuthStore, r *http.Request, tid int64) bool {
+// sessionViewer resolves the request cookie to a viewer: who, and whether they
+// run the site. Both private-viewing checks below start here so the staff rule
+// exists in exactly one place.
+func sessionViewer(st previewAuthStore, r *http.Request) (int64, bool) {
 	c, err := r.Cookie(skinSessionCookie)
 	if err != nil {
-		return false
+		return 0, false
 	}
 	uid, err := st.SessionUser(r.Context(), c.Value)
 	if err != nil || uid == 0 {
-		return false
+		return 0, false
 	}
 	if perm, err := st.UserPermission(r.Context(), uid); err == nil && perm > 0 {
+		return uid, true
+	}
+	return uid, false
+}
+
+// privatePreviewAllowed mirrors the skinlib detail page visibility rule:
+// the owner or an admin (permission > 0) may see a private texture.
+func privatePreviewAllowed(st previewAuthStore, r *http.Request, tid int64) bool {
+	uid, staff := sessionViewer(st, r)
+	if staff {
 		return true
+	}
+	if uid == 0 {
+		return false
 	}
 	owner, err := st.TextureOwner(r.Context(), tid)
 	return err == nil && owner == uid
+}
+
+// privateHashAllowed is the content-addressed twin of the rule above. The
+// address itself is not listed, so only staff or one of the accounts holding a
+// private row for those bytes may look — and "the owner" is a set, because two
+// uploaders can each claim the same bytes without either seeing the other.
+func privateHashAllowed(st previewAuthStore, r *http.Request, privateOwners []int64) bool {
+	uid, staff := sessionViewer(st, r)
+	if staff {
+		return true
+	}
+	if uid == 0 {
+		return false
+	}
+	for _, o := range privateOwners {
+		if o == uid {
+			return true
+		}
+	}
+	return false
 }
 
 // previewCacheControl keeps private renders out of shared caches. Public
@@ -369,6 +404,25 @@ func (d *avatarDeps) handleViewerTexture(w http.ResponseWriter, r *http.Request)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
+	// /skinlib/{tid} shows this URL for private textures too, so the route is
+	// reachable by whoever the detail page let in — and it used to answer them
+	// all with `public, immutable`, which is exactly the directive a CDN needs
+	// to turn one owner's private sheet into a cached site-wide asset.
+	public, privateOwners, verr := d.st.TextureHashVisibility(r.Context(), hash)
+	if verr != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	private := !public
+	if private && !privateHashAllowed(d.st, r, privateOwners) {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	cache := previewCacheControl(private)
+	if private {
+		w.Header().Set("Vary", "Cookie")
+		w.Header().Set("X-Robots-Tag", "noindex")
+	}
 	f, err := d.ts.Open(hash)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
@@ -379,7 +433,7 @@ func (d *avatarDeps) handleViewerTexture(w http.ResponseWriter, r *http.Request)
 	// raw bytes even if someone requests this route directly.
 	if typ != "skin" {
 		w.Header().Set("Content-Type", "image/png")
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.Header().Set("Cache-Control", cache)
 		http.ServeContent(w, r, "", zeroTime(), f)
 		return
 	}
@@ -388,7 +442,7 @@ func (d *avatarDeps) handleViewerTexture(w http.ResponseWriter, r *http.Request)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	writePNG(w, avatargen.NormalizeBackground(skin), "public, max-age=31536000, immutable")
+	writePNG(w, avatargen.NormalizeBackground(skin), cache)
 }
 
 func writePNG(w http.ResponseWriter, img image.Image, cache string) {
