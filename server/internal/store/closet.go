@@ -99,26 +99,44 @@ type WearableRow struct {
 // GROUP BY, not a unique key: user_closet keeps the legacy shape with no unique
 // constraint, so a direct import can carry the same pair twice. MAX() over the
 // closet alias picks the entry's own name over the texture's, as in blessing.
-func (m *Mysql) WearableTextures(ctx context.Context, uid int64, typ string) ([]WearableRow, error) {
+//
+// The picker pages and searches now — an account can have collected hundreds of
+// these — so the group count comes back as total. COUNT(DISTINCT …) is exactly
+// that count without a derived table the three engines would each spell
+// differently.
+func (m *Mysql) WearableTextures(ctx context.Context, uid int64, typ, q string, limit, offset int) ([]WearableRow, int64, error) {
+	d := m.db.Dialect()
+	where := "c.user_uid = ? AND t.type = ?"
+	args := []any{uid, typ}
+	if s := strings.TrimSpace(q); s != "" {
+		where += ` AND (` + d.CIContains("COALESCE(c.item_name, '')") + ` OR ` +
+			d.CIContains("COALESCE(t.description, '')") + ` OR ` + d.CIContains("COALESCE(t.hash, '')") + `)`
+		like := dialect.LikeContains(s)
+		args = append(args, like, like, like)
+	}
+	from := ` FROM user_closet c JOIN textures t ON t.id = c.texture_tid WHERE ` + where
+	var total int64
+	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(DISTINCT c.texture_tid)`+from, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	page := append(append([]any{}, args...), limit, offset)
 	rows, err := m.db.QueryContext(ctx, `
 		SELECT c.texture_tid, MAX(t.hash), MAX(COALESCE(t.model, '')),
-		       MAX(COALESCE(c.item_name, '')), MAX(COALESCE(t.description, ''))
-		FROM user_closet c JOIN textures t ON t.id = c.texture_tid
-		WHERE c.user_uid = ? AND t.type = ?
-		GROUP BY c.texture_tid ORDER BY MAX(c.id) DESC`, uid, typ)
+		       MAX(COALESCE(c.item_name, '')), MAX(COALESCE(t.description, ''))`+from+`
+		GROUP BY c.texture_tid ORDER BY MAX(c.id) DESC LIMIT ? OFFSET ?`, page...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 	out := make([]WearableRow, 0)
 	for rows.Next() {
 		var w WearableRow
 		if err := rows.Scan(&w.ID, &w.Hash, &w.Model, &w.Alias, &w.Name); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		out = append(out, w)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 // AddClosetEntry puts a texture into the closet. Idempotent: an existing

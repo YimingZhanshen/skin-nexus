@@ -869,29 +869,37 @@ func TestIntegrationWearableIsClosetOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed own: %v", err)
 	}
-	if rows, err := m.WearableTextures(ctx, uid, "skin"); err != nil || len(rows) != 0 {
+	if rows, _, err := m.WearableTextures(ctx, uid, "skin", "", 50, 0); err != nil || len(rows) != 0 {
 		t.Fatalf("wearable before collecting = %+v %v, want empty", rows, err)
 	}
 
 	if _, err := m.AddClosetEntry(ctx, uid, own, "衣柜里的名字"); err != nil {
 		t.Fatalf("collect: %v", err)
 	}
-	rows, err := m.WearableTextures(ctx, uid, "skin")
+	rows, total, err := m.WearableTextures(ctx, uid, "skin", "", 50, 0)
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("wearable after collecting = %+v %v, want one row", rows, err)
+	}
+	if total != 1 {
+		t.Fatalf("wearable total = %d, want 1", total)
 	}
 	if rows[0].ID != own || rows[0].Alias != "衣柜里的名字" || rows[0].Name != "own upload" || rows[0].Model != "slim" {
 		t.Fatalf("wearable row = %+v", rows[0])
 	}
 
 	// The legacy table has no unique key: a direct import can carry the pair
-	// twice, and the picker must still show it once.
+	// twice, and the picker must still show it once — in the list *and* in the
+	// count, or the pager would promise pages that are not there.
 	if _, err := m.db.ExecContext(ctx,
 		`INSERT INTO user_closet (user_uid, texture_tid, item_name) VALUES (?, ?, NULL)`, uid, own); err != nil {
 		t.Fatalf("insert legacy duplicate: %v", err)
 	}
-	if rows, err := m.WearableTextures(ctx, uid, "skin"); err != nil || len(rows) != 1 {
+	rows, total, err = m.WearableTextures(ctx, uid, "skin", "", 50, 0)
+	if err != nil || len(rows) != 1 {
 		t.Fatalf("wearable with a duplicate pair = %+v %v, want one row", rows, err)
+	}
+	if total != 1 {
+		t.Fatalf("wearable total with a duplicate pair = %d, want 1", total)
 	}
 
 	// Type isolation: a cape upload is not offered to the skin picker.
@@ -902,12 +910,53 @@ func TestIntegrationWearableIsClosetOnly(t *testing.T) {
 	if _, err := m.AddClosetEntry(ctx, uid, cape, ""); err != nil {
 		t.Fatalf("collect cape: %v", err)
 	}
-	capes, err := m.WearableTextures(ctx, uid, "cape")
+	capes, capeTotal, err := m.WearableTextures(ctx, uid, "cape", "", 50, 0)
 	if err != nil || len(capes) != 1 || capes[0].ID != cape {
 		t.Fatalf("cape picker = %+v %v, want only the cape", capes, err)
 	}
-	if rows, err := m.WearableTextures(ctx, uid, "skin"); err != nil || len(rows) != 1 {
+	if capeTotal != 1 {
+		t.Fatalf("cape total = %d, want 1", capeTotal)
+	}
+	if rows, _, err := m.WearableTextures(ctx, uid, "skin", "", 50, 0); err != nil || len(rows) != 1 {
 		t.Fatalf("skin picker after adding a cape = %+v %v, want the skin alone", rows, err)
+	}
+
+	// Search is what turns a 300-row dropdown into a usable picker, and it has to
+	// reach all three things a player might type: the name they gave the entry,
+	// the texture's own name, and the content address.
+	if got, _, err := m.WearableTextures(ctx, uid, "skin", "衣柜里", 50, 0); err != nil || len(got) != 1 {
+		t.Fatalf("search by closet alias = %+v %v, want the one row", got, err)
+	}
+	if got, _, err := m.WearableTextures(ctx, uid, "skin", strings.Repeat("F", 8), 50, 0); err != nil || len(got) != 1 {
+		t.Fatalf("search by hash, upper case = %+v %v, want the one row", got, err)
+	}
+	if got, tot, err := m.WearableTextures(ctx, uid, "skin", "不存在的名字", 50, 0); err != nil || len(got) != 0 || tot != 0 {
+		t.Fatalf("search with no match = %+v total %d %v, want empty", got, tot, err)
+	}
+
+	// Paging: one row per page, but the total still counts the whole set.
+	second, err := m.AddTexture(ctx, uid, "skin", strings.Repeat("c", 64), "default", TextureMeta{Description: "another skin"})
+	if err != nil {
+		t.Fatalf("seed second: %v", err)
+	}
+	if _, err := m.AddClosetEntry(ctx, uid, second, "第二件"); err != nil {
+		t.Fatalf("collect second: %v", err)
+	}
+	firstPage, tot, err := m.WearableTextures(ctx, uid, "skin", "", 1, 0)
+	if err != nil || len(firstPage) != 1 {
+		t.Fatalf("page size 1 = %+v %v, want one row", firstPage, err)
+	}
+	if tot != 2 {
+		t.Fatalf("total across pages = %d, want 2", tot)
+	}
+	// Newest closet entry first, so the second one leads and the first sits on
+	// the next page — the order a player expects after collecting something.
+	if firstPage[0].ID != second {
+		t.Fatalf("first page row = %+v, want the newest entry (%d)", firstPage[0], second)
+	}
+	secondPage, _, err := m.WearableTextures(ctx, uid, "skin", "", 1, 1)
+	if err != nil || len(secondPage) != 1 || secondPage[0].ID != own {
+		t.Fatalf("offset 1 = %+v %v, want the older entry", secondPage, err)
 	}
 }
 

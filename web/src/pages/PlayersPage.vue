@@ -8,21 +8,21 @@ import { guard401 } from '../session.js'
 import { confirmDialog, promptDialog } from '../dialog.js'
 import SkinPreview from '../components/SkinPreview.vue'
 import PluginSlot from '../components/plugin/PluginSlot.vue'
+import WearTexturePicker from '../components/WearTexturePicker.vue'
 
 const { t } = useI18n()
 
 const players = ref([])
-// The picker reads the wearable set — the closet, which is exactly what the
-// server will accept — split by type. Own uploads reach it because upload
-// collects them (and migration 0022 collected the history).
-const skins = ref([])
-const capes = ref([])
+// While the material dialog is open: which character, which slot. The list it
+// pages through is the wearable set (the closet), which is exactly what the
+// server accepts — own uploads reach it because upload collects them, and
+// migration 0022 collected the history.
+const picker = ref(null) // { player, kind } while the dialog is open
 const newName = ref('')
 const err = ref('')
 const ok = ref('')
-// Cards hold a dropdown each: without one-in-flight and a response stamp, a
-// double-click sent two texture changes and a slow /me list could overwrite a
-// fresher one.
+// Every change is one-in-flight per account: a double-click used to send two
+// texture changes, and a slow /me list could overwrite a fresher one.
 const creating = ref(false)
 const busyId = ref(0)
 let reqSeq = 0
@@ -31,11 +31,9 @@ async function load() {
   const seq = ++reqSeq
   err.value = ''
   try {
-    const [p, s, c] = await Promise.all([api.players(), api.wearable('skin'), api.wearable('cape')])
+    const p = await api.players()
     if (seq !== reqSeq) return
     players.value = p.players || []
-    skins.value = s.textures || []
-    capes.value = c.textures || []
   } catch (e) { if (seq === reqSeq && !guard401(e)) err.value = e.message }
 }
 
@@ -83,33 +81,37 @@ async function deletePlayer(p) {
   } catch (e) { if (!guard401(e)) err.value = e.message } finally { busyId.value = 0 }
 }
 
-// currentTid mirrors the player's mounted texture in the <select> (review
-// B P2: without it the picker always showed 无皮肤). The payload now carries the
-// mounted texture's own id, so the match is exact — the earlier URL-suffix
-// compare broke silently whenever a plugin URL filter rewrote the address.
+// currentTid reads the mounted material off the player payload. It used to be
+// cross-checked against the loaded closet list, which was fine while that list
+// was the whole closet and is wrong now that the dialog pages through it: an
+// entry on page three would have made the character look undressed.
 function currentTid(p, kind) {
   const raw = kind === 'cape' ? (p.CapeTID ?? p.capeTID) : (p.SkinTID ?? p.skinTID)
-  const tid = Number(raw || 0)
-  if (!tid) return ''
-  const list = kind === 'skin' ? skins.value : capes.value
-  return list.some(x => Number(x.id) === tid) ? String(tid) : ''
+  return Number(raw || 0)
 }
 
-// The preview must agree with the mounted skin: an Alex (slim) skin rendered on
-// the Steve model looks wrong and used to be indistinguishable from a broken
-// upload. /me/players carries SkinModel; the texture lookup is the fallback for
-// older payloads.
-function currentModel(p) {
-  const fromPlayer = p.SkinModel || p.skinModel || ''
-  if (fromPlayer) return fromPlayer === 'slim' ? 'slim' : 'default'
-  const tid = currentTid(p, 'skin')
-  const tx = skins.value.find(x => String(x.id) === tid)
-  return tx && tx.model === 'slim' ? 'slim' : 'default'
+// What the row says about the mounted material. The payload carries no closet
+// name (and the dialog only holds one page of it), so the content address is the
+// honest label — the card preview above already shows what it looks like.
+function mountedLabel(p, kind) {
+  const tid = currentTid(p, kind)
+  if (!tid) return t(kind === 'cape' ? 'dashboard.noCape' : 'dashboard.noSkin')
+  const hash = kind === 'cape' ? (p.CapeHash || p.capeHash) : (p.SkinHash || p.skinHash)
+  return '#' + tid + (hash ? ' · ' + String(hash).slice(0, 8) : '')
 }
 
-async function swapTexture(p, kind, e) {
-  const v = parseInt(e.target.value || '0', 10)
-  if (busyId.value) { e.target.value = currentTid(p, kind); return }
+function openPicker(p, kind) {
+  if (busyId.value) return
+  picker.value = { player: p, kind }
+}
+function closePicker() { picker.value = null }
+
+async function pickTexture(v) {
+  const cur = picker.value
+  if (!cur) return
+  const p = cur.player
+  const kind = cur.kind
+  picker.value = null
   err.value = ''; ok.value = ''
   busyId.value = pid(p)
   try {
@@ -118,6 +120,14 @@ async function swapTexture(p, kind, e) {
     ok.value = t('players.textureSet')
   } catch (ex) { if (!guard401(ex)) err.value = ex.message }
   finally { busyId.value = 0; try { await load() } catch (ex) { if (!guard401(ex)) err.value = ex.message } }
+}
+
+// The preview must agree with the mounted skin: an Alex (slim) skin rendered on
+// the Steve model looks wrong and used to be indistinguishable from a broken
+// upload. /me/players carries SkinModel for every mounted skin.
+function currentModel(p) {
+  const fromPlayer = p.SkinModel || p.skinModel || ''
+  return fromPlayer === 'slim' ? 'slim' : 'default'
 }
 
 onMounted(load)
@@ -146,20 +156,20 @@ onMounted(load)
             <span class="muted">PID {{ pid(p) }}</span>
             <code class="uuid" :title="puuid(p)">{{ puuid(p) }}</code>
           </div>
-          <label class="pc-field">
+          <div class="pc-field">
             <span>{{ t('dashboard.colSkin') }}</span>
-            <select :disabled="busyId === pid(p)" :value="currentTid(p, 'skin')" @change="swapTexture(p, 'skin', $event)">
-              <option value="">{{ t('dashboard.noSkin') }}</option>
-              <option v-for="tx in skins" :key="tx.id" :value="String(tx.id)" :title="tx.hash">{{ tx.label }}</option>
-            </select>
-          </label>
-          <label class="pc-field">
+            <button class="secondary" :disabled="busyId === pid(p)" @click="openPicker(p, 'skin')">
+              {{ t('players.pickSkin') }}
+            </button>
+            <span class="muted pc-mounted">{{ mountedLabel(p, 'skin') }}</span>
+          </div>
+          <div class="pc-field">
             <span>{{ t('dashboard.colCape') }}</span>
-            <select :disabled="busyId === pid(p)" :value="currentTid(p, 'cape')" @change="swapTexture(p, 'cape', $event)">
-              <option value="">{{ t('dashboard.noCape') }}</option>
-              <option v-for="tx in capes" :key="tx.id" :value="String(tx.id)" :title="tx.hash">{{ tx.label }}</option>
-            </select>
-          </label>
+            <button class="secondary" :disabled="busyId === pid(p)" @click="openPicker(p, 'cape')">
+              {{ t('players.pickCape') }}
+            </button>
+            <span class="muted pc-mounted">{{ mountedLabel(p, 'cape') }}</span>
+          </div>
           <div class="pc-actions">
             <button class="secondary" :disabled="busyId === pid(p)" @click="renamePlayer(p)">{{ t('players.rename') }}</button>
             <button class="secondary danger-outline" :disabled="busyId === pid(p)" @click="deletePlayer(p)">{{ t('common.delete') }}</button>
@@ -170,6 +180,14 @@ onMounted(load)
     <p class="muted" v-else>{{ t('players.empty') }}</p>
     <PluginSlot slot="player.card.footer" />
   </div>
+
+  <WearTexturePicker
+    :open="!!picker"
+    :type="picker ? picker.kind : 'skin'"
+    :texture-id="picker ? currentTid(picker.player, picker.kind) : 0"
+    @close="closePicker"
+    @pick="pickTexture"
+  />
 </template>
 
 <style scoped>
@@ -195,7 +213,8 @@ onMounted(load)
    "PID 1 / 2". Stacked plus break-all keeps both readable. */
 .uuid { font-size: var(--fs-xs); word-break: break-all; line-height: 1.35; }
 .pc-field { display: flex; flex-direction: column; gap: 4px; margin: 0; font-size: var(--fs-xs); color: var(--muted); }
-.pc-field select { width: 100%; padding: 4px 6px; font-size: var(--fs-s); }
+.pc-field button { width: 100%; font-size: var(--fs-s); }
+.pc-mounted { font-family: var(--mono, ui-monospace, monospace); }
 .pc-actions { display: flex; gap: 8px; margin-top: 2px; }
 .pc-actions button { flex: 1; }
 </style>

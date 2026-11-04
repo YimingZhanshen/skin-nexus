@@ -400,6 +400,15 @@
     "goPlayers": "Create one first",
     "done": "Wore “{texture}” on {player}"
   },
+  "picker": {
+    "titleSkin": "Pick a skin from your closet",
+    "titleCape": "Pick a cape from your closet",
+    "search": "Search by name or fingerprint…",
+    "current": "Currently worn",
+    "empty": "Nothing wearable in your closet yet",
+    "emptyFiltered": "Nothing matches that search",
+    "hint": "You can only wear what is in your closet: collect it with ♥ in the library, or upload your own."
+  },
   "players": {
     "title": "Profiles ({count})",
     "hint": "The profile name is the name you show in game: sign in to the skin site with it and the skin applies. Renaming never changes the UUID.",
@@ -412,13 +421,15 @@
     "created": "Profile created",
     "textureSet": "Updated",
     "empty": "No profiles yet — create one",
-    "nameRule": "3–16 characters: letters, digits or underscore (the site rule can be adjusted by admins)"
+    "nameRule": "3–16 characters: letters, digits or underscore (the site rule can be adjusted by admins)",
+    "pickSkin": "Pick a skin",
+    "pickCape": "Pick a cape"
   },
   "profile": {
     "title": "Profile",
     "avatarSection": "Avatar",
     "avatarDefault": "Default skin",
-    "avatarPick": "Pick a skin from the closet…",
+    "avatarPick": "Pick an avatar",
     "avatarResetBtn": "Reset avatar",
     "avatarReset": "Avatar reset to the default skin",
     "infoSection": "Account info",

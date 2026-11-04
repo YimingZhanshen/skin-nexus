@@ -7,6 +7,7 @@ import { api } from '../api.js'
 import { guard401 } from '../session.js'
 import { confirmDialog } from '../dialog.js'
 import PluginSlot from '../components/plugin/PluginSlot.vue'
+import WearTexturePicker from '../components/WearTexturePicker.vue'
 
 const { t } = useI18n()
 
@@ -15,7 +16,7 @@ const { t } = useI18n()
 defineProps({ mailEnabled: { type: Boolean, default: false } })
 
 const me = ref(null)
-const closet = ref([])
+const avatarPickOpen = ref(false)
 const err = ref('')
 const ok = ref('')
 
@@ -35,15 +36,14 @@ const delBusy = ref(false)
 const avatarUrl = computed(() => (me.value && me.value.avatarHash)
   ? `/textures/${me.value.avatarHash}` : '')
 
-// 设为头像候选：衣柜里有真实纹理（hash 非空）的皮肤目
-const avatarSkins = computed(() => closet.value.filter((c) => c.type === 'skin' && c.hash))
+// 头像就是衣柜里的一张皮肤，所以候选集与「穿到角色」用的是同一个弹窗：以前这里
+// 是一条把整个衣柜摊进 <option> 的下拉，几百项时既没图也没法搜。
 
 async function load() {
   err.value = ''
   try {
-    const [u, cl] = await Promise.all([api.me(), api.closet()])
+    const u = await api.me()
     me.value = u
-    closet.value = cl.closet || []
     newNickname.value = u.nickname || ''
   } catch (e) { if (!guard401(e)) err.value = e.message }
 }
@@ -79,10 +79,12 @@ async function requestEmailVerification() {
   } catch (e) { if (!guard401(e)) err.value = e.message }
 }
 
-async function setAvatar(c) {
+async function setAvatarTid(tid) {
+  avatarPickOpen.value = false
+  if (!tid) return resetAvatar()
   err.value = ''; ok.value = ''
   try {
-    await api.setAvatar(c.textureId)
+    await api.setAvatar(tid)
     ok.value = t('closet.avatarSet')
     try { me.value = await api.me() } catch (e) { if (!guard401(e)) err.value = e.message }
   } catch (e) { if (!guard401(e)) err.value = e.message }
@@ -130,10 +132,7 @@ onMounted(load)
         <div v-else class="avatar-empty">{{ t('profile.avatarDefault') }}</div>
       </div>
       <div class="row" style="flex-wrap: wrap;">
-        <select v-if="avatarSkins.length" class="avatar-pick" @change="(e) => { const c = closet.find(x => String(x.textureId) === e.target.value); if (c) setAvatar(c) }">
-          <option value="">{{ t('profile.avatarPick') }}</option>
-          <option v-for="c in avatarSkins" :key="c.id" :value="String(c.textureId)">{{ c.itemName || c.hash.slice(0, 12) }}…</option>
-        </select>
+        <button class="secondary" @click="avatarPickOpen = true">{{ t('profile.avatarPick') }}</button>
         <button class="secondary" v-if="avatarUrl" @click="resetAvatar">{{ t('profile.avatarResetBtn') }}</button>
       </div>
     </div>
@@ -173,6 +172,14 @@ onMounted(load)
     <div class="muted" style="margin-top: 6px; font-size: var(--fs-xs);">{{ t('profile.deleteHint') }}</div>
     <PluginSlot slot="profile.card.footer" />
   </div>
+
+  <WearTexturePicker
+    :open="avatarPickOpen"
+    type="skin"
+    :texture-hash="me && me.avatarHash ? me.avatarHash : ''"
+    @close="avatarPickOpen = false"
+    @pick="setAvatarTid"
+  />
 </template>
 
 <style scoped>
@@ -192,7 +199,6 @@ h3 { font-size: 14px; margin: 18px 0 8px; color: var(--muted); font-weight: 600;
   border-radius: 2px;
 }
 .avatar-empty { color: var(--muted); font-size: var(--fs-xs); }
-.avatar-pick { max-width: 260px; }
 .fld { flex: 1; min-width: 220px; }
 .fld input { margin-top: 4px; }
 .danger-text { color: var(--danger); }

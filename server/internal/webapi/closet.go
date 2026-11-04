@@ -51,6 +51,10 @@ func (b *Backend) handleClosetList(w http.ResponseWriter, r *http.Request) {
 // GET /api/v1/me/wearable?type=skin|cape — the compact set a player may wear.
 // The picker used to read /me/textures, which both carried fields it never
 // shows and missed the collected half of what is wearable.
+//
+// Paged and searchable (?page=&pageSize=&q=): the set is the whole closet, and a
+// player who has collected for a year is not served a 400-row dropdown — that is
+// also why the surface is a modal with thumbnails now instead of a <select>.
 func (b *Backend) handleMyWearable(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {
@@ -62,7 +66,8 @@ func (b *Backend) handleMyWearable(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusBadRequest, "type must be skin|cape", i18n.MsgInvalidValue)
 		return
 	}
-	rows, err := b.Store.WearableTextures(r.Context(), uid, typ)
+	limit, offset := pageParams(r)
+	rows, total, err := b.Store.WearableTextures(r.Context(), uid, typ, r.URL.Query().Get("q"), limit, offset)
 	if err != nil {
 		writeInternal(r, w, err)
 		return
@@ -76,11 +81,18 @@ func (b *Backend) handleMyWearable(w http.ResponseWriter, r *http.Request) {
 		if label == "" {
 			label = x.Hash
 		}
-		out = append(out, map[string]any{
+		item := map[string]any{
 			"id": x.ID, "hash": x.Hash, "model": x.Model, "label": label,
-		})
+		}
+		if typ == "skin" {
+			item["previewURL"] = previewThumbURL(x.ID)
+		} else {
+			item["previewURL"] = "" // no body render for a cape; the flat sheet is the honest thumb
+		}
+		item["url"] = b.textureURL(r.Context(), x.Hash, typ)
+		out = append(out, item)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"textures": out})
+	writeJSON(w, http.StatusOK, map[string]any{"textures": out, "total": total})
 }
 
 // POST /api/v1/me/closet {textureId, itemName?} — idempotent add.

@@ -46,8 +46,12 @@ export const api = {
   closet: (page = 1, pageSize = 50, q = '', type = '') => req('GET',
     `/api/v1/me/closet?page=${Number(page) || 1}&pageSize=${Number(pageSize) || 50}`
     + (q ? `&q=${encodeURIComponent(q)}` : '') + (type ? `&type=${type}` : '')),
-  // The set a player may wear: own uploads plus the closet.
-  wearable: (type) => req('GET', `/api/v1/me/wearable?type=${type === 'cape' ? 'cape' : 'skin'}`),
+  // The set a player may wear: the user's closet, filtered to one type. Paged
+  // and searchable because the picker is a modal over a list that gets long.
+  wearable: (type, q = '', page = 1, pageSize = 12) => req('GET',
+    `/api/v1/me/wearable?type=${type === 'cape' ? 'cape' : 'skin'}`
+    + `&page=${Number(page) || 1}&pageSize=${Number(pageSize) || 12}`
+    + (q ? `&q=${encodeURIComponent(q)}` : '')),
   closetAdd: (textureId, itemName = '') => req('POST', '/api/v1/me/closet', { textureId, itemName }),
   closetRename: (id, itemName) => req('PUT', `/api/v1/me/closet/${id}`, { itemName }),
   closetRemove: (id) => req('DELETE', `/api/v1/me/closet/${id}`),
