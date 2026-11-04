@@ -207,6 +207,14 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Validate the link itself, not only the derivative/repost pairing below: the
+	// detail page renders source_url into an href, so a row whose provenance says
+	// "original" must not be able to carry "javascript:…" just because the
+	// provenance field was not part of this PATCH.
+	if *req.SourceURL != "" && !validSourceURL(*req.SourceURL) {
+		writeErrCode(w, http.StatusBadRequest, "the original URL must be an http(s) link", account.CodeSourceURLBad)
+		return
+	}
 	// Owner-scoped unless admin (admins may fix any row).
 	owner := uid
 	if perm, err := b.Store.UserPermission(r.Context(), uid); err == nil && perm > 0 {
