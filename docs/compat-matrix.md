@@ -51,6 +51,9 @@ JWT access token 实测形状：`aud="2"（shared_client_id）、sub=uid、scope
 | 纹理广场 · OAuth 社交登录 · API PAT 面 · 积分商城 · 2FA · 验证码 · `/api` 根装饰 | ➖ 超出兼容范围 | 老站的增强面，不在「协议与数据可直迁」的口径内（站内通知另见下） |
 | 站内通知 | 🔧 语义 | 老站是逐用户站内信 + 永不过期的链接；我方是**处置决定的留痕收件箱**（举报成立/驳回、材质下架与解除违规、封禁与解禁），90 天保留、拉取式未读角标，不做评论/@ 等社交流 |
 | 删除材质后已下发的纹理 URL | 🔧 取舍 | `/textures/{hash}` 只查磁盘、不校验行与可见性，且响应是 `max-age=31536000, immutable`。删除保证**源站停止供源**并保留取证记录，不保证浏览器/中间缓存/CDN 上的旧副本失效（hash 即 URL，无法主动失效）。加每请求 DB 校验会推翻纹理分发的性能模型，故不做 |
+| 私有材质的渲染面 | 🔧 偏差备案（2026-11-04 起） | 老站的头像/渲染路由不查可见性，`/avatar/{tid}` 与详情页 WebGL 用的 `/texture-render/{hash}` 谁都能拿（tid 可枚举）。我方现在按「作者本人或管理员」放行，私有渲染回 `private, no-store` + `Vary: Cookie` + `X-Robots-Tag: noindex`。**行为变化要记账**：以前发出去的私有头像/渲染直链现在对匿名访客是 404，被 CDN 缓存过的旧副本仍会存活到过期（与上面「删除材质后已下发的纹理 URL」同一局限）。按内容地址直取原始文件的 `/textures/{hash}` 与 `/avatar/{hash}` 不变——那是能力地址模型，不是可枚举入口 |
+| 新站初始化 | 🔧 偏差备案（2026-11-04 起） | 老站空库直接开注册，谁先到谁当管理员。我方未初始化时启动生成一次性安装令牌打进日志，`POST /api/v1/setup` 必须带它（`SKIN_SETUP_TOKEN` 可固定），占位与建号同事务、并发只有一个超管。装好之后端点永久 404，向导是一扇门不是开关 |
+| 全站安全响应头 | 🔧 取舍（2026-11-04 起） | 页面与 API 统一带 CSP/`X-Frame-Options: DENY`/`Referrer-Policy`/`Permissions-Policy`。CSP 刻意允许 `script/style 'unsafe-inline'`：站长自定义 CSS/JS、主题包、插件包都是这个能力的使用者，nonce 化等于砍掉三项功能。`/plugin-assets/` 是唯一允许被本站 iframe 的前缀（`SAMEORIGIN` + `frame-ancestors 'self'`），其余一律拒绝被嵌；插件/主题 HTML 文档另带 `Sandbox: allow-scripts allow-forms`，落到不透明源里拿不到 cookie。反代在站点前时以站点自身响应为准，覆盖需反代显式改写 |
 | 违规内容地址的解禁面 | 🔧 取舍 | 判定违规（`moderation='violation'`）后彻底删除的材质，其内容地址进墓碑并被上传收口点拒绝，任何人都传不回来，私有导入也一样（私有副本可穿，放行等于留后门）。**撤销误判只有数据侧一途**：面板不提供墓碑视图，因为解禁必须指明是谁撤销了谁的判定，而那需要整套处置历史界面而非一个按钮。老站没有等价物（它根本没有彻底删除） |
 | 行 id 不复用 | 🔧 偏差备案 | `textures/users/players` 的行 id 会被举报、墓碑、衣柜长期按 id 引用，回收即错配。SQLite 靠 `AUTOINCREMENT`（新装走 DDL，已装库在启动时幂等重建）；MySQL `AUTO_INCREMENT`、PostgreSQL `BIGSERIAL` 本就不回退。**MariaDB 的 InnoDB 计数器不持久化**，重启后按 `MAX(id)+1` 重算，理论上仍可回收——本机无 docker，未复现，只备案 |
 | 「换肤必须先入柜」 | ➖ 不复刻 | 拍板：那是老站 UI 流程而非数据约束，强加会破坏已验收的 setSkin 直连；衣柜按收藏集合上线 |

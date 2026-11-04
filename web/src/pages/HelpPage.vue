@@ -43,6 +43,11 @@ const verifyGate = computed(() => conf.value.verify_gate_enabled === true)
         <b>{{ t('help.notShownDomain') }}</b>
         <span>{{ t('help.notShownDomainBody') }}</span>
       </li>
+      <li>
+        <b>{{ t('help.notShownPrivate') }}</b>
+        <span>{{ t('help.notShownPrivateBody') }}</span>
+        <button v-if="goto" class="link-like" @click="goto('closet')">{{ t('help.goCloset') }}</button>
+      </li>
       <li v-if="verifyGate">
         <b>{{ t('help.notShownVerify') }}</b>
         <span>{{ t('help.notShownVerifyBody') }}</span>
