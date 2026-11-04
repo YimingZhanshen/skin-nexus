@@ -88,6 +88,12 @@ func (m *Manager) AssetHandler() http.Handler {
 		}
 		w.Header().Set("Content-Type", ctype)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		// Plugin UI pages are HTML on the site origin. Inside the panel they sit in
+		// a sandboxed iframe; reached directly they would run with the viewer's
+		// cookies, so the same flags travel with the response.
+		if strings.HasPrefix(ctype, "text/html") {
+			w.Header().Set("Sandbox", "allow-scripts allow-forms")
+		}
 		// Plugin assets are mutable (a plugin upgrade replaces the directory)
 		// and are not content-hashed; always revalidate instead of a 1h stale
 		// window. Iframe URLs also carry ?v=<plugin version>.

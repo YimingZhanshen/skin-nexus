@@ -429,6 +429,28 @@ location / {
 >
 > `X-Real-IP` 默认不读取；开启 CDN 开关后才按配置的头顺序读取（见下）。
 
+### 安全响应头（服务端已内置，反代不必再加）
+
+每个响应都带：`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`、
+`X-Frame-Options: DENY`、`Permissions-Policy`（相机/麦克风/支付/USB 等本站用得到的能力一律关掉），
+以及一条 `Content-Security-Policy`：脚本与样式只允许同源（外加内联，见下）、图片同源或 http(s)、
+`frame-ancestors 'none'`（禁被嵌套，与 `X-Frame-Options` 同义）、`object-src 'none'`、
+`base-uri 'self'`、`form-action 'self'`。
+
+**CSP 有意允许 `'unsafe-inline'` 的 script/style**：「自定义 CSS/JS」「主题包」「插件 bundle」
+是站长主动安装的功能，都靠内联。所以这条策略不是「装了恶意插件包也能挡住」的防线，
+而是其余一切的边界。要上严格 CSP（nonce/hash）就得同时放弃内联自定义 JS，
+那是产品取舍，不在这里顺手改。
+
+`/plugin-assets/` 与 `/theme-assets/` 里**以 HTML 文档返回**的响应额外带
+`Sandbox: allow-scripts allow-forms`（与面板 iframe 的 `sandbox` 同一组标记）：
+有人直接访问第三方包里的 HTML 时，那份文档跑在隔离源里，带不上本站会话。
+CSS/JS 这类子资源**不带**这个头——浏览器对「子资源的 sandbox 作用在谁身上」语义并不一致，
+不如只处理确定有意义的那一类。
+
+反代/CDN 若也加同名头，值是**追加**而不是替换，同一份响应出现两条 CSP 时浏览器取交集，
+容易把自己锁死。要么只在服务端配，要么只在最外层配一处。
+
 ### CDN 场景（Cloudflare / 阿里云 CDN 等）
 
 CDN → Nginx → 容器时，XFF 最后一跳通常是 CDN 节点，不是玩家。后台

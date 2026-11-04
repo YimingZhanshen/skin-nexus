@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -917,7 +918,7 @@ func main() {
 	addr := cfg.Listen
 	log.Printf("skin-nexus %s listening on %s (base %s)", version, addr, cfg.BaseURL)
 
-	srv := newHTTPServer(addr, pub.WrapRoot(gzipHandler(root)))
+	srv := newHTTPServer(addr, pub.WrapRoot(securityHeaders(gzipHandler(root))))
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.ListenAndServe() }()
 
@@ -1212,6 +1213,10 @@ func themeAssetHandler(reg *theme.Registry) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
+		// A theme pack is third-party content on the site's own origin. If someone
+		// navigates straight to an HTML file inside it, that document would run with
+		// the site's cookies; the sandbox header puts it in an opaque origin instead.
+		sandboxDocument(w, mime.TypeByExtension(strings.ToLower(filepath.Ext(full))))
 		w.Header().Set("Cache-Control", "public, max-age=86400")
 		http.ServeFile(w, r, full)
 	})

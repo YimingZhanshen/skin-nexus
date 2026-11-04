@@ -79,7 +79,10 @@ function plain(value) {
 function send(type, payload, id) {
   const win = frame.value && frame.value.contentWindow
   if (!win) return
-  win.postMessage({ v: 1, nonce, id, type, payload }, '*')
+  // The frame is same-origin by construction (/plugin-assets/…), but a sandboxed
+  // document can navigate itself elsewhere; "*" would then hand the CSRF token and
+  // the user's permission level to whatever page it landed on.
+  win.postMessage({ v: 1, nonce, id, type, payload }, window.location.origin)
 }
 
 async function init() {
