@@ -537,6 +537,19 @@ func DefaultAvatar(size int, threeD bool) (*image.NRGBA, error) {
 	return resizeNearest(tmp, img.Bounds(), size, size), nil
 }
 
+// Ceilings for decoding a stored texture. texture.MaxPixels (1M) and
+// texture.MaxUploadBytes (2 MiB) guard the *upload* path, but a file can also
+// arrive through the legacy migration or an importer, which re-hash and store
+// bytes without rejecting oversized sheets — and the render routes below are
+// reachable without a session. The decode ceilings are therefore set well above
+// what the uploader accepts (8× the pixels, 8× the bytes), so no legitimate skin
+// — including the largest HD sheet — is refused, while a file declaring
+// 8192×8192 can no longer cost 268 MB of heap per request.
+const (
+	maxSkinPixels = 8 << 20 // 8× texture.MaxPixels
+	maxSkinBytes  = 16 << 20
+)
+
 // LoadSkin decodes a texture PNG file into NRGBA.
 func LoadSkin(path string) (*image.NRGBA, error) {
 	f, err := os.Open(path)
@@ -550,8 +563,28 @@ func LoadSkin(path string) (*image.NRGBA, error) {
 // LoadSkinReader decodes a texture PNG stream into NRGBA at its native
 // resolution. HD sheets stay full-resolution — render() maps the 64-space UV
 // tables onto whatever grid the sheet has, so no detail is discarded.
+//
+// The header is read before the pixels: png.Decode allocates whatever the IHDR
+// declares, so a file can only be refused by looking at the declaration first.
+// That is why the stream is buffered (under the byte ceiling) instead of handed
+// straight to the decoder.
 func LoadSkinReader(r io.Reader) (*image.NRGBA, error) {
-	img, err := png.Decode(r)
+	raw, err := io.ReadAll(io.LimitReader(r, maxSkinBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > maxSkinBytes {
+		return nil, fmt.Errorf("avatargen: texture exceeds %d bytes", maxSkinBytes)
+	}
+	cfg, err := png.DecodeConfig(bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	if cfg.Width*cfg.Height > maxSkinPixels {
+		return nil, fmt.Errorf("avatargen: texture declares %dx%d = %d pixels, over the %d pixel decoding ceiling",
+			cfg.Width, cfg.Height, cfg.Width*cfg.Height, maxSkinPixels)
+	}
+	img, err := png.Decode(bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
