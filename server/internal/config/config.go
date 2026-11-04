@@ -36,6 +36,11 @@ type Config struct {
 	// that boot and prints it to the log.
 	SetupToken string // SKIN_SETUP_TOKEN
 
+	// TrustedProxies narrows which peers may speak X-Forwarded-For. Empty keeps
+	// the historical default (loopback or RFC1918), so an existing deployment is
+	// unaffected until it opts in.
+	TrustedProxies []string // SKIN_TRUSTED_PROXIES
+
 	// Phase 2: yggc/OIDC passwordless login (internal OIDC provider).
 	OIDCEnabled    bool
 	OIDCIssuer     string // e.g. https://skin.example.com
@@ -148,17 +153,18 @@ func themeTrustKeys() string {
 func Load() (*Config, error) {
 	dataDir := getenv("SKIN_DATA_DIR", "./data")
 	c := &Config{
-		Listen:      getenv("SKIN_LISTEN", ":8080"),
-		BaseURL:     strings.TrimRight(getenv("SKIN_BASE_URL", "http://localhost:8080"), "/"),
-		Environment: getenv("SKIN_ENV", "production"),
-		DatabaseDSN: os.Getenv("SKIN_DATABASE_DSN"),
-		SMTP:        loadSMTP(),
-		TexturesDir: resolveDataPath("SKIN_TEXTURES_DIR", dataDir, "textures"),
-		ServerName:  getenv("SKIN_SERVER_NAME", "SkinNexus"),
-		SkinDomains: splitCSV(getenv("SKIN_SKIN_DOMAINS", "")),
-		SignKeyPath: resolveDataPath("SKIN_SIGN_KEY", dataDir, "sign-key.pem"),
-		SiteName:    getenv("SKIN_SITE_NAME", "SkinNexus"),
-		SetupToken:  os.Getenv("SKIN_SETUP_TOKEN"),
+		Listen:         getenv("SKIN_LISTEN", ":8080"),
+		BaseURL:        strings.TrimRight(getenv("SKIN_BASE_URL", "http://localhost:8080"), "/"),
+		Environment:    getenv("SKIN_ENV", "production"),
+		DatabaseDSN:    os.Getenv("SKIN_DATABASE_DSN"),
+		SMTP:           loadSMTP(),
+		TexturesDir:    resolveDataPath("SKIN_TEXTURES_DIR", dataDir, "textures"),
+		ServerName:     getenv("SKIN_SERVER_NAME", "SkinNexus"),
+		SkinDomains:    splitCSV(getenv("SKIN_SKIN_DOMAINS", "")),
+		SignKeyPath:    resolveDataPath("SKIN_SIGN_KEY", dataDir, "sign-key.pem"),
+		SiteName:       getenv("SKIN_SITE_NAME", "SkinNexus"),
+		SetupToken:     os.Getenv("SKIN_SETUP_TOKEN"),
+		TrustedProxies: splitCSV(getenv("SKIN_TRUSTED_PROXIES", "")),
 
 		OIDCEnabled:         getenv("SKIN_OIDC_ENABLED", "false") == "true",
 		RequireVerification: getenv("SKIN_REQUIRE_VERIFICATION", "false") == "true",

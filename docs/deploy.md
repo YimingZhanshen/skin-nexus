@@ -141,6 +141,7 @@ environment:
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `SKIN_SITE_NAME` | `SkinNexus` | 站点名（面板可改） |
+| `SKIN_TRUSTED_PROXIES` | 空（= loopback + RFC1918 全信任） | 逗号分隔的 CIDR 列表，指定**哪些对端可以声称** `X-Forwarded-For`。留空沿用历史行为（同机 nginx / docker bridge 场景不用改）；一旦配置，只有列出的网段被信任，其余对端来的 XFF 一律不信。写错（非 CIDR）直接启动失败，而不是悄悄放宽信任——认证限流与审计里的 IP 全靠这条 |
 | `SKIN_SETUP_TOKEN` | 空（每次启动临时生成并打进日志） | 安装向导的一次性令牌。空库时 `/api/v1/setup` 谁先提交谁当超管，所以这一步要一个只有运维者拿得到的值：留空则本次启动随机生成并在日志里打印 `setup: ... install token "xxxxxxxxxx"`，`docker compose logs skin-nexus` 可见；自己定一个则跨重启不变。填错只回 403，不写任何数据；站点初始化后本变量不再起作用 |
 | `SKIN_SERVER_NAME` | `SkinNexus` | Yggdrasil 元数据里的服务器显示名（面板可改） |
 | `SKIN_SKIN_DOMAINS` | 空 | 皮肤域白名单，逗号分隔；不接联盟填本站域名，接入 MUA Union 以联盟公布清单为准（改动会破坏联盟互认） |
@@ -423,8 +424,9 @@ location / {
 > `X-Forwarded-For` 同样必传：注册按 IP 计数（`regs_per_ip`）与 `users.ip` 记录、
 > 认证限流窗口都走 `ygg.ClientIP`。缺了它，容器看到的对端全是反代地址——
 > **全站共享一个计数桶，第三个注册就把所有人挡在门外**，且所有账号的 `ip` 列
-> 都会记成同一个值（切流后追溯困难）。服务端只在对端处于 loopback/RFC1918
-> 信任区时才采信 XFF 的**最后一跳**（防伪造绕限流），所以反代必须用
+> 都会记成同一个值（切流后追溯困难）。服务端只在对端处于信任区时才采信 XFF 的
+> **最后一跳**（防伪造绕限流）：默认信任区是 loopback + RFC1918，够同机反代用；容器端口
+> 若被别的机器摸得到，请用 `SKIN_TRUSTED_PROXIES` 收成实际反代网段。所以反代必须用
 > `$proxy_add_x_forwarded_for` 或 `$remote_addr` 追加真实地址，不要透传客户端原样头。
 >
 > `X-Real-IP` 默认不读取；开启 CDN 开关后才按配置的头顺序读取（见下）。

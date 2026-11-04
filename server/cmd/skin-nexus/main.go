@@ -918,6 +918,14 @@ func main() {
 	addr := cfg.Listen
 	log.Printf("skin-nexus %s listening on %s (base %s)", version, addr, cfg.BaseURL)
 
+	if len(cfg.TrustedProxies) > 0 {
+		// A typo here would silently widen the trust that every rate limit and
+		// audit row depends on, so refuse to start rather than fall back.
+		if err := ygg.ConfigureTrustedProxies(cfg.TrustedProxies); err != nil {
+			log.Fatalf("config: %v", err)
+		}
+		log.Printf("client IP: X-Forwarded-For accepted only from %s", strings.Join(cfg.TrustedProxies, ", "))
+	}
 	srv := newHTTPServer(addr, pub.WrapRoot(securityHeaders(gzipHandler(root))))
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.ListenAndServe() }()

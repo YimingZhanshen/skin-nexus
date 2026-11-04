@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -689,11 +690,45 @@ func normalizeIP(raw string) string {
 	return ip.String()
 }
 
-// isTrustedProxy reports whether the peer address is inside the local trust
-// zone (loopback or RFC1918 — docker bridge / same-host nginx).
+// trustedProxyNets holds the operator-supplied trust zone (empty = the default
+// loopback/private zone). It is a separate atomic so ConfigureClientIP (the CDN
+// header list) and the peer rule can be set independently.
+var trustedProxyNets atomic.Value // []*net.IPNet
+
+// ConfigureTrustedProxies narrows which peers may speak X-Forwarded-For. An
+// empty list restores the default (loopback or RFC1918 — same-host nginx,
+// docker bridge). Every entry must be a CIDR: accepting a bare "10.0.0.1" would
+// mean "this one host" to some readers and "a /8" to others, and a typo here
+// silently widens the trust that rate limits and audit rows depend on.
+func ConfigureTrustedProxies(cidrs []string) error {
+	var nets []*net.IPNet
+	for _, c := range cidrs {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		_, n, err := net.ParseCIDR(c)
+		if err != nil {
+			return fmt.Errorf("ygg: trusted proxy %q is not a CIDR: %w", c, err)
+		}
+		nets = append(nets, n)
+	}
+	trustedProxyNets.Store(nets)
+	return nil
+}
+
+// isTrustedProxy reports whether the peer may be believed about X-Forwarded-For.
 func isTrustedProxy(host string) bool {
 	ip := net.ParseIP(strings.Trim(host, "[]"))
 	if ip == nil {
+		return false
+	}
+	if nets, ok := trustedProxyNets.Load().([]*net.IPNet); ok && len(nets) > 0 {
+		for _, n := range nets {
+			if n.Contains(ip) {
+				return true
+			}
+		}
 		return false
 	}
 	return ip.IsLoopback() || ip.IsPrivate()
