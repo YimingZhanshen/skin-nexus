@@ -166,6 +166,16 @@ func main() {
 			log.Fatalf("rowid: %v", err)
 		}
 	}
+	// Session and launcher tokens are stored as digests. Runs on every boot, not
+	// only when SKIN_AUTO_MIGRATE is on: it rewrites rows, not schema. The rewrite
+	// and its marker share one transaction, so a failure here leaves the database
+	// exactly as it was (still plaintext, still working) and the next boot retries
+	// — which is why this logs rather than killing the process.
+	if n, err := st.EnsureTokenDigests(context.Background()); err != nil {
+		log.Printf("auth: WARNING token digests not applied, session and launcher tokens remain in plaintext: %v", err)
+	} else if n > 0 {
+		log.Printf("auth: rewrote %d stored token(s) as digests (this happens once)", n)
+	}
 	if n, err := st.BackfillPublicDedupe(context.Background()); err != nil {
 		log.Printf("dedupe: backfill public hashes: %v", err)
 	} else if n > 0 {

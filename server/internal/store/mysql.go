@@ -217,12 +217,16 @@ func collectPlayers(rows *sql.Rows) ([]ygg.Player, error) {
 }
 
 // ---- ygg tokens ----
+//
+// access_token is stored and matched as hex(sha256(value)) — see digest.go.
+// client_token stays verbatim: it is the pairing id, useless without an access
+// token, and Yggdrasil requires the server to echo the same value back.
 
 func (m *Mysql) SaveToken(ctx context.Context, t ygg.Token) error {
 	_, err := m.db.ExecContext(ctx,
 		`INSERT INTO ygg_tokens (user_id, client_token, access_token, selected_pid, created_at, expires_at, invalidated)
 		 VALUES (?,?,?,?,?,?,0)`,
-		t.UserID, t.ClientToken, t.AccessToken, nullableInt(t.SelectedPID), t.CreatedAt, t.ExpiresAt)
+		t.UserID, t.ClientToken, credentialDigest(t.AccessToken), nullableInt(t.SelectedPID), t.CreatedAt, t.ExpiresAt)
 	return err
 }
 
@@ -230,18 +234,22 @@ func (m *Mysql) TokenByAccess(ctx context.Context, access string) (ygg.Token, er
 	var t ygg.Token
 	var sel sql.NullInt64
 	err := m.db.QueryRowContext(ctx,
-		`SELECT user_id, client_token, access_token, selected_pid, created_at, expires_at, invalidated
-		 FROM ygg_tokens WHERE access_token = ?`, access).
-		Scan(&t.UserID, &t.ClientToken, &t.AccessToken, &sel, &t.CreatedAt, &t.ExpiresAt, &t.Invalidated)
+		`SELECT user_id, client_token, selected_pid, created_at, expires_at, invalidated
+		 FROM ygg_tokens WHERE access_token = ?`, credentialDigest(access)).
+		Scan(&t.UserID, &t.ClientToken, &sel, &t.CreatedAt, &t.ExpiresAt, &t.Invalidated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ygg.Token{}, ErrNotFound
 	}
 	t.SelectedPID = sel.Int64
+	// The stored column is a digest and cannot be turned back into a token; the
+	// caller already holds the value it presented, and that is the only thing
+	// downstream code (Join → SaveJoin) needs it for.
+	t.AccessToken = access
 	return t, err
 }
 
 func (m *Mysql) InvalidateToken(ctx context.Context, access string) error {
-	_, err := m.db.ExecContext(ctx, "UPDATE ygg_tokens SET invalidated = 1 WHERE access_token = ?", access)
+	_, err := m.db.ExecContext(ctx, "UPDATE ygg_tokens SET invalidated = 1 WHERE access_token = ?", credentialDigest(access))
 	return err
 }
 
@@ -290,27 +298,30 @@ func (m *Mysql) SaveJoin(ctx context.Context, j ygg.JoinSession) error {
 	_, err := m.db.ExecContext(ctx,
 		`INSERT INTO ygg_join_sessions (access_token, uuid, server_id, server_ip, created_at, expires_at)
 		 VALUES (?,?,?,?,?,?)`,
-		j.AccessToken, j.UUID, j.ServerID, j.ServerIP, j.CreatedAt, j.ExpiresAt)
+		credentialDigest(j.AccessToken), j.UUID, j.ServerID, j.ServerIP, j.CreatedAt, j.ExpiresAt)
 	return err
 }
 
 func (m *Mysql) JoinByTokenServer(ctx context.Context, access, serverID string) (ygg.JoinSession, error) {
 	var j ygg.JoinSession
+	// access_token is not selected: the column now holds a digest, and no caller
+	// may treat it as the token.
 	err := m.db.QueryRowContext(ctx,
-		`SELECT access_token, uuid, server_id, server_ip, created_at, expires_at
+		`SELECT uuid, server_id, server_ip, created_at, expires_at
 		 FROM ygg_join_sessions WHERE access_token = ? AND server_id = ? ORDER BY id DESC LIMIT 1`,
-		access, serverID).
-		Scan(&j.AccessToken, &j.UUID, &j.ServerID, &j.ServerIP, &j.CreatedAt, &j.ExpiresAt)
+		credentialDigest(access), serverID).
+		Scan(&j.UUID, &j.ServerID, &j.ServerIP, &j.CreatedAt, &j.ExpiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ygg.JoinSession{}, ErrNotFound
 	}
+	j.AccessToken = access
 	return j, err
 }
 
 // FindLiveJoins powers hasJoined (service uses this optional scanner).
 func (m *Mysql) FindLiveJoins(ctx context.Context, uuid string, now time.Time) ([]ygg.JoinSession, error) {
 	rows, err := m.db.QueryContext(ctx,
-		`SELECT access_token, uuid, server_id, server_ip, created_at, expires_at
+		`SELECT uuid, server_id, server_ip, created_at, expires_at
 		 FROM ygg_join_sessions WHERE uuid = ? AND expires_at > ? ORDER BY id DESC`, uuid, now)
 	if err != nil {
 		return nil, err
@@ -319,7 +330,7 @@ func (m *Mysql) FindLiveJoins(ctx context.Context, uuid string, now time.Time) (
 	var out []ygg.JoinSession
 	for rows.Next() {
 		var j ygg.JoinSession
-		if err := rows.Scan(&j.AccessToken, &j.UUID, &j.ServerID, &j.ServerIP, &j.CreatedAt, &j.ExpiresAt); err != nil {
+		if err := rows.Scan(&j.UUID, &j.ServerID, &j.ServerIP, &j.CreatedAt, &j.ExpiresAt); err != nil {
 			return nil, err
 		}
 		out = append(out, j)

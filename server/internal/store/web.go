@@ -83,10 +83,12 @@ func (m *Mysql) NicknameTaken(ctx context.Context, nickname string) (bool, error
 	return true, nil
 }
 
-// CreateSession stores an opaque web session token.
+// CreateSession stores an opaque web session token. The column holds
+// hex(sha256(token)) — see digest.go — because a dumped sessions table must not
+// be a list of working logins.
 func (m *Mysql) CreateSession(ctx context.Context, token string, uid int64, expires time.Time) error {
 	_, err := m.db.ExecContext(ctx,
-		`INSERT INTO web_sessions (token, user_id, expires_at) VALUES (?,?,?)`, token, uid, expires)
+		`INSERT INTO web_sessions (token, user_id, expires_at) VALUES (?,?,?)`, credentialDigest(token), uid, expires)
 	return err
 }
 
@@ -94,7 +96,7 @@ func (m *Mysql) CreateSession(ctx context.Context, token string, uid int64, expi
 func (m *Mysql) SessionUser(ctx context.Context, token string) (int64, error) {
 	var uid int64
 	err := m.db.QueryRowContext(ctx,
-		`SELECT user_id FROM web_sessions WHERE token = ? AND expires_at > ?`, token, m.now().UTC()).
+		`SELECT user_id FROM web_sessions WHERE token = ? AND expires_at > ?`, credentialDigest(token), m.now().UTC()).
 		Scan(&uid)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNotFound
@@ -103,7 +105,7 @@ func (m *Mysql) SessionUser(ctx context.Context, token string) (int64, error) {
 }
 
 func (m *Mysql) DeleteSession(ctx context.Context, token string) error {
-	_, err := m.db.ExecContext(ctx, `DELETE FROM web_sessions WHERE token = ?`, token)
+	_, err := m.db.ExecContext(ctx, `DELETE FROM web_sessions WHERE token = ?`, credentialDigest(token))
 	return err
 }
 
@@ -111,7 +113,7 @@ func (m *Mysql) DeleteSession(ctx context.Context, token string) error {
 // change hygiene: the caller's own session survives, stolen ones do not).
 func (m *Mysql) DeleteUserSessionsExcept(ctx context.Context, uid int64, keepToken string) error {
 	_, err := m.db.ExecContext(ctx,
-		`DELETE FROM web_sessions WHERE user_id = ? AND token <> ?`, uid, keepToken)
+		`DELETE FROM web_sessions WHERE user_id = ? AND token <> ?`, uid, credentialDigest(keepToken))
 	return err
 }
 
