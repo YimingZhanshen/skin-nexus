@@ -374,18 +374,37 @@ func (m *Mysql) ListTextures(ctx context.Context, uid int64) ([]TextureRow, erro
 		 FROM textures t WHERE t.uid = ? ORDER BY t.id DESC`, uid)
 }
 
-// ListTexturesPage returns one page plus the full count. An uploader with
-// hundreds of textures used to get every row rendered at once.
-func (m *Mysql) ListTexturesPage(ctx context.Context, uid int64, limit, offset int) ([]TextureRow, int64, error) {
+// ListTexturesPage returns one page plus the count that matches the same
+// filters. An uploader with hundreds of textures used to get every row rendered
+// at once, and with no way to find one short of paging through it by hand while
+// the library and the closet both already search as you type.
+//
+// q matches the name or the content address; typ is "skin"/"cape" and anything
+// else (including "") means "no type filter" — the caller validates, this stays
+// total: the filter cannot turn into an unbounded scan.
+func (m *Mysql) ListTexturesPage(ctx context.Context, uid int64, q, typ string, limit, offset int) ([]TextureRow, int64, error) {
+	where := "WHERE t.uid = ?"
+	args := []any{uid}
+	if typ == "skin" || typ == "cape" {
+		where += " AND t.type = ?"
+		args = append(args, typ)
+	}
+	if q = strings.TrimSpace(q); q != "" {
+		like := dialect.LikeContains(q)
+		where += " AND (" + dialect.CIContainsSQL("COALESCE(t.description,'')") +
+			" OR " + dialect.CIContainsSQL("t.hash") + ")"
+		args = append(args, like, like)
+	}
 	var total int64
-	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM textures WHERE uid = ?`, uid).Scan(&total); err != nil {
+	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM textures t `+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	rows, err := m.queryTextures(ctx,
 		`SELECT id, type, hash, COALESCE(model,''), COALESCE(description,''),
 		        COALESCE(detail_md,''), COALESCE(source,''), COALESCE(source_url,''), upload_at,
 		        EXISTS (SELECT 1 FROM user_closet c WHERE c.user_uid = t.uid AND c.texture_tid = t.id)
-		 FROM textures t WHERE t.uid = ? ORDER BY t.id DESC LIMIT ? OFFSET ?`, uid, limit, offset)
+		 FROM textures t `+where+` ORDER BY t.id DESC LIMIT ? OFFSET ?`,
+		append(append([]any{}, args...), limit, offset)...)
 	return rows, total, err
 }
 

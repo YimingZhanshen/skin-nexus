@@ -125,6 +125,7 @@
     "texture": {
       "avatar_skin_only": "只有皮肤可以设为头像",
       "bad_id": "材质编号不合法",
+      "bad_type": "类型筛选只能是皮肤或披风",
       "busy": "该材质正被其他操作占用，请稍后重试",
       "dimensions_invalid": "材质尺寸不合法：你传的是 {width}×{height}。皮肤须为 64×64 或 64×32 的等比放大，披风须为 64×32 或 22×17 的等比放大",
       "duplicate_public": "该皮肤已在公共皮肤库：{url}",
@@ -225,7 +226,8 @@
     "privateTip": "仅自己可见，未进入公共皮肤库",
     "rename": "改材质名",
     "emptyHint": "没有合适的？自己上传一张——它会同时出现在这里和你的衣柜里。",
-    "goUpload": "去上传材质"
+    "goUpload": "去上传材质",
+    "uploadCta": "上传我的材质"
   },
   "site": {
     "name": "SkinNexus",
@@ -355,7 +357,14 @@
     "sourceOriginalBadge": "原创",
     "sourceDerivativeBadge": "二创",
     "sourceRepostBadge": "转载",
-    "texturesHint": "上传后会自动收进衣柜，在角色管理里就能穿上。"
+    "texturesHint": "上传后会自动收进衣柜，在角色管理里就能穿上。",
+    "texSearchPlaceholder": "搜索我的材质（名称或指纹）",
+    "texTypeLabel": "材质类型筛选",
+    "texTypeAll": "全部类型",
+    "texTypeSkin": "皮肤",
+    "texTypeCape": "披风",
+    "texClear": "清除筛选",
+    "texNoMatch": "没有匹配的材质"
   },
   "closet": {
     "title": "衣柜（{count}）",

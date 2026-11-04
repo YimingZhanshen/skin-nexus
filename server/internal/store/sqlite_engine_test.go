@@ -863,3 +863,55 @@ func TestSQLiteEngineHugePageDoesNotError(t *testing.T) {
 		t.Fatalf("AdminUsers with a huge page: %v", err)
 	}
 }
+
+// The uploader's own list is the one place a private texture is always visible,
+// so its filters must never widen past the owner — and a typed "%" must not turn
+// "find my one skin" into "list everything I own".
+func TestSQLiteEngineOwnTextureListFilters(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	mine, err := st.CreateUser(ctx, "me@example.com", "me", "x", 3, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	theirs, err := st.CreateUser(ctx, "other@example.com", "other", "x", 3, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddTexturePrivate(ctx, mine, "skin", hashOf("own-skin"), "default", TextureMeta{Description: "50%off"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddTexturePrivate(ctx, mine, "cape", hashOf("own-cape"), "", TextureMeta{Description: "night"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddTexture(ctx, theirs, "skin", hashOf("their-skin"), "default", TextureMeta{Description: "50%off"}); err != nil {
+		t.Fatal(err)
+	}
+
+	all, total, err := st.ListTexturesPage(ctx, mine, "", "", 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 2 || len(all) != 2 {
+		t.Fatalf("unfiltered own list = %d rows / total %d, want 2/2", len(all), total)
+	}
+
+	if _, n, _ := st.ListTexturesPage(ctx, mine, "", "cape", 50, 0); n != 1 {
+		t.Fatalf("type=cape matched %d, want 1", n)
+	}
+	if _, n, _ := st.ListTexturesPage(ctx, mine, "50%off", "", 50, 0); n != 1 {
+		t.Fatalf(`q="50%%off" matched %d, want the one literal name`, n)
+	}
+	if _, n, _ := st.ListTexturesPage(ctx, mine, "%", "", 50, 0); n != 1 {
+		t.Fatalf(`q="%%" matched %d, want only the row whose name carries a percent sign`, n)
+	}
+	// The hash side of the match is what makes "find the one I just uploaded" work
+	// when the texture is unnamed.
+	if rows, n, _ := st.ListTexturesPage(ctx, mine, hashOf("own-cape"), "", 50, 0); n != 1 || rows[0].Type != "cape" {
+		t.Fatalf("search by content address = %d rows, want the cape", n)
+	}
+	// Someone else's identically-named texture must not appear.
+	if _, n, _ := st.ListTexturesPage(ctx, mine, "50%off", "", 50, 0); n != 1 {
+		t.Fatalf("the filter leaked another user's row: %d matches", n)
+	}
+}

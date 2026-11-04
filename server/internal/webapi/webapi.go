@@ -857,7 +857,13 @@ func (b *Backend) handleListTextures(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit, offset := pageParams(r)
-	rows, total, err := b.Store.ListTexturesPage(r.Context(), uid, limit, offset)
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	typ := strings.TrimSpace(r.URL.Query().Get("type"))
+	if typ != "" && typ != "skin" && typ != "cape" {
+		writeErrCode(w, http.StatusBadRequest, "texture type filter must be skin or cape", i18n.MsgTextureBadType)
+		return
+	}
+	rows, total, err := b.Store.ListTexturesPage(r.Context(), uid, q, typ, limit, offset)
 	if err != nil {
 		writeInternal(r, w, err)
 		return

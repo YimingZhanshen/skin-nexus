@@ -87,6 +87,7 @@ const (
 	MsgTextureNotFound   = "texture.not_found"
 	MsgTextureNotVisible = "texture.not_visible" // exists, not visible to caller
 	MsgTextureBadID      = "texture.bad_id"
+	MsgTextureBadType    = "texture.bad_type"
 	MsgTextureNotOwner   = "texture.not_owner"
 	MsgTextureModeration = "texture.moderation_ban" // struck: may not republish
 	MsgTextureAvatarSkin = "texture.avatar_skin_only"

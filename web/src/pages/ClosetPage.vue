@@ -175,7 +175,6 @@ onMounted(load)
         </td>
       </tr>
     </table>
-    <Pager :page="page" :pages="totalPages" :total="total" @update:page="goPage" />
     </div>
     <EmptyState
       v-else
@@ -186,6 +185,7 @@ onMounted(load)
         <button class="secondary" @click="goto('skinlib')">{{ t('closet.goSkinlib') }}</button>
       </div>
     </EmptyState>
+    <Pager :page="page" :pages="totalPages" :total="total" @update:page="goPage" />
   </div>
 
   <WearTargetPicker

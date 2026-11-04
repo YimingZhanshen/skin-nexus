@@ -29,6 +29,13 @@ const textures = ref([])
 const TEX_PAGE_SIZE = 50
 const texPage = ref(1)
 const texTotal = ref(0)
+// 与衣柜同一套：即输即搜 + 类型筛选。名字与内容地址都能搜——导入批次给的
+// 是「xxx · 来源 littleskin.cn#123」这种长名字，玩家记得住的往往只有片段。
+const texQ = ref('')
+const texType = ref('')
+const newTexId = ref(0)
+let texTimer = 0
+let texSeq = 0
 const announcement = ref('')
 
 const uploadType = ref('skin')
@@ -156,18 +163,40 @@ function onDragLauncher(e) {
 }
 
 async function load() {
+  const mine = ++texSeq
   try {
-    const [u, tx] = await Promise.all([api.me(), api.textures(texPage.value, TEX_PAGE_SIZE)])
+    const [u, tx] = await Promise.all([api.me(), api.textures(texPage.value, TEX_PAGE_SIZE, texQ.value.trim(), texType.value)])
+    if (mine !== texSeq) return // 搜索连打时旧响应不能覆盖新结果
     me.value = u
     textures.value = tx.textures || []
     texTotal.value = tx.total || 0
-  } catch (e) { if (!guard401(e)) pageErr.value = e.message } // 数据加载失败≠上传失败
+    // 删掉末页最后一条后停在一个空页，以前只剩「还没有上传过材质」——玩家会以为
+    // 全部材质都没了。页码超出总数就退回最后一页再取一次。
+    const pages = Math.max(1, Math.ceil((tx.total || 0) / TEX_PAGE_SIZE))
+    if (!(tx.textures || []).length && tx.total > 0 && texPage.value > pages) {
+      texPage.value = pages
+      return load()
+    }
+  } catch (e) { if (mine === texSeq && !guard401(e)) pageErr.value = e.message } // 数据加载失败≠上传失败
+}
+
+function searchTextures() {
+  clearTimeout(texTimer)
+  texTimer = setTimeout(() => { texPage.value = 1; newTexId.value = 0; load() }, 300)
+}
+
+function clearTexSearch() {
+  texQ.value = ''
+  texType.value = ''
+  texPage.value = 1
+  load()
 }
 
 const texPages = computed(() => Math.max(1, Math.ceil(texTotal.value / TEX_PAGE_SIZE)))
 function goTexPage(p) {
   if (p < 1 || p > texPages.value || p === texPage.value) return
   texPage.value = p
+  newTexId.value = 0
   load()
 }
 
@@ -255,6 +284,10 @@ async function doUpload() {
     uploadPrivate.value = false
     detailTab.value = 'edit'
     clearPreview()
+    // 列表按 id 倒序，新材质只在第 1 页：以前传完停在原页码，玩家看不见刚传的，
+    // 于是重复上传。回到第 1 页并描边那一行。
+    texPage.value = 1
+    newTexId.value = d.id || 0
     await load()
   } catch (e) {
     if (e.data && e.data.textureId) {
@@ -290,7 +323,20 @@ function onPick(e) {
   }
 }
 
-onMounted(() => { load(); loadAnnouncement() })
+onMounted(() => {
+  load()
+  loadAnnouncement()
+  // 皮肤库顶部的「上传我的材质」用 #upload 深链到这里：滚过去并把焦点放在
+  // 选文件按钮上，玩家不用自己找第几张卡是上传。
+  if (location.hash === '#upload') {
+    const card = document.getElementById('upload')
+    if (card) {
+      card.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      const btn = card.querySelector('button')
+      if (btn) btn.focus()
+    }
+  }
+})
 onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.value) })
 </script>
 
@@ -319,7 +365,7 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
   </div>
 
   <!-- upload: 左控件列 + 右即时预览（选中文件即渲染 3D / 平面图） -->
-  <div class="card">
+  <div class="card" id="upload">
     <h2>{{ t('dashboard.uploadTitle') }}</h2>
     <div class="up-grid">
       <div class="up-controls">
@@ -411,10 +457,20 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
   <!-- textures -->
   <div class="card">
     <h2>{{ t('dashboard.texturesTitle', { count: texTotal }) }}</h2>
+    <div class="row" style="gap: 8px; flex-wrap: wrap;">
+      <input :value="texQ" :placeholder="t('dashboard.texSearchPlaceholder')" :aria-label="t('dashboard.texSearchPlaceholder')"
+             style="flex: 1 1 220px; max-width: 360px;" @input="texQ = $event.target.value; searchTextures()" />
+      <select v-model="texType" :aria-label="t('dashboard.texTypeLabel')" @change="searchTextures()" style="max-width: 160px;">
+        <option value="">{{ t('dashboard.texTypeAll') }}</option>
+        <option value="skin">{{ t('dashboard.texTypeSkin') }}</option>
+        <option value="cape">{{ t('dashboard.texTypeCape') }}</option>
+      </select>
+      <button class="secondary" v-if="texQ || texType" @click="clearTexSearch">{{ t('dashboard.texClear') }}</button>
+    </div>
     <div class="table-scroll" v-if="textures.length">
     <table>
       <tr><th>{{ t('dashboard.materialName') }}</th><th>{{ t('dashboard.colType') }}</th><th>{{ t('dashboard.colModel') }}</th><th>{{ t('dashboard.colPreview') }}</th><th>{{ t('dashboard.colHash') }}</th><th></th></tr>
-      <tr v-for="tx in textures" :key="tx.id">
+      <tr v-for="tx in textures" :key="tx.id" :class="{ 'row-new': tx.id === newTexId }">
         <td class="tx-name" :title="tx.description || tx.hash">{{ textureLabel(tx) }}</td>
         <td>{{ tx.type }}</td>
         <td>
@@ -437,11 +493,11 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
         </td>
       </tr>
     </table>
-    <Pager :page="texPage" :pages="texPages" :total="texTotal" @update:page="goTexPage" />
     </div>
-    <EmptyState v-else :text="t('dashboard.texturesEmpty')" :hint="t('dashboard.texturesHint')">
+    <EmptyState v-else-if="!pageErr" :text="texQ || texType ? t('dashboard.texNoMatch') : t('dashboard.texturesEmpty')" :hint="t('dashboard.texturesHint')">
       <button @click="pickFile">{{ t('dashboard.chooseFile') }}</button>
     </EmptyState>
+    <Pager :page="texPage" :pages="texPages" :total="texTotal" @update:page="goTexPage" />
   </div>
   <PluginSlot slot="dashboard.cards" />
 </template>
@@ -501,6 +557,8 @@ h3 { font-size: var(--fs-s); margin: 16px 0 4px; color: var(--muted); font-weigh
   transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
 }
 .drop-zone:hover, .drop-zone.over { border-color: var(--gold); background: var(--ink-3); }
+/* 刚上传那一行的标记：不是动画，避免 reduced-motion 下玩家看不到反馈 */
+.row-new { outline: 2px solid var(--jade); outline-offset: -2px; border-radius: 4px; }
 .file-hidden { display: none; }
 .file-name { font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tx-name { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }

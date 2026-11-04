@@ -125,6 +125,7 @@
     "texture": {
       "avatar_skin_only": "Only a skin can be used as the avatar",
       "bad_id": "Texture id is not valid",
+      "bad_type": "The type filter must be skin or cape",
       "busy": "This texture is locked by another operation, try again shortly",
       "dimensions_invalid": "That size is not allowed — you sent {width}×{height}. Skins must be 64×64 or 64×32 scaled up evenly; capes must be 64×32 or 22×17.",
       "duplicate_public": "This skin is already public: {url}",
@@ -225,7 +226,8 @@
     "privateTip": "Visible only to you, not in the public library",
     "rename": "Rename texture",
     "emptyHint": "Nothing suitable? Upload one — it lands here and in your closet at the same time.",
-    "goUpload": "Upload a texture"
+    "goUpload": "Upload a texture",
+    "uploadCta": "Upload my texture"
   },
   "site": {
     "name": "SkinNexus",
@@ -355,7 +357,14 @@
     "sourceOriginalBadge": "Original",
     "sourceDerivativeBadge": "Derivative",
     "sourceRepostBadge": "Repost",
-    "texturesHint": "Uploads land in your closet automatically, ready to wear from the profiles page."
+    "texturesHint": "Uploads land in your closet automatically, ready to wear from the profiles page.",
+    "texSearchPlaceholder": "Search my textures (name or fingerprint)",
+    "texTypeLabel": "Texture type filter",
+    "texTypeAll": "All types",
+    "texTypeSkin": "Skins",
+    "texTypeCape": "Capes",
+    "texClear": "Clear filters",
+    "texNoMatch": "No textures match"
   },
   "closet": {
     "title": "Closet ({count})",

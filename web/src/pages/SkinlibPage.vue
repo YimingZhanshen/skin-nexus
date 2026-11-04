@@ -73,6 +73,10 @@ function onSearch() {
 }
 
 function setFilter(f) { filter.value = f; page.value = 1; load() }
+function goUpload() {
+  location.href = '/user/dashboard#upload'
+}
+
 function setSort(s) { sort.value = s; page.value = 1; load() }
 function toggleMine() { mine.value = !mine.value; page.value = 1; load() }
 function goPage(p) {
@@ -170,6 +174,9 @@ onMounted(() => { load() })
         <option value="likes">{{ t('skinlib.sortLikes') }}</option>
       </select>
       <button v-if="me" class="secondary" :class="{ 'mine-on': mine }" @click="toggleMine">{{ t('skinlib.mineOnly') }}</button>
+      <!-- 上传是玩家来这里最常做的事，却藏在仪表盘第 3 张卡下面（站长的原话）。
+           工具条右侧给一个入口，深链到上传卡并聚焦选文件按钮。 -->
+      <button v-if="me" @click="goUpload">{{ t('skinlib.uploadCta') }}</button>
     </div>
     <PluginSlot slot="skinlib.list.toolbar" />
 
@@ -191,7 +198,7 @@ onMounted(() => { load() })
       </div>
     </div>
     <EmptyState v-else-if="!items.length" :text="t('skinlib.empty')" :hint="t('skinlib.emptyHint')">
-      <button v-if="me && goto" @click="goto('dashboard')">{{ t('skinlib.goUpload') }}</button>
+      <button v-if="me" @click="goUpload">{{ t('skinlib.goUpload') }}</button>
     </EmptyState>
 
     <div class="skinlib-grid" v-else>
