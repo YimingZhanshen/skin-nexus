@@ -43,15 +43,27 @@ func (m *Mysql) CreateInvitationCodes(ctx context.Context, n int, description st
 	}
 	now := time.Now()
 	out := make([]InvitationCode, 0, n)
+	// One transaction for the batch: the loop used to autocommit per code and
+	// return the partial slice with an error, so an operator asking for 50 codes
+	// could end up with 30 in the database and an error screen telling them none
+	// were made.
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
 	for i := 0; i < n; i++ {
 		code := NewInvitationCodeValue()
-		id, err := m.db.InsertReturningID(ctx,
+		id, err := tx.InsertReturningID(ctx,
 			`INSERT INTO invitation_codes (code, generated_at, used_by, description) VALUES (?,?,0,?)`,
 			code, now, nullableStr(description))
 		if err != nil {
-			return out, err
+			return nil, err
 		}
 		out = append(out, InvitationCode{ID: id, Code: code, GeneratedAt: now, Description: description})
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

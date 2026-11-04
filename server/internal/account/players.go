@@ -74,13 +74,13 @@ func (s *Service) ListPlayers(ctx context.Context, uid int64) ([]Player, *Error)
 }
 
 func (s *Service) playerRow(ctx context.Context, p ygg.Player) Player {
-	skinTID, capeTID, err := s.Store.PlayerTextureIDs(ctx, p.ID)
-	if err != nil {
-		skinTID, capeTID = 0, 0
-	}
+	// The tids ride in on the same join that produces the hashes (see
+	// store.playerSelect); querying players a second time per row turned a list of
+	// N players into N+1 round trips, and GetPlayer re-enters ListPlayers, so even
+	// a single-player view paid for it.
 	return Player{
 		ID: p.ID, UID: p.UID, Name: p.Name, UUID: p.UUID,
-		SkinTID: skinTID, CapeTID: capeTID,
+		SkinTID: p.SkinTID, CapeTID: p.CapeTID,
 		SkinHash: p.SkinHash, CapeHash: p.CapeHash, SkinModel: p.SkinModel,
 	}
 }

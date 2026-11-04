@@ -49,6 +49,11 @@ type Player struct {
 	// plugin URL filters can key on the content address. Not serialized.
 	SkinHash string `json:"-"`
 	CapeHash string `json:"-"`
+	// SkinTID/CapeTID are the wardrobe columns the same join already reads.
+	// Not serialized; the account layer needs them per player and used to pay a
+	// second query for each one.
+	SkinTID int64 `json:"-"`
+	CapeTID int64 `json:"-"`
 }
 
 // Token is an issued access token (opaque string; format intentionally

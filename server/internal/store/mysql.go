@@ -170,7 +170,8 @@ func (m *Mysql) PlayersByUID(ctx context.Context, uid int64) ([]ygg.Player, erro
 }
 
 const playerSelect = `SELECT p.id, p.uid, p.name, COALESCE(u.uuid,''),
-  COALESCE(ts.hash,''), COALESCE(ts.model,'default'), COALESCE(tc.hash,'')
+  COALESCE(ts.hash,''), COALESCE(ts.model,'default'), COALESCE(tc.hash,''),
+  COALESCE(p.tid_skin,0), COALESCE(p.tid_cape,0)
   FROM players p
   LEFT JOIN uuid_map u ON u.player_id = p.id
   LEFT JOIN textures ts ON ts.id = p.tid_skin
@@ -183,7 +184,8 @@ func (m *Mysql) scanPlayer(ctx context.Context, where string, arg interface{}) (
 
 func scanPlayerRow(s rowScanner) (ygg.Player, error) {
 	var p ygg.Player
-	err := s.Scan(&p.ID, &p.UID, &p.Name, &p.UUID, &p.SkinURL, &p.SkinModel, &p.CapeURL)
+	err := s.Scan(&p.ID, &p.UID, &p.Name, &p.UUID, &p.SkinURL, &p.SkinModel, &p.CapeURL,
+		&p.SkinTID, &p.CapeTID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ygg.Player{}, ErrNotFound
 	}
