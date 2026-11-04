@@ -16,7 +16,7 @@ import (
 // the boundary: no other origin for scripts, no object/embed, no framing, no base
 // hijack, forms only to ourselves.
 
-const pageCSP = "default-src 'self'; " +
+const cspCore = "default-src 'self'; " +
 	"script-src 'self' 'unsafe-inline'; " +
 	"style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' data: blob: http: https:; " +
@@ -24,21 +24,38 @@ const pageCSP = "default-src 'self'; " +
 	"media-src 'self'; " +
 	"connect-src 'self'; " +
 	"frame-src 'self' blob:; " +
-	"frame-ancestors 'none'; " +
 	"base-uri 'self'; " +
 	"form-action 'self'; " +
 	"object-src 'none'"
+
+const (
+	pageCSP   = cspCore + "; frame-ancestors 'none'"
+	framedCSP = cspCore + "; frame-ancestors 'self'"
+)
+
+// framedAssetPrefix is the one surface this site embeds in its own iframes:
+// plugin UI documents served from /plugin-assets/. Everything else refuses to
+// be framed at all.
+const framedAssetPrefix = "/plugin-assets/"
+
+func isFramedAssetPath(p string) bool { return strings.HasPrefix(p, framedAssetPrefix) }
 
 // securityHeaders wraps the whole mux. It sets before any handler writes, so a
 // handler that forgets — or a template that gets it wrong — still inherits the
 // baseline.
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		framed := isFramedAssetPath(r.URL.Path)
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "same-origin")
-		h.Set("X-Frame-Options", "DENY")
-		h.Set("Content-Security-Policy", pageCSP)
+		if framed {
+			h.Set("X-Frame-Options", "SAMEORIGIN")
+			h.Set("Content-Security-Policy", framedCSP)
+		} else {
+			h.Set("X-Frame-Options", "DENY")
+			h.Set("Content-Security-Policy", pageCSP)
+		}
 		h.Set("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=()")
 		next.ServeHTTP(w, r)
 	})

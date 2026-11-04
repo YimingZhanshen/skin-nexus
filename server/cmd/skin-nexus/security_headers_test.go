@@ -40,6 +40,51 @@ func TestSecurityHeadersApplyToEveryResponse(t *testing.T) {
 	}
 }
 
+// PluginFrame puts an iframe on /plugin-assets/<name>/… on this very origin, and
+// DENY refuses same-origin frames as hard as foreign ones: the operator installs
+// a plugin, opens its page and gets a blank panel. So the framed prefix is
+// allowed to be framed by ourselves — and only by ourselves. The boundary is
+// prefix-with-slash, so a route that merely starts with the same letters
+// ("plugin-assets-evil") keeps the refusal instead of inheriting the exemption.
+func TestFramedPluginAssetsMayBeFramedByUs(t *testing.T) {
+	h := securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	cases := []struct {
+		path      string
+		wantXFO   string
+		wantAnces string
+	}{
+		{"/plugin-assets/demo/ui.html", "SAMEORIGIN", "frame-ancestors 'self'"},
+		{"/plugin-assets/demo/ui", "SAMEORIGIN", "frame-ancestors 'self'"},
+		{"/plugin-assets-evil/ui.html", "DENY", "frame-ancestors 'none'"},
+		{"/plugin-assets", "DENY", "frame-ancestors 'none'"},
+		{"/", "DENY", "frame-ancestors 'none'"},
+		{"/skinlib/1", "DENY", "frame-ancestors 'none'"},
+		{"/api/v1/me", "DENY", "frame-ancestors 'none'"},
+	}
+	for _, tc := range cases {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
+		if got := rec.Header().Get("X-Frame-Options"); got != tc.wantXFO {
+			t.Errorf("%s X-Frame-Options = %q, want %q", tc.path, got, tc.wantXFO)
+		}
+		csp := rec.Header().Get("Content-Security-Policy")
+		if !strings.Contains(csp, tc.wantAnces) {
+			t.Errorf("%s CSP = %q, want %s", tc.path, csp, tc.wantAnces)
+		}
+		// The exemption is only ever about framing. Everything else still applies.
+		for _, must := range []string{"default-src 'self'", "object-src 'none'", "base-uri 'self'"} {
+			if !strings.Contains(csp, must) {
+				t.Errorf("%s CSP dropped %q: %s", tc.path, must, csp)
+			}
+		}
+		if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("%s X-Content-Type-Options = %q", tc.path, got)
+		}
+	}
+}
+
 func TestOnlyDocumentsGetSandboxed(t *testing.T) {
 	rec := httptest.NewRecorder()
 	sandboxDocument(rec, "text/html; charset=utf-8")
