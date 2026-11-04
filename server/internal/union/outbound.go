@@ -490,6 +490,30 @@ func (o *Outbound) BlacklistDelete(ctx context.Context, id string) (*ProxyResult
 
 // ---- transport ----
 
+// maxResponseBytes bounds how much of a hub response is buffered. The cap is
+// deliberately generous: the relay route passes an opaque hub answer straight
+// through to the member's panel, so a tight ceiling would corrupt real data
+// rather than protect anything. Its only job is to stop "the hub keeps
+// talking" from becoming "the member runs out of memory" — the per-call context
+// bounds how long a call may take, and five seconds of a fast pipe is hundreds
+// of megabytes. Same shape as internal/outbound: check the declared length,
+// read one byte past the cap, and fail if the extra byte exists.
+const maxResponseBytes = 8 << 20
+
+func readCapped(resp *http.Response) ([]byte, error) {
+	if resp.ContentLength > maxResponseBytes {
+		return nil, fmt.Errorf("union: hub response exceeds %d bytes", maxResponseBytes)
+	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > maxResponseBytes {
+		return nil, fmt.Errorf("union: hub response exceeds %d bytes", maxResponseBytes)
+	}
+	return raw, nil
+}
+
 // doJSON performs one authenticated JSON call. Non-2xx becomes *APIError; a
 // nil out skips response decoding.
 // doJSON is the instrumented wrapper: one timing/logging point for every
@@ -539,7 +563,7 @@ func (o *Outbound) doJSONInner(ctx context.Context, method, path string, body an
 		return 0, nil, fmt.Errorf("union: %s %s: %w", method, path, err)
 	}
 	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := readCapped(resp)
 	if err != nil {
 		return resp.StatusCode, nil, fmt.Errorf("union: %s %s: read response: %w", method, path, err)
 	}
@@ -593,7 +617,7 @@ func (o *Outbound) doProxyInner(ctx context.Context, method, path string, body j
 		return nil, fmt.Errorf("union: %s %s: %w", method, path, err)
 	}
 	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := readCapped(resp)
 	if err != nil {
 		return nil, fmt.Errorf("union: %s %s: read response: %w", method, path, err)
 	}
