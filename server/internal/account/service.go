@@ -7,7 +7,7 @@ package account
 import (
 	"context"
 	"net/http"
-
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/siteurl"
 	"skin-nexus/server/internal/store"
@@ -38,7 +38,7 @@ func (e *Error) Unwrap() error { return e.Err }
 // answering 400 for a code we do not know would blame the client for our gap.
 func (e *Error) Status() int {
 	switch e.Code {
-	case CodeNotFound, CodeLibraryNotFnd:
+	case CodeNotFound, CodeLibraryNotFnd, i18n.MsgTextureNotFound:
 		return http.StatusNotFound
 	case CodeLimit, CodeNotOwned, CodeForbidden, CodeViolationReupload:
 		return http.StatusForbidden

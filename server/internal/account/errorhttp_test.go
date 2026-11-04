@@ -8,10 +8,10 @@ package account
 
 import (
 	"net/http"
+	"skin-nexus/server/internal/errorgate"
+	"skin-nexus/server/internal/i18n"
 	"strings"
 	"testing"
-
-	"skin-nexus/server/internal/errorgate"
 )
 
 // codeDirs are the packages that own error codes. The account package owns its
@@ -33,6 +33,16 @@ func accountCodeValues(t *testing.T) map[string]string {
 		t.Fatalf("found only %d account codes — the prefix convention changed", len(out))
 	}
 	return out
+}
+
+// The texture-delete path answers with a code the i18n namespace owns (the web
+// handlers raise the same one for a bad id in the URL, and one situation must
+// not carry two codes). It is therefore not in the table above, which is scoped
+// to this package's own constants — so its status gets pinned here instead.
+func TestTextureNotFoundStatusFromI18nCode(t *testing.T) {
+	if got := (&Error{Code: i18n.MsgTextureNotFound}).Status(); got != http.StatusNotFound {
+		t.Errorf("Status() for %q = %d, want 404", i18n.MsgTextureNotFound, got)
+	}
 }
 
 func TestErrorStatusCoversEveryCode(t *testing.T) {

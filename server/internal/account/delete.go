@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
-
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/store"
 )
@@ -21,7 +21,7 @@ func (s *Service) DeleteTexture(ctx context.Context, actorUID, tid, ownerUID int
 	}
 	hash, typ, err := s.Store.TextureContentRef(ctx, tid)
 	if errors.Is(err, store.ErrNotFound) {
-		return errf(CodeNotFound, "texture not found", err)
+		return errf(i18n.MsgTextureNotFound, "texture not found", err)
 	}
 	if err != nil {
 		return errf(CodeInternal, "could not read the texture", err)
@@ -53,7 +53,7 @@ func (s *Service) DeleteTexture(ctx context.Context, actorUID, tid, ownerUID int
 	})
 	switch {
 	case errors.Is(lockErr, store.ErrNotFound):
-		return errf(CodeNotFound, "texture not found", lockErr)
+		return errf(i18n.MsgTextureNotFound, "texture not found", lockErr)
 	case errors.Is(lockErr, store.ErrForbidden):
 		return errf(CodeForbidden, "only the uploader may delete this texture", lockErr)
 	case errors.Is(lockErr, store.ErrTextureInUse):
