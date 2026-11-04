@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"skin-nexus/server/internal/dbx"
 	"skin-nexus/server/internal/dialect"
 	"strings"
 )
@@ -154,7 +155,11 @@ func (m *Mysql) SkinlibList(ctx context.Context, opt SkinlibOpts) ([]SkinlibRow,
 		ORDER BY %s
 		LIMIT ? OFFSET ?`, where, orderBy)
 	qargs := append([]any{opt.ViewerUID}, args...)
-	qargs = append(qargs, opt.PerPage, (opt.Page-1)*opt.PerPage)
+	// dbx.Offset, never (Page-1)*PerPage: the page number arrives on the query
+	// string, and the product wraps negative at int64. MySQL and PostgreSQL reject
+	// a negative OFFSET (a 500 from an anonymous request); SQLite reads it as "zero
+	// rows skipped" and hands back the first page for a page past the end.
+	qargs = append(qargs, opt.PerPage, dbx.Offset(opt.Page, opt.PerPage))
 
 	rows, err := m.db.QueryContext(ctx, sel, qargs...)
 	if err != nil {

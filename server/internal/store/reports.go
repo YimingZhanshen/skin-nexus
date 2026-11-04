@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"skin-nexus/server/internal/dbx"
 	"time"
 )
 
@@ -104,7 +105,7 @@ func (m *Mysql) ListReports(ctx context.Context, opt ReportOpts) ([]ReportRow, i
 	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM texture_reports r WHERE `+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	args = append(args, opt.PerPage, (opt.Page-1)*opt.PerPage)
+	args = append(args, opt.PerPage, dbx.Offset(opt.Page, opt.PerPage))
 	rows, err := m.db.QueryContext(ctx, reportJoinSQL+` WHERE `+where+` ORDER BY r.created_at DESC LIMIT ? OFFSET ?`, args...)
 	if err != nil {
 		return nil, 0, err

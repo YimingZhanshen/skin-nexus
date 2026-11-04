@@ -8,6 +8,7 @@ package store
 
 import (
 	"context"
+	"math"
 	"strings"
 	"testing"
 )
@@ -92,5 +93,33 @@ func TestIntegrationSkinlibListViewerMatrix(t *testing.T) {
 	}
 	if n := privateOf(SkinlibOpts{}); n != 0 {
 		t.Errorf("anonymous sees %d private rows, want 0", n)
+	}
+}
+
+// The half of the paging bug SQLite cannot show. A wrapped negative offset is a
+// hard error on MySQL and PostgreSQL — one anonymous query string becomes a
+// database failure and a 500 — while SQLite reads the same value as "skip zero
+// rows" and answers with the first page. Only the engine legs can tell those
+// apart, so the assertion lives here rather than in the unit suite that passes
+// on both.
+func TestIntegrationSkinlibHugePageOffsetReachesTheEngine(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	owner := seedUser(t, m)
+	if _, err := m.AddTexture(ctx, owner, "skin", strings.Repeat("e", 64), "default",
+		TextureMeta{Description: "offset overflow probe"}); err != nil {
+		t.Fatalf("add skin: %v", err)
+	}
+	for _, page := range []int{math.MaxInt64, math.MaxInt64 - 7} {
+		rows, total, err := m.SkinlibList(ctx, SkinlibOpts{PublicOnly: true, Page: page})
+		if err != nil {
+			t.Fatalf("page=%d: %v — the offset must be clamped before it reaches the engine", page, err)
+		}
+		if len(rows) != 0 {
+			t.Errorf("page=%d returned %d rows, want an empty page, not the first one", page, len(rows))
+		}
+		if total != 1 {
+			t.Errorf("page=%d total = %d, want the count to stay honest", page, total)
+		}
 	}
 }
