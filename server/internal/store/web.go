@@ -60,17 +60,7 @@ func (m *Mysql) EnsureSuperAdmin(ctx context.Context) (int64, bool, error) {
 }
 
 func (m *Mysql) createUser(ctx context.Context, email, nickname, passwordHash string, playerLimit, permission int, ip string) (int64, error) {
-	uid, err := m.db.InsertReturningID(ctx,
-		`INSERT INTO users (email, nickname, password, password_algo, player_limit, email_verified, can_join_server, permission, ip)
-		 VALUES (?,?,?,'argon2id',?,0,1,?,?)`,
-		nullableStr(email), nickname, passwordHash, playerLimit, permission, nullableStr(ip))
-	if err != nil {
-		if isDupKey(err) {
-			return 0, ErrDuplicate
-		}
-		return 0, err
-	}
-	return uid, nil
+	return insertUser(ctx, m.db, email, nickname, passwordHash, playerLimit, permission, ip)
 }
 
 // NicknameTaken says which half of the (nickname, email) pair a rejected

@@ -162,4 +162,5 @@ const (
 	MsgSetupDone      = "setup.already_done"
 	MsgSetupBadInput  = "setup.bad_input"
 	MsgSetupDBMissing = "setup.db_missing"
+	MsgSetupTokenBad  = "setup.token_bad"
 )

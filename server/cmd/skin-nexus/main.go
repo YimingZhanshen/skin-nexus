@@ -447,6 +447,21 @@ func main() {
 		}
 	}()
 	backend := webapi.New(st, ts, yggSvc)
+	// The wizard is the one endpoint that answers before anyone exists. Guard it
+	// while it is still open, and say the token out loud in the log so the
+	// operator — the only person reading that log — can complete the install.
+	if need, nerr := st.NeedsSetup(context.Background()); nerr == nil && need {
+		if tok, generated := installToken(cfg.SetupToken); tok != "" {
+			backend.SetupToken = tok
+			if generated {
+				log.Printf("setup: the site is not initialized yet — use install token %q in the wizard (or set SKIN_SETUP_TOKEN to keep it across restarts)", tok)
+			}
+		} else {
+			// No operator token and no random one (a host where crypto/rand fails).
+			// Say so loudly instead of quietly leaving the door open.
+			log.Printf("setup: WARNING the install wizard is unguarded because no setup token could be produced; set SKIN_SETUP_TOKEN before exposing this site")
+		}
+	}
 	backend.Appearance = appearEng
 	backend.TextureURL = pluginHost.TextureURL
 	backend.ProfileFilter = pluginHost.ProfileFilter

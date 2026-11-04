@@ -116,7 +116,8 @@
     "setup": {
       "already_done": "站点已完成初始化",
       "bad_input": "初始化信息不完整或格式不正确",
-      "db_missing": "数据库尚未建表，请先执行迁移"
+      "db_missing": "数据库尚未建表，请先执行迁移",
+      "token_bad": "缺少安装令牌或令牌不对：请看服务器日志里那行 install token，或在环境变量 SKIN_SETUP_TOKEN 里自己定一个"
     },
     "skinlib": {
       "like_missing": "你还没有收藏该材质"

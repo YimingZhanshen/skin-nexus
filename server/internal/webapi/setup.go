@@ -4,14 +4,23 @@
 // and setup_done unset). After completion the endpoint answers 404 forever —
 // the wizard is a one-way door. Mounted always; the gate is state-based so a
 // fresh docker volume self-initializes without operator commands.
+//
+// The window between "the container answers on the public interface" and "the
+// operator got around to the wizard" is precisely when nobody is authenticated,
+// so the door needs a key the operator already holds: SKIN_SETUP_TOKEN when set,
+// otherwise a token generated for that boot and printed to the log. Before this,
+// whoever POSTed first simply became the site's super admin.
 package webapi
 
 import (
+	"crypto/subtle"
+	"errors"
 	"net/http"
 	"strings"
 
 	"skin-nexus/server/internal/auth"
 	"skin-nexus/server/internal/i18n"
+	"skin-nexus/server/internal/store"
 )
 
 // SetupState is the wizard's bootstrap snapshot (GET /api/v1/setup/status).
@@ -25,11 +34,15 @@ func (b *Backend) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 		writeInternal(r, w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"needs_setup": need})
+	// The token itself is never returned — only whether the wizard has to ask.
+	writeJSON(w, http.StatusOK, map[string]any{
+		"needs_setup":    need,
+		"token_required": b.SetupToken != "",
+	})
 }
 
-// POST /api/v1/setup — one-shot initialization:
-// create the admin account, write site_name + SEO defaults, mark done.
+// POST /api/v1/setup — one-shot initialization: claim the one-way marker, create
+// the admin account and write the collected options, in one transaction.
 func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 	need, err := b.Store.NeedsSetup(r.Context())
 	if err != nil {
@@ -62,9 +75,14 @@ func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 		Password    string   `json:"password"`
 		PlayerLimit int      `json:"player_limit"`
 		SkinDomains []string `json:"skin_domains"`
+		Token       string   `json:"setup_token"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgSetupBadInput)
+		return
+	}
+	if b.SetupToken != "" && subtle.ConstantTimeCompare([]byte(req.Token), []byte(b.SetupToken)) != 1 {
+		writeErrCode(w, http.StatusForbidden, "the install token from SKIN_SETUP_TOKEN or the server log is required", i18n.MsgSetupTokenBad)
 		return
 	}
 	req.SiteName = strings.TrimSpace(req.SiteName)
@@ -93,33 +111,48 @@ func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 		writeInternal(r, w, err)
 		return
 	}
-	// The wizard's bootstrap account is the site SUPER_ADMIN (permission=2):
-	// plugin install/market operations require exactly 2, not merely >0.
-	uid, err := b.Store.CreateUserAdmin(r.Context(), req.Email, req.Nickname, hash, req.PlayerLimit)
-	if err != nil {
-		writeErrCode(w, http.StatusConflict, "could not create the account (nickname or email may already exist)", i18n.MsgIdentifierTaken)
-		return
-	}
-	// site identity + SEO defaults
+	// site identity + SEO defaults. An empty site_name must not wipe seo_title
+	// (review P3), so the two keys move together or not at all.
+	opts := map[string]string{}
 	if req.SiteName != "" {
-		_ = b.Store.SetOption(r.Context(), "site_name", req.SiteName)
+		opts["site_name"] = req.SiteName
+		opts["seo_title"] = req.SiteName
 	}
 	if siteURL != "" {
 		// `site_url` is what the panel reads and writes. The wizard used to
 		// write the legacy `base_url` key instead: same precedence over
 		// SKIN_BASE_URL, but invisible in the settings table — so an address
-		// typed as a LAN IP during install silently outrank the env forever and
+		// typed as a LAN IP during install silently outranked the env forever and
 		// nobody could find the row to fix. Old `base_url` values keep working
 		// (resolveBaseURL falls back to them); only new writes move.
-		_ = b.Store.SetOption(r.Context(), "site_url", siteURL)
+		opts["site_url"] = siteURL
 	}
 	if len(req.SkinDomains) > 0 {
-		_ = b.Store.SetOption(r.Context(), "skin_domains", strings.Join(req.SkinDomains, ","))
+		opts["skin_domains"] = strings.Join(req.SkinDomains, ",")
 	}
-	if req.SiteName != "" { // review P3: empty SiteName used to wipe seo_title
-		_ = b.Store.SetOption(r.Context(), "seo_title", req.SiteName)
+	// The bootstrap account is the site SUPER_ADMIN (permission=2): plugin
+	// install/market operations require exactly 2, not merely >0. Claiming
+	// setup_done inside the same transaction is what makes a racing second caller
+	// lose cleanly, and what lets a failed account creation be retried instead of
+	// leaving an installed-looking site with nobody able to sign in.
+	uid, claimed, err := b.Store.ClaimSetup(r.Context(), store.SetupSpec{
+		Email: req.Email, Nickname: req.Nickname, PasswordHash: hash,
+		PlayerLimit: req.PlayerLimit, Options: opts,
+	})
+	if err != nil {
+		if errors.Is(err, store.ErrDuplicate) {
+			writeErrCode(w, http.StatusConflict, "could not create the account (nickname or email may already exist)", i18n.MsgIdentifierTaken)
+			return
+		}
+		writeInternal(r, w, err)
+		return
 	}
-	_ = b.Store.SetOption(r.Context(), "setup_done", "1")
+	if !claimed {
+		// Somebody won the claim while this request was in flight; the door is
+		// one-way, so answer exactly as if we had checked first.
+		writeErrCode(w, http.StatusNotFound, "setup already completed", i18n.MsgSetupDone)
+		return
+	}
 	b.Store.InsertAudit(r.Context(), uid, "setup_completed", map[string]interface{}{
 		"site_name": req.SiteName,
 	})

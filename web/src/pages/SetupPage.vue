@@ -19,6 +19,8 @@ const email = ref('')
 const password = ref('')
 const password2 = ref('')
 const skinDomains = ref('')
+const setupToken = ref('')
+const tokenRequired = ref(false)
 const done = ref(false)
 const result = ref({ site_url: '', env_base_url: '', mismatch: false })
 
@@ -27,6 +29,7 @@ onMounted(async () => {
     const r = await fetch('/api/v1/setup/status')
     const d = await r.json()
     if (!d.needs_setup) { location.href = '/'; }
+    tokenRequired.value = d.token_required === true
   } catch { /* server down — keep the form visible */ }
 })
 
@@ -64,6 +67,7 @@ async function finish() {
         email: email.value.trim(),
         password: password.value,
         skin_domains: skinDomains.value.split('\n').map(s => s.trim()).filter(Boolean),
+        setup_token: setupToken.value.trim(),
       }),
     })
     const d = await r.json()
@@ -98,6 +102,15 @@ function goHome() {
       <input id="s-site-name" v-model="siteName" placeholder="例如：示例皮肤站" />
       <label for="s-base-url">站点地址（Base URL）</label>
       <input id="s-base-url" v-model="baseURL" placeholder="https://skin.example.com" />
+      <template v-if="tokenRequired">
+        <label for="s-setup-token">安装令牌</label>
+        <input id="s-setup-token" v-model="setupToken" autocomplete="off" spellcheck="false" />
+        <div class="muted" style="font-size: var(--fs-xs); margin-top: 6px;">
+          站点还没有初始化时这个表单任何人都能提交，所以先要一个只有运维者拿得到的值：
+          它写在服务器日志那行 install token 里（docker compose logs 可见），
+          也可以在环境变量 SKIN_SETUP_TOKEN 里自己定一个。填错会被拒绝，不会写进任何数据。
+        </div>
+      </template>
       <div class="muted" style="font-size: var(--fs-xs); margin-top: 6px;">
         默认取当前地址。它会被写进「管理 → 设置 → 站点地址」，材质与预览链接都以它为前缀：
         请用玩家能访问到的域名，不要用局域网 IP 或 http://localhost。

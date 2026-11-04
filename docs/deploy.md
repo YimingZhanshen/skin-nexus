@@ -101,6 +101,7 @@ environment:
 外部库 MySQL 5.7 / 8.0 均可（5.7.44 实测通过）；MariaDB、SQLite、PostgreSQL 见
 上面的引擎表，DSN 前缀即选择。空库启动时 `SKIN_AUTO_MIGRATE=true`
 自动建表，随后首访站点进 `/setup` 安装向导（建管理员 / 站点名 / 皮肤域）。
+向导要填安装令牌（见 §2.3 的 `SKIN_SETUP_TOKEN`）：容器一对外暴露就有人能提交这张表单，令牌把「谁先提交谁当超管」这段窗口关上。
 
 用 SQLite 时没有外部数据库要装，也没有 `db` 服务：把 `SKIN_DATABASE_DSN` 写成
 `sqlite:/绝对路径/skin.db`，并让该路径落在持久卷（compose 里挂一个卷进去即可），
@@ -140,6 +141,7 @@ environment:
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `SKIN_SITE_NAME` | `SkinNexus` | 站点名（面板可改） |
+| `SKIN_SETUP_TOKEN` | 空（每次启动临时生成并打进日志） | 安装向导的一次性令牌。空库时 `/api/v1/setup` 谁先提交谁当超管，所以这一步要一个只有运维者拿得到的值：留空则本次启动随机生成并在日志里打印 `setup: ... install token "xxxxxxxxxx"`，`docker compose logs skin-nexus` 可见；自己定一个则跨重启不变。填错只回 403，不写任何数据；站点初始化后本变量不再起作用 |
 | `SKIN_SERVER_NAME` | `SkinNexus` | Yggdrasil 元数据里的服务器显示名（面板可改） |
 | `SKIN_SKIN_DOMAINS` | 空 | 皮肤域白名单，逗号分隔；不接联盟填本站域名，接入 MUA Union 以联盟公布清单为准（改动会破坏联盟互认） |
 | `SKIN_INVITE_REQUIRED` | `false` | 注册强制邀请码（等价老站必填语义）；面板「站点设置」可改 |

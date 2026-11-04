@@ -116,7 +116,8 @@
     "setup": {
       "already_done": "This site is already initialised",
       "bad_input": "Setup information is incomplete or invalid",
-      "db_missing": "The database schema is missing, run the migration first"
+      "db_missing": "The database schema is missing, run the migration first",
+      "token_bad": "The install token is missing or wrong — read it from the server log (the line starting with \"setup: ... install token\") or set SKIN_SETUP_TOKEN yourself"
     },
     "skinlib": {
       "like_missing": "You have not favourited this texture"

@@ -66,6 +66,10 @@ type Backend struct {
 	SMTPDefaults map[string]string
 	BaseURL      string
 	SiteName     string
+	// SetupToken guards the install wizard while the site still has no accounts.
+	// Empty means the wizard is open to whoever POSTs first, which is exactly the
+	// window a freshly exposed container sits in; main sets it on every such boot.
+	SetupToken string
 	// VerificationEnabled reports whether the site enforces email verification
 	// at join right now (options panel, per request). main wires the same
 	// resolver the Yggdrasil gate uses, so the register flow mails a link

@@ -31,6 +31,11 @@ type Config struct {
 
 	SiteName string
 
+	// SetupToken guards the install wizard during the window when the site has no
+	// accounts yet. Empty at boot does not mean "no token": main generates one for
+	// that boot and prints it to the log.
+	SetupToken string // SKIN_SETUP_TOKEN
+
 	// Phase 2: yggc/OIDC passwordless login (internal OIDC provider).
 	OIDCEnabled    bool
 	OIDCIssuer     string // e.g. https://skin.example.com
@@ -153,6 +158,7 @@ func Load() (*Config, error) {
 		SkinDomains: splitCSV(getenv("SKIN_SKIN_DOMAINS", "")),
 		SignKeyPath: resolveDataPath("SKIN_SIGN_KEY", dataDir, "sign-key.pem"),
 		SiteName:    getenv("SKIN_SITE_NAME", "SkinNexus"),
+		SetupToken:  os.Getenv("SKIN_SETUP_TOKEN"),
 
 		OIDCEnabled:         getenv("SKIN_OIDC_ENABLED", "false") == "true",
 		RequireVerification: getenv("SKIN_REQUIRE_VERIFICATION", "false") == "true",
