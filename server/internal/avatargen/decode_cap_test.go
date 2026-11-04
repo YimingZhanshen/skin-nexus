@@ -61,7 +61,7 @@ func pngOf(t *testing.T, w, h int) []byte {
 }
 
 func TestLoadSkinReaderRejectsADeclaredSizeOverTheCeiling(t *testing.T) {
-	for _, size := range [][2]int{{8192, 8192}, {4096, 4096}, {1, maxSkinPixels + 1}} {
+	for _, size := range [][2]int{{8192, 8192}, {4096, 4096}, {1, MaxSkinPixels + 1}} {
 		w, h := size[0], size[1]
 		_, err := LoadSkinReader(bytes.NewReader(pngHeaderWithSize(w, h)))
 		if err == nil {
@@ -93,7 +93,7 @@ func TestLoadSkinReaderStillRendersLegitHDSheets(t *testing.T) {
 // A file bigger than the encoded ceiling is refused by the size guard rather
 // than buffered whole into memory first.
 func TestLoadSkinReaderCapsEncodedBytesToo(t *testing.T) {
-	garbage := bytes.Repeat([]byte("x"), maxSkinBytes+1024)
+	garbage := bytes.Repeat([]byte("x"), MaxSkinBytes+1024)
 	_, err := LoadSkinReader(bytes.NewReader(garbage))
 	if err == nil {
 		t.Fatal("an over-size stream was accepted")

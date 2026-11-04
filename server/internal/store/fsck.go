@@ -90,3 +90,48 @@ func (m *Mysql) FSCKCounts(ctx context.Context) (textures, tombstones, openRepor
 		`SELECT COUNT(*) FROM texture_reports WHERE status = 'open'`).Scan(&openReports)
 	return
 }
+
+// FSCKDuplicateCloset counts (account, texture) pairs stored more than once, and
+// the number of rows above the one each pair needs.
+//
+// The library's like count is a COUNT over this pivot, so duplicates are not just
+// spare bytes — they inflate the number every visitor sees. The cause is known
+// (AddClosetEntry does SELECT then INSERT with no transaction and no unique key);
+// the repair is a unique index, which cannot be added before these rows are
+// resolved, so this tool reports the size of that decision instead of making it.
+func (m *Mysql) FSCKDuplicateCloset(ctx context.Context) (pairs, extra int, err error) {
+	err = m.db.QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(c - 1), 0)
+		   FROM (SELECT COUNT(*) AS c FROM user_closet GROUP BY user_uid, texture_tid HAVING COUNT(*) > 1) d`).
+		Scan(&pairs, &extra)
+	return
+}
+
+// FSCKClosetOnMissingTextures counts wardrobe rows whose texture no longer exists.
+// The rows are invisible in the UI (the join drops them) but they keep the
+// texture's tombstone cited, so an operator reading「已彻底删除」sees the file
+// reappear as still-referenced.
+func (m *Mysql) FSCKClosetOnMissingTextures(ctx context.Context) (int, error) {
+	var n int
+	err := m.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM user_closet c
+		  LEFT JOIN textures t ON t.id = c.texture_tid
+		 WHERE t.id IS NULL`).Scan(&n)
+	return n, err
+}
+
+// FSCKSitemapCoverage compares the public library with what the sitemap can
+// enumerate. PublicTextureIDs takes the lowest ids up to SitemapIDLimit, so on a
+// site past that ceiling the omitted pages are the newest skins — the content a
+// crawler most wants — and nothing anywhere reports it. Read-only by design:
+// which urls get published is the operator's call, not this pass's.
+func (m *Mysql) FSCKSitemapCoverage(ctx context.Context) (public, listed int, err error) {
+	if err = m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM textures WHERE public = 1`).Scan(&public); err != nil {
+		return
+	}
+	listed = public
+	if listed > SitemapIDLimit {
+		listed = SitemapIDLimit
+	}
+	return
+}

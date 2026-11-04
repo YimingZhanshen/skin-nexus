@@ -226,11 +226,16 @@ type TextureIDTime struct {
 	UploadAt sql.NullTime
 }
 
+// SitemapIDLimit is the ceiling PublicTextureIDs applies. It is exported because
+// the sitemap route and the read-only fsck pass both have to speak the same
+// number — a limit that only one of them knows is a limit nobody can audit.
+const SitemapIDLimit = 5000
+
 // PublicTextureIDs lists public texture ids (bounded, ascending) — the
 // sitemap source. Private textures never enumerate here.
 func (m *Mysql) PublicTextureIDs(ctx context.Context, limit int) ([]TextureIDTime, error) {
-	if limit <= 0 || limit > 5000 {
-		limit = 5000
+	if limit <= 0 || limit > SitemapIDLimit {
+		limit = SitemapIDLimit
 	}
 	rows, err := m.db.QueryContext(ctx,
 		`SELECT id, upload_at FROM textures WHERE public = 1 ORDER BY id LIMIT ?`, limit)

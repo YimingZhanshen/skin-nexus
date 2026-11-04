@@ -546,8 +546,8 @@ func DefaultAvatar(size int, threeD bool) (*image.NRGBA, error) {
 // — including the largest HD sheet — is refused, while a file declaring
 // 8192×8192 can no longer cost 268 MB of heap per request.
 const (
-	maxSkinPixels = 8 << 20 // 8× texture.MaxPixels
-	maxSkinBytes  = 16 << 20
+	MaxSkinPixels = 8 << 20 // 8× texture.MaxPixels
+	MaxSkinBytes  = 16 << 20
 )
 
 // LoadSkin decodes a texture PNG file into NRGBA.
@@ -569,20 +569,20 @@ func LoadSkin(path string) (*image.NRGBA, error) {
 // That is why the stream is buffered (under the byte ceiling) instead of handed
 // straight to the decoder.
 func LoadSkinReader(r io.Reader) (*image.NRGBA, error) {
-	raw, err := io.ReadAll(io.LimitReader(r, maxSkinBytes+1))
+	raw, err := io.ReadAll(io.LimitReader(r, MaxSkinBytes+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(raw) > maxSkinBytes {
-		return nil, fmt.Errorf("avatargen: texture exceeds %d bytes", maxSkinBytes)
+	if len(raw) > MaxSkinBytes {
+		return nil, fmt.Errorf("avatargen: texture exceeds %d bytes", MaxSkinBytes)
 	}
 	cfg, err := png.DecodeConfig(bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
-	if cfg.Width*cfg.Height > maxSkinPixels {
+	if cfg.Width*cfg.Height > MaxSkinPixels {
 		return nil, fmt.Errorf("avatargen: texture declares %dx%d = %d pixels, over the %d pixel decoding ceiling",
-			cfg.Width, cfg.Height, cfg.Width*cfg.Height, maxSkinPixels)
+			cfg.Width, cfg.Height, cfg.Width*cfg.Height, MaxSkinPixels)
 	}
 	img, err := png.Decode(bytes.NewReader(raw))
 	if err != nil {
