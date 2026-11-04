@@ -66,6 +66,46 @@ func TestSPARoutesAgreeWithAppMaps(t *testing.T) {
 	}
 }
 
+// The agreement above is only as good as the extractor: it reads a .vue file
+// with a regex, so a style change in App.vue would silently shrink the checked
+// set to nothing. Pinned here against an inline fixture rather than the real
+// file, because the property being asserted is "which spellings are seen".
+func TestSPARouteExtractorSeesBothQuoteStyles(t *testing.T) {
+	src := `const legacyRoutes = {
+  '/skinlib': 'skinlib',
+  '/help': 'help',
+}
+const viewURLs = {
+  skinlib: '/skinlib',
+  help: "/help",
+  detail: '/texture-detail',
+}
+`
+	routes := objectField(src, "legacyRoutes", 0)
+	urls := objectField(src, "viewURLs", 1)
+	if len(routes) != 2 {
+		t.Errorf("legacyRoutes keys = %v, want both quoted keys", routes)
+	}
+	if len(urls) != 3 {
+		t.Fatalf("viewURLs values = %v, want three (bare key, single-quoted and double-quoted value)", urls)
+	}
+	want := map[string]bool{"/skinlib": true, "/help": true, "/texture-detail": true}
+	for _, u := range urls {
+		if !want[u] {
+			t.Errorf("unexpected view URL %q", u)
+		}
+		delete(want, u)
+	}
+	if len(want) != 0 {
+		t.Errorf("extractor missed %v — a route the gate would fail to compare", want)
+	}
+	if got := objectField(src, "noSuchMap", 0); got != nil {
+		t.Errorf("a missing map returned %v, want nil (the caller's <5 guard depends on that)", got)
+	}
+}
+
+// literal: index 0 gives the keys, index 1 the values. The path walks out of
+// server/cmd/skin-nexus to the repository root — the test runs from its own package dir.
 // objectField pulls one side out of a `const NAME = { 'url': 'view', … }`
 // literal: index 0 gives the keys, index 1 the values. The path walks out of
 // server/cmd/skin-nexus to the repository root — the test runs from its own package dir.
@@ -78,8 +118,11 @@ func objectField(src, name string, side int) []string {
 	if end < 0 {
 		return nil
 	}
-	// Keys are quoted in legacyRoutes and bare in viewURLs, so both are allowed.
-	pair := regexp.MustCompile(`'?([A-Za-z0-9_\-/]+)'?\s*:\s*'([^']+)'`)
+	// Keys are quoted in legacyRoutes and bare in viewURLs, so both are allowed —
+	// and so is either quote character on the value. Requiring a single quote
+	// meant a view written as `x: "/y"` was invisible to this gate, which is the
+	// one failure it exists to catch.
+	pair := regexp.MustCompile(`'?([A-Za-z0-9_\-/]+)'?\s*:\s*['"]([^'"]+)['"]`)
 	var out []string
 	for _, m := range pair.FindAllStringSubmatch(src[start:start+end], -1) {
 		out = append(out, m[side+1])
