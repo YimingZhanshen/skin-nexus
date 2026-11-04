@@ -31,12 +31,29 @@ import (
 	"skin-nexus/server/internal/avatargen"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/texture"
+	"skin-nexus/server/internal/ygg"
 )
 
 const skinSessionCookie = "skin_session"
 
+// avatarStore is the read slice of the store the avatar/preview surface needs.
+// Naming it keeps the handlers testable: the visibility rule below is a
+// security property, and a security property that can only be exercised
+// against a live database tends to get dropped.
+type avatarStore interface {
+	previewAuthStore
+	PlayerByName(ctx context.Context, name string) (ygg.Player, error)
+	PlayerTextureHashes(ctx context.Context, pid int64) (skinHash, skinModel, capeHash string, err error)
+	UserAvatarTID(ctx context.Context, uid int64) (int64, error)
+	TextureByTID(ctx context.Context, tid int64) (hash, typ string, slim bool, err error)
+	TextureMetaByHash(ctx context.Context, hash string) (typ string, slim bool, err error)
+	TextureIsPublic(ctx context.Context, tid int64) (bool, error)
+	TextureIsPublicByHash(ctx context.Context, hash string) (bool, error)
+	NewestPublicSkin(ctx context.Context) (hash string, tid int64, slim bool, err error)
+}
+
 type avatarDeps struct {
-	st       *store.Mysql
+	st       avatarStore
 	ts       *texture.Store
 	redirect func(ctx context.Context, hash string, size int, threeD bool) (string, bool)
 }
@@ -100,20 +117,37 @@ func writeAvatarErr(w http.ResponseWriter, status int, desc string) {
 	})
 }
 
+// avatarCacheControl keeps a session-authorized private render out of shared
+// caches; the anonymous default avatar and public textures stay cacheable.
+func avatarCacheControl(private bool) string {
+	if private {
+		return "private, no-store"
+	}
+	return "public, max-age=86400"
+}
+
 // serveAvatar renders hash as an avatar and writes it; nil hash / missing
 // file / undecodable PNG falls back to the embedded default avatar
 // (legacy: null texture or $disk->missing → default image, 200).
-func (d *avatarDeps) serveAvatar(w http.ResponseWriter, r *http.Request, hash, typ string, threeD bool) {
+func (d *avatarDeps) serveAvatar(w http.ResponseWriter, r *http.Request, hash, typ string, threeD, private bool) {
 	if typ != "" && typ != "skin" {
 		writeAvatarErr(w, http.StatusUnprocessableEntity, "texture is not a skin")
 		return
 	}
 	size := avatarSize(r)
+	if private {
+		w.Header().Set("Vary", "Cookie")
+		w.Header().Set("X-Robots-Tag", "noindex")
+	}
 	// Plugin avatar delegation: only for a real texture hash (never the
 	// default avatar) and only when the plugin's manifest allowlists the host.
 	if hash != "" && d.redirect != nil {
 		if target, ok := d.redirect(r.Context(), hash, size, threeD); ok {
-			w.Header().Set("Cache-Control", "public, max-age=60")
+			if private {
+				w.Header().Set("Cache-Control", "private, no-store")
+			} else {
+				w.Header().Set("Cache-Control", "public, max-age=60")
+			}
 			http.Redirect(w, r, target, http.StatusFound)
 			return
 		}
@@ -137,7 +171,7 @@ func (d *avatarDeps) serveAvatar(w http.ResponseWriter, r *http.Request, hash, t
 		}
 		img = def
 	}
-	writePNG(w, img, "public, max-age=86400")
+	writePNG(w, img, avatarCacheControl(private))
 }
 
 func (d *avatarDeps) handleAvatarPlayer(w http.ResponseWriter, r *http.Request) {
@@ -157,66 +191,91 @@ func (d *avatarDeps) handleAvatarPlayer(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
-	d.serveAvatar(w, r, skinHash, "skin", r.URL.Query().Has("3d"))
+	d.serveAvatar(w, r, skinHash, "skin", r.URL.Query().Has("3d"), false)
 }
 
+// handleAvatarUser serves the face an account chose to present. Identity routes
+// (by player name, by user id) are public on purpose — launcher profile UIs,
+// union member lists and the in-app wearer picker all render them — because
+// `textures.public` says "listed in the skin library", not "this face is
+// secret". Only the routes that address a texture directly are gated.
 func (d *avatarDeps) handleAvatarUser(w http.ResponseWriter, r *http.Request) {
 	uid, perr := strconv.ParseInt(r.PathValue("uid"), 10, 64)
 	if perr != nil {
 		// Legacy: User::find('abc') → null → default avatar.
-		d.serveAvatar(w, r, "", "", r.URL.Query().Has("3d"))
+		d.serveAvatar(w, r, "", "", r.URL.Query().Has("3d"), false)
 		return
 	}
 	tid, err := d.st.UserAvatarTID(r.Context(), uid)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			d.serveAvatar(w, r, "", "", r.URL.Query().Has("3d")) // user missing → default
+			d.serveAvatar(w, r, "", "", r.URL.Query().Has("3d"), false) // user missing → default
 			return
 		}
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
 	if tid == 0 {
-		d.serveAvatar(w, r, "", "", r.URL.Query().Has("3d")) // no avatar set → default
+		d.serveAvatar(w, r, "", "", r.URL.Query().Has("3d"), false) // no avatar set → default
 		return
 	}
-	d.serveAvatarTID(w, r, tid)
+	d.serveAvatarTID(w, r, tid, false)
 }
 
 func (d *avatarDeps) handleAvatarTID(w http.ResponseWriter, r *http.Request) {
 	tid, perr := strconv.ParseInt(r.PathValue("tid"), 10, 64)
 	if perr != nil || tid <= 0 {
-		d.serveAvatar(w, r, "", "", r.URL.Query().Has("3d"))
+		d.serveAvatar(w, r, "", "", r.URL.Query().Has("3d"), false)
 		return
 	}
-	d.serveAvatarTID(w, r, tid)
+	// A tid is sequential, so this route is enumerable: it must honour the same
+	// visibility rule /preview/{tid} applies, or a private skin's face leaks to
+	// anyone who walks the integers.
+	pub, err := d.st.TextureIsPublic(r.Context(), tid)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			d.serveAvatar(w, r, "", "", r.URL.Query().Has("3d"), false) // texture missing → default
+			return
+		}
+		log.Printf("avatar/%d visibility: %v", tid, err)
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	if !pub && !privatePreviewAllowed(d.st, r, tid) {
+		http.NotFound(w, r)
+		return
+	}
+	d.serveAvatarTID(w, r, tid, !pub)
 }
 
-func (d *avatarDeps) serveAvatarTID(w http.ResponseWriter, r *http.Request, tid int64) {
+func (d *avatarDeps) serveAvatarTID(w http.ResponseWriter, r *http.Request, tid int64, private bool) {
 	hash, typ, _, err := d.st.TextureByTID(r.Context(), tid)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			d.serveAvatar(w, r, "", "", r.URL.Query().Has("3d")) // texture missing → default
+			d.serveAvatar(w, r, "", "", r.URL.Query().Has("3d"), private) // texture missing → default
 			return
 		}
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
-	d.serveAvatar(w, r, hash, typ, r.URL.Query().Has("3d"))
+	d.serveAvatar(w, r, hash, typ, r.URL.Query().Has("3d"), private)
 }
 
+// handleAvatarHash addresses a texture by its content address, which is only
+// ever handed to people who may see it (the raw /textures/{hash} route runs the
+// same capability model), so no visibility lookup happens here.
 func (d *avatarDeps) handleAvatarHash(w http.ResponseWriter, r *http.Request) {
 	hash := r.PathValue("hash")
 	typ, _, err := d.st.TextureMetaByHash(r.Context(), hash)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			d.serveAvatar(w, r, "", "", r.URL.Query().Has("3d"))
+			d.serveAvatar(w, r, "", "", r.URL.Query().Has("3d"), false)
 			return
 		}
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
-	d.serveAvatar(w, r, hash, typ, r.URL.Query().Has("3d"))
+	d.serveAvatar(w, r, hash, typ, r.URL.Query().Has("3d"), false)
 }
 
 // preview renders the full-body front+back views. Unlike avatars there is
