@@ -18,6 +18,7 @@ import (
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/texture"
+	"skin-nexus/server/internal/ugctext"
 )
 
 // errStruckContent is how the locked region reports a moderation refusal through
@@ -109,7 +110,10 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 	if typ == "skin" && model != "" && model != texture.ModelDefault && model != texture.ModelSlim {
 		return TextureView{}, false, errf(CodeModelBad, "skin model must be default or slim", nil)
 	}
-	desc := strings.TrimSpace(um.Name)
+	// Format characters (BiDi overrides, zero-width spaces) survive every length
+	// check and change what a reader sees, so they are stripped before the text is
+	// stored — the renderer cannot undo them later.
+	desc := ugctext.Visible(strings.TrimSpace(um.Name))
 	if !utf8.ValidString(desc) || !utf8.ValidString(um.DetailMD) ||
 		!utf8.ValidString(um.Source) || !utf8.ValidString(um.SourceURL) {
 		return TextureView{}, false, errf(CodeMetadata, "texture metadata must be UTF-8 text", nil)
@@ -117,7 +121,7 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 	if utf8.RuneCountInString(desc) > 50 {
 		return TextureView{}, false, errf(CodeMetadata, "texture name is limited to 50 characters", nil)
 	}
-	detail := strings.TrimSpace(um.DetailMD)
+	detail := ugctext.Visible(strings.TrimSpace(um.DetailMD))
 	if utf8.RuneCountInString(detail) > 4000 {
 		return TextureView{}, false, errf(CodeMetadata, "texture description is limited to 4000 characters", nil)
 	}

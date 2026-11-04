@@ -22,6 +22,7 @@ import (
 
 	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/mailer"
+	"skin-nexus/server/internal/redact"
 )
 
 // handleMailTest: POST /api/admin/v1/mail-test — sends one message to the
@@ -96,12 +97,5 @@ func senderOf(cfg *mailer.Config) string {
 	return cfg.User
 }
 
-// maskEmail keeps the local part's first character and the whole domain:
-// enough to confirm "yes, that is my address", not enough to harvest.
-func maskEmail(email string) string {
-	at := strings.LastIndex(email, "@")
-	if at <= 0 {
-		return "***"
-	}
-	return email[:1] + "***" + email[at:]
-}
+// maskEmail keeps the local part's first character and the whole domain.
+func maskEmail(email string) string { return redact.Email(email) }

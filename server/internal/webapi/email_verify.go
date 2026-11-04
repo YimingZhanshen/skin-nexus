@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"skin-nexus/server/internal/i18n"
+	"skin-nexus/server/internal/redact"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/ygg"
 )
@@ -72,7 +73,7 @@ func (b *Backend) sendVerificationMail(ctx context.Context, uid int64, address s
 		if delErr := b.Store.DeleteEmailVerifyToken(ctx, hex.EncodeToString(digest[:])); delErr != nil {
 			log.Printf("email-verification token cleanup uid=%d: %v", uid, delErr)
 		}
-		log.Printf("email-verification mail to %s (uid %d): %v", address, uid, err)
+		log.Printf("email-verification mail to %s (uid %d): %v", redact.Email(address), uid, err)
 		return err
 	}
 	return nil

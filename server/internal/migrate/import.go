@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -609,6 +610,25 @@ func ValidateDSNs(src, tgt string) error {
 				return fmt.Errorf("import: %s DSN: %w", d.label, err)
 			}
 		}
+	}
+	return nil
+}
+
+// sourcePrefixRe accepts the spellings blessing installs actually use: a bare
+// table prefix ("legacy_"), a schema qualifier ("legacy."), or nothing at all.
+var sourcePrefixRe = regexp.MustCompile(`^[A-Za-z0-9_.]{1,64}$`)
+
+// ValidateSourcePrefix keeps --source-prefix to an identifier-shaped token. The
+// importer pastes it straight into `FROM <prefix>players`, so a value carrying
+// a quote, a space or a semicolon would not be a broken migration but a second
+// statement — and the operator typing it is the only "attacker". Cheap insurance
+// against a shell-quoting mistake on a tool that runs against production data.
+func ValidateSourcePrefix(p string) error {
+	if p == "" {
+		return fmt.Errorf("import: --source-prefix is required")
+	}
+	if !sourcePrefixRe.MatchString(p) {
+		return fmt.Errorf("import: --source-prefix %q must be 1-64 characters of [A-Za-z0-9_.]", p)
 	}
 	return nil
 }

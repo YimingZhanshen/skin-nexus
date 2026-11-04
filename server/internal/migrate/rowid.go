@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"skin-nexus/server/internal/dialect"
@@ -218,6 +219,19 @@ func rowIDFloor(ctx context.Context, q execQuerier, name string) (int64, error) 
 	return floor, nil
 }
 
+// tableDDLRe matches the DDL of exactly the table being rebuilt: CREATE TABLE,
+// optional IF NOT EXISTS, then the name as its own token.
+var tableDDLRe = map[string]*regexp.Regexp{}
+
+func tableMatcher(name string) *regexp.Regexp {
+	if rx, ok := tableDDLRe[name]; ok {
+		return rx
+	}
+	rx := regexp.MustCompile(`(?i)^CREATE TABLE\s+(IF NOT EXISTS\s+)?["` + "`" + `\[]?` + regexp.QuoteMeta(name) + `["` + "`" + `\]]?\s*\(`)
+	tableDDLRe[name] = rx
+	return rx
+}
+
 // withAutoIncrement rewrites the captured DDL instead of restating the column list,
 // so a column added by a later migration cannot be dropped by an out-of-date copy.
 func withAutoIncrement(ddl, name string) (string, error) {
@@ -227,6 +241,16 @@ func withAutoIncrement(ddl, name string) (string, error) {
 	out := strings.Replace(ddl, "INTEGER PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT", 1)
 	if !strings.Contains(out, "AUTOINCREMENT") {
 		return "", fmt.Errorf("rebuild DDL for %s lost its primary key", name)
+	}
+	// Depth, not a live threat: sqlite_master holds one statement per row, so a
+	// second statement cannot ride along, and reaching this code at all already
+	// means the operator can write the database. What must not happen is a future
+	// caller feeding this a string that is not the table it names.
+	if !tableMatcher(name).MatchString(strings.TrimSpace(out)) {
+		return "", fmt.Errorf("rebuild DDL for %s is not its own CREATE TABLE statement", name)
+	}
+	if strings.Contains(out, ";") {
+		return "", fmt.Errorf("rebuild DDL for %s carries a statement separator", name)
 	}
 	return out, nil
 }

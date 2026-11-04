@@ -17,6 +17,7 @@ import (
 	"skin-nexus/server/internal/avatargen"
 	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/store"
+	"skin-nexus/server/internal/ugctext"
 	"skin-nexus/server/internal/ygg"
 )
 
@@ -166,14 +167,14 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Name != nil {
-		*req.Name = strings.TrimSpace(*req.Name)
+		*req.Name = ugctext.Visible(strings.TrimSpace(*req.Name))
 		if len([]rune(*req.Name)) > 50 {
 			writeErrCode(w, http.StatusBadRequest, "name is too long", i18n.MsgTooLong)
 			return
 		}
 	}
 	if req.Detail != nil {
-		*req.Detail = strings.TrimSpace(*req.Detail)
+		*req.Detail = ugctext.Visible(strings.TrimSpace(*req.Detail))
 		if len([]rune(*req.Detail)) > 4000 {
 			writeErrCode(w, http.StatusBadRequest, "description is limited to 4000 characters", i18n.MsgTooLong)
 			return
@@ -206,14 +207,14 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 			writeErrCode(w, http.StatusBadRequest, "source URL is too long", i18n.MsgTooLong)
 			return
 		}
-	}
-	// Validate the link itself, not only the derivative/repost pairing below: the
-	// detail page renders source_url into an href, so a row whose provenance says
-	// "original" must not be able to carry "javascript:…" just because the
-	// provenance field was not part of this PATCH.
-	if *req.SourceURL != "" && !validSourceURL(*req.SourceURL) {
-		writeErrCode(w, http.StatusBadRequest, "the original URL must be an http(s) link", account.CodeSourceURLBad)
-		return
+		// Validate the link itself, not only the derivative/repost pairing below:
+		// the detail page renders source_url into an href, so a row whose
+		// provenance says "original" must not be able to carry "javascript:…"
+		// just because the provenance field was not part of this PATCH.
+		if *req.SourceURL != "" && !validSourceURL(*req.SourceURL) {
+			writeErrCode(w, http.StatusBadRequest, "the original URL must be an http(s) link", account.CodeSourceURLBad)
+			return
+		}
 	}
 	// Owner-scoped unless admin (admins may fix any row).
 	owner := uid

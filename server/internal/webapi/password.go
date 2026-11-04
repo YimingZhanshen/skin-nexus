@@ -17,6 +17,7 @@ import (
 	"skin-nexus/server/internal/auth"
 	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/mailer"
+	"skin-nexus/server/internal/redact"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/ygg"
 )
@@ -195,7 +196,7 @@ func (b *Backend) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	// hiccups into an existence oracle). The user retries; the log carries
 	// the diagnostic for the operator.
 	if err := cfg.Send(req.Email, subject, body); err != nil {
-		log.Printf("password-reset mail to %s: %v", req.Email, err)
+		log.Printf("password-reset mail to %s: %v", redact.Email(req.Email), err)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }

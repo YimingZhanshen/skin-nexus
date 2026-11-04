@@ -151,6 +151,9 @@ func runImport(args []string, out io.Writer) error {
 	if err := ValidateDSNs(*sourceDSN, *targetDSN); err != nil {
 		return err
 	}
+	if err := ValidateSourcePrefix(*prefix); err != nil {
+		return err
+	}
 	// The legacy site is whatever engine it runs on — blessing ships MySQL,
 	// its compose image SQLite, and forks exist on PostgreSQL. dbx picks the
 	// driver from the DSN, so a cross-engine cutover is one flag.

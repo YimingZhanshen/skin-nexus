@@ -101,3 +101,25 @@ func sourceURL(t *testing.T, m *store.Mysql, tid int64) string {
 	}
 	return v
 }
+
+// The same PATCH path is where a name reaches the library. A BiDi override in
+// the name changes what a reader sees while keeping the length check happy, so
+// it has to be stripped on the way in, not hoped away at render time.
+func TestPatchStripsInvisibleControls(t *testing.T) {
+	h, m, _, tid := provenanceFixture(t)
+	rec := patchTexture(h, tid, `{"name":"‮gnails","detail":"a​b"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch = %d, want 200; body %s", rec.Code, rec.Body.String())
+	}
+	var name, detail string
+	if err := m.DB().QueryRowContext(context.Background(),
+		`SELECT description, COALESCE(detail_md,'') FROM textures WHERE id = ?`, tid).Scan(&name, &detail); err != nil {
+		t.Fatal(err)
+	}
+	if name != "gnails" {
+		t.Fatalf("stored name = %q, want the override removed", name)
+	}
+	if detail != "ab" {
+		t.Fatalf("stored description = %q, want the zero-width space removed", detail)
+	}
+}
