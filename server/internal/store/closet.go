@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"skin-nexus/server/internal/dialect"
 	"strings"
 )
 
@@ -50,7 +51,7 @@ func (m *Mysql) ListClosetPage(ctx context.Context, uid int64, q, typ string, li
 		d := m.db.Dialect()
 		where += ` AND (` + d.CIContains("COALESCE(c.item_name, '')") + ` OR ` +
 			d.CIContains("COALESCE(t.description, '')") + ` OR ` + d.CIContains("COALESCE(t.hash, '')") + `)`
-		like := "%" + s + "%"
+		like := dialect.LikeContains(s)
 		args = append(args, like, like, like)
 	}
 	from := ` FROM user_closet c LEFT JOIN textures t ON t.id = c.texture_tid WHERE ` + where

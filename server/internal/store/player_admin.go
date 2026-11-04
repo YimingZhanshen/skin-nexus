@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"skin-nexus/server/internal/dbx"
+	"skin-nexus/server/internal/dialect"
 	"strconv"
 	"strings"
 	"time"
@@ -28,7 +30,7 @@ func (m *Mysql) AdminPlayers(ctx context.Context, q string, uidFilter int64, pag
 		ci := m.db.Dialect()
 		// The clause opens here and closes after the optional uid term below.
 		where += " AND (" + ci.CIContains("p.name") + " OR " + ci.CIContains("usr.nickname")
-		like := "%" + q + "%"
+		like := dialect.LikeContains(q)
 		args = append(args, like, like)
 		if uidFilter == 0 {
 			// numeric q also matches the owner uid exactly (blessing 列表习惯)
@@ -57,7 +59,7 @@ func (m *Mysql) AdminPlayers(ctx context.Context, q string, uidFilter int64, pag
 		`SELECT p.id, p.uid, p.name, COALESCE(u.uuid,''),
 		        COALESCE(ts.hash,''), COALESCE(tc.hash,''), COALESCE(usr.nickname,''), p.updated_at`+
 			from+` ORDER BY p.id DESC LIMIT ? OFFSET ?`,
-		append(args, size, (page-1)*size)...)
+		append(args, size, dbx.Offset(page, size))...)
 	if err != nil {
 		return nil, 0, err
 	}

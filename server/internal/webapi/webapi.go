@@ -27,6 +27,7 @@ import (
 	"skin-nexus/server/internal/announce"
 	"skin-nexus/server/internal/appearance"
 	"skin-nexus/server/internal/auth"
+	"skin-nexus/server/internal/dbx"
 	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/ratelimit"
@@ -987,7 +988,7 @@ func pageParams(r *http.Request) (limit, offset int) {
 	if v, err := strconv.Atoi(r.URL.Query().Get("page")); err == nil && v > 0 {
 		page = v
 	}
-	return limit, (page - 1) * limit
+	return limit, dbx.Offset(page, limit)
 }
 
 // textureURL resolves a texture URL and lets plugin URL filters rewrite it

@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"skin-nexus/server/internal/dbx"
+	"skin-nexus/server/internal/dialect"
 	"strings"
 	"time"
 )
@@ -571,8 +573,8 @@ func (m *Mysql) AdminUsers(ctx context.Context, q string, page, size int) ([]map
 	where := ""
 	var args []interface{}
 	if q != "" {
-		where = `WHERE LOWER(COALESCE(email,'')) LIKE ? OR LOWER(nickname) LIKE ?`
-		like := "%" + strings.ToLower(q) + "%"
+		where = "WHERE " + m.db.Dialect().CIContains("COALESCE(email,'')") + " OR " + m.db.Dialect().CIContains("nickname")
+		like := dialect.LikeContains(q)
 		args = append(args, like, like)
 	}
 	var total int
@@ -583,7 +585,7 @@ func (m *Mysql) AdminUsers(ctx context.Context, q string, page, size int) ([]map
 		`SELECT id, COALESCE(email,''), nickname, password_algo, player_limit,
 		        COALESCE(email_verified,0), COALESCE(permission,0), created_at
 		 FROM users `+where+` ORDER BY id DESC LIMIT ? OFFSET ?`,
-		append(args, size, (page-1)*size)...)
+		append(args, size, dbx.Offset(page, size))...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -616,7 +618,7 @@ func (m *Mysql) AdminTextures(ctx context.Context, page, size int) ([]map[string
 	rows, err := m.db.QueryContext(ctx,
 		`SELECT t.id, t.uid, t.type, t.hash, COALESCE(t.model,''), COALESCE(t.description,''),
 		        t.public, t.moderation, t.upload_at
-		 FROM textures t ORDER BY t.id DESC LIMIT ? OFFSET ?`, size, (page-1)*size)
+		 FROM textures t ORDER BY t.id DESC LIMIT ? OFFSET ?`, size, dbx.Offset(page, size))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -653,7 +655,7 @@ func (m *Mysql) AdminAudit(ctx context.Context, page, size int) ([]map[string]in
 	}
 	rows, err := m.db.QueryContext(ctx,
 		`SELECT id, COALESCE(actor_uid,0), action, COALESCE(detail,'{}'), created_at
-		 FROM audit_log ORDER BY id DESC LIMIT ? OFFSET ?`, size, (page-1)*size)
+		 FROM audit_log ORDER BY id DESC LIMIT ? OFFSET ?`, size, dbx.Offset(page, size))
 	if err != nil {
 		return nil, 0, err
 	}

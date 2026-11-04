@@ -259,3 +259,26 @@ func TestUnderlyingIsTheSamePool(t *testing.T) {
 		t.Error("Underlying() must return the embedded pool")
 	}
 }
+
+// A page number comes straight from a query parameter. (page-1)*size overflows
+// int64 near 2^63/size and the product wraps negative, which every engine
+// rejects — an anonymous request would turn into a 500.
+func TestOffsetNeverWraps(t *testing.T) {
+	if got := Offset(1, 20); got != 0 {
+		t.Fatalf("Offset(1) = %d", got)
+	}
+	if got := Offset(3, 20); got != 40 {
+		t.Fatalf("Offset(3,20) = %d", got)
+	}
+	if got := Offset(0, 20); got != 0 {
+		t.Fatalf("a page below 1 must clamp, got %d", got)
+	}
+	for _, page := range []int{9223372036854775807, 922337203685477580, 1 << 40} {
+		if got := Offset(page, 20); got < 0 {
+			t.Fatalf("Offset(%d,20) = %d, must never be negative", page, got)
+		}
+	}
+	if got := Offset(9223372036854775807, 0); got < 0 {
+		t.Fatalf("a zero page size must not produce a negative offset, got %d", got)
+	}
+}

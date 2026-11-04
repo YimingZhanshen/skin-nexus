@@ -11,6 +11,7 @@ package store
 // which keeps the table bounded without a cron job.
 import (
 	"context"
+	"skin-nexus/server/internal/dbx"
 	"time"
 )
 
@@ -69,7 +70,7 @@ func (m *Mysql) ListNotifications(ctx context.Context, uid int64, onlyUnread boo
 	rows, err := m.db.QueryContext(ctx,
 		`SELECT id, kind, tid, ref, read_at IS NOT NULL, created_at
 		 FROM notifications`+where+` ORDER BY id DESC LIMIT ? OFFSET ?`,
-		append(append([]any{}, args...), size, (page-1)*size)...)
+		append(append([]any{}, args...), size, dbx.Offset(page, size))...)
 	if err != nil {
 		return nil, 0, err
 	}

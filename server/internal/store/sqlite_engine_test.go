@@ -803,3 +803,63 @@ func TestSQLiteEngineAdminAuditPagesWithTotal(t *testing.T) {
 		t.Errorf("page 2 holds %q, want the oldest entry", action)
 	}
 }
+
+// The store's search predicates must treat a typed "%" or "_" as text. Left
+// unescaped, "%" matches every row (a full scan behind an anonymous library
+// search) and "_" silently widens the query.
+func TestSQLiteEngineSearchTreatsWildcardsLiterally(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid, err := st.CreateUser(ctx, "wild@example.com", "wildcards", "x", 3, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddTexture(ctx, uid, "skin", hashOf("w-percent"), "default", TextureMeta{Description: "50%off skin"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddTexture(ctx, uid, "skin", hashOf("w-under"), "default", TextureMeta{Description: "axb cape"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddTexture(ctx, uid, "skin", hashOf("w-plain"), "default", TextureMeta{Description: "ordinary"}); err != nil {
+		t.Fatal(err)
+	}
+
+	count := func(kw string) int {
+		opts := SkinlibOpts{Keyword: kw, PublicOnly: true, Page: 1, PerPage: 50}
+		_, total, err := st.SkinlibList(ctx, opts)
+		if err != nil {
+			t.Fatalf("search %q: %v", kw, err)
+		}
+		return total
+	}
+	// Escaped, "%" means a percent sign: exactly the one row whose name carries
+	// it. Unescaped it would be every row in the library.
+	if got := count("%"); got != 1 {
+		t.Fatalf(`keyword "%%" matched %d rows, want the single literal one`, got)
+	}
+	if got := count("50%off"); got != 1 {
+		t.Fatalf(`keyword "50%%off" matched %d rows, want the one literal name`, got)
+	}
+	if got := count("a_b"); got != 0 {
+		t.Fatalf(`keyword "a_b" matched %d rows, want 0 — "_" must not match "x"`, got)
+	}
+	// Case folding still works through LOWER(?) on the bound side.
+	if got := count("ORDINARY"); got != 1 {
+		t.Fatalf("keyword ORDINARY matched %d rows, want 1", got)
+	}
+}
+
+// A hostile page number must not reach the engine as a negative OFFSET.
+func TestSQLiteEngineHugePageDoesNotError(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	if _, _, err := st.AdminTextures(ctx, 9223372036854775807, 50); err != nil {
+		t.Fatalf("AdminTextures with a huge page: %v", err)
+	}
+	if _, _, err := st.AdminAudit(ctx, 9223372036854775807, 100); err != nil {
+		t.Fatalf("AdminAudit with a huge page: %v", err)
+	}
+	if _, _, err := st.AdminUsers(ctx, "", 9223372036854775807, 20); err != nil {
+		t.Fatalf("AdminUsers with a huge page: %v", err)
+	}
+}

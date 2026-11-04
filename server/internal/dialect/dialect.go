@@ -217,7 +217,7 @@ func (e Engine) CIEquals(col string) string {
 
 // CIContains is the case-insensitive substring test for LIKE filters.
 func (e Engine) CIContains(col string) string {
-	return fmt.Sprintf("LOWER(%s) LIKE LOWER(?)", col)
+	return CIContainsSQL(col)
 }
 
 // NullSafeEq compares two expressions treating NULL = NULL as true.

@@ -118,6 +118,27 @@ func (d *DB) QueryRowContext(ctx context.Context, query string, args ...any) *sq
 	return d.DB.QueryRowContext(ctx, d.Bind(query), d.args(args)...)
 }
 
+// maxOffset caps a computed row offset. Paging arithmetic is fed by a request
+// parameter: (page-1)*size on int64 wraps negative for page ≈ 2^63/size, and
+// every engine rejects a negative OFFSET with its own error — which the handler
+// turns into a 500 an anonymous visitor can trigger at will. Clamping keeps the
+// answer "no rows here" instead of "server broken".
+const maxOffset = 1<<31 - 1
+
+// Offset converts a 1-based page into a row offset, clamped.
+func Offset(page, size int) int {
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 {
+		size = 1
+	}
+	if page-1 > maxOffset/size {
+		return maxOffset
+	}
+	return (page - 1) * size
+}
+
 // BeginTx starts a transaction whose statements are rewritten the same way.
 func (d *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	tx, err := d.DB.BeginTx(ctx, opts)

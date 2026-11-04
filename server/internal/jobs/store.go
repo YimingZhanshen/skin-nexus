@@ -128,7 +128,7 @@ func (s *Store) List(ctx context.Context, plugin, state string, page, perPage in
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM host_jobs WHERE `+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	args = append(args, perPage, (page-1)*perPage)
+	args = append(args, perPage, dbx.Offset(page, perPage))
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+cols+` FROM host_jobs WHERE `+where+` ORDER BY created_at DESC LIMIT ? OFFSET ?`, args...)
 	if err != nil {

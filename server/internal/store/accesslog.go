@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"skin-nexus/server/internal/accesslog"
+	"skin-nexus/server/internal/dbx"
+	"skin-nexus/server/internal/dialect"
 )
 
 // AccessRow is one row of the admin access-log table (time localised by
@@ -57,7 +59,7 @@ func (m *Mysql) ListAccessLogs(ctx context.Context, kind, q string, page, size i
 	if q = strings.TrimSpace(q); q != "" {
 		ci := m.db.Dialect()
 		where += " AND (" + ci.CIContains("who") + " OR " + ci.CIContains("ip") + " OR " + ci.CIContains("detail") + ")"
-		like := "%" + q + "%"
+		like := dialect.LikeContains(q)
 		args = append(args, like, like, like)
 	}
 	var total int
@@ -68,7 +70,7 @@ func (m *Mysql) ListAccessLogs(ctx context.Context, kind, q string, page, size i
 	rows, err := m.db.QueryContext(ctx,
 		`SELECT id, kind, outcome, COALESCE(uid,0), who, ip, ua, detail, created_at
 		 FROM access_logs`+where+` ORDER BY id DESC LIMIT ? OFFSET ?`,
-		append(args, size, (page-1)*size)...)
+		append(args, size, dbx.Offset(page, size))...)
 	if err != nil {
 		return nil, 0, err
 	}

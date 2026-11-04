@@ -151,7 +151,9 @@ func TestPortablePredicates(t *testing.T) {
 	if got := MySQL.CIEquals("email"); got != "LOWER(email) = LOWER(?)" {
 		t.Errorf("CIEquals = %q", got)
 	}
-	if got := SQLite.CIContains("nickname"); got != "LOWER(nickname) LIKE LOWER(?)" {
+	// The ESCAPE clause is part of the contract: callers bind dialect.LikeContains,
+	// so a predicate without it would read the escaped text as wildcards again.
+	if got := SQLite.CIContains("nickname"); got != "LOWER(nickname) LIKE LOWER(?) ESCAPE '!'" {
 		t.Errorf("CIContains = %q", got)
 	}
 	// Each engine gets its own native null-safe comparison: the long

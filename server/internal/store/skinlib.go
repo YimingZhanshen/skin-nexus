@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"skin-nexus/server/internal/dialect"
 	"strings"
 )
 
@@ -104,8 +105,8 @@ func (o *SkinlibOpts) where() (clause string, args []any) {
 		// LOWER on both sides: MySQL folded case through the column collation,
 		// PostgreSQL and SQLite do not, so a library search must not depend on
 		// which engine the site happens to run on.
-		conds = append(conds, "LOWER(t.description) LIKE LOWER(?)")
-		args = append(args, "%"+o.Keyword+"%")
+		conds = append(conds, dialect.CIContainsSQL("t.description"))
+		args = append(args, dialect.LikeContains(o.Keyword))
 	}
 	if o.Uploader != 0 {
 		conds = append(conds, "t.uid = ?")
