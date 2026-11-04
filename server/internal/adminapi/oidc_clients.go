@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"skin-nexus/server/internal/auth"
 	"skin-nexus/server/internal/i18n"
@@ -63,7 +64,16 @@ func (b *Backend) handleOIDCClientsCreate(w http.ResponseWriter, r *http.Request
 		Public       bool     `json:"public"`
 		Secret       string   `json:"secret"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ID == "" {
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErrCode(w, http.StatusBadRequest, "bad body", i18n.MsgBadBody)
+		return
+	}
+	// A client id is looked up by exact match at the token endpoint, so a
+	// whitespace-only one would be stored as a row nothing can ever name. The
+	// blacklist handler in this package already trims before its check; this one
+	// compared the raw string, so `"   "` passed.
+	body.ID = strings.TrimSpace(body.ID)
+	if body.ID == "" {
 		writeErrCode(w, http.StatusBadRequest, "bad body", i18n.MsgBadBody)
 		return
 	}
