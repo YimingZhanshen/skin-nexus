@@ -381,18 +381,30 @@ func (b *Backend) handleTextures(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"textures": rows, "total": total, "page": page})
 }
 
+// GET /api/admin/v1/audit?page=&q=&action= — the operator's "who did what"
+// lookup. `q` covers actor nickname, action and detail; `action` is an exact
+// match picked from the names this log actually contains (also returned, so
+// the picker never offers an action that cannot be found).
 func (b *Backend) handleAudit(w http.ResponseWriter, r *http.Request) {
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("page"))
 	if page < 1 {
 		page = 1
 	}
 	const auditPerPage = 100
-	rows, total, err := b.Store.AdminAudit(r.Context(), page, auditPerPage)
+	rows, total, err := b.Store.AdminAudit(r.Context(), q.Get("q"), q.Get("action"), page, auditPerPage)
 	if err != nil {
 		writeInternal(r, w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"audit": rows, "total": total, "page": page})
+	actions, err := b.Store.AuditActions(r.Context())
+	if err != nil {
+		writeInternal(r, w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"audit": rows, "total": total, "page": page, "actions": actions,
+	})
 }
 
 // handleAccessLogs pages the observability table (access_logs): web +

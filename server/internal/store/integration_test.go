@@ -461,7 +461,7 @@ func TestIntegrationUnionAndAudit(t *testing.T) {
 	uid := seedUser(t, m)
 	m.InsertAudit(ctx, 0, "union.member_key_rotated", map[string]any{"k": "v"})
 	m.InsertAudit(ctx, uid, "oidc.device_approve", map[string]any{"pid": 7})
-	rows, _, err := m.AdminAudit(ctx, 1, 10)
+	rows, _, err := m.AdminAudit(ctx, "", "", 1, 10)
 	if err != nil || len(rows) < 2 {
 		t.Fatalf("recent audit = %v %v", rows, err)
 	}

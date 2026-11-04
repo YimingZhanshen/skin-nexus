@@ -118,6 +118,7 @@ async function clearSetting(s) {
 // SEO (phase 3)
 const seo = ref(null)
 const seoError = ref('')
+const seoOk = ref('')
 async function loadSEO() {
   seoError.value = ''
   try { seo.value = await fetchJSON('/api/admin/v1/seo') } catch (e) { seoError.value = e.message }
@@ -129,10 +130,14 @@ async function seoOneClick() {
 }
 async function seoSave() {
   seoError.value = ''
+  seoOk.value = ''
   try {
     await fetchJSON('/api/admin/v1/seo', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(seo.value),
     })
+    // Saving used to be silent on success: the operator was left staring at the
+    // same fields, unsure whether the click had landed or the page had frozen.
+    seoOk.value = t('common.saved')
   } catch (e) {
     // review P2-10: refetch so the UI doesn't keep unsaved values
     await loadSEO()
@@ -143,6 +148,7 @@ async function seoSave() {
 // Appearance + themes
 const appearance = ref(null)
 const appearError = ref('')
+const appearOk = ref('')
 const themes = ref([])
 async function loadAppearance() {
   appearError.value = ''
@@ -157,10 +163,12 @@ async function loadAppearance() {
 }
 async function appearSave() {
   appearError.value = ''
+  appearOk.value = ''
   try {
     await fetchJSON('/api/admin/v1/appearance', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(appearance.value),
     })
+    appearOk.value = t('common.saved')
   } catch (e) {
     // review P2-10: refetch so the UI doesn't keep unsaved values
     await loadAppearance()
@@ -268,6 +276,7 @@ onMounted(load)
       <div class="row">
         <button class="secondary" @click="seoOneClick">一键优化（填充默认值）</button>
         <button @click="seoSave">保存 SEO</button>
+        <span class="success" role="status" v-if="seoOk">{{ seoOk }}</span>
       </div>
       <label for="seo-title">站点标题</label>
       <input id="seo-title" v-model="seo.title" />
@@ -332,6 +341,7 @@ onMounted(load)
       </div>
       <div class="row" style="margin-top: 12px;">
         <button @click="appearSave">保存外观</button>
+        <span class="success" role="status" v-if="appearOk">{{ appearOk }}</span>
       </div>
       <div class="error" role="alert" v-if="appearError">{{ appearError }}</div>
       <ThemeMarketSection @changed="loadAppearance" />

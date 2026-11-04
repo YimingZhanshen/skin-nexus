@@ -16,23 +16,54 @@ const page = ref(1)
 const pageSize = 100
 const loading = ref(false)
 const error = ref('')
+const q = ref('')
+const action = ref('')
+const actions = ref([])
 let seq = 0
+let timer = null
 
 async function load() {
   const mine = ++seq
   loading.value = true
   error.value = ''
   try {
-    const d = await fetchJSON(`/api/admin/v1/audit?page=${page.value}`)
+    const p = new URLSearchParams({ page: String(page.value) })
+    if (q.value.trim()) p.set('q', q.value.trim())
+    if (action.value) p.set('action', action.value)
+    const d = await fetchJSON(`/api/admin/v1/audit?${p}`)
     if (mine !== seq) return
     rows.value = d.audit || []
     total.value = d.total || 0
+    actions.value = d.actions || []
   } catch (e) {
     if (mine !== seq) return
     error.value = e.message
   } finally {
     if (mine === seq) loading.value = false
   }
+}
+
+// Search debounces like every other list here; a keystroke per full-table
+// LIKE on an audit log that only grows would be a self-inflicted denial of
+// service on the operator's own database.
+function search() {
+  clearTimeout(timer)
+  timer = setTimeout(() => { page.value = 1; load() }, 300)
+}
+function setAction(v) { action.value = v; page.value = 1; load() }
+function clearFilters() {
+  q.value = ''; action.value = ''
+  page.value = 1
+  load()
+}
+const filtering = () => !!(q.value.trim() || action.value)
+
+function actorLabel(row) {
+  if (row.actorName) return row.actorName
+  // 0 is the X-Admin-Token path: no account stands behind it, and pretending
+  // otherwise would blame a person for a script's work.
+  if (!Number(row.actorUid)) return t('admin.auditSystem')
+  return '#' + row.actorUid
 }
 
 function goPage(p) {
@@ -67,8 +98,16 @@ onMounted(load)
   <div class="card">
     <h2 style="margin-top: 0;">{{ t('admin.auditTitle') }}</h2>
     <p class="muted" style="margin-top: -6px;">{{ t('admin.auditHint') }}</p>
-    <div class="row">
+    <div class="row audit-bar">
       <button class="secondary" @click="load">{{ t('admin.reload') }}</button>
+      <input v-model="q" :placeholder="t('admin.auditSearchPh')" :aria-label="t('admin.auditSearchPh')"
+             style="max-width: 240px;" @input="search" />
+      <select :value="action" :aria-label="t('admin.auditActionFilter')" style="max-width: 200px;"
+              @change="setAction($event.target.value)">
+        <option value="">{{ t('admin.auditActionAll') }}</option>
+        <option v-for="a in actions" :key="a" :value="a">{{ a }}</option>
+      </select>
+      <button class="secondary" v-if="filtering()" @click="clearFilters">{{ t('dashboard.texClear') }}</button>
       <span class="muted">{{ t('admin.auditTotal', { total }) }}</span>
       <span class="muted" v-if="loading">{{ t('common.loading') }}</span>
     </div>
@@ -81,7 +120,7 @@ onMounted(load)
         </tr>
         <tr v-for="row in rows" :key="row.id">
           <td class="nowrap muted">{{ fmtTime(row.createdAt) }}</td>
-          <td class="nowrap muted">{{ row.actorUid ? '#' + row.actorUid : t('admin.auditSystem') }}</td>
+          <td class="nowrap muted" :title="row.actorUid ? ('#' + row.actorUid) : ''">{{ actorLabel(row) }}</td>
           <td class="nowrap mono">{{ row.action }}</td>
           <td class="detail" :title="detail(row)">{{ detail(row) || '—' }}</td>
         </tr>

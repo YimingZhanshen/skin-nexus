@@ -883,7 +883,7 @@ func TestSQLiteEngineAdminAuditPagesWithTotal(t *testing.T) {
 		st.InsertAudit(ctx, uid, action, map[string]any{"why": action})
 	}
 
-	rows, total, err := st.AdminAudit(ctx, 1, 2)
+	rows, total, err := st.AdminAudit(ctx, "", "", 1, 2)
 	if err != nil {
 		t.Fatalf("admin audit page 1: %v", err)
 	}
@@ -896,7 +896,7 @@ func TestSQLiteEngineAdminAuditPagesWithTotal(t *testing.T) {
 	if newest, ok := rows[0]["action"].(string); !ok || newest != "third" {
 		t.Errorf("newest entry = %#v, want third (rows must come back newest first)", rows[0])
 	}
-	older, total2, err := st.AdminAudit(ctx, 2, 2)
+	older, total2, err := st.AdminAudit(ctx, "", "", 2, 2)
 	if err != nil {
 		t.Fatalf("admin audit page 2: %v", err)
 	}
@@ -905,6 +905,49 @@ func TestSQLiteEngineAdminAuditPagesWithTotal(t *testing.T) {
 	}
 	if action, _ := older[0]["action"].(string); action != "first" {
 		t.Errorf("page 2 holds %q, want the oldest entry", action)
+	}
+	if nick, _ := rows[0]["actorName"].(string); nick != "auditor" {
+		t.Errorf("row carries actorName %q, want the nickname — a bare #uid is not an answer to 「谁干的」", nick)
+	}
+
+	// The filters are why this page is usable: 「谁」 by nickname, 「干了什么」 by
+	// action, and each must narrow the total too or the pager lies.
+	for _, tc := range []struct {
+		q, action string
+		want      int
+	}{
+		{"auditor", "", 3}, // the actor's name, not an action
+		{"second", "", 1},  // the action itself
+		{"zzz-nothing", "", 0},
+		{"", "third", 1},
+		{"", "no_such_action", 0},
+	} {
+		got, tot, err := st.AdminAudit(ctx, tc.q, tc.action, 1, 10)
+		if err != nil {
+			t.Fatalf("filter q=%q action=%q: %v", tc.q, tc.action, err)
+		}
+		if len(got) != tc.want || tot != tc.want {
+			t.Errorf("q=%q action=%q = %d rows of total %d, want %d", tc.q, tc.action, len(got), tot, tc.want)
+		}
+	}
+	// A typed wildcard stays text.
+	if _, tot, err := st.AdminAudit(ctx, "%", "", 1, 10); err != nil || tot != 0 {
+		t.Errorf("audit search of one percent sign matched %d rows (err %v), want 0", tot, err)
+	}
+	// The action picker is built from the log, so a new audited feature shows up
+	// in it without anyone remembering to extend a hardcoded list.
+	names, err := st.AuditActions(ctx)
+	if err != nil {
+		t.Fatalf("audit actions: %v", err)
+	}
+	have := map[string]bool{}
+	for _, n := range names {
+		have[n] = true
+	}
+	for _, want := range []string{"first", "second", "third"} {
+		if !have[want] {
+			t.Errorf("AuditActions = %v, missing %q", names, want)
+		}
 	}
 }
 
@@ -960,7 +1003,7 @@ func TestSQLiteEngineHugePageDoesNotError(t *testing.T) {
 	if _, _, err := st.AdminTextures(ctx, "", "", "", 9223372036854775807, 50); err != nil {
 		t.Fatalf("AdminTextures with a huge page: %v", err)
 	}
-	if _, _, err := st.AdminAudit(ctx, 9223372036854775807, 100); err != nil {
+	if _, _, err := st.AdminAudit(ctx, "", "", 9223372036854775807, 100); err != nil {
 		t.Fatalf("AdminAudit with a huge page: %v", err)
 	}
 	if _, _, err := st.AdminUsers(ctx, "", 9223372036854775807, 20); err != nil {

@@ -177,7 +177,7 @@ onMounted(load)
               </a>
               <div>
                 <div>{{ r.textureName || ('#' + r.textureId) }}</div>
-                <div class="muted">{{ t('admin.reportsUploader') }}: {{ r.uploader || '—' }} · {{ r.public ? t('admin.reportsPublic') : t('admin.reportsPrivate') }}</div>
+                <div class="muted">{{ t('admin.reportsUploader') }}: {{ r.uploader || '—' }} · {{ r.public ? t('admin.texPublic') : t('admin.texPrivate') }}</div>
                 <div v-if="r.moderation" class="struck">{{ t('admin.reportsStruck') }}</div>
               </div>
             </div>

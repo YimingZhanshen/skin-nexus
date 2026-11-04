@@ -136,7 +136,7 @@ func TestMailTestReportsTransportFailure(t *testing.T) {
 		t.Errorf("response %s should not echo an address", w.Body.String())
 	}
 	// The raw transport error belongs to the audit row and the log.
-	entries, _, err := b.Store.AdminAudit(ctx, 1, 20)
+	entries, _, err := b.Store.AdminAudit(ctx, "", "", 1, 20)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,6 +6,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
+import { confirmDialog } from '../../dialog.js'
 import Pager from '../Pager.vue'
 
 const { t } = useI18n()
@@ -18,7 +19,11 @@ const state = ref('')
 const plugin = ref('')
 const loading = ref(false)
 const error = ref('')
+const ok = ref('')
 const unavailable = ref(false)
+// One control action in flight: a second 取消 on the same job would only be
+// refused by the runner, and a double click on 恢复 reads as two resumes.
+const busy = ref('')
 
 const STATES = ['queued', 'running', 'paused', 'cancelling', 'cancelled', 'failed', 'done']
 
@@ -52,6 +57,30 @@ function goPage(p) {
 }
 const pageMax = () => Math.max(1, Math.ceil(total.value / pageSize))
 
+// Cancelling and resuming are the whole reason this page exists: without them
+// the queue can be watched stopping but not nudged. Each is confirmed because
+// both change what runs next on a shared machine.
+async function act(row, kind) {
+  if (busy.value) return
+  const label = row.handler + ' #' + row.id.slice(0, 6)
+  if (!(await confirmDialog(t(kind === 'cancel' ? 'admin.jobCancelConfirm' : 'admin.jobResumeConfirm', { job: label })))) return
+  busy.value = row.id
+  error.value = ''
+  ok.value = ''
+  try {
+    await fetchJSON(`/api/admin/v1/jobs/${encodeURIComponent(row.id)}/${kind}`, { method: 'POST' })
+    ok.value = t(kind === 'cancel' ? 'admin.jobCancelSent' : 'admin.jobResumed')
+    await load()
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    busy.value = ''
+  }
+}
+
+const canCancel = (s) => ['queued', 'running', 'paused'].includes(s)
+const canResume = (s) => ['paused', 'failed'].includes(s)
+
 function stateTone(s) {
   return { done: 'oc-ok', failed: 'oc-bad', cancelled: 'oc-miss', running: 'oc-warn' }[s] || 'oc-miss'
 }
@@ -75,6 +104,7 @@ onMounted(load)
       <span class="muted" v-if="loading">{{ t('common.loading') }}</span>
     </div>
     <div class="error" role="alert" v-if="error">{{ error }}</div>
+    <div class="success" role="status" v-if="ok">{{ ok }}</div>
     <p class="muted" v-if="unavailable">{{ t('admin.jobsModuleOff') }}</p>
     <div class="table-scroll" v-else-if="rows.length">
       <table class="job-table">
@@ -82,7 +112,7 @@ onMounted(load)
           <th>{{ t('admin.colTime') }}</th><th>{{ t('admin.colPlugin') }}</th>
           <th>{{ t('admin.colState') }}</th><th>{{ t('admin.colProgress') }}</th>
           <th>{{ t('admin.colAttempts') }}</th><th>{{ t('admin.colMessage') }}</th>
-          <th>{{ t('admin.colJob') }}</th>
+          <th>{{ t('admin.colJob') }}</th><th>{{ t('admin.colActions') }}</th>
         </tr>
         <tr v-for="row in rows" :key="row.id">
           <td class="nowrap muted">{{ row.updatedAt ? row.updatedAt.slice(0, 16).replace('T', ' ') : '—' }}</td>
@@ -92,6 +122,13 @@ onMounted(load)
           <td class="nowrap muted">{{ row.attempts }}/{{ row.maxAttempts }}<span v-if="row.reclaims"> ·↺{{ row.reclaims }}</span></td>
           <td class="msg" :title="row.lastError || row.message || ''">{{ row.lastError || row.message || '—' }}</td>
           <td class="nowrap muted" :title="row.id">{{ row.handler }} <span class="muted">#{{ row.id.slice(0, 6) }}</span></td>
+          <td class="nowrap">
+            <button class="secondary" v-if="canCancel(row.state)" :disabled="busy === row.id"
+                    @click="act(row, 'cancel')">{{ t('admin.jobCancel') }}</button>
+            <button class="secondary" v-if="canResume(row.state)" :disabled="busy === row.id"
+                    @click="act(row, 'resume')">{{ t('admin.jobResume') }}</button>
+            <span class="muted" v-if="!canCancel(row.state) &amp;&amp; !canResume(row.state)">—</span>
+          </td>
         </tr>
       </table>
     </div>
@@ -101,7 +138,7 @@ onMounted(load)
 </template>
 
 <style scoped>
-.job-table { min-width: 940px; width: 100%; table-layout: fixed; margin-top: 10px; }
+.job-table { min-width: 1080px; width: 100%; table-layout: fixed; margin-top: 10px; }
 .job-table td { overflow: hidden; text-overflow: ellipsis; }
 .job-table th:nth-child(1), .job-table td:nth-child(1) { width: 132px; }
 .job-table th:nth-child(2), .job-table td:nth-child(2) { width: 150px; }
@@ -109,6 +146,7 @@ onMounted(load)
 .job-table th:nth-child(4), .job-table td:nth-child(4) { width: 56px; }
 .job-table th:nth-child(5), .job-table td:nth-child(5) { width: 82px; }
 .job-table th:nth-child(7), .job-table td:nth-child(7) { width: 170px; }
+.job-table th:nth-child(8), .job-table td:nth-child(8) { width: 150px; }
 .nowrap { white-space: nowrap; }
 .mono { font-family: var(--mono, monospace); font-size: var(--fs-xs); }
 .msg { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

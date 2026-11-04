@@ -732,17 +732,39 @@ func (m *Mysql) AdminTextures(ctx context.Context, q, typ, state string, page, s
 // AdminAudit pages the audit log and reports the whole count. It replaced
 // RecentAudit(limit), which silently stopped showing history at the cap and gave
 // the operator no way to know more rows exist.
-func (m *Mysql) AdminAudit(ctx context.Context, page, size int) ([]map[string]interface{}, int, error) {
+func (m *Mysql) AdminAudit(ctx context.Context, q, action string, page, size int) ([]map[string]interface{}, int, error) {
 	if page < 1 {
 		page = 1
 	}
+	d := m.db.Dialect()
+	var cond []string
+	var args []interface{}
+	if s := strings.TrimSpace(q); s != "" {
+		// 「谁在什么时候干了什么」 is asked in names: the actor's nickname, the
+		// action, and the ids/names inside the detail JSON all belong to one
+		// search box rather than three.
+		cond = append(cond, "("+d.CIContains("a.action")+` OR `+d.CIContains("COALESCE(a.detail, '{}')")+
+			` OR `+d.CIContains("COALESCE(u.nickname, '')")+")")
+		like := dialect.LikeContains(s)
+		args = append(args, like, like, like)
+	}
+	if a := strings.TrimSpace(action); a != "" {
+		cond = append(cond, `a.action = ?`)
+		args = append(args, a)
+	}
+	where := ""
+	if len(cond) > 0 {
+		where = "WHERE " + strings.Join(cond, " AND ")
+	}
+	from := ` FROM audit_log a LEFT JOIN users u ON u.id = a.actor_uid ` + where
 	var total int
-	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM audit_log`).Scan(&total); err != nil {
+	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*)`+from, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	rows, err := m.db.QueryContext(ctx,
-		`SELECT id, COALESCE(actor_uid,0), action, COALESCE(detail,'{}'), created_at
-		 FROM audit_log ORDER BY id DESC LIMIT ? OFFSET ?`, size, dbx.Offset(page, size))
+		`SELECT a.id, COALESCE(a.actor_uid,0), a.action, COALESCE(a.detail,'{}'), a.created_at,
+		        COALESCE(u.nickname, '')`+from+`
+		 ORDER BY a.id DESC LIMIT ? OFFSET ?`, append(args, size, dbx.Offset(page, size))...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -750,17 +772,38 @@ func (m *Mysql) AdminAudit(ctx context.Context, page, size int) ([]map[string]in
 	out := make([]map[string]interface{}, 0)
 	for rows.Next() {
 		var id, actor int64
-		var action, detail string
+		var action2, detail, nick string
 		var created time.Time
-		if err := rows.Scan(&id, &actor, &action, &detail, &created); err != nil {
+		if err := rows.Scan(&id, &actor, &action2, &detail, &created, &nick); err != nil {
 			return nil, 0, err
 		}
 		out = append(out, map[string]interface{}{
-			"id": id, "actorUid": actor, "action": action, "detail": detail,
+			"id": id, "actorUid": actor, "actorName": nick, "action": action2, "detail": detail,
 			"createdAt": created.Format(time.RFC3339),
 		})
 	}
 	return out, total, rows.Err()
+}
+
+// AuditActions lists the action names actually present in the log, newest first.
+// The dropdown is built from the data because the set grows with every feature
+// that audits itself; a hardcoded list would silently hide the newer events.
+func (m *Mysql) AuditActions(ctx context.Context) ([]string, error) {
+	rows, err := m.db.QueryContext(ctx,
+		`SELECT DISTINCT action FROM audit_log ORDER BY action LIMIT 200`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]string, 0)
+	for rows.Next() {
+		var a string
+		if err := rows.Scan(&a); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }
 
 // ---- players ----

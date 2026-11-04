@@ -99,7 +99,7 @@ onMounted(load)
       </tr>
     </table>
     </div>
-    <p class="muted" v-else>{{ t('admin.accessEmpty') }}</p>
+    <p class="muted" v-else-if="!error">{{ t('admin.accessEmpty') }}</p>
     <Pager :page="page" :pages="pageMax()" :total="total" @update:page="goPage" />
   </div>
 </template>
