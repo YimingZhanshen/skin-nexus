@@ -17,6 +17,7 @@ import (
 
 	"github.com/zitadel/oidc/v3/pkg/op"
 
+	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/webi18n"
 )
 
@@ -319,7 +320,7 @@ func (p *Provider) deviceInfo(w http.ResponseWriter, r *http.Request) {
 	userCode := r.URL.Query().Get("user_code")
 	rec, err := p.backend.GetDeviceAuthByUserCode(r.Context(), userCode)
 	if err != nil || rec.Done || rec.Denied || time.Now().After(rec.ExpiresAt) {
-		writeJSON(w, map[string]any{"error": "无效或已过期的用户码"})
+		writeJSON(w, deviceErr(i18n.MsgDeviceCodeInvalid, "invalid or expired user code"))
 		return
 	}
 	var players []PlayerBrief
@@ -374,18 +375,18 @@ func (p *Provider) deviceSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, err := p.backend.GetDeviceAuthByUserCode(r.Context(), userCode)
 	if err != nil || rec.Done || rec.Denied {
-		writeJSON(w, map[string]any{"error": "无效的用户码"})
+		writeJSON(w, deviceErr(i18n.MsgDeviceCodeInvalid, "invalid user code"))
 		return
 	}
 	if time.Now().After(rec.ExpiresAt) {
 		// review P2: expired codes could be "approved" (ok:true) yet never yield tokens
-		writeJSON(w, map[string]any{"error": "用户码已过期"})
+		writeJSON(w, deviceErr(i18n.MsgDeviceCodeExpired, "user code expired"))
 		return
 	}
 	switch decision {
 	case "approve":
 		if err := p.ApproveDevice(r.Context(), uid, userCode, pid); err != nil {
-			writeJSON(w, map[string]any{"error": "批准失败"})
+			writeJSON(w, deviceErr(i18n.MsgDeviceApproveFail, "approval failed"))
 			return
 		}
 		p.auditEvent("oidc.device_approve", map[string]any{
@@ -520,6 +521,14 @@ func bearerToken(r *http.Request) string {
 func unauthorized(w http.ResponseWriter) {
 	w.Header().Set("WWW-Authenticate", `Bearer realm="openid"`)
 	w.WriteHeader(http.StatusUnauthorized)
+}
+
+// deviceErr is the standard envelope: `code` is the half the page can
+// translate, the English text is what an older client falls back to. The four
+// answers this replaced were Chinese literals, so the device page showed
+// Chinese to every language but the one it was written in.
+func deviceErr(code, msg string) map[string]any {
+	return map[string]any{"error": code, "code": code, "message": msg}
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

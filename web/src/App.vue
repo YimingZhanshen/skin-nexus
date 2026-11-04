@@ -207,6 +207,12 @@ const viewURLs = {
   profile: '/user/profile',
   players: '/user/players',
   dashboard: '/user/dashboard',
+  // Three views the nav offers with no address of their own: the URL bar kept
+  // saying /user/dashboard while 站内通知 was on screen, so a bookmark or a
+  // second-tab open landed somewhere else entirely.
+  notifications: '/user/notifications',
+  apps: '/user/apps',
+  union: '/user/union',
 }
 let syncingURL = false
 watch(view, (v) => {
@@ -253,6 +259,9 @@ const legacyRoutes = {
   // Readable without a session: the page exists for the player who is stuck
   // outside, so it must be reachable from a shared link before login.
   '/help': 'help',
+  '/user/apps': 'apps',
+  '/user/notifications': 'notifications',
+  '/user/union': 'union',
 }
 // Deep-linked view held for after login (open /user/closet logged-out → login
 // card first, then drop straight into the closet).

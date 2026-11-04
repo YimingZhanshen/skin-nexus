@@ -1,13 +1,14 @@
 <script setup>
 // Signed plugin market. The server verifies the registry and artifacts; this
 // view only renders the verified catalog and sends super-admin actions.
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { api } from '../../api.js'
 import { loadPluginUI } from '../../pluginUI.js'
 import { describe } from '../../errors.js'
 import Pager from '../Pager.vue'
+import FilePicker from '../FilePicker.vue'
 import EmptyState from '../EmptyState.vue'
 
 const { t } = useI18n()
@@ -71,11 +72,12 @@ function openInstall(p) {
   readme.value = p.readme || p.changelog || ''
 }
 
-function onFile(e) {
-  uploadFile.value = e.target.files && e.target.files[0]
+// Picking another bundle invalidates what the previous one was found to be:
+// an inspection result and a risk tick box must not survive the swap.
+watch(uploadFile, () => {
   inspection.value = null
   riskAck.value = false
-}
+})
 
 function trustText(status) {
   switch (status) {
@@ -183,7 +185,8 @@ onMounted(async () => {
 
     <div class="row" style="margin: 12px 0; gap: 8px; align-items: center;">
       <input v-model="search" :placeholder="t('admin.marketSearch')" style="max-width: 360px;" @input="page = 1" />
-      <input type="file" accept=".zip" :disabled="!isSuper || uploading" @change="onFile" />
+      <FilePicker v-model:file="uploadFile" accept=".zip" :disabled="!isSuper || uploading"
+                  :disabled-reason="t('admin.marketReadOnly')" />
       <button class="secondary" :disabled="!isSuper || !uploadFile || uploading" @click="uploadBundle">
         {{ uploading ? t('admin.marketInstalling') : t('admin.marketUpload') }}
       </button>

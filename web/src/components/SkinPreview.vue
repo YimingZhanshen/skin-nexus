@@ -46,7 +46,9 @@ async function ensureViewer() {
     height: props.height,
     zoom: 0.7,
   })
-  viewer.autoRotate = true
+  // A spinning preview is the one thing on the page that never stops asking for
+  // the GPU, and 「reduced motion」 is how people opt out of exactly that.
+  viewer.autoRotate = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
   viewer.playerModelType = props.modelType === 'slim' ? 'slim' : 'default'
 }
 

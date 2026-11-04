@@ -201,7 +201,7 @@ onMounted(load)
         <tr>
           <th>#</th><th></th><th>{{ t('admin.colTime') }}</th><th>{{ t('admin.colName') }}</th>
           <th>{{ t('admin.colType') }}</th><th>{{ t('admin.colUploader') }}</th>
-          <th>{{ t('admin.colVisibility') }}</th><th>hash</th><th>{{ t('admin.colActions') }}</th>
+          <th>{{ t('admin.colVisibility') }}</th><th>{{ t('dashboard.colHash') }}</th><th>{{ t('admin.colActions') }}</th>
         </tr>
         <tr v-for="row in rows" :key="row.id">
           <td class="muted">{{ row.id }}</td>

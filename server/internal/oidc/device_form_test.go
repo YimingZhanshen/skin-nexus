@@ -89,3 +89,23 @@ func TestDeviceFormLabelsAreValidJS(t *testing.T) {
 		}
 	}
 }
+
+// The device page reads these answers through the same envelope helper as every
+// other web call: `code` is translatable, the English text is only a fallback.
+// Chinese literals in `error` used to mean every language but zh-CN read the
+// server's Chinese, and an unknown code could not be translated at all.
+func TestDeviceErrorsCarryTranslatableCodes(t *testing.T) {
+	for _, tc := range []struct{ code, msg string }{
+		{"device.code_invalid", "invalid user code"},
+		{"device.code_expired", "user code expired"},
+		{"device.approve_failed", "approval failed"},
+	} {
+		got := deviceErr(tc.code, tc.msg)
+		if got["code"] != tc.code || got["error"] != tc.code {
+			t.Errorf("deviceErr(%q) = %v, want code and error both set to the code", tc.code, got)
+		}
+		if got["message"] != tc.msg {
+			t.Errorf("deviceErr(%q) message = %v, want an English fallback %q", tc.code, got["message"], tc.msg)
+		}
+	}
+}

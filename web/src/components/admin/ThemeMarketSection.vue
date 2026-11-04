@@ -3,11 +3,12 @@
 // the 外观 card. The server verifies registry/bundle signatures; installs and
 // uninstalls hot-reload the theme registry, so we re-emit `changed` to let
 // the parent refresh the theme <select>.
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
 import { api } from '../../api.js'
+import FilePicker from '../FilePicker.vue'
 
 const emit = defineEmits(['changed'])
 const { t } = useI18n()
@@ -82,12 +83,11 @@ async function uninstall(p) {
   }
 }
 
-function onFile(e) {
-  uploadFile.value = e.target.files && e.target.files[0]
+watch(uploadFile, () => {
   inspection.value = null
   riskAck.value = false
   uploadNote.value = ''
-}
+})
 
 async function inspectUpload() {
   if (!uploadFile.value) return
@@ -188,12 +188,13 @@ onMounted(async () => {
       </table>
     </div>
     <p class="error" role="alert" v-if="actionError">{{ actionError }}</p>
-    <p class="muted" v-if="!isSuper">{{ t('admin.themeNeedSuper') }}</p>
+
 
     <h3 class="tm-title">{{ t('admin.themeUploadTitle') }}</h3>
     <p class="muted tm-hint">{{ t('admin.themeUploadHint') }}</p>
     <div class="row">
-      <input type="file" accept=".zip" style="max-width: 320px;" @change="onFile" />
+      <FilePicker v-model:file="uploadFile" accept=".zip" :disabled="!isSuper"
+                  :disabled-reason="t('admin.themeNeedSuper')" />
       <button class="secondary" :disabled="!uploadFile || uploading || !isSuper" @click="inspectUpload">{{ t('admin.themeInspect') }}</button>
     </div>
     <div class="card tm-inspect" v-if="inspection">

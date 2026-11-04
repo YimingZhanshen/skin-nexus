@@ -164,4 +164,11 @@ const (
 	MsgSetupBadInput  = "setup.bad_input"
 	MsgSetupDBMissing = "setup.db_missing"
 	MsgSetupTokenBad  = "setup.token_bad"
+
+	// device authorisation (launcher flow). These answer the SPA's own
+	// /api/v1/oidc/device/* calls, not the /oauth/token wire contract, so the
+	// envelope can carry a code the way every other web endpoint does.
+	MsgDeviceCodeInvalid = "device.code_invalid"
+	MsgDeviceCodeExpired = "device.code_expired"
+	MsgDeviceApproveFail = "device.approve_failed"
 )

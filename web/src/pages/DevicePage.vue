@@ -5,6 +5,7 @@
 import { ref, onMounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { oidc } from '../api.js'
+import { describe } from '../errors.js'
 
 const { t } = useI18n()
 const goto = inject('gotoView', null)
@@ -24,7 +25,7 @@ async function loadInfo() {
   loadingInfo.value = true
   try {
     const d = await oidc.deviceInfo(userCode.value)
-    if (d.error) { error.value = d.error; info.value = null; return }
+    if (d.error) { error.value = describe(d, 200); info.value = null; return }
     info.value = d
     // review P2-12: the backend only sets default_pid for single-player
     // accounts on purpose — never auto-pick players[0], that enabled
@@ -48,7 +49,7 @@ async function submit(decision) {
   loading.value = true; error.value = ''
   try {
     const d = await oidc.deviceSubmit(userCode.value, decision, selectedPID.value)
-    if (d.error) { error.value = d.error; return }
+    if (d.error) { error.value = describe(d, 200); return }
     done.value = decision === 'approve' ? t('device.approved') : t('device.denied')
     info.value = null
   } catch (e) {

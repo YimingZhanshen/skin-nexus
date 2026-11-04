@@ -113,6 +113,11 @@
       "save_failed": "提交举报失败",
       "self_report": "不能举报自己的材质"
     },
+    "device": {
+      "code_invalid": "这个用户码不对，或者已经被用过。请在启动器里重新获取一个新的。",
+      "code_expired": "这个用户码已经过期。请在启动器里重新获取一个新的。",
+      "approve_failed": "批准失败，请重试；一直失败就回启动器重新获取用户码。"
+    },
     "setup": {
       "already_done": "站点已完成初始化",
       "bad_input": "初始化信息不完整或格式不正确",
@@ -309,7 +314,7 @@
     "colType": "类型",
     "colModel": "模型",
     "colPreview": "预览",
-    "colHash": "hash",
+    "colHash": "材质指纹",
     "playersTitle": "我的角色（{count}）",
     "newPlayerName": "新角色名",
     "createPlayer": "创建角色",
@@ -372,16 +377,16 @@
   "closet": {
     "title": "衣柜（{count}）",
     "tabAll": "全部",
-    "searchPlaceholder": "即输即搜：备注名 / 材质名 / hash…",
+    "searchPlaceholder": "即输即搜：备注名 / 材质名 / 指纹…",
     "colName": "备注名",
-    "colHash": "hash",
+    "colHash": "材质指纹",
     "setAvatar": "设为头像",
     "rename": "改备注名",
     "remove": "移出",
     "renamePrompt": "输入新备注名",
     "removeConfirm": "把「{name}」移出衣柜？",
     "avatarSet": "头像已更新",
-    "orphanNoAvatar": "该条目的材质已不存在（遗留孤儿行），无法设为头像",
+    "orphanNoAvatar": "这条收藏对应的材质已经删掉了，所以没法设为头像",
     "empty": "衣柜里还没有可穿的材质",
     "emptyFiltered": "没有匹配的条目",
     "emptyHint": "上传材质会自动收进衣柜；也可以在皮肤库点 ♥ 把喜欢的作品收进来。",

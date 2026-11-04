@@ -83,4 +83,7 @@ h3 { margin: 22px 0 4px; font-size: var(--fs-m); }
   color: var(--jade); cursor: pointer; font-size: var(--fs-s);
 }
 .link-like:hover { color: var(--jade-hi); text-decoration: underline; }
+/* The scoped min-height: 0 above outspecifies the global coarse-pointer rule, so
+   on a phone these「链接一样的按钮」were 20px tall targets. */
+@media (pointer: coarse) { .link-like { min-height: 44px; } }
 </style>

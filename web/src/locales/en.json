@@ -113,6 +113,11 @@
       "save_failed": "Could not submit the report",
       "self_report": "You cannot report your own texture"
     },
+    "device": {
+      "code_invalid": "That user code is wrong or already used. Get a new one from the launcher.",
+      "code_expired": "This user code has expired. Get a new one from the launcher.",
+      "approve_failed": "Approval failed — try again; if it keeps failing, get a fresh user code in the launcher."
+    },
     "setup": {
       "already_done": "This site is already initialised",
       "bad_input": "Setup information is incomplete or invalid",
@@ -309,7 +314,7 @@
     "colType": "Type",
     "colModel": "Model",
     "colPreview": "Preview",
-    "colHash": "hash",
+    "colHash": "Fingerprint",
     "playersTitle": "My profiles ({count})",
     "newPlayerName": "New profile name",
     "createPlayer": "Create profile",
@@ -372,16 +377,16 @@
   "closet": {
     "title": "Closet ({count})",
     "tabAll": "All",
-    "searchPlaceholder": "Search as you type: alias / name / hash…",
+    "searchPlaceholder": "Search as you type: alias / name / fingerprint…",
     "colName": "Note name",
-    "colHash": "hash",
+    "colHash": "Fingerprint",
     "setAvatar": "Set as avatar",
     "rename": "Rename alias",
     "remove": "Remove",
     "renamePrompt": "Enter a new note name",
     "removeConfirm": "Remove “{name}” from the closet?",
     "avatarSet": "Avatar updated",
-    "orphanNoAvatar": "This entry's texture no longer exists (orphan legacy row) — cannot be an avatar",
+    "orphanNoAvatar": "This closet entry points at a texture that no longer exists, so it cannot become your avatar",
     "empty": "Nothing to wear yet — your closet is empty",
     "emptyFiltered": "No matching entries",
     "emptyHint": "Uploads land here automatically; you can also tap ♥ in the skin library to collect one.",
