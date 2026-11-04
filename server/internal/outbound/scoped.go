@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -133,7 +134,10 @@ func (s *Scoped) Fetch(ctx context.Context, raw string) (FetchResult, error) {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			code = "net.timeout"
 		}
-		return FetchResult{}, &PolicyError{Code: code, Message: err.Error()}
+		// The transport error text carries the resolved address and the upstream
+		// host; the plugin only needs to know the request failed.
+		log.Printf("outbound: %s: %v", u.Host, err)
+		return FetchResult{}, &PolicyError{Code: code, Message: "the upstream request failed"}
 	}
 	defer resp.Body.Close()
 	if resp.ContentLength > s.policy.MaxBytes {
@@ -141,7 +145,8 @@ func (s *Scoped) Fetch(ctx context.Context, raw string) (FetchResult, error) {
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, s.policy.MaxBytes+1))
 	if err != nil {
-		return FetchResult{}, &PolicyError{Code: "net.unavailable", Message: err.Error()}
+		log.Printf("outbound: %s read: %v", u.Host, err)
+		return FetchResult{}, &PolicyError{Code: "net.unavailable", Message: "the upstream response could not be read"}
 	}
 	if int64(len(body)) > s.policy.MaxBytes {
 		return FetchResult{}, &PolicyError{Code: "net.too_large", Message: "response exceeds size limit"}
@@ -173,15 +178,30 @@ func (s *Scoped) allow(host string) bool {
 	return true
 }
 
+// pathAllowed pins a user-supplied URL to a path segment the plugin declared.
+// Matching at a segment start keeps reverse-proxied installs under /sub/ working
+// (that is why this is not HasPrefix), while a prefix that is not absolute — or
+// text that merely contains it, "btextures/" against a "textures/" rule — no
+// longer opens the door.
 func pathAllowed(p string, prefixes []string) bool {
 	if p == "" {
 		p = "/"
 	}
 	for _, prefix := range prefixes {
-		// Contains (not HasPrefix) keeps reverse-proxied Blessing installs
-		// under /sub/ working while still pinning the origin.
-		if prefix != "" && strings.Contains(p, prefix) {
+		if !strings.HasPrefix(prefix, "/") {
+			continue
+		}
+		trimmed := strings.TrimRight(prefix, "/")
+		if trimmed == "" {
 			return true
+		}
+		for i := 0; i+len(trimmed) <= len(p); i++ {
+			if p[i] != '/' || !strings.HasPrefix(p[i:], trimmed) {
+				continue
+			}
+			if rest := i + len(trimmed); rest == len(p) || p[rest] == '/' {
+				return true
+			}
 		}
 	}
 	return false

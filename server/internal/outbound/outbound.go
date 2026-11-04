@@ -140,9 +140,22 @@ func publicDialContext(ctx context.Context, network, addr string) (net.Conn, err
 	return nil, lastErr
 }
 
+// sixToFour and teredo are the two transition ranges that can carry a private
+// destination through a "global" address: 2002:10.0.0.1:: embeds 10.0.0.1, and
+// Teredo encodes the peer inside the address. Both only deliver if the host has
+// tunnelling enabled, which is exactly the assumption an SSRF check must not
+// make about somebody else's machine.
+var (
+	sixToFour = &net.IPNet{IP: net.ParseIP("2002::"), Mask: net.CIDRMask(16, 128)}
+	teredo    = &net.IPNet{IP: net.ParseIP("2001::"), Mask: net.CIDRMask(32, 128)}
+)
+
 func isPublicIP(ip net.IP) bool {
 	if ip == nil || ip.IsUnspecified() || ip.IsLoopback() ||
 		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsPrivate() {
+		return false
+	}
+	if sixToFour.Contains(ip) || teredo.Contains(ip) {
 		return false
 	}
 	if ip4 := ip.To4(); ip4 != nil {

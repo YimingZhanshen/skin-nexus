@@ -2,6 +2,7 @@ package outbound
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -84,5 +85,38 @@ func TestScopedRateLimit(t *testing.T) {
 	}
 	if _, err := s.Fetch(context.Background(), base); err == nil || err.(*PolicyError).Code != "net.rate_limited" {
 		t.Fatalf("fifth request error = %v", err)
+	}
+}
+
+func TestPathAllowedSegments(t *testing.T) {
+	cases := []struct {
+		path     string
+		prefixes []string
+		want     bool
+		why      string
+	}{
+		{"/textures/a.png", []string{"/textures/"}, true, "the plain case the importer needs"},
+		{"/sub/textures/a.png", []string{"/textures/"}, true, "a reverse-proxied install under /sub/"},
+		{"/textures", []string{"/textures/"}, true, "the directory itself"},
+		{"/nottextures/a", []string{"/textures/"}, false, "a longer word that merely ends in the prefix"},
+		{"/a/btextures/c", []string{"textures/"}, false, "a prefix that is not absolute is ignored"},
+		{"/a/btextures/c", []string{"/textures/"}, false, "wildcards inside a segment do not count"},
+		{"/anything", []string{"/"}, true, "an explicit root rule means any path"},
+		{"/textures/a", nil, false, "no rule, no access"},
+	}
+	for _, c := range cases {
+		if got := pathAllowed(c.path, c.prefixes); got != c.want {
+			t.Errorf("pathAllowed(%q, %v) = %v, want %v — %s", c.path, c.prefixes, got, c.want, c.why)
+		}
+	}
+}
+
+func TestPublicIPTunnelsAreNotPublic(t *testing.T) {
+	// 6to4 embeds the v4 destination in the address, so 2002:0a00:0001:: is
+	// 10.0.0.1 wearing a global prefix; Teredo encodes the peer the same way.
+	for _, s := range []string{"2002:0a00:0001::", "2002:4008:0808::", "2001:0000:4136:e000:0:0:0:1"} {
+		if isPublicIP(net.ParseIP(s)) {
+			t.Errorf("%s must not count as public — it is a transition address that can reach a private peer", s)
+		}
 	}
 }
