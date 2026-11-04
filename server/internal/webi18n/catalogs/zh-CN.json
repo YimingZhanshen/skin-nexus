@@ -21,6 +21,7 @@
   "detail.uploadedBy": "上传者",
   "detail.visibilityPrivate": "私密",
   "detail.visibilityPublic": "公开",
+  "detail.wear": "穿到角色",
   "device.approve": "同意",
   "device.authorize": "授权 {client}",
   "device.deny": "拒绝",

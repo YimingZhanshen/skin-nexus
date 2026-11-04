@@ -2,11 +2,11 @@
 // Skinlib — public texture library (blessing skinlib.index parity).
 // Like heart = closet add/remove (legacy semantics). Owner sees rename /
 // visibility toggle on their own entries.
-import { ref, computed, onMounted, inject } from 'vue'
+import { computed, ref, onMounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
-import { promptDialog } from '../dialog.js'
+import { confirmDialog, promptDialog } from '../dialog.js'
 import PluginSlot from '../components/plugin/PluginSlot.vue'
 import Pager from '../components/Pager.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -31,6 +31,13 @@ const loading = ref(false)
 const err = ref('')
 const ok = ref('')
 const justLiked = ref(null)  // the ♥ that just landed, so the page can offer the next step
+// The server-rendered detail page hands its tid back here as
+// /skinlib#wear-12-skin: the wearer picker lives in this page, not in that one,
+// and duplicating it in the Go template would be a second implementation of the
+// same flow. Separate from justLiked because that row says「已收进衣柜」, and
+// someone arriving over here never clicked the heart.
+const wearTarget = ref(null)
+const pickerItem = computed(() => justLiked.value || wearTarget.value)
 const wearOpen = ref(false)
 const me = computed(() => props.user)
 
@@ -89,6 +96,13 @@ async function toggleLike(it) {
   // 访客点 ♥ = 明确登录引导（2026-10-27 逻辑修复：原只塞一行红字）
   if (!me.value) { emit('login'); return }
   err.value = ''
+  if (it.liked) {
+    // The heart is worded as「收进衣柜」, so un-clicking it takes something out of
+    // the closet. One silent click that vanished a row the player didn't mean to
+    // drop reads as a mis-click; ask once, in the same closet words.
+    const name = it.name || ('#' + it.tid)
+    if (!(await confirmDialog(t('skinlib.unlikeConfirm', { name })))) return
+  }
   try {
     if (it.liked) {
       const res = await api.skinlibUnlike(it.tid)
@@ -150,7 +164,22 @@ function previewURL(it) {
   return it.type === 'skin' ? (it.previewURL || it.textureURL) : it.textureURL
 }
 
-onMounted(() => { load() })
+function wearFromHash() {
+  const m = /^#wear-(\d+)-(skin|cape)$/.exec(location.hash || '')
+  if (!m) return
+  const tid = Number(m[1])
+  const it = items.value.find((x) => x.tid === tid)
+  wearTarget.value = { tid, type: m[2], name: it ? it.name : '' }
+  wearOpen.value = true
+  // Drop it: a reload of a URL that still says #wear-… would pop the dialog
+  // again at a moment the player didn't ask for.
+  history.replaceState(null, '', location.pathname)
+}
+
+onMounted(async () => {
+  await load()
+  wearFromHash()
+})
 </script>
 
 <template>
@@ -225,8 +254,9 @@ onMounted(() => { load() })
             <span class="uploader">{{ it.nickname }}</span>
           </div>
           <div class="skin-card-actions">
-            <button class="like-btn" :class="{ liked: it.liked }" :title="t('skinlib.likeTip')" @click="toggleLike(it)">
-              ♥ {{ it.likes }}
+            <button class="like-btn" :class="{ liked: it.liked }"
+                    :title="t(it.liked ? 'skinlib.likedTip' : 'skinlib.likeTip')" @click="toggleLike(it)">
+              ♥ {{ it.likes }}<span class="like-state" v-if="it.liked">{{ t('skinlib.closetBadge') }}</span>
             </button>
             <template v-if="canEdit(it)">
               <button class="ghost" @click="renameItem(it)">{{ t('skinlib.rename') }}</button>
@@ -244,12 +274,12 @@ onMounted(() => { load() })
 
   <WearTargetPicker
     :open="wearOpen"
-    :type="justLiked ? justLiked.type : 'skin'"
-    :texture-id="justLiked ? justLiked.tid : 0"
-    :texture-name="justLiked ? (justLiked.name || '') : ''"
-    @close="wearOpen = false"
-    @worn="justLiked = null; wearOpen = false"
-    @need-player="wearOpen = false; justLiked = null; goto && goto('players')"
+    :type="pickerItem ? pickerItem.type : 'skin'"
+    :texture-id="pickerItem ? pickerItem.tid : 0"
+    :texture-name="pickerItem ? (pickerItem.name || '') : ''"
+    @close="wearOpen = false; wearTarget = null"
+    @worn="justLiked = null; wearTarget = null; wearOpen = false"
+    @need-player="wearOpen = false; justLiked = null; wearTarget = null; goto && goto('players')"
   />
 </template>
 
@@ -311,6 +341,7 @@ onMounted(() => { load() })
 }
 .like-btn:hover { color: var(--danger); border-color: var(--danger); background: transparent; box-shadow: none; transform: none; }
 .like-btn.liked { color: var(--danger); border-color: var(--danger); }
+.like-state { margin-left: 4px; font-size: 0.85em; }
 .skel-line { height: 14px; border-radius: var(--r-s); }
 .skel-line.short { width: 60%; }
 </style>

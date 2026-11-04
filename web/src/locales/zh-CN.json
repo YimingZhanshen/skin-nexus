@@ -227,7 +227,10 @@
     "rename": "改材质名",
     "emptyHint": "没有合适的？自己上传一张——它会同时出现在这里和你的衣柜里。",
     "goUpload": "去上传材质",
-    "uploadCta": "上传我的材质"
+    "uploadCta": "上传我的材质",
+    "closetBadge": "在柜",
+    "likedTip": "已在衣柜，点击移出",
+    "unlikeConfirm": "把「{name}」移出衣柜？材质还在皮肤库里，随时能再收回来。"
   },
   "site": {
     "name": "SkinNexus",

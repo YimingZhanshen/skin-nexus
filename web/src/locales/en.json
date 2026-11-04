@@ -227,7 +227,10 @@
     "rename": "Rename texture",
     "emptyHint": "Nothing suitable? Upload one — it lands here and in your closet at the same time.",
     "goUpload": "Upload a texture",
-    "uploadCta": "Upload my texture"
+    "uploadCta": "Upload my texture",
+    "closetBadge": "in closet",
+    "likedTip": "In your closet — click to take it out",
+    "unlikeConfirm": "Take “{name}” out of your closet? The texture stays in the library and you can collect it again any time."
   },
   "site": {
     "name": "SkinNexus",

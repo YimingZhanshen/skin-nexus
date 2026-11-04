@@ -21,6 +21,7 @@
   "detail.uploadedBy": "uploaded by",
   "detail.visibilityPrivate": "Private",
   "detail.visibilityPublic": "Public",
+  "detail.wear": "Wear it",
   "device.approve": "Approve",
   "device.authorize": "Authorize {client}",
   "device.deny": "Deny",

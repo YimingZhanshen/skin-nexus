@@ -238,7 +238,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
       <div class="actions">
         <button class="alt like-btn{{if .Liked}} liked{{end}}" data-like="{{.TID}}" data-liked="{{if .Liked}}1{{else}}0{{end}}">♥ <span>{{t .Lang "detail.likeLabel"}}</span></button>
         <a class="primary" href="{{.TextureURL}}" download>{{t .Lang "detail.download"}}</a>
-        <a class="alt" href="/register">{{t .Lang "detail.registerToUse"}}</a>
+        {{if .LoggedIn}}<a class="alt" href="/skinlib#wear-{{.TID}}-{{.Type}}">{{t .Lang "detail.wear"}}</a>{{else}}<a class="alt" href="/register">{{t .Lang "detail.registerToUse"}}</a>{{end}}
         {{if .CanEdit}}<button class="alt" id="edit-btn">{{t .Lang "detail.edit"}}</button>{{end}}
         {{if .Public}}<button class="alt report-btn" id="report-btn" data-tid="{{.TID}}">{{t .Lang "detail.report"}}</button>{{end}}
       </div>
