@@ -142,7 +142,7 @@ environment:
 |---|---|---|
 | `SKIN_SITE_NAME` | `SkinNexus` | 站点名（面板可改） |
 | `SKIN_TRUSTED_PROXIES` | 空（= loopback + RFC1918 全信任） | 逗号分隔的 CIDR 列表，指定**哪些对端可以声称** `X-Forwarded-For`。留空沿用历史行为（同机 nginx / docker bridge 场景不用改）；一旦配置，只有列出的网段被信任，其余对端来的 XFF 一律不信。写错（非 CIDR）直接启动失败，而不是悄悄放宽信任——认证限流与审计里的 IP 全靠这条 |
-| `SKIN_SETUP_TOKEN` | 空（每次启动临时生成并打进日志） | 安装向导的一次性令牌。空库时 `/api/v1/setup` 谁先提交谁当超管，所以这一步要一个只有运维者拿得到的值：留空则本次启动随机生成并在日志里打印 `setup: ... install token "xxxxxxxxxx"`，`docker compose logs skin-nexus` 可见；自己定一个则跨重启不变。填错只回 403，不写任何数据；站点初始化后本变量不再起作用 |
+| `SKIN_SETUP_TOKEN` | 空（每次启动临时生成并打进日志） | 安装向导的一次性令牌。空库时 `/api/v1/setup` 谁先提交谁当超管，所以这一步要一个只有运维者拿得到的值：留空则本次启动随机生成并在日志里打印 `setup: ... install token "xxxxxxxxxx"`，`docker compose logs skin-nexus` 可见；自己定一个则跨重启不变。填错只回 403，不写任何数据；站点初始化后本变量不再起作用。**另一面也要知道**：随机源不可用时（`crypto/rand` 失败）既没有你的令牌也没有随机令牌，向导就是**裸开的**，此时唯一的提示是启动日志里那条 `setup: WARNING the install wizard is unguarded`——把站点暴露出去之前先 grep 这一行；自己设 `SKIN_SETUP_TOKEN` 就不依赖随机源 |
 | `SKIN_SERVER_NAME` | `SkinNexus` | Yggdrasil 元数据里的服务器显示名（面板可改） |
 | `SKIN_SKIN_DOMAINS` | 空 | 皮肤域白名单，逗号分隔；不接联盟填本站域名，接入 MUA Union 以联盟公布清单为准（改动会破坏联盟互认） |
 | `SKIN_INVITE_REQUIRED` | `false` | 注册强制邀请码（等价老站必填语义）；面板「站点设置」可改 |

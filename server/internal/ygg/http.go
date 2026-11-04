@@ -753,8 +753,6 @@ func isTrustedProxy(host string) bool {
 // (webapi rate limiting shares one definition).
 func ClientIP(r *http.Request) string { return clientIP(r) }
 
-var _ = errors.Is // keep errors import for future sentinel mapping
-
 func isJoinDenied(err error) bool {
 	var d *JoinDeniedError
 	return errors.As(err, &d)
