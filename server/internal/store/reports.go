@@ -160,6 +160,11 @@ func (m *Mysql) ResolveReport(ctx context.Context, id int64, status string, hand
 // then closes the report that led to that verdict — in one transaction. The
 // two separate statements used to be issued by the HTTP layer, where a failure
 // between them left a report closed over a still-public texture.
+//
+// reportID 0 means the operator acted on their own, with no player report
+// behind the verdict: there is nothing to close, so that step is skipped. The
+// texture lock and the verdict write stay exactly the same either way — the
+// audit trail distinguishes them by event name, not by a second code path.
 func (m *Mysql) StrikeTexture(ctx context.Context, tid, reportID, handledBy int64) error {
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -178,14 +183,16 @@ func (m *Mysql) StrikeTexture(ctx context.Context, tid, reportID, handledBy int6
 		return fmt.Errorf("texture strike: %w", err)
 	}
 
-	res, err := tx.ExecContext(ctx,
-		`UPDATE texture_reports SET status='resolved', handled_by=?, handled_at=?
-		  WHERE id=? AND status='open'`, handledBy, m.now().UTC(), reportID)
-	if err != nil {
-		return fmt.Errorf("texture strike report: %w", err)
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound // already handled by someone else
+	if reportID > 0 {
+		res, err := tx.ExecContext(ctx,
+			`UPDATE texture_reports SET status='resolved', handled_by=?, handled_at=?
+			  WHERE id=? AND status='open'`, handledBy, m.now().UTC(), reportID)
+		if err != nil {
+			return fmt.Errorf("texture strike report: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return ErrNotFound // already handled by someone else
+		}
 	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE textures SET public=0, public_dedupe=NULL, moderation='violation' WHERE id=?`, tid); err != nil {

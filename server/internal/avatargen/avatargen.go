@@ -32,6 +32,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"strconv"
 )
 
 // RenderVersion is bumped whenever rasterizer output changes (UV fixes,
@@ -42,6 +43,16 @@ import (
 // v4 drops the legacy background color (white overlay layers); v5 fixes the
 // body back-face UV (36→32, was sampling the left-arm sheet).
 const RenderVersion = "5"
+
+// PreviewThumb is the small server-rendered skin preview (front+back body).
+// The renderer version rides in the URL because previews are immutable-cached
+// for a year — a rasterizer fix must change the address or every browser keeps
+// serving the old render. One helper, because four call sites used to spell the
+// same string out and any cache-busting rule had to be found in each of them.
+// Capes have no body render, so callers must not ask for one.
+func PreviewThumb(tid int64) string {
+	return "/preview/" + strconv.FormatInt(tid, 10) + "?v=" + RenderVersion + "&small=1"
+}
 
 //go:embed av_default2d.png av_default3d.png
 var defaultFS embed.FS

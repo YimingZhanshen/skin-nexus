@@ -136,6 +136,32 @@ func (b *Backend) handleReportResolve(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+// handleTextureStrike is the verdict an operator reaches on their own — a
+// banned skin spotted in the library, with no player having reported it. The
+// only way to strike before this was to wait for a report, so the library view
+// could show something that should not be there and offer no action but delete,
+// which is the irreversible one. Same store call the report queue uses, so the
+// verdict, the un-publishing and the tombstone behaviour cannot drift apart.
+func (b *Backend) handleTextureStrike(w http.ResponseWriter, r *http.Request) {
+	tid, err := strconv.ParseInt(r.PathValue("tid"), 10, 64)
+	if err != nil || tid <= 0 {
+		writeErrCode(w, http.StatusBadRequest, "bad texture id", i18n.MsgTextureBadID)
+		return
+	}
+	handledBy := actorUID(r)
+	if err := b.Store.StrikeTexture(r.Context(), tid, 0, handledBy); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErrCode(w, http.StatusNotFound, "texture not found", i18n.MsgTextureNotFound)
+			return
+		}
+		writeErrCode(w, http.StatusInternalServerError, "strike texture failed", i18n.MsgInternal)
+		return
+	}
+	b.Store.InsertAudit(r.Context(), handledBy, "texture_strike", map[string]any{"texture": tid})
+	b.notifyTextureOwner(r.Context(), store.NotifTextureHidden, tid)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 // handleTextureModeration lifts a violation verdict. Lifting restores the
 // right to publish, not the publication itself — the owner decides that.
 func (b *Backend) handleTextureModeration(w http.ResponseWriter, r *http.Request) {

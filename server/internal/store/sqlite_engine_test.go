@@ -8,6 +8,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -609,6 +610,43 @@ func TestSQLiteEngineViolationTombstoneKeepsContentBlocked(t *testing.T) {
 	}
 }
 
+// A站长 who finds banned bytes in the library should not have to wait for a
+// player to report them. reportID 0 is that path: same verdict, same
+// un-publishing, nothing to close.
+func TestSQLiteEngineStrikeWithoutReport(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid, err := st.CreateUser(ctx, "strike@example.com", "striker", "x", 3, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tid, err := st.AddTexture(ctx, uid, "skin", hashOf("strike-direct"), "default", TextureMeta{Description: "banned look"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.StrikeTexture(ctx, tid, 0, uid); err != nil {
+		t.Fatalf("strike with no report: %v", err)
+	}
+	if pub, _ := st.TextureIsPublic(ctx, tid); pub {
+		t.Error("a directly struck texture is still listed publicly")
+	}
+	if _, n, err := st.AdminTextures(ctx, "", "", "struck", 1, 50); err != nil || n != 1 {
+		t.Errorf("struck filter after a direct strike = %d (err %v), want 1", n, err)
+	}
+	// The verdict must survive as evidence once the row goes: same content, same
+	// ban, whether or not a report ever existed.
+	if _, err := st.DeleteTexture(ctx, tid, 0, uid, true, "站长直接处置"); err != nil {
+		t.Fatalf("delete the struck texture: %v", err)
+	}
+	if blocked, err := st.ViolationTombstoned(ctx, "skin", hashOf("strike-direct")); err != nil || !blocked {
+		t.Errorf("directly struck content blocked = %v (%v), want true", blocked, err)
+	}
+	// And a strike still refuses a texture that is not there.
+	if err := st.StrikeTexture(ctx, tid+999, 0, uid); !errors.Is(err, ErrNotFound) {
+		t.Errorf("strike a missing texture = %v, want ErrNotFound", err)
+	}
+}
+
 // The fsck queries have to see what the library actually holds: which addresses are
 // reachable, which ones only survive as deletion evidence, and the one mismatch a
 // database can prove — a tombstone citing an id that a different texture now owns.
@@ -716,7 +754,7 @@ func TestSQLiteEngineAdminTexturesReportsVisibilityAndVerdict(t *testing.T) {
 		t.Fatalf("strike: %v", err)
 	}
 
-	rows, total, err := st.AdminTextures(ctx, 1, 50)
+	rows, total, err := st.AdminTextures(ctx, "", "", "", 1, 50)
 	if err != nil {
 		t.Fatalf("admin textures: %v", err)
 	}
@@ -756,12 +794,78 @@ func TestSQLiteEngineAdminTexturesReportsVisibilityAndVerdict(t *testing.T) {
 	}
 
 	// Paging must report the whole count while returning one page of rows.
-	page2, total2, err := st.AdminTextures(ctx, 2, 2)
+	page2, total2, err := st.AdminTextures(ctx, "", "", "", 2, 2)
 	if err != nil {
 		t.Fatalf("admin textures page 2: %v", err)
 	}
 	if len(page2) != 1 || total2 != 3 {
 		t.Errorf("page 2 = %d rows of total %d, want 1 of 3", len(page2), total2)
+	}
+
+	// The three filters are what makes this list operable, and they have to
+	// narrow the *count* too or the pager lies about how many pages exist.
+	if got, n, err := st.AdminTextures(ctx, "", "cape", "", 1, 50); err != nil {
+		t.Fatalf("filter by type: %v", err)
+	} else if n != 1 || len(got) != 1 || got[0]["id"].(int64) != struck {
+		t.Errorf("type=cape = %d rows of %d, want only the struck cape", len(got), n)
+	}
+	for _, tc := range []struct {
+		state string
+		want  int
+	}{
+		{"public", 1},  // the struck cape is not public either, but never was listed
+		{"private", 2}, // the private skin and the struck cape
+		{"struck", 1},
+	} {
+		got, n, err := st.AdminTextures(ctx, "", "", tc.state, 1, 50)
+		if err != nil {
+			t.Fatalf("filter by state %s: %v", tc.state, err)
+		}
+		if n != tc.want || len(got) != tc.want {
+			t.Errorf("state=%s = %d rows of total %d, want %d", tc.state, len(got), n, tc.want)
+		}
+	}
+	// Search reaches the uploader's nickname, because 「谁传的那张」 is asked in
+	// names, not in #7.
+	byNick, nNick, err := st.AdminTextures(ctx, "panellist", "", "", 1, 50)
+	if err != nil {
+		t.Fatalf("filter by nickname: %v", err)
+	}
+	if nNick != 3 || len(byNick) != 3 {
+		t.Errorf("search by uploader = %d rows of %d, want all three (one uploader)", len(byNick), nNick)
+	}
+	skinsSeen := 0
+	for _, row := range byNick {
+		if got, _ := row["nickname"].(string); got != "panellist" {
+			t.Fatalf("row %#v carries nickname %q, want the uploader's; the list would show a bare #uid", row, got)
+		}
+		if row["type"] == "skin" {
+			skinsSeen++
+			if got, _ := row["previewURL"].(string); got == "" {
+				t.Errorf("skin row %#v has no previewURL; the panel stays text-only", row)
+			}
+		}
+	}
+	if skinsSeen != 2 {
+		t.Errorf("skin rows = %d, want 2", skinsSeen)
+	}
+	// A cape has no body render, so its thumbnail must stay empty rather than
+	// point at a preview route that 404s.
+	capeRow, _, err := st.AdminTextures(ctx, "", "cape", "", 1, 50)
+	if err != nil || len(capeRow) != 1 {
+		t.Fatalf("cape row: %v %d", err, len(capeRow))
+	}
+	if got, _ := capeRow[0]["previewURL"].(string); got != "" {
+		t.Errorf("cape previewURL = %q, want empty", got)
+	}
+	// Searching by uploader must be able to exclude, too: the other account owns
+	// nothing here.
+	if _, n, err := st.AdminTextures(ctx, "panelmod", "", "", 1, 50); err != nil || n != 0 {
+		t.Errorf("search by the second uploader = %d rows (err %v), want 0", n, err)
+	}
+	// Wildcards in a search string are text, not pattern.
+	if _, n, err := st.AdminTextures(ctx, "%", "", "", 1, 50); err != nil || n != 0 {
+		t.Errorf("a search of one percent sign matched %d rows (err %v), want 0 — the LIKE must be escaped", n, err)
 	}
 }
 
@@ -853,7 +957,7 @@ func TestSQLiteEngineSearchTreatsWildcardsLiterally(t *testing.T) {
 func TestSQLiteEngineHugePageDoesNotError(t *testing.T) {
 	st := openSQLiteStore(t)
 	ctx := context.Background()
-	if _, _, err := st.AdminTextures(ctx, 9223372036854775807, 50); err != nil {
+	if _, _, err := st.AdminTextures(ctx, "", "", "", 9223372036854775807, 50); err != nil {
 		t.Fatalf("AdminTextures with a huge page: %v", err)
 	}
 	if _, _, err := st.AdminAudit(ctx, 9223372036854775807, 100); err != nil {

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"skin-nexus/server/internal/avatargen"
 	"skin-nexus/server/internal/dbx"
 	"skin-nexus/server/internal/dialect"
 	"strings"
@@ -635,7 +636,7 @@ func (m *Mysql) AdminUsers(ctx context.Context, q string, page, size int) ([]map
 		return nil, 0, err
 	}
 	defer rows.Close()
-	var out []map[string]interface{}
+	out := make([]map[string]interface{}, 0)
 	for rows.Next() {
 		var id, limit int64
 		var email, nick, algo string
@@ -654,35 +655,76 @@ func (m *Mysql) AdminUsers(ctx context.Context, q string, page, size int) ([]map
 	return out, total, rows.Err()
 }
 
-// AdminTextures returns a page of texture records.
-func (m *Mysql) AdminTextures(ctx context.Context, page, size int) ([]map[string]interface{}, int, error) {
+// AdminTextures returns a page of texture records for the panel.
+//
+// The three filters are the questions an operator actually asks — 「这个人传的
+// 那张在哪」(name / hash / uploader), 皮肤还是披风, 还在库里还是在货架上 — and
+// none of them could be answered when the view only paged by id. The nickname
+// rides along on the row because a bare `#7` says nothing about who to contact.
+// `state` is deliberately one dropdown over two columns: 「已判违规」 is the
+// verdict, 公开/私密 is the listing, and a struck texture always sits at
+// public=0, so the three choices stay mutually meaningful.
+func (m *Mysql) AdminTextures(ctx context.Context, q, typ, state string, page, size int) ([]map[string]interface{}, int, error) {
+	d := m.db.Dialect()
+	var cond []string
+	var args []interface{}
+	if s := strings.TrimSpace(q); s != "" {
+		cond = append(cond, "("+d.CIContains("COALESCE(t.description, '')")+` OR `+
+			d.CIContains("t.hash")+` OR `+d.CIContains("COALESCE(u.nickname, '')")+")")
+		like := dialect.LikeContains(s)
+		args = append(args, like, like, like)
+	}
+	switch typ {
+	case "skin", "cape":
+		cond = append(cond, `t.type = ?`)
+		args = append(args, typ)
+	}
+	switch state {
+	case "public":
+		cond = append(cond, `t.public = 1`)
+	case "private":
+		cond = append(cond, `t.public = 0`)
+	case "struck":
+		cond = append(cond, `t.moderation = 'violation'`)
+	}
+	where := ""
+	if len(cond) > 0 {
+		where = "WHERE " + strings.Join(cond, " AND ")
+	}
+	from := ` FROM textures t LEFT JOIN users u ON u.id = t.uid ` + where
 	var total int
-	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM textures`).Scan(&total); err != nil {
+	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*)`+from, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	rows, err := m.db.QueryContext(ctx,
 		`SELECT t.id, t.uid, t.type, t.hash, COALESCE(t.model,''), COALESCE(t.description,''),
-		        t.public, t.moderation, t.upload_at
-		 FROM textures t ORDER BY t.id DESC LIMIT ? OFFSET ?`, size, dbx.Offset(page, size))
+		        t.public, t.moderation, t.upload_at, COALESCE(u.nickname, '')`+from+`
+		 ORDER BY t.id DESC LIMIT ? OFFSET ?`, append(args, size, dbx.Offset(page, size))...)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
-	var out []map[string]interface{}
+	out := make([]map[string]interface{}, 0)
 	for rows.Next() {
 		var id, uid, pub int64
-		var typ, hash, model, name, moderation string
+		var typ2, hash, model, name, moderation, nick string
 		var up time.Time
-		if err := rows.Scan(&id, &uid, &typ, &hash, &model, &name, &pub, &moderation, &up); err != nil {
+		if err := rows.Scan(&id, &uid, &typ2, &hash, &model, &name, &pub, &moderation, &up, &nick); err != nil {
 			return nil, 0, err
 		}
 		// Visibility and verdict travel together: with only the hash on screen,
 		// a struck texture that is still listed looks exactly like a live one.
-		out = append(out, map[string]interface{}{
-			"id": id, "uid": uid, "type": typ, "hash": hash, "model": model, "name": name,
-			"public": pub == 1, "moderation": moderation,
+		row := map[string]interface{}{
+			"id": id, "uid": uid, "type": typ2, "hash": hash, "model": model, "name": name,
+			"nickname": nick, "public": pub == 1, "moderation": moderation,
 			"uploadAt": up.Format(time.RFC3339),
-		})
+		}
+		if typ2 == "skin" {
+			row["previewURL"] = avatargen.PreviewThumb(id)
+		} else {
+			row["previewURL"] = "" // no body render for a cape
+		}
+		out = append(out, row)
 	}
 	return out, total, rows.Err()
 }
@@ -705,7 +747,7 @@ func (m *Mysql) AdminAudit(ctx context.Context, page, size int) ([]map[string]in
 		return nil, 0, err
 	}
 	defer rows.Close()
-	var out []map[string]interface{}
+	out := make([]map[string]interface{}, 0)
 	for rows.Next() {
 		var id, actor int64
 		var action, detail string

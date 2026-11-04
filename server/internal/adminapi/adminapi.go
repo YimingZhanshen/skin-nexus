@@ -109,6 +109,7 @@ func (b *Backend) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/v1/reports", b.auth(b.handleReportsList))
 	mux.HandleFunc("POST /api/admin/v1/reports/{id}/resolve", b.auth(b.handleReportResolve))
 	mux.HandleFunc("PUT /api/admin/v1/textures/{tid}/moderation", b.auth(b.handleTextureModeration))
+	mux.HandleFunc("POST /api/admin/v1/textures/{tid}/strike", b.auth(b.handleTextureStrike))
 	mux.HandleFunc("DELETE /api/admin/v1/textures/{tid}", b.auth(b.handleTextureDelete))
 	// Access/communication logs (2026-10-26 运维观测面): web + launcher
 	// logins, ygg server traffic, union traffic — filterable/paged.
@@ -362,12 +363,17 @@ func (b *Backend) handleUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"users": rows, "total": total, "page": page})
 }
 
+// GET /api/admin/v1/textures?page=&q=&type=&state=
+// `type` and `state` are matched against a fixed set, so anything else simply
+// does not filter; `q` is escaped as a LIKE pattern by the store.
 func (b *Backend) handleTextures(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	if page < 1 {
 		page = 1
 	}
-	rows, total, err := b.Store.AdminTextures(r.Context(), page, 50)
+	q := r.URL.Query()
+	rows, total, err := b.Store.AdminTextures(r.Context(),
+		q.Get("q"), q.Get("type"), q.Get("state"), page, 50)
 	if err != nil {
 		writeInternal(r, w, err)
 		return
