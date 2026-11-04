@@ -123,3 +123,57 @@ func TestIntegrationSkinlibHugePageOffsetReachesTheEngine(t *testing.T) {
 		}
 	}
 }
+
+// The wildcard-escaping fix is only a fix while every engine agrees about what
+// an escaped pattern *matches*. The unit test in sqlite_engine_test.go proves
+// the semantics on SQLite alone; the six integration legs used to exercise only
+// the syntax of `ESCAPE '!'` (via a plain keyword), which a database accepts
+// whether or not it then honours it. Here the assertions are about row counts,
+// so MySQL, MariaDB and PostgreSQL each have to produce the literal-match
+// answer or the leg goes red.
+func TestIntegrationSkinlibSearchTreatsWildcardsLiterally(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	uid := seedUser(t, m)
+
+	seed := []struct {
+		kind, hash, desc string
+	}{
+		{"skin", strings.Repeat("e", 64), "50%off skin"},    // the row a "%" must find
+		{"skin", strings.Repeat("f", 64), "axb cape"},       // "a_b" must NOT reach this
+		{"skin", strings.Repeat("g", 64), "ordinary"},       // case folding still applies
+		{"skin", strings.Repeat("h", 64), "urgent! upload"}, // the escape char itself
+	}
+	for _, s := range seed {
+		if _, err := m.AddTexture(ctx, uid, s.kind, s.hash, "default", TextureMeta{Description: s.desc}); err != nil {
+			t.Fatalf("add %q: %v", s.desc, err)
+		}
+	}
+
+	count := func(kw string) int {
+		t.Helper()
+		_, total, err := m.SkinlibList(ctx, SkinlibOpts{Keyword: kw, PublicOnly: true, Page: 1, PerPage: 50})
+		if err != nil {
+			t.Fatalf("search %q: %v", kw, err)
+		}
+		return total
+	}
+
+	cases := []struct {
+		keyword string
+		want    int
+		why     string
+	}{
+		{"%", 1, `unescaped "%" would match every row in the library — a full scan behind an anonymous search box`},
+		{"50%off", 1, "the percent sign has to stay a percent sign"},
+		{"a_b", 0, `unescaped "_" matches any single character, so "axb" would answer and the operator would read it as a real result`},
+		{"!", 1, `the escape character is text too — it must not be swallowed by its own escaping role`},
+		{"urgent!", 1, "a trailing escape char must not break the pattern"},
+		{"ORDINARY", 1, "case folding still has to work through the escaped predicate"},
+	}
+	for _, c := range cases {
+		if got := count(c.keyword); got != c.want {
+			t.Errorf("keyword %q matched %d rows, want %d — %s", c.keyword, got, c.want, c.why)
+		}
+	}
+}
