@@ -620,6 +620,8 @@
     },
     "title": "Admin panel",
     "tokenPlaceholder": "X-Admin-Token",
+    "tokenStoredHint": "This browser still holds an API token",
+    "tokenClear": "Clear token",
     "load": "Load",
     "reload": "Reload",
     "overviewTitle": "Overview",

@@ -423,12 +423,22 @@ func (m *Manager) handleCSRF(w http.ResponseWriter, r *http.Request, name string
 		m.writePluginError(w, r, http.StatusMethodNotAllowed, "plugin.method_not_allowed", "method not allowed", name, "", start)
 		return
 	}
-	buf := make([]byte, 32)
-	if _, err := rand.Read(buf); err != nil {
-		m.writePluginError(w, r, http.StatusInternalServerError, "plugin.internal", "cannot issue csrf token", name, "", start)
-		return
+	token := ""
+	if c, err := r.Cookie(csrfCookieName); err == nil && isCSRFToken(c.Value) {
+		// Re-issue the value the browser already holds. There is one cookie for
+		// the whole site (Path=/) but every plugin page keeps its own copy of the
+		// token, so a fresh value per request makes the last page loaded win and
+		// silently breaks the writes of every other mounted page. The pairing
+		// cookie-vs-header is the protection; rotating it per request adds nothing.
+		token = c.Value
+	} else {
+		buf := make([]byte, 32)
+		if _, err := rand.Read(buf); err != nil {
+			m.writePluginError(w, r, http.StatusInternalServerError, "plugin.internal", "cannot issue csrf token", name, "", start)
+			return
+		}
+		token = hex.EncodeToString(buf)
 	}
-	token := hex.EncodeToString(buf)
 	http.SetCookie(w, &http.Cookie{
 		Name: csrfCookieName, Value: token, Path: "/", HttpOnly: true,
 		SameSite: http.SameSiteLaxMode, Secure: isHTTPS(r), MaxAge: int((12 * time.Hour).Seconds()),
@@ -437,6 +447,21 @@ func (m *Manager) handleCSRF(w http.ResponseWriter, r *http.Request, name string
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"token": token})
 	m.logAccess(r, name, r.Method, "/_csrf", http.StatusOK, RouteTierPublic, nil, start)
+}
+
+// isCSRFToken accepts only a value this handler issued: a 64-character lowercase
+// hex string. Anything else in the jar (an old format, a hand-written cookie on
+// a subdomain that shares the name) is replaced rather than adopted.
+func isCSRFToken(v string) bool {
+	if len(v) != 64 {
+		return false
+	}
+	for _, ch := range v {
+		if !(ch >= '0' && ch <= '9' || ch >= 'a' && ch <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func csrfOK(r *http.Request) bool {

@@ -185,13 +185,25 @@ func (b *Backend) Handler() http.Handler {
 		mux.HandleFunc("POST /api/admin/v1/jobs/{id}/cancel", b.auth(b.handleJobCancel))
 		mux.HandleFunc("POST /api/admin/v1/jobs/{id}/resume", b.auth(b.handleJobResume))
 	}
-	// 1 MiB body cap (review B P2) — admin JSON endpoints included.
+	// 1 MiB body cap (review B P2) — admin JSON endpoints included. Package
+	// uploads are the exception: each one declares its own ceiling in the
+	// handler, and a request truncated here never reaches it, so the operator
+	// sees "bad body" instead of the size limit they were told about.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Body != nil && r.URL.Path != "/api/admin/v1/market/upload" {
+		if r.Body != nil && !packageUploadRoutes[r.URL.Path] {
 			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		}
 		mux.ServeHTTP(w, r)
 	})
+}
+
+// packageUploadRoutes lists the admin paths that carry a file rather than a
+// JSON document. Membership is what keeps the handler-side limit honest; the
+// test in upload_cap_test.go walks the registered routes and fails if one of
+// them parses a multipart form without being listed here.
+var packageUploadRoutes = map[string]bool{
+	"/api/admin/v1/market/upload": true, // plugin package
+	"/api/admin/v1/themes/upload": true, // theme pack
 }
 
 // sessionCookieName is the site session cookie webapi issues (same name the
@@ -238,6 +250,18 @@ func (b *Backend) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		got := r.Header.Get("X-Admin-Token")
 		if b.AdminTok != "" && subtle.ConstantTimeCompare([]byte(got), []byte(b.AdminTok)) == 1 {
+			// A token alone is a machine call, so the audit actor stays uid 0.
+			// But the panel attaches a stored token to *every* request, so a
+			// browser that once pasted one arrives with both credentials — and
+			// taking the machine channel there erases the person, which the
+			// super-admin actions read as "no web session" and refuse. When a
+			// session cookie rides along, the human wins.
+			if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
+				if uid, ok := sessionAdmin(r, b.Store); ok {
+					next(w, r.WithContext(context.WithValue(r.Context(), actorUIDKey{}, uid)))
+					return
+				}
+			}
 			next(w, r) // machine/API fallback: audit actor stays uid 0
 			return
 		}

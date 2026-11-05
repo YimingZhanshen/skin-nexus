@@ -85,11 +85,17 @@ func (b *Backend) handleThemesList(w http.ResponseWriter, r *http.Request) {
 
 // mountThemeMarket registers the theme market routes (called from the
 // appearance block in Handler once a ThemeMarket service is wired).
+//
+// Every one of them rides `b.auth` even though the handlers also call
+// pluginSuper: that gate reads the actor out of the request context, and only
+// auth puts it there. Register a mutation without it and the caller is told
+// "this action needs a super admin web session" no matter who they are — the
+// refusal is indistinguishable from the one a plain admin is supposed to get.
 func (b *Backend) mountThemeMarket(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/v1/themes/market", b.auth(b.handleThemeMarketCatalog))
-	mux.HandleFunc("POST /api/admin/v1/themes/market/install", b.handleThemeMarketInstall)
-	mux.HandleFunc("DELETE /api/admin/v1/themes/market/{id}", b.handleThemeUninstall)
-	mux.HandleFunc("POST /api/admin/v1/themes/upload", b.handleThemeUpload)
+	mux.HandleFunc("POST /api/admin/v1/themes/market/install", b.auth(b.handleThemeMarketInstall))
+	mux.HandleFunc("DELETE /api/admin/v1/themes/market/{id}", b.auth(b.handleThemeUninstall))
+	mux.HandleFunc("POST /api/admin/v1/themes/upload", b.auth(b.handleThemeUpload))
 }
 
 var _ = context.Background

@@ -125,6 +125,15 @@ async function submitToken() {
   reloadTick.value++
 }
 
+// A session admin who once pasted the machine token keeps sending it on every
+// request. The server now resolves the human first, but the secret is still
+// sitting in this browser, so let them see it and drop it.
+function clearStoredToken() {
+  token.value = ''
+  persistToken()
+  reloadTick.value++
+}
+
 onMounted(async () => {
   // Session-admin detection: permission > 0 means the session alone reaches
   // admin data — no token ceremony needed.
@@ -148,6 +157,10 @@ onMounted(async () => {
       <div v-if="needToken" class="admin-token">
         <input v-model="token" type="password" :placeholder="t('admin.tokenPlaceholder')" />
         <button @click="submitToken">{{ t('admin.load') }}</button>
+      </div>
+      <div v-else-if="token" class="admin-token">
+        <span class="muted">{{ t('admin.tokenStoredHint') }}</span>
+        <button class="secondary" @click="clearStoredToken">{{ t('admin.tokenClear') }}</button>
       </div>
       <nav class="admin-nav">
         <button v-for="n in visibleNav" :key="n.id" class="nav-item"

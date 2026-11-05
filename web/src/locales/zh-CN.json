@@ -620,6 +620,8 @@
     },
     "title": "管理面板",
     "tokenPlaceholder": "X-Admin-Token",
+    "tokenStoredHint": "本机仍存着 API 令牌",
+    "tokenClear": "清除令牌",
     "load": "加载",
     "reload": "刷新",
     "overviewTitle": "总览",

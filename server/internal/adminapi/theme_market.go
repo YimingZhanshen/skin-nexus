@@ -118,7 +118,14 @@ func (b *Backend) themeMarketError(r *http.Request, w http.ResponseWriter, err e
 	case errors.Is(err, thememkt.ErrDigestStale):
 		writeDomain(w, http.StatusConflict, err, i18n.MsgDigestMismatch)
 	case errors.Is(err, thememkt.ErrBadThemePkg):
-		writeDomain(w, http.StatusConflict, err, i18n.MsgInvalidValue)
+		// The wrapped detail is not safe to echo: the staging step puts
+		// os.MkdirTemp failures behind this same error, so the response would
+		// carry a server filesystem path — and a host permission problem reads
+		// exactly like "your zip is malformed", sending the operator off to
+		// re-package a file that was fine. The decision stays here, the detail
+		// goes to the log; `?inspect=1` is the channel that explains a real
+		// package problem in structured terms.
+		writeLogged(r, w, http.StatusConflict, i18n.MsgInvalidValue, "the theme package failed validation", err)
 	case errors.Is(err, thememkt.ErrNotFound):
 		writeDomain(w, http.StatusConflict, err, i18n.MsgThemeNotFound)
 	case errors.Is(err, thememkt.ErrMarketOff):
