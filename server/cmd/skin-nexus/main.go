@@ -1188,8 +1188,10 @@ func sitemapHandler(seoEng *seo.Engine, st *store.Mysql, baseURL string) http.Ha
 			return
 		}
 		entries := []seo.SitemapEntry{}
-		// bounded: at most 5000 public texture pages
-		if rows, err := st.PublicTextureIDs(r.Context(), 5000); err == nil {
+		// bounded: at most store.SitemapIDLimit public texture pages — the same
+		// constant fsck reports against, or the two numbers drift apart and
+		// `omitted=` stops describing what a crawler is actually told.
+		if rows, err := st.PublicTextureIDs(r.Context(), store.SitemapIDLimit); err == nil {
 			for _, row := range rows {
 				e := seo.SitemapEntry{Path: "/skinlib/" + strconv.FormatInt(row.TID, 10)}
 				if row.UploadAt.Valid {

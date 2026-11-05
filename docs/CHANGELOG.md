@@ -17,7 +17,10 @@
   （`auth: rewrote 2 stored token(s) as digests`，原文随即取不出），再用**同一把**在途凭证走完
   `validate 204 → refresh 200 → join 204 → hasJoined 200`，升级前签发的网页 cookie 仍然 200；
   第二次启动不重复改写。改写 SQL 由 `digestRewrites` 列表自己拼，所以另加一条走 CI 四引擎腿的
-  集成用例（MySQL/MariaDB/PostgreSQL/SQLite 各跑一遍，断改写前后行数相等）。变异三次：摘要截半 →
+  集成用例（MySQL/MariaDB/PostgreSQL/SQLite 各跑一遍，断改写前后行数相等）。**这条腿第一次跑就抓到东西**：
+  夹具 `testClientToken32` 实际 33 个字符，而 `ygg_tokens.client_token` 是 `CHAR(32)`——SQLite 不检查列宽所以
+  它一直「对」，MySQL/MariaDB/PostgreSQL 三条腿同时报 `Data too long for column 'client_token'`；收进 32 位后
+  四条腿全绿（run `41942441167`）。变异三次：摘要截半 →
   红在三列的期望摘要；漏掉 `web_sessions` → 红在 `rewrote 2 rows, want 3` 与 `in-flight session = 0 not found`；
   `fsck` 改成恒报 `digest_migrated=true` → 红在「空库」与「升级前」两行。
 - **日志策略改回来了（站长拍板）**：昨晚把访问日志里的 `client_token` 落成了 sha256 前缀，
@@ -42,6 +45,12 @@
   `body.ID == ""`，**不带 trim**，而同包的黑名单添加用的是 `strings.TrimSpace` —— 于是
   `{"client_id":"   "}` 能过校验，把一行谁也叫不出名字的 OAuth 客户端写进库。现在按 trim 后判空，
   并且落库、审计、响应回吐都用 trim 过的值。
+
+- **sitemap 的上限终于只有一个真源**：`SitemapIDLimit` 当初导出时写的理由是「路由与只读体检必须说同一个数，
+  只有一方知道的数字没人能审」——但 `/sitemap.xml` 那条仍传字面量 `5000`，`fsck` 传常量。今天把路由改成常量，
+  并加一条读自身源码的用例钉住（`PublicTextureIDs(..., store.SitemapIDLimit)` 必须成，传数字必须红）：
+  断言只认调用里的表达式，注释里提一句常量名不算过关。变异取证：改回 `5000` → 红并打印出那一行。
+  数字本身没变（5000 = 常量），行为零变化；变的是一旦有人抬上限，`fsck` 报的 `omitted=` 不会开始说谎。
 
 ## 2026-11-04
 
