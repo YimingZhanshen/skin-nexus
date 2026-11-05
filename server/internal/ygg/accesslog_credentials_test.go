@@ -1,15 +1,24 @@
 package ygg
 
-// The operator's read on this file: the traffic log has to be good enough to
-// debug a launcher with, and it is admin-readable and kept for 90 days. Those
-// two facts are reconciled by one rule, pinned here —
+// What this file pins, and whose rule it is:
 //
-//   a value that can authenticate somewhere must never reach access_logs.
+// The operator asked, in plain words, for traffic logs detailed enough to debug
+// a launcher with — un-redacted, admin-readable, kept 90 days. `client_token`
+// going back to verbatim is his call, and it is right on the facts: every
+// endpoint that consumes it also demands a valid access token, so the log line
+// alone gets an attacker nothing, while a truncated fingerprint makes two
+// installs indistinguishable.
 //
-// client_token is logged in full: every endpoint that consumes it also demands
-// a valid access token, so the log line alone gets an attacker nothing, while a
-// truncated fingerprint makes it impossible to tell two installs apart.
-// accessToken is never logged, and neither is a web session token.
+// The second half — "nothing that can authenticate anywhere reaches
+// access_logs" — was *my* reasoning, written down as if we had agreed on it.
+// Nobody set that bottom line; I did. It has since been ruled on (by the agent,
+// because the operator handed the decision over): the rule stays for these
+// summary lines, and the credential material he wants for debugging belongs to
+// the diagnostics window instead — captured into the detail rows only while that
+// window is open, and swept on a fixed short clock rather than the 90-day log
+// retention. So read the assertions below as "the always-on surface never carries
+// a usable credential", not as a policy nobody may revisit: if the next change
+// weakens one, fail it here rather than in a backup three months later.
 
 import (
 	"net/http"
