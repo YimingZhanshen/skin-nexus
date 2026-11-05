@@ -24,7 +24,10 @@ const (
 	digestSessionToken = "58aa88018cd7454a9ab8168d6f45035a583c34a6bb63853a0225e2907844a9cc"
 	rawLauncherToken   = "live-launcher-token"
 	digestLauncherTok  = "d6e48f1926394445e2b52330b32562c5b1c5b8c888a2d9e142ee72dbb2c96217"
-	testClientToken32  = "ct-0123456789abcdef0123456789abcd"
+	// Exactly 32: `ygg_tokens.client_token` is CHAR(32), which SQLite does not
+	// enforce and MySQL/MariaDB/PostgreSQL do — a 33-char fixture here passed the
+	// SQLite-only leg for a whole day and was rejected by the engine legs.
+	testClientToken32 = "0123456789abcdef0123456789abcdef"
 )
 
 func selectString(t *testing.T, st *Mysql, query string, args ...any) string {
