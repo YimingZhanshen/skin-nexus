@@ -150,10 +150,11 @@ func (m *Mysql) FSCKCredentialDigestState(ctx context.Context) (rows int, migrat
 }
 
 // FSCKSitemapCoverage compares the public library with what the sitemap can
-// enumerate. PublicTextureIDs takes the lowest ids up to SitemapIDLimit, so on a
-// site past that ceiling the omitted pages are the newest skins — the content a
-// crawler most wants — and nothing anywhere reports it. Read-only by design:
-// which urls get published is the operator's call, not this pass's.
+// enumerate. PublicTextureIDs takes the newest ids up to SitemapIDLimit, so on a
+// site past that ceiling the omitted pages are the oldest skins — content a
+// crawler has most likely already been told about, which is why this order is the
+// cheap one. Read-only by design: which urls get published is the operator's
+// call, not this pass's.
 func (m *Mysql) FSCKSitemapCoverage(ctx context.Context) (public, listed int, err error) {
 	if err = m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM textures WHERE public = 1`).Scan(&public); err != nil {
 		return

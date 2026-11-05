@@ -8,6 +8,7 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func newMeasureUser(t *testing.T, st *Mysql, email, nick string) int64 {
@@ -104,14 +105,38 @@ func TestSQLiteEngineFSCKClosetRowsWithoutTexture(t *testing.T) {
 	}
 }
 
+// sitemapNewerOrEqual is the (upload_at DESC, id DESC) order PublicTextureIDs
+// promises. Untagged on purpose: both the SQLite unit leg and the integration
+// suite assert it, and an ordering claim is not engine-specific. upload_at is NOT
+// NULL in every tree, but a NULL scans as "oldest" rather than panicking on a
+// zero-time comparison.
+func sitemapNewerOrEqual(prev, cur TextureIDTime) bool {
+	p, c := prev.UploadAt.Time, cur.UploadAt.Time
+	if !prev.UploadAt.Valid {
+		p = time.Time{}
+	}
+	if !cur.UploadAt.Valid {
+		c = time.Time{}
+	}
+	if !p.Equal(c) {
+		return p.After(c)
+	}
+	return prev.TID >= cur.TID
+}
+
 func TestSQLiteEngineFSCKSitemapCoverage(t *testing.T) {
 	st := openSQLiteStore(t)
 	ctx := context.Background()
 	uid := newMeasureUser(t, st, "map@example.com", "mapuser")
+	newest := int64(0)
 	for i := 0; i < 3; i++ {
-		if _, err := st.AddTexture(ctx, uid, "skin", hashOf(string(rune('m'+i))), "default",
-			TextureMeta{Description: "public"}); err != nil {
+		tid, err := st.AddTexture(ctx, uid, "skin", hashOf(string(rune('m'+i))), "default",
+			TextureMeta{Description: "public"})
+		if err != nil {
 			t.Fatalf("add %d: %v", i, err)
+		}
+		if tid > newest {
+			newest = tid
 		}
 	}
 	if _, err := st.AddTexturePrivate(ctx, uid, "skin", hashOf("private-one"), "slim",
@@ -136,6 +161,23 @@ func TestSQLiteEngineFSCKSitemapCoverage(t *testing.T) {
 	}
 	if len(rows) != listed {
 		t.Errorf("route listed %d ids but coverage reported %d", len(rows), listed)
+	}
+	// The direction is the part that used to be wrong. A bounded listing must
+	// start at the newest page, so what the cap drops is material a crawler has
+	// most likely already been told about — the old `ORDER BY id` silently froze
+	// every site past the ceiling, publishing only its oldest skins. upload_at is
+	// NOT NULL, and rows added in one test share a millisecond, so the id
+	// tie-break is what this measures: last added must come first.
+	if rows[0].TID != newest {
+		t.Errorf("sitemap listing starts at tid %d, want the newest %d — the cap must cost the oldest pages", rows[0].TID, newest)
+	}
+	for i := 1; i < len(rows); i++ {
+		if !sitemapNewerOrEqual(rows[i-1], rows[i]) {
+			t.Errorf("sitemap listing not newest-first at %d: %d then %d", i, rows[i-1].TID, rows[i].TID)
+		}
+	}
+	if one, err := st.PublicTextureIDs(ctx, 1); err != nil || len(one) != 1 || one[0].TID != newest {
+		t.Errorf("limit=1 = %+v %v, want only the newest public row %d", one, err, newest)
 	}
 	if SitemapIDLimit != 5000 {
 		t.Errorf("SitemapIDLimit = %d; changing it changes which urls a crawler is told about, so it is an operator decision, not a constant to tune here", SitemapIDLimit)

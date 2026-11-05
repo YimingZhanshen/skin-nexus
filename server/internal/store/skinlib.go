@@ -231,14 +231,19 @@ type TextureIDTime struct {
 // number — a limit that only one of them knows is a limit nobody can audit.
 const SitemapIDLimit = 5000
 
-// PublicTextureIDs lists public texture ids (bounded, ascending) — the
-// sitemap source. Private textures never enumerate here.
+// PublicTextureIDs lists public texture ids — the sitemap source — bounded and
+// newest first. The direction is the whole decision: `ORDER BY id` published the
+// oldest 5000 pages and nothing else, so past that ceiling a growing site stopped
+// telling crawlers about the skins it was actually adding, silently (fsck reports
+// `omitted=` now). This order also matches the library's own default view, which
+// is the one idx_textures_public_upload (0024) can serve with a backward index
+// scan instead of a sort. Private textures never enumerate here.
 func (m *Mysql) PublicTextureIDs(ctx context.Context, limit int) ([]TextureIDTime, error) {
 	if limit <= 0 || limit > SitemapIDLimit {
 		limit = SitemapIDLimit
 	}
 	rows, err := m.db.QueryContext(ctx,
-		`SELECT id, upload_at FROM textures WHERE public = 1 ORDER BY id LIMIT ?`, limit)
+		`SELECT id, upload_at FROM textures WHERE public = 1 ORDER BY upload_at DESC, id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("public texture ids: %w", err)
 	}

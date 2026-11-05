@@ -1411,7 +1411,7 @@ func TestIntegrationSkinlibOneAndPublicIDs(t *testing.T) {
 		t.Fatalf("missing err = %v, want ErrNotFound", err)
 	}
 
-	// sitemap enumeration: public only, ascending, bounded
+	// sitemap enumeration: public only, newest first, bounded
 	ids, err := m.PublicTextureIDs(ctx, 5000)
 	if err != nil {
 		t.Fatalf("PublicTextureIDs: %v", err)
@@ -1424,16 +1424,27 @@ func TestIntegrationSkinlibOneAndPublicIDs(t *testing.T) {
 		if e.TID == privID {
 			foundPriv = true
 		}
-		if i > 0 && ids[i-1].TID > e.TID {
-			t.Fatalf("PublicTextureIDs not ascending at %d", i)
+		if i > 0 && !sitemapNewerOrEqual(ids[i-1], e) {
+			t.Fatalf("PublicTextureIDs not newest-first at %d: %d@%v then %d@%v",
+				i, ids[i-1].TID, ids[i-1].UploadAt, e.TID, e.UploadAt)
 		}
 	}
 	if !foundPub || foundPriv {
 		t.Fatalf("enumeration leak/miss: public=%v private=%v", foundPub, foundPriv)
 	}
-	// limit respected
-	if ids2, err := m.PublicTextureIDs(ctx, 1); err != nil || len(ids2) != 1 {
+	// The cap has to cost the oldest pages, not the newest — that was the whole
+	// defect this ordering fixes. With limit=1 the single row must be the newest
+	// entry of the uncapped listing.
+	if len(ids) == 0 {
+		t.Fatal("sitemap listing is empty: every ordering assertion above proved nothing")
+	}
+	ids2, err := m.PublicTextureIDs(ctx, 1)
+	if err != nil || len(ids2) != 1 {
 		t.Fatalf("limit=1: %v err=%v", ids2, err)
+	}
+	if ids2[0].TID != ids[0].TID {
+		t.Errorf("limit=1 returned tid %d, want the newest %d: a bounded sitemap must publish fresh content first",
+			ids2[0].TID, ids[0].TID)
 	}
 }
 

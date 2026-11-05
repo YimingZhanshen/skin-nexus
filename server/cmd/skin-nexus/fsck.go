@@ -183,7 +183,7 @@ func runFSCK(args []string, out io.Writer) error {
 	// outlive their texture.
 	fmt.Fprintf(out, "closet_duplicate_pairs=%d closet_extra_rows=%d closet_rows_without_texture=%d\n",
 		dupPairs, dupExtra, dangling)
-	fmt.Fprintf(out, "sitemap public=%d listed=%d omitted=%d (limit %d, lowest ids win, so the newest skins are the ones missing)\n",
+	fmt.Fprintf(out, "sitemap public=%d listed=%d omitted=%d (limit %d, newest first, so what falls off the end is the oldest pages)\n",
 		pub, listed, pub-listed, store.SitemapIDLimit)
 	fmt.Fprintf(out, "credentials_at_rest rows=%d digest_migrated=%v (raw and digest are the same shape, so only the marker says which; ygg client_token stays verbatim by design)\n",
 		credRows, credDigested)

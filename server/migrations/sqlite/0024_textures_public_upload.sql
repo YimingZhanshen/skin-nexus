@@ -5,6 +5,8 @@
 -- What this buys and what it does not: on InnoDB a secondary index carries the
 -- primary key, so (public, upload_at) really stores (public, upload_at, id) and a
 -- backward scan yields both DESC columns in the order the query wants. The
--- sitemap query (public, ORDER BY id) is helped only in filtering — it still
--- sorts. That is a known limit of this index, not a second thing it does.
+-- sitemap query was the exception until 2026-11-05 (it asked ORDER BY id, so the
+-- index only filtered and the engine still sorted, and the cap silently cost the
+-- newest pages); it now asks for this same order, so one index serves both faces
+-- of the library.
 CREATE INDEX idx_textures_public_upload ON textures (public, upload_at);
