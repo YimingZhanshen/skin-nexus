@@ -270,7 +270,13 @@ v2 的 UI 采用**固定插槽 + iframe/schema 页面**，不允许第三方直�
 - 资产 URL 自动追加 `?v=<插件版本>`，响应头为 `Cache-Control: public, max-age=0, must-revalidate`：
   升级插件后浏览器最多做一次 304 校验即可拿到新文件，不需要清缓存；升级时**必须递增版本号**。
 - iframe bridge（`postMessage`，信封 `{v:1, nonce, id, type, payload}`）：
-  - 宿主→frame：`init`（plugin/src/origin/path/locale/user/csrf/theme）；`path` 是宿主当前 URL，便于 slot 识别上下文；
+  - **方向不对称，写错会静默失效**：frame 被 `sandbox` 剥夺了同源身份，它的 origin 永远是 opaque（`"null"`），
+    所以**宿主→frame 只能用 `targetOrigin: "*"`**——把目标写成站点自己的源，浏览器比对的是「接收方的 origin」，
+    `"null"` 永远不匹配 `"https://站点"`，消息被丢弃且**不报错**（宿主侧看起来一切正常）。
+    反过来 frame→宿主可以用 init 里的 `origin`，因为宿主的源是真实的。
+    代价是规则：**凡经 `'*'` 出去的 payload 不得含凭据**，所以 `init` 不带 `csrf`——
+    宿主在代发 `request` 时自己加 `X-CSRF-Token`，frame 从来不需要持有它。
+  - 宿主→frame：`init`（plugin/src/origin/path/locale/user/theme）；`path` 是宿主当前 URL，便于 slot 识别上下文；
     `theme` 提供 `{bg,panel,border,text,muted,accent,link,danger,ok,dark}`，插件页面应把它写入自己的 CSS 变量，
     不要硬编码浅色文字/透明背景（iframe 不继承宿主样式）；页面型 iframe 的背景应与宿主卡片一致（`panel`），
     输入框可用 `bg` 形成层次；
@@ -281,7 +287,7 @@ v2 的 UI 采用**固定插槽 + iframe/schema 页面**，不允许第三方直�
   - `resize` 的 `height` 必须是**内容高度**（不是 iframe 视口高度），并建议在 `ResizeObserver`/提交状态变化时上报；
     宿主 clamp 80–2000，页面型 iframe 不再依赖固定 420/520 高度。
   - `request` 由宿主代发到该插件路由，自动带 cookie/CSRF，返回 `{status, body}`。
-  - iframe 首次 `ready` 可用 `targetOrigin: "*"`（此时 origin 为 opaque）；之后用 init 里的 `origin`。
+  - iframe 的 `ready` 用 `targetOrigin: "*"` 发给宿主即可（宿主按 `ev.source` 认 frame）；上面那条方向规则同样适用于它。
 - 插件 UI 基线：只用宿主 `theme` 令牌/`var(--...)`；必须有加载/空/错误三态；
   页面型 iframe 使用 `panel` 背景、`max-width` 760（管理页 1080）与 28px 内边距；
   h2 22px / 正文 15px / 次要文字 13px；按钮提交中禁用；移动端触控目标 ≥44px；

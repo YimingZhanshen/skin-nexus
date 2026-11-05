@@ -79,10 +79,17 @@ function plain(value) {
 function send(type, payload, id) {
   const win = frame.value && frame.value.contentWindow
   if (!win) return
-  // The frame is same-origin by construction (/plugin-assets/…), but a sandboxed
-  // document can navigate itself elsewhere; "*" would then hand the CSRF token and
-  // the user's permission level to whatever page it landed on.
-  win.postMessage({ v: 1, nonce, id, type, payload }, window.location.origin)
+  // `sandbox="allow-scripts allow-forms"` without `allow-same-origin` gives the
+  // frame an opaque origin, and a message addressed to *our* origin is then
+  // silently dropped: the browser compares the target against the recipient, and
+  // "null" never matches "https://site". Measured, not assumed — a probe with
+  // both variants delivered only the `'*'` one, which is what made every plugin
+  // page go deaf (no theme, no locale, no API responses) while the host side kept
+  // looking healthy, because child→host messages still arrive.
+  // The consequence is the rule: whatever leaves through '*' must carry no
+  // credential. `csrf` used to be in the init payload; the host attaches
+  // X-CSRF-Token itself in request(), so the frame never needed to hold it.
+  win.postMessage({ v: 1, nonce, id, type, payload }, '*')
 }
 
 async function init() {
@@ -92,7 +99,7 @@ async function init() {
   send('init', {
     plugin: props.plugin, src: props.src, origin: location.origin,
     path: location.pathname + location.search,
-    locale: document.documentElement.lang || 'zh-CN', user: plain(user), csrf, theme: themePayload(),
+    locale: document.documentElement.lang || 'zh-CN', user: plain(user), theme: themePayload(),
   })
 }
 

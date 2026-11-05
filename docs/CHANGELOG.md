@@ -4,6 +4,26 @@
 
 ## 2026-11-05
 
+- **修掉我自己 11-04 引入的插件桥失效**（站长报的是「插件 UI 不适配自定义主题」，症状只是最表面那一层）：
+  安全轮那条 `477267b`「postMessage 不再发往任意源」把宿主→iframe 的 targetOrigin 从 `'*'` 改成站点自己的源。
+  但 frame 是 `sandbox="allow-scripts allow-forms"`（**故意**不给 `allow-same-origin`，否则插件 JS 能读站点 cookie），
+  它的 origin 永远是 opaque `"null"`；浏览器比对的是**接收方**的 origin，`"null"` 不匹配 `"https://站点"`
+  → 消息被**静默丢弃**。于是 `/ext/*` 插件页再也收不到 `init`：主题令牌、语言、用户态全丢，
+  插件自己的 API 调用一次也发不出去（`loadPlayers` 在 init 分支里），点「开始导入」只会卡住。
+  宿主侧日志与网络面板一切正常——**这是它难发现的真正原因**。
+  取证链：生产 iframe 的 CSS 默认值就是截图里的深底红按钮（`--plugin-bg:#101825`/`--plugin-accent:#b0453a`）；
+  生产父页此刻的令牌确实是主题的 `#f7f5f0`/`#601986`，主题 CSS 76ms 就加载完、iframe 181ms 才开始——**不是时序问题**；
+  生产 bundle 里 `init` 确实带着 `theme:`；最小实验（沙箱 iframe 各发一条，一条目标写站点源、一条写 `'*'`）
+  只有 `'*'` 那条被收到。本地带主题+插件复现：修前 `/api/plugins/…/players` 零请求、iframe 钉死 520px；
+  修后该请求出现，非沙箱 harness 量到 iframe 内 `--plugin-accent=#601986`、按钮实际渲染 `rgb(96,25,134)`、
+  body 白底墨字、`lang="en"`。
+  修法不是把 A10 撤回去：`'*'` 是唯一能送达的目标，所以规则改成「**经 `'*'` 出去的 payload 不得含凭据**」——
+  `init` 不再带 `csrf`（宿主代发请求时自己加 `X-CSRF-Token`，frame 从来不需要持有它），契约与 SPEC 同步改口径。
+  新增一条读自身源码的门禁 `plugin_bridge_test.go`：targetOrigin 必须是 `'*'`、init 里不得出现 `csrf`、
+  sandbox 不得被加上 `allow-same-origin`（那是权限放大，不是修主题）。三条变异分别取证会红。
+  **遗留（记账不粉饰）**：opaque frame 意味着握手用的 `nonce` 也会随 `'*'` 交给「自己导航到别处」的那份文档；
+  彻底做法是把 nonce 放进 iframe 的 URL 查询、由子页回显后才认，这需要插件侧一起改，属独立一片。
+
 - **会话与启动器令牌改为只存摘要（不可回滚的一次升级）**：`web_sessions.token`、
   `ygg_tokens.access_token`、`ygg_join_sessions.access_token` 原先存的是客户端呈报的那串原文，
   于是任何一次库读取——备份、SQL 报错回显、被拖走的 dump——都是一张「还能登录的账号表」。现在存
