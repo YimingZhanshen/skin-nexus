@@ -2,7 +2,6 @@ package ygg
 
 import (
 	"crypto/sha1"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -79,20 +78,6 @@ func (a *API) accessLog(r *http.Request, e accesslog.Entry) {
 	e.IP = clientIP(r)
 	e.UA = r.UserAgent()
 	a.access.Log(r.Context(), e)
-}
-
-// tokenFingerprint is what a traffic line gets in place of a client token.
-// access_logs rows are admin-readable and kept for 90 days, so quoting the
-// submitted value would make the log a second store of usable credentials.
-// Twelve hex characters still let an operator see that the same launcher
-// re-authenticated six times tonight, which is the only thing the field was
-// ever for.
-func tokenFingerprint(s string) string {
-	if s == "" {
-		return ""
-	}
-	sum := sha256.Sum256([]byte(s))
-	return hex.EncodeToString(sum[:])[:12]
 }
 
 // Handler returns the route table. Routes are rooted at the /api/yggdrasil
@@ -286,7 +271,7 @@ func (a *API) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
 		a.svc.Limiter.Succeed(idKey)
 	}
 	a.accessLog(r, accesslog.Entry{Kind: accesslog.YggAuthenticate,
-		Outcome: accesslog.OutcomeOK, Who: req.Username, Detail: "client_token=" + tokenFingerprint(req.ClientToken)})
+		Outcome: accesslog.OutcomeOK, Who: req.Username, Detail: "client_token=" + req.ClientToken})
 	writeTokenResponse(w, t, players, req.RequestUser)
 }
 
@@ -331,7 +316,7 @@ func (a *API) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.accessLog(r, accesslog.Entry{Kind: accesslog.YggRefresh,
-		Outcome: accesslog.OutcomeOK, Detail: "client_token=" + tokenFingerprint(req.ClientToken)})
+		Outcome: accesslog.OutcomeOK, Detail: "client_token=" + req.ClientToken})
 	writeTokenResponse(w, t, players, req.RequestUser)
 }
 
