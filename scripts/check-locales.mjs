@@ -258,6 +258,49 @@ for (const rel of UI_DIRS.flatMap(walk)) {
 }
 
 
+// 6. a .vue template must carry no untranslated copy either. The SPA does have a
+//    fallback locale, which is exactly why this needs a gate: vue-i18n silently
+//    serves zh-CN inside an English UI, so a leftover Chinese label is invisible
+//    to whoever writes it and visible to every visitor. Same contract as the SSR
+//    rule above, three differences: HTML comments keep their Chinese (design
+//    notes, and a block comment's continuation lines are not copy), `<script>`
+//    and `<style>` blocks are outside the region, and the region ends where the
+//    <template> tag does — matched by depth pairing, because a named slot nests a
+//    second `</template>` and an interval scan would stop there and call the rest
+//    of the file untranslated-free.
+function templateRegions(src) {
+  const out = []
+  const tag = /<template[\s>]|<\/template>/g
+  let depth = 0, start = -1, m
+  while ((m = tag.exec(src))) {
+    if (m[0].startsWith('</')) {
+      if (depth === 1) out.push([start, m.index])
+      depth = Math.max(0, depth - 1)
+    } else {
+      if (depth === 0) start = m.index + m[0].length
+      depth++
+    }
+  }
+  return out
+}
+
+for (const rel of UI_DIRS.flatMap(walk).filter((r) => r.endsWith('.vue'))) {
+  const src = readFileSync(resolve(root, rel), 'utf8')
+  for (const [from, to] of templateRegions(src)) {
+    const body = src.slice(from, to).replace(/<!--[\s\S]*?-->/g, (c) => c.replace(/[^\n]/g, ' '))
+    // One report per line, and the whole match before slicing: with /u a Han
+    // code point above the BMP is two UTF-16 units, so cutting at a lone
+    // surrogate would point the operator at the wrong line.
+    for (const line of body.matchAll(/[^\n]*\p{Script=Han}[^\n]*/gu)) {
+      const offset = from + line.index
+      const at = 1 + src.slice(0, offset).split('\n').length - 1
+      const text = line[0].trim()
+      errors.push(`${rel}:${at}: Chinese left inside a rendered template (${JSON.stringify(text.slice(0, 60))}) — add a locale key`)
+    }
+  }
+}
+
+
 if (errors.length) {
   console.error('check-locales: FAILED')
   for (const e of errors) console.error('  - ' + e)

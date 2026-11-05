@@ -93,72 +93,67 @@ function goHome() {
 
 <template>
   <div class="card" style="max-width: 520px;">
-    <h2>{{ t('site.name') }} 安装向导</h2>
-    <div class="muted" style="margin-bottom: 12px;">步骤 {{ step }} / 4</div>
+    <h2>{{ t('setup.wizardTitle', { site: t('site.name') }) }}</h2>
+    <div class="muted" style="margin-bottom: 12px;">{{ t('setup.step', { step: step, total: 4 }) }}</div>
 
     <!-- step 1: site identity -->
     <template v-if="step === 1">
-      <label for="s-site-name">站点名称</label>
-      <input id="s-site-name" v-model="siteName" placeholder="例如：示例皮肤站" />
-      <label for="s-base-url">站点地址（Base URL）</label>
+      <label for="s-site-name">{{ t('setup.siteName') }}</label>
+      <input id="s-site-name" v-model="siteName" :placeholder="t('setup.siteNameExample')" />
+      <label for="s-base-url">{{ t('setup.baseUrl') }}</label>
       <input id="s-base-url" v-model="baseURL" placeholder="https://skin.example.com" />
       <template v-if="tokenRequired">
-        <label for="s-setup-token">安装令牌</label>
+        <label for="s-setup-token">{{ t('setup.setupToken') }}</label>
         <input id="s-setup-token" v-model="setupToken" autocomplete="off" spellcheck="false" />
         <div class="muted" style="font-size: var(--fs-xs); margin-top: 6px;">
-          站点还没有初始化时这个表单任何人都能提交，所以先要一个只有运维者拿得到的值：
-          它写在服务器日志那行 install token 里（docker compose logs 可见），
-          也可以在环境变量 SKIN_SETUP_TOKEN 里自己定一个。填错会被拒绝，不会写进任何数据。
+          {{ t('setup.setupTokenHint') }}
         </div>
       </template>
       <div class="muted" style="font-size: var(--fs-xs); margin-top: 6px;">
-        默认取当前地址。它会被写进「管理 → 设置 → 站点地址」，材质与预览链接都以它为前缀：
-        请用玩家能访问到的域名，不要用局域网 IP 或 http://localhost。
+        {{ t('setup.baseUrlHint') }}
       </div>
     </template>
 
     <!-- step 2: admin account -->
     <template v-else-if="step === 2">
-      <label for="s-nickname">管理员昵称</label>
+      <label for="s-nickname">{{ t('setup.nickname') }}</label>
       <input id="s-nickname" v-model="nickname" />
-      <label for="s-email">管理员邮箱（可留空）</label>
+      <label for="s-email">{{ t('setup.email') }}</label>
       <input id="s-email" v-model="email" type="email" />
-      <label for="s-password">管理员密码（≥8 位）</label>
+      <label for="s-password">{{ t('setup.password') }}</label>
       <input id="s-password" v-model="password" type="password" />
-      <label for="s-password2">确认密码</label>
+      <label for="s-password2">{{ t('setup.password2') }}</label>
       <input id="s-password2" v-model="password2" type="password" />
     </template>
 
     <!-- step 3: skin domains -->
     <template v-else-if="step === 3">
-      <label for="s-domains">皮肤域清单（每行一个，用于 Yggdrasil 元数据）</label>
+      <label for="s-domains">{{ t('setup.domains') }}</label>
       <textarea id="s-domains" v-model="skinDomains" rows="6" placeholder="skin.example.com"></textarea>
       <div class="muted" style="font-size: var(--fs-xs); margin-top: 6px;">
-        可留空，之后在环境变量 SKIN_SKIN_DOMAINS 或数据库里补充。
+        {{ t('setup.domainsHint') }}
       </div>
     </template>
 
     <!-- step 4: done -->
     <template v-else>
-      <div class="success" role="status">初始化完成！请用刚才创建的管理员账号登录。</div>
+      <div class="success" role="status">{{ t('setup.done') }}</div>
       <p class="muted" style="margin-top: 10px;">
-        站点地址已写入设置：
-        <b>{{ result.site_url || '（未填，沿用环境变量 SKIN_BASE_URL）' }}</b>
+        {{ t('setup.siteUrlWritten') }}
+        <b>{{ result.site_url || t('setup.envFallback') }}</b>
       </p>
       <div class="error" role="alert" v-if="result.mismatch">
-        它与环境变量 SKIN_BASE_URL（{{ result.env_base_url }}）不一致：站点以你刚填的地址为准，
-        材质链接、页面链接与 sitemap 都会用它。如果这是安装时随手用的局域网地址，
-        请现在去「管理 → 设置 → 站点地址」改成玩家能访问的域名，改完重启容器。
+        {{ t('setup.mismatch', { url: result.env_base_url }) }}
       </div>
     </template>
 
     <div class="error" role="alert" v-if="error">{{ error }}</div>
 
     <div class="row" style="margin-top: 14px;">
-      <button v-if="step > 1 && step < 4" class="secondary" @click="step--">上一步</button>
-      <button v-if="step < 3" @click="next">下一步</button>
-      <button v-if="step === 3" :disabled="loading" @click="finish">{{ loading ? '提交中…' : '完成初始化' }}</button>
-      <button v-if="step === 4" @click="goHome">进入站点</button>
+      <button v-if="step > 1 && step < 4" class="secondary" @click="step--">{{ t('setup.prev') }}</button>
+      <button v-if="step < 3" @click="next">{{ t('setup.next') }}</button>
+      <button v-if="step === 3" :disabled="loading" @click="finish">{{ loading ? t('setup.submitting') : t('setup.finish') }}</button>
+      <button v-if="step === 4" @click="goHome">{{ t('setup.enterSite') }}</button>
     </div>
   </div>
 </template>

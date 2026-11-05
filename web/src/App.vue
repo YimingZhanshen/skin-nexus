@@ -505,7 +505,7 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
         </a>
         <div class="topbar-right" :class="{ open: menuOpen }">
           <select :value="locale" class="locale-sel" @change="onLocaleChange">
-            <option value="zh-CN">中文</option>
+            <option value="zh-CN">{{ t('common.langZh') }}</option>
             <option value="en">English</option>
           </select>
           <button v-if="view === 'admin'" class="secondary" @click="view = 'dashboard'">← {{ t('nav.backToDashboard') }}</button>

@@ -230,7 +230,7 @@ onMounted(load)
   <div>
     <!-- 站点设置（env 迁 UI），按后端 group 分节 -->
     <div class="card">
-      <h2 style="margin-top: 0;">站点设置（原环境变量，管理员可改）</h2>
+      <h2 style="margin-top: 0;">{{ t('admin.settings.cardTitle') }}</h2>
       <div class="error" role="alert" v-if="setError">{{ setError }}</div>
       <div class="success" role="status" v-if="setOk">{{ setOk }}</div>
       <template v-for="grp in groupedSettings" :key="grp.id">
@@ -247,100 +247,100 @@ onMounted(load)
           <textarea v-else-if="!s.secret && textKeys.has(s.key)"
                     v-model="s.value" :style="s.key.startsWith('union_oauth2_sig_') ? 'max-width: 360px; min-height: 72px; font-family: monospace; font-size: var(--fs-xs);' : 'max-width: 360px; min-height: 38px;'"></textarea>
           <select v-else-if="s.key === 'player_name_rule'" v-model="s.value" style="max-width: 160px;">
-            <option value="official">official（字母/数字/下划线）</option>
-            <option value="cjk">cjk（+ 中文/§）</option>
-            <option value="utf8">utf8（任意非空白）</option>
-            <option value="custom">custom（自定义正则）</option>
+            <option value="official">{{ t('admin.settings.ruleOfficial') }}</option>
+            <option value="cjk">{{ t('admin.settings.ruleCjk') }}</option>
+            <option value="utf8">{{ t('admin.settings.ruleUtf8') }}</option>
+            <option value="custom">{{ t('admin.settings.ruleCustom') }}</option>
           </select>
           <select v-else-if="s.key === 'union_queryemail_mode'" v-model="s.value" style="max-width: 160px;">
-            <option value="full">full（按 union 协议返回邮箱）</option>
-            <option value="off">off（不返回）</option>
+            <option value="full">{{ t('admin.settings.emailFull') }}</option>
+            <option value="off">{{ t('admin.settings.emailOff') }}</option>
           </select>
           <input v-else v-model="s.value" :type="s.secret ? 'password' : 'text'" style="max-width: 300px;"
                  :placeholder="secretHint(s)" autocomplete="new-password" />
-          <button @click="saveSetting(s)">保存</button>
+          <button @click="saveSetting(s)">{{ t('common.save') }}</button>
           <button v-if="s.secret && s.set" class="secondary" @click="clearSetting(s)">{{ t('admin.settingsClear') }}</button>
-          <span class="muted" style="font-size: var(--fs-xs);">{{ s.restart ? '重启后生效' : '立即生效' }}</span>
+          <span class="muted" style="font-size: var(--fs-xs);">{{ s.restart ? t('admin.settings.restartLater') : t('admin.settings.applyNow') }}</span>
         </div>
       </template>
     </div>
 
     <!-- SEO：加载失败不再静默（卡外横幅 + 重试），卡内横幅只管保存失败 -->
     <div class="card" v-if="!seo && seoError">
-      <h2>SEO 配置</h2>
+      <h2>{{ t('admin.seo.title') }}</h2>
       <div class="error" role="alert">{{ seoError }}</div>
       <button class="secondary" style="margin-top: 12px;" @click="loadSEO">{{ t('common.retry') }}</button>
     </div>
     <div class="card" v-if="seo">
-      <h2>SEO 配置</h2>
+      <h2>{{ t('admin.seo.title') }}</h2>
       <div class="row">
-        <button class="secondary" @click="seoOneClick">一键优化（填充默认值）</button>
-        <button @click="seoSave">保存 SEO</button>
+        <button class="secondary" @click="seoOneClick">{{ t('admin.seo.oneClick') }}</button>
+        <button @click="seoSave">{{ t('admin.seo.save') }}</button>
         <span class="success" role="status" v-if="seoOk">{{ seoOk }}</span>
       </div>
-      <label for="seo-title">站点标题</label>
+      <label for="seo-title">{{ t('admin.seo.siteTitle') }}</label>
       <input id="seo-title" v-model="seo.title" />
       <p class="muted">
-        当前 {{ (seo.title || '').length }} 字符；建议 15–30 个字符。
-        搜索引擎会把过短的标题判定为信息不足（Bing 阈值 15 字符）。
+        {{ t('admin.seo.titleLength', { n: (seo.title || '').length }) }}
+        {{ t('admin.seo.titleHint') }}
       </p>
       <label for="seo-desc">meta description</label>
       <textarea id="seo-desc" v-model="seo.description" rows="2"></textarea>
-      <label for="seo-keywords">meta keywords（逗号分隔）</label>
+      <label for="seo-keywords">{{ t('admin.seo.keywords') }}</label>
       <input id="seo-keywords" v-model="seo.keywords" />
-      <label for="seo-og">OG 分享图 URL</label>
+      <label for="seo-og">{{ t('admin.seo.ogImage') }}</label>
       <input id="seo-og" v-model="seo.og_image" />
-      <label for="seo-canonical">canonical 基址</label>
+      <label for="seo-canonical">{{ t('admin.seo.canonical') }}</label>
       <input id="seo-canonical" v-model="seo.canonical" />
       <div class="row" style="margin-top: 8px;">
         <label style="display: flex; align-items: center; gap: 4px;">
-          <input type="checkbox" v-model="seo.sitemap" /> 启用 sitemap.xml
+          <input type="checkbox" v-model="seo.sitemap" /> {{ t('admin.seo.enableSitemap') }}
         </label>
         <label style="display: flex; align-items: center; gap: 4px;">
-          <input type="checkbox" v-model="seo.noindex" /> 整站 noindex（预发）
+          <input type="checkbox" v-model="seo.noindex" /> {{ t('admin.seo.noindex') }}
         </label>
       </div>
-      <label style="margin-top: 8px;" for="seo-robots">robots.txt 内容</label>
+      <label style="margin-top: 8px;" for="seo-robots">{{ t('admin.seo.robots') }}</label>
       <textarea id="seo-robots" v-model="seo.robots" rows="3"></textarea>
       <div class="error" role="alert" v-if="seoError">{{ seoError }}</div>
     </div>
 
     <!-- Appearance: themes + custom CSS/JS（失败卡外可见 + 重试） -->
     <div class="card" v-if="!appearance && appearError">
-      <h2>外观（主题 / 页脚 / 自定义 CSS / JS）</h2>
+      <h2>{{ t('admin.appearance.title') }}</h2>
       <div class="error" role="alert">{{ appearError }}</div>
       <button class="secondary" style="margin-top: 12px;" @click="loadAppearance">{{ t('common.retry') }}</button>
     </div>
     <div class="card" v-if="appearance">
-      <h2>外观（主题 / 页脚 / 自定义 CSS / JS）</h2>
-      <label for="ap-theme">启用主题包</label>
+      <h2>{{ t('admin.appearance.title') }}</h2>
+      <label for="ap-theme">{{ t('admin.appearance.activeTheme') }}</label>
       <select id="ap-theme" v-model="appearance.active_theme" style="max-width: 320px;">
-        <option value="">无（默认样式）</option>
+        <option value="">{{ t('admin.appearance.noTheme') }}</option>
         <option v-for="th in themes" :key="th.id" :value="th.id">{{ th.name }}（{{ th.version }}）</option>
       </select>
       <div class="muted" v-if="!themes.length" style="font-size: var(--fs-xs);">
-        将主题包放入 data/themes/&lt;id&gt;/（含 theme.json）后用下方「主题市场 → 本地上传」安装，或重启服务扫描目录。规范见 docs/theme-spec.md。
+        {{ t('admin.appearance.themeDirHint') }}
       </div>
-      <label style="margin-top: 12px;" for="ap-footer-text">页脚文字（支持 {year} / {site_name} / {site_url} 占位符）</label>
-      <textarea id="ap-footer-text" v-model="appearance.footer_text" rows="3" maxlength="1000" placeholder="© {year} {site_name} · 浙ICP备12345678号"></textarea>
-      <label style="margin-top: 12px;">页脚链接（友链 / 备案号，最多 8 条）</label>
+      <label style="margin-top: 12px;" for="ap-footer-text">{{ t('admin.appearance.footerText') }} <span class="muted">{{ '{year} / {site_name} / {site_url}' }}</span></label>
+      <textarea id="ap-footer-text" v-model="appearance.footer_text" rows="3" maxlength="1000" :placeholder="t('admin.appearance.footerPlaceholder')"></textarea>
+      <label style="margin-top: 12px;">{{ t('admin.appearance.footerLinks', { max: 8 }) }}</label>
       <div v-for="(link, i) in appearance.footer_links" :key="i" class="row" style="gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">
-        <input v-model="link.label" maxlength="40" placeholder="名称" style="max-width: 180px;" />
+        <input v-model="link.label" maxlength="40" :placeholder="t('admin.appearance.footerLinkName')" style="max-width: 180px;" />
         <input v-model="link.url" maxlength="2048" placeholder="https://" style="max-width: 420px;" />
-        <button class="secondary" type="button" @click="appearance.footer_links.splice(i, 1)">删除</button>
+        <button class="secondary" type="button" @click="appearance.footer_links.splice(i, 1)">{{ t('common.delete') }}</button>
       </div>
-      <button class="secondary" type="button" v-if="appearance.footer_links.length < 8" @click="appearance.footer_links.push({ label: '', url: '' })">添加链接</button>
-      <p class="muted" style="font-size: var(--fs-xs); margin-top: 6px;">页脚文字和链接会公开展示；链接仅支持 http(s) 绝对地址。页脚始终保留 SkinNexus 版权行。</p>
-      <label style="margin-top: 12px;" for="ap-css">自定义 CSS（约 64KB 上限）</label>
+      <button class="secondary" type="button" v-if="appearance.footer_links.length < 8" @click="appearance.footer_links.push({ label: '', url: '' })">{{ t('admin.appearance.addLink') }}</button>
+      <p class="muted" style="font-size: var(--fs-xs); margin-top: 6px;">{{ t('admin.appearance.footerPublicHint') }}</p>
+      <label style="margin-top: 12px;" for="ap-css">{{ t('admin.appearance.css') }}</label>
       <textarea id="ap-css" v-model="appearance.custom_css" rows="5" placeholder=".card { border-radius: 16px; }"></textarea>
-      <label for="ap-js">自定义 JS（约 64KB 上限）</label>
+      <label for="ap-js">{{ t('admin.appearance.js') }}</label>
       <textarea id="ap-js" v-model="appearance.custom_js" rows="4" placeholder="document.addEventListener('DOMContentLoaded', () => { /* ... */ })"></textarea>
       <div class="muted" style="font-size: var(--fs-xs); margin-top: 8px;">
-        自定义 JS 与主题 JS 以管理员信任面原样注入（与 blessing 行为一致）——请只粘贴自己信任的代码。
-        JS 在 Vue 挂载前执行，操作界面 DOM 请包在 DOMContentLoaded 回调里。
+        {{ t('admin.appearance.jsTrustHint') }}
+        {{ t('admin.appearance.jsDomHint') }}
       </div>
       <div class="row" style="margin-top: 12px;">
-        <button @click="appearSave">保存外观</button>
+        <button @click="appearSave">{{ t('admin.appearance.save') }}</button>
         <span class="success" role="status" v-if="appearOk">{{ appearOk }}</span>
       </div>
       <div class="error" role="alert" v-if="appearError">{{ appearError }}</div>
