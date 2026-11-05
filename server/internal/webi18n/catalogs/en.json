@@ -46,6 +46,7 @@
   "landing.enterSkinlib": "Enter the skin library",
   "landing.enterUserCenter": "Open the user center",
   "landing.featured": "From the skin library",
+  "landing.help": "Help",
   "landing.intro": "A Minecraft skin site: upload skins and capes, run your closet, browse the library — and with Yggdrasil external login, launchers and servers swap the look directly.",
   "landing.registerAccount": "Create an account",
   "landing.statPlayers": "Game profiles",
@@ -80,6 +81,14 @@
   "seo.modelDefault": " (Steve classic)",
   "seo.modelSlim": " (Alex slim)",
   "seo.titleSuffix": "{name} - a Minecraft {kind}",
+  "skinlib.by": "by {name}",
+  "skinlib.count": "{n} public textures",
+  "skinlib.description": "Browse {n} public Minecraft skins and capes on {site}, sorted by newest or most liked, with server-rendered previews and per-skin detail pages.",
+  "skinlib.empty": "No public textures yet — uploads that are marked public show up here.",
+  "skinlib.next": "Next page",
+  "skinlib.page": "page {n}",
+  "skinlib.prev": "Previous page",
+  "skinlib.title": "Skin library",
   "ui.cancel": "Cancel",
   "ui.save": "Save",
   "viewer.likeFailed": "That did not work — please try again.",
@@ -88,6 +97,5 @@
   "viewer.reportDuplicate": "You already reported this texture.",
   "viewer.reportFailed": "Could not submit — please try again.",
   "viewer.saveFailed": "Could not save — please try again.",
-  "viewer.sourceUrlRequired": "Derivative and repost need the original http(s) URL.",
-  "landing.help": "Help"
+  "viewer.sourceUrlRequired": "Derivative and repost need the original http(s) URL."
 }

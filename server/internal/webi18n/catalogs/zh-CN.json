@@ -46,6 +46,7 @@
   "landing.enterSkinlib": "进入皮肤库",
   "landing.enterUserCenter": "进入用户中心",
   "landing.featured": "皮肤库精选",
+  "landing.help": "帮助中心",
   "landing.intro": "Minecraft 皮肤站：上传皮肤/披风、管理角色衣柜、逛皮肤库；配合 Yggdrasil 外置登录，启动器与服务器之间直接换装。",
   "landing.registerAccount": "注册账号",
   "landing.statPlayers": "游戏角色",
@@ -80,6 +81,14 @@
   "seo.modelDefault": "，Steve 常规模型",
   "seo.modelSlim": "，Alex 瘦臂模型",
   "seo.titleSuffix": "{name} 的 Minecraft {kind}",
+  "skinlib.by": "上传者 {name}",
+  "skinlib.count": "公开材质 {n} 个",
+  "skinlib.description": "在 {site} 浏览 {n} 个公开 Minecraft 皮肤与披风：可按最新或最多收藏排序，预览图由服务端渲染，每个材质都有独立详情页。",
+  "skinlib.empty": "还没有公开材质——把上传设为「公开」后会出现在这里。",
+  "skinlib.next": "下一页",
+  "skinlib.page": "第 {n} 页",
+  "skinlib.prev": "上一页",
+  "skinlib.title": "皮肤库",
   "ui.cancel": "取消",
   "ui.save": "保存",
   "viewer.likeFailed": "操作失败，请稍后重试",
@@ -88,6 +97,5 @@
   "viewer.reportDuplicate": "你已经举报过该材质。",
   "viewer.reportFailed": "提交失败，请稍后重试。",
   "viewer.saveFailed": "保存失败，请稍后重试",
-  "viewer.sourceUrlRequired": "二创/转载必须填写 http(s) 原始发布地址",
-  "landing.help": "帮助中心"
+  "viewer.sourceUrlRequired": "二创/转载必须填写 http(s) 原始发布地址"
 }

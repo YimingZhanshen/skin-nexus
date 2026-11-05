@@ -916,7 +916,7 @@ func main() {
 		}
 		return d
 	}
-	spa := spaHandler(spaDistDir, seoEng, appearEng, cfg.SiteName, landingFn, pluginHost.HasUIPath)
+	spa := spaHandler(spaDistDir, seoEng, appearEng, cfg.SiteName, landingFn, st, pluginHost.HasUIPath)
 	if oidcProvider != nil {
 		spa = oidcProvider.Wrap(spa)
 	}
@@ -1098,7 +1098,7 @@ func isKnownSPAPath(p string, uiPath func(string) bool) bool {
 	return strings.HasPrefix(p, "user/")
 }
 
-func spaHandler(dir string, seoEng *seo.Engine, appearEng *appearance.Engine, siteName string, landing func(*http.Request) landingData, uiPath func(string) bool) http.Handler {
+func spaHandler(dir string, seoEng *seo.Engine, appearEng *appearance.Engine, siteName string, landing func(*http.Request) landingData, skinlib skinlibLister, uiPath func(string) bool) http.Handler {
 	if st, err := os.Stat(dir); err == nil && st.IsDir() {
 		fs := http.FileServer(http.Dir(dir))
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1139,7 +1139,18 @@ func spaHandler(dir string, seoEng *seo.Engine, appearEng *appearance.Engine, si
 					return
 				}
 				html := string(raw)
-				html = seoEng.RenderHeadWith(r.Context(), html, pageMetaFor(p))
+				meta := pageMetaFor(p)
+				// The library list is the one SPA route that is public content a
+				// crawler is asked to index, so its first page ships in the HTML:
+				// Bing says critical content must not live behind client-side
+				// rendering, and AI crawlers do not run JavaScript at all.
+				if strings.TrimRight(p, "/") == "skinlib" {
+					if block, pm, ok := prerenderSkinlib(r.Context(), r, skinlib, siteName); ok {
+						html = injectAppContent(html, block)
+						meta = pm
+					}
+				}
+				html = seoEng.RenderHeadWith(r.Context(), html, meta)
 				html = appearEng.Render(r.Context(), html)
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.Header().Set("Cache-Control", "no-cache")

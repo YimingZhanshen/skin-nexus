@@ -222,11 +222,12 @@ func localeURL(u, lang string) string {
 // the site entity even before they reach a detail page.
 //
 // lang names the language the page is served in; `inLanguage` used to be pinned
-// to zh-CN on every page, including the English ones. The SearchAction node is
-// deliberately absent: it pointed at the skin library list, which is a
-// client-rendered shell marked noindex, and Bing's own rule for markup that does
-// not match the page is to ignore the annotation. It can come back with a
-// server-rendered list.
+// to zh-CN on every page, including the English ones.
+//
+// SearchAction targets the library list because that page now answers `?q=` on
+// the server (skinlib_ssr.go). It is annotated only where the promise is
+// checkable: Bing ignores markup that does not match the page, and Google's own
+// note is that structured data buys rich results, not AI citation.
 func (e *Engine) siteJSONLD(s Settings, lang string) string {
 	base := strings.TrimRight(s.Canonical, "/")
 	if base == "" {
@@ -267,6 +268,11 @@ func (e *Engine) siteJSONLD(s Settings, lang string) string {
 				"description": desc,
 				"inLanguage":  inLanguage,
 				"publisher":   map[string]any{"@id": orgID},
+				"potentialAction": map[string]any{
+					"@type":       "SearchAction",
+					"target":      base + "/skinlib?q={search_term_string}",
+					"query-input": "required name=search_term_string",
+				},
 			},
 			map[string]any{
 				"@type":       "Organization",
@@ -453,14 +459,14 @@ func SitemapXML(canonical, baseURL string, entries []SitemapEntry) string {
 	sb.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
 	sb.WriteString(`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" ` +
 		`xmlns:xhtml="http://www.w3.org/1999/xhtml">` + "\n")
-	// Only public, crawlable routes: the landing page and the server-rendered
-	// texture detail pages. The skin library list (/skinlib) is left out while it
-	// is a client-rendered shell — the shell always carries noindex, so listing it
-	// asks a crawler to index a URL this same site tells it to exclude. Rendering
-	// the list server-side is what earns it back (and with it the internal links
-	// a category page is supposed to hand out). /user/* stays behind login — never
-	// advertise it.
-	statics := []string{"/"}
+	// Only public, crawlable routes: the landing page, the skin library list and
+	// the server-rendered texture detail pages. /skinlib earns its place because
+	// the shell ships its first page as HTML (cmd/skin-nexus/skinlib_ssr.go,
+	// covered by skinlib_ssr_test.go) — while the list was an empty #app it was
+	// marked noindex, and advertising a noindexed URL in a sitemap is a mixed
+	// signal, so it had to come out. /user/* and every panel route stay behind
+	// login or the noindexed shell — never advertise them.
+	statics := []string{"/", "/skinlib"}
 	// One entry per language: a locale that only exists behind a cookie is not a
 	// URL, and the sitemap is where a crawler learns the two it does have.
 	writeURL := func(p string, lastmod time.Time) {

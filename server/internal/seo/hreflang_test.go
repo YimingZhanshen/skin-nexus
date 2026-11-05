@@ -91,17 +91,21 @@ func TestSitemapCarriesLocaleAlternates(t *testing.T) {
 	}
 }
 
-// The library list is a client-rendered shell and the shell always carries
-// noindex (landing.go pageMetaFor). Advertising it in the sitemap asks the
-// crawler to index a URL the same site tells it to exclude — one of the two has
-// to move. The honest answer is to render the list server-side and put it back;
-// until then the entry is dropped rather than kept as a contradiction.
-func TestSitemapDoesNotAdvertiseANoindexedShell(t *testing.T) {
+// The list page is listed because its first page now ships in the HTML — see
+// cmd/skin-nexus/skinlib_ssr.go and its test, which is the half that proves the
+// page has crawlable content. Panel routes and login-gated shells stay out
+// whatever else changes: an entry a crawler cannot read is soft-404 poison.
+func TestSitemapListsOnlyWhatACrawlerCanRead(t *testing.T) {
 	xml := SitemapXML("https://skin.test", "", nil)
-	if strings.Contains(xml, "<loc>https://skin.test/skinlib</loc>") {
-		t.Errorf("the SPA list shell is noindexed; a sitemap entry for it is a mixed signal:\n%s", xml)
+	if !strings.Contains(xml, `<loc>https://skin.test/skinlib?hl=zh-CN</loc>`) {
+		t.Errorf("the server-rendered list page should be listed:\n%s", xml)
 	}
 	if !strings.Contains(xml, `<loc>https://skin.test/?hl=zh-CN</loc>`) {
 		t.Error("the landing page must stay listed")
+	}
+	for _, banned := range []string{"/dashboard", "/admin", "/profile/", "/user/", "/login", "/register"} {
+		if strings.Contains(xml, banned) {
+			t.Errorf("%s must not be listed (login-gated or noindexed shell):\n%s", banned, xml)
+		}
 	}
 }

@@ -32,7 +32,11 @@
   </style>
 </head>
 <body>
-  <div id="app"><div class="boot-static"><span class="spin" aria-hidden="true"></span><p>…</p></div></div>
+  <!-- The server may replace what sits between these two markers with
+       server-rendered content (the public skin library list). Vue takes over
+       #app on mount either way, so the swap is the first paint, not a second
+       copy of the list. -->
+  <div id="app"><!--skin-app-start--><div class="boot-static"><span class="spin" aria-hidden="true"></span><p>…</p></div><!--skin-app-end--></div>
   <script type="module" src="/src/main.js"></script>
   <!--skin-custom-body-->
 </body>
