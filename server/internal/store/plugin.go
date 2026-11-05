@@ -254,7 +254,7 @@ func (m *Mysql) ListPluginKV(ctx context.Context, plugin, ns, prefix string, lim
 		`SELECT ns, k, v, expires_at, updated_at FROM plugin_kv
 		  WHERE plugin=? AND ns=? AND k LIKE `+m.db.Dialect().Concat("?", "'%'")+dialect.LikeEscapeClause()+`
 		    AND (expires_at IS NULL OR expires_at > ?)
-		  ORDER BY k LIMIT ?`, plugin, ns, prefix, m.now().UTC(), limit)
+		  ORDER BY k LIMIT ?`, plugin, ns, dialect.LikePrefix(prefix), m.now().UTC(), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +346,7 @@ func (m *Mysql) ListPluginDocs(ctx context.Context, plugin, coll, prefix string,
 	rows, err := m.db.QueryContext(ctx,
 		`SELECT coll, id, doc, created_at, updated_at FROM plugin_docs
 		  WHERE plugin=? AND coll=? AND id LIKE `+m.db.Dialect().Concat("?", "'%'")+dialect.LikeEscapeClause()+`
-		  ORDER BY id LIMIT ?`, plugin, coll, prefix, limit)
+		  ORDER BY id LIMIT ?`, plugin, coll, dialect.LikePrefix(prefix), limit)
 	if err != nil {
 		return nil, err
 	}

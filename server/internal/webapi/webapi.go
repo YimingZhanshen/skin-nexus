@@ -31,6 +31,7 @@ import (
 	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/ratelimit"
+	"skin-nexus/server/internal/redact"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/texture"
 	"skin-nexus/server/internal/union"
@@ -655,12 +656,17 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	idKey := "id:" + strings.ToLower(strings.TrimSpace(req.Identifier))
 	ipKey := "ip:" + ygg.ClientIP(r)
+	// The limiter keys on whatever the visitor typed, because it has to tell two
+	// accounts apart whether they signed in by address or by nickname. The log
+	// field does not get that latitude: a table retained for 90 days would
+	// otherwise keep a permanent copy of every address that failed to log in, so
+	// every Entry below writes the masked form.
 	if b.Limiter != nil {
 		if b.Limiter.Locked(idKey) {
 			ra := int(b.Limiter.RetryAfter(idKey).Seconds()) + 1
 			w.Header().Set("Retry-After", strconv.Itoa(ra))
 			b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
-				Outcome: accesslog.OutcomeDenied, Who: req.Identifier, Detail: "locked"})
+				Outcome: accesslog.OutcomeDenied, Who: redact.Identifier(req.Identifier), Detail: "locked"})
 			// The header is for HTTP clients; the body field is for the SPA,
 			// which never sees response headers (fetch/XHR wrappers hand the
 			// page a parsed body and a status).
@@ -670,7 +676,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		if !b.Limiter.Allow(ipKey) {
 			b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
-				Outcome: accesslog.OutcomeDenied, Who: req.Identifier, Detail: "rate_limited"})
+				Outcome: accesslog.OutcomeDenied, Who: redact.Identifier(req.Identifier), Detail: "rate_limited"})
 			// No seconds here: the sliding-window counter (Limiter.Allow) does
 			// not record a lockout time the way the failure box does, so
 			// RetryAfter would only ever answer 0. "slow down" is the honest
@@ -685,7 +691,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 			b.Limiter.Fail(idKey)
 		}
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
-			Outcome: accesslog.OutcomeFail, Who: req.Identifier, Detail: "unknown_account"})
+			Outcome: accesslog.OutcomeFail, Who: redact.Identifier(req.Identifier), Detail: "unknown_account"})
 		writeErrCode(w, http.StatusUnauthorized, "wrong account or password", i18n.MsgCredentials)
 		return
 	}
@@ -695,7 +701,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 	ok, err := b.Store.VerifyPassword(r.Context(), u.ID, req.Password)
 	if err != nil {
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
-			Outcome: accesslog.OutcomeError, UID: u.ID, Who: req.Identifier, Detail: "verify_error"})
+			Outcome: accesslog.OutcomeError, UID: u.ID, Who: redact.Identifier(req.Identifier), Detail: "verify_error"})
 		writeInternal(r, w, err)
 		return
 	}
@@ -704,7 +710,7 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 			b.Limiter.Fail(idKey)
 		}
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
-			Outcome: accesslog.OutcomeFail, UID: u.ID, Who: req.Identifier, Detail: "bad_password"})
+			Outcome: accesslog.OutcomeFail, UID: u.ID, Who: redact.Identifier(req.Identifier), Detail: "bad_password"})
 		writeErrCode(w, http.StatusUnauthorized, "wrong account or password", i18n.MsgCredentials)
 		return
 	}
@@ -719,13 +725,13 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 	perm, err := b.Store.UserPermission(r.Context(), u.ID)
 	if err != nil {
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
-			Outcome: accesslog.OutcomeError, UID: u.ID, Who: req.Identifier, Detail: "permission_read"})
+			Outcome: accesslog.OutcomeError, UID: u.ID, Who: redact.Identifier(req.Identifier), Detail: "permission_read"})
 		writeInternal(r, w, err)
 		return
 	}
 	if perm == -1 {
 		b.webAccessLog(r, accesslog.Entry{Kind: accesslog.WebLogin,
-			Outcome: accesslog.OutcomeDenied, UID: u.ID, Who: req.Identifier, Detail: "banned"})
+			Outcome: accesslog.OutcomeDenied, UID: u.ID, Who: redact.Identifier(req.Identifier), Detail: "banned"})
 		writeErrCode(w, http.StatusForbidden, "this account is suspended", i18n.MsgAccountBanned)
 		return
 	}

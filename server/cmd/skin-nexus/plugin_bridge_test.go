@@ -77,3 +77,28 @@ func TestPluginBridgeDeliversToAnOpaqueFrameWithoutLeavingCredentials(t *testing
 		t.Error("init no longer sends theme tokens; plugin UIs fall back to their own palette and stop following the active theme")
 	}
 }
+
+// `navigate` is the one bridge message that moves the whole page, so its filter
+// is a redirect target in its own right. Prefix rules on the raw string are the
+// shape that leaks: "//host" and "/\host" both leave the site while looking like
+// a path, and a browser resolves them before anything can compare origins.
+func TestPluginNavigateStaysOnThisOrigin(t *testing.T) {
+	src := pluginFrameSource(t)
+	i := strings.Index(src, "case 'navigate':")
+	if i < 0 {
+		t.Fatal("the navigate case is gone; if the bridge moved, this gate has to follow it")
+	}
+	body := src[i:]
+	if j := strings.Index(body, "break"); j >= 0 {
+		body = body[:j]
+	}
+	if !strings.Contains(body, "new URL(") {
+		t.Errorf("navigate does not resolve the target before judging it:\n%s", body)
+	}
+	if !strings.Contains(body, ".origin === location.origin") {
+		t.Errorf("navigate does not compare the resolved origin against this site's:\n%s", body)
+	}
+	if strings.Contains(body, "startsWith('/')") {
+		t.Error("navigate is back to a string-prefix guard, which admits /\\evil.com")
+	}
+}

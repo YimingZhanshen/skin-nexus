@@ -177,7 +177,19 @@ function onMessage(ev) {
     }
     case 'request': request(p, msg.id); break
     case 'navigate':
-      if (typeof p.path === 'string' && p.path.startsWith('/') && !p.path.startsWith('//')) location.assign(p.path)
+      // A sandboxed frame cannot move the top window, so the host does it on
+      // request — which makes this the one message that can take the whole page
+      // somewhere else. Same-origin only, and it has to be *parsed*: a string
+      // that starts with "/" is not automatically local, because "//evil.com"
+      // and "/\evil.com" both resolve to another host while looking like a path.
+      // A full URL of this very site is something a plugin legitimately sends,
+      // so it is compared by origin rather than rejected by shape.
+      if (typeof p.path === 'string') {
+        try {
+          const target = new URL(p.path, location.origin)
+          if (target.origin === location.origin) location.assign(target.href)
+        } catch { /* not a URL at all: refuse */ }
+      }
       break
     case 'confirm':
       // A sandboxed frame cannot open a dialog of its own (no allow-modals), so

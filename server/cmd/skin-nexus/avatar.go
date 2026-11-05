@@ -296,9 +296,16 @@ func (d *avatarDeps) serveAvatarTID(w http.ResponseWriter, r *http.Request, tid 
 	d.serveAvatar(w, r, hash, typ, r.URL.Query().Has("3d"), private)
 }
 
-// handleAvatarHash addresses a texture by its content address, which is only
-// ever handed to people who may see it (the raw /textures/{hash} route runs the
-// same capability model), so no visibility lookup happens here.
+// handleAvatarHash renders the face of a texture addressed by content hash.
+//
+// A content address is not a permission. 65e2beb closed /texture-render/{hash}
+// for exactly this reason: the library list and the detail page hand the URL of
+// a private sheet to whoever may look at it, and every other pair of eyes that
+// ever sees that URL — a referrer, a saved page, a plugin proxy, a CDN log —
+// could fetch it too, and `public, max-age=86400` let an edge cache keep the
+// answer for the world. So the session decides here: an allowed viewer gets the
+// face, anyone else gets the embedded default the route already falls back to
+// for a missing texture, and nothing about a private sheet is cacheable.
 func (d *avatarDeps) handleAvatarHash(w http.ResponseWriter, r *http.Request) {
 	hash := r.PathValue("hash")
 	typ, _, err := d.st.TextureMetaByHash(r.Context(), hash)
@@ -310,7 +317,13 @@ func (d *avatarDeps) handleAvatarHash(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
-	d.serveAvatar(w, r, hash, typ, r.URL.Query().Has("3d"), false)
+	public, owners, verr := d.st.TextureHashVisibility(r.Context(), hash)
+	private := verr != nil || !public // a row whose visibility is unreadable is not public
+	if private && !privateHashAllowed(d.st, r, owners) {
+		d.serveAvatar(w, r, "", "", r.URL.Query().Has("3d"), true)
+		return
+	}
+	d.serveAvatar(w, r, hash, typ, r.URL.Query().Has("3d"), private)
 }
 
 // preview renders the full-body front+back views. Unlike avatars there is

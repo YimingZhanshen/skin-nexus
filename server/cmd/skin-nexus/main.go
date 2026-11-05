@@ -936,7 +936,10 @@ func main() {
 		}
 		log.Printf("client IP: X-Forwarded-For accepted only from %s", strings.Join(cfg.TrustedProxies, ", "))
 	}
-	srv := newHTTPServer(addr, pub.WrapRoot(securityHeaders(gzipHandler(root))))
+	// securityHeaders must be the outermost wrapper: pub.WrapRoot answers the
+	// CustomSkinAPI `GET /{player}.json` routes itself, so anything it wraps
+	// never sees a header applied underneath it.
+	srv := newHTTPServer(addr, securityHeaders(pub.WrapRoot(gzipHandler(root))))
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.ListenAndServe() }()
 
