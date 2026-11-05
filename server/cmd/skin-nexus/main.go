@@ -872,7 +872,22 @@ func main() {
 	root.Handle("GET /robots.txt", robotsHandler(seoEng))
 	root.Handle("GET /llms.txt", llmsHandler(seoEng))
 	root.Handle("GET /theme-assets/{id}/{file}", themeAssetHandler(themeReg))
-	root.Handle("/plugin-assets/", pluginHost.AssetHandler())
+	// A plugin UI page paints with its own inline defaults, so the theme has to
+	// travel as CSS in <head> rather than only through the postMessage bridge —
+	// otherwise every plugin page shows the stock palette for a moment before the
+	// bridge applies the site's theme. Same source the pages get it from.
+	pluginThemeHead := func(ctx context.Context) string {
+		id := appearEng.Settings(ctx).ActiveTheme
+		if id == "" {
+			return ""
+		}
+		t, err := themeReg.Get(id)
+		if err != nil {
+			return ""
+		}
+		return t.HeadHTML()
+	}
+	root.Handle("/plugin-assets/", pluginHost.AssetHandler(pluginThemeHead))
 	// Public server-rendered texture detail page (2026-10-25 拍板: 皮肤详情
 	// 是搜索引擎的内容页). Registered on the root mux so it beats the SPA
 	// catch-all below; private textures render only for their owner (noindex).

@@ -52,12 +52,12 @@ func TestUIMetadataAssetsAndSlots(t *testing.T) {
 		t.Fatal("HasUIPath mismatch")
 	}
 	rec := httptest.NewRecorder()
-	host.AssetHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/plugin-assets/ui/home.html", nil))
+	host.AssetHandler(nil).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/plugin-assets/ui/home.html", nil))
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "home") {
 		t.Fatalf("asset = %d %s", rec.Code, rec.Body.String())
 	}
 	rec = httptest.NewRecorder()
-	host.AssetHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/plugin-assets/ui/../plugin.json", nil))
+	host.AssetHandler(nil).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/plugin-assets/ui/../plugin.json", nil))
 	if rec.Code != 404 {
 		t.Fatalf("traversal = %d", rec.Code)
 	}
@@ -76,7 +76,7 @@ func TestUIMetadataAssetsAndSlots(t *testing.T) {
 		t.Fatal("disabled plugin still exposes UI")
 	}
 	rec = httptest.NewRecorder()
-	host.AssetHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/plugin-assets/ui/home.html", nil))
+	host.AssetHandler(nil).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/plugin-assets/ui/home.html", nil))
 	if rec.Code != 404 {
 		t.Fatalf("disabled asset = %d", rec.Code)
 	}
