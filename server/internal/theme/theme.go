@@ -55,6 +55,11 @@ type Requires struct {
 type Theme struct {
 	Manifest Manifest
 	BaseDir  string
+
+	// Token view of the pack's stylesheets, computed on first use. A Registry
+	// rescan replaces the *Theme, so a pack edit is picked up with the rescan.
+	tokensOnce sync.Once
+	tokensCSS  string
 }
 
 var (

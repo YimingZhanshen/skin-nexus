@@ -885,7 +885,11 @@ func main() {
 		if err != nil {
 			return ""
 		}
-		return t.HeadHTML()
+		// TokenStyle, not HeadHTML: a plugin document must inherit the
+		// palette, and a linked theme stylesheet would also apply the theme's
+		// bare element rules (body background wash, h1/h2 font, input size) to
+		// the plugin's own markup.
+		return t.TokenStyle()
 	}
 	root.Handle("/plugin-assets/", pluginHost.AssetHandler(pluginThemeHead))
 	// Public server-rendered texture detail page (2026-10-25 拍板: 皮肤详情

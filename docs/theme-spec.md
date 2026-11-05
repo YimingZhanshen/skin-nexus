@@ -75,9 +75,14 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 变量集以 `web/src/style.css` 的实际定义为准（AI 生成前可对照最新版）。
 
 **`color-scheme` 也要自己声明**（`:root { color-scheme: light }` 或 `dark`，与你的 `--bg` 明暗一致）：
-插件页的 HTML 由宿主注入本主题的样式表，若主题不写 `color-scheme`，插件自己那段
-`:root { color-scheme: dark }` 就会留下——结果是「浅色配色 + 深色滚动条与表单控件」。
-宿主桥按 `--bg` 的亮度判定明暗，注入表取的九个源变量是
+插件页的 HTML 由宿主注入本主题的**根令牌**，`color-scheme` 是其中被带过去的一条；主题不写它，
+插件自己那句 `:root { color-scheme: dark }` 就留下——浅色主题配深色滚动条与表单控件。
+
+**令牌必须写在 `:root` 或 `html` 上**：宿主只把这两个选择器上的自定义属性（加 `color-scheme`）
+交给插件页，写在 `body` 或其它选择器上的令牌进不了沙箱文档，那一页会先画插件默认色、
+等 JS 桥到达才纠正。反过来，你样式表里的裸元素规则（`body{background-image}`、`h1,h2{font-family}`、
+`input{font-size}`、`table{}`、`th,td{}`）**不会**漏进插件页——插件的字体与排版由插件自己决定，
+这是有意为之，别指望主题能改它们。宿主桥取的九个源令牌是
 `--bg --panel --border --text --muted --accent --jade --danger --ok`（链接取 `--jade`、成功色取 `--ok`，
 这两个在 §11 的派生令牌里，别忘了覆盖）。
 

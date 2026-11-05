@@ -8,10 +8,12 @@ package plugin
 // sees: dark defaults, then a jump to the theme a moment later.
 //
 // The fix is not to win the race, it is to take the theme out of the race: the
-// host serves this HTML, so the active theme's stylesheet and the mapping onto
+// host serves this HTML, so the active theme's root tokens and the mapping onto
 // the plugin contract can travel in <head> as render-blocking CSS, exactly the
-// way the SPA shell and the SSR pages already get them. The bridge stays —
-// locale, user and `dark` still come through `init`.
+// way the SPA shell and the SSR pages already get them. Tokens only — linking
+// the pack's real stylesheet also applies its bare element rules to the plugin's
+// own markup, which is the regression theme.TokenStyle exists to prevent.
+// The bridge stays — locale, user and `dark` still come through `init`.
 
 import (
 	"context"
@@ -46,7 +48,11 @@ func TestAssetHandlerInjectsThemeBeforeFirstPaint(t *testing.T) {
 	m.order = []string{"demo"}
 
 	theme := func(context.Context) string {
-		return `<link rel="stylesheet" href="/theme-assets/violet/style.css?v=1.2.0">`
+		// What theme.TokenStyle produces: root tokens only. A linked
+		// stylesheet here used to drag the theme's bare element rules
+		// (body{background-image}, h1,h2{font-family}, input{font-size}) into
+		// the plugin document — see internal/theme/tokens.go.
+		return `<style id="skin-theme-tokens">:root{--bg:#f7f5f0;--accent:#601986;color-scheme:light}</style>` + "\n"
 	}
 	h := m.AssetHandler(theme)
 
@@ -58,11 +64,18 @@ func TestAssetHandlerInjectsThemeBeforeFirstPaint(t *testing.T) {
 	body := rec.Body.String()
 
 	// 1) the theme arrives as CSS in <head>, not as a postMessage payload
-	if !strings.Contains(body, `/theme-assets/violet/style.css`) {
-		t.Fatalf("theme stylesheet not injected:\n%s", body)
+	if !strings.Contains(body, `--bg:#f7f5f0`) {
+		t.Fatalf("theme tokens not injected:\n%s", body)
 	}
 	if !strings.Contains(body, `--plugin-bg:var(--bg,`) {
 		t.Fatalf("token mapping not injected:\n%s", body)
+	}
+	// 1b) tokens before the mapping, or var(--bg) resolves to its fallback
+	// while the value that should have supplied it lands one rule later.
+	tokens := strings.Index(body, "--bg:#f7f5f0")
+	mapping := strings.Index(body, "--plugin-bg:var(--bg,")
+	if tokens > mapping {
+		t.Errorf("mapping injected before the token block (%d > %d)", mapping, tokens)
 	}
 	// 2) order is the whole fix: the injected block must come AFTER the plugin's
 	// own :root, or its literal defaults keep winning at equal specificity.

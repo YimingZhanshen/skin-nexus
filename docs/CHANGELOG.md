@@ -8,19 +8,31 @@
   自带 `:root{--plugin-bg:#101825;…}`，**第一帧必然画它那套**，而主题令牌只能走 JS 桥
   （frame `ready` → 宿主读 computed style → `init` → 插件 `applyTheme`），这条链一定在第一帧之后，
   于是肉眼能看到一次配色跳变。修法是让主题离开这场比赛：插件页的 HTML 是宿主发出去的，
-  所以把当前主题的样式表（同源 `/theme-assets/<id>/style.css`）和一段
-  `--plugin-*: var(--bg,#101825)…` 的映射**插到 `</head>` 之前**——顺序是关键，必须排在插件自己那段
-  `:root` 之后，同特异性后写的才赢。`init.theme` 照旧发（`dark` 判定、语言、用户态只有这条路能到）。
-  没启用主题时文件**一字不改**地发出，CSS/JS 资产一律不重写。四条断言：注入落在插件自己的 `:root`
-  之后且在 `<head>` 内、无主题与 nil 注入器都逐字节原样、非 HTML 不动、`Sandbox` 与
-  `must-revalidate` 跟着改写活下来（缓存钉住旧主题就是下一个 bug）。
-  另有一条防漂移闸：宿主 `PluginFrame.vue` 里那九个 `cssVar(…, 默认值)` 与注入表的九个回退**必须逐项相等**，
-  两条列表各自读源码比对——这道闸当场抓到过一次真实不一致（`rgba(169,138,95,.24)` 被 `[^)]*` 截断成半个值）。
-  真机已看：在浏览器里直接打开注入后的插件 HTML（宿主桥不触发、`documentElement` 上没有任何内联 `style`），
-  九个 `--plugin-*` 已经是当前主题的令牌值、`color-scheme` 也随主题走；同一页里 `init.theme` 会写的那九个值
-  与它们逐项相等，所以桥到达时不再产生第二次变化。顺带确认沙箱的不透明源不会挡下这份同源样式表
-  （frame 自报 `linkLoaded` 而无 `onerror`）。**未做的**：逐帧录屏（截图通道不可用），
-  以及冷缓存下这条 render-blocking `<link>` 的实际耗时——宿主页早先已请求同一 URL，推测命中，没测。
+  所以把**当前主题的根令牌**和一段 `--plugin-*: var(--bg,#101825)…` 的映射**插到 `</head>` 之前**——
+  顺序是关键，必须排在插件自己那段 `:root` 之后，同特异性后写的才赢。`init.theme` 照旧发
+  （`dark` 判定、语言、用户态只有这条路能到）。没启用主题时文件**一字不改**地发出，
+  CSS/JS 资产一律不重写。断言：注入落在插件自己的 `:root` 之后且在 `<head>` 内、令牌段排在映射段之前、
+  无主题与 nil 注入器都逐字节原样、非 HTML 不动、`Sandbox` 与 `must-revalidate` 跟着改写活下来
+  （缓存钉住旧主题就是下一个 bug）。另有一条防漂移闸：宿主 `PluginFrame.vue` 里那九个
+  `cssVar(…, 默认值)` 与注入表的九个回退**必须逐项相等**——这道闸当场抓到过一次真实不一致
+  （`rgba(169,138,95,.24)` 被 `[^)]*` 截断成半个值）。
+- **上一条的第一版把整张主题表 `<link>` 进插件文档，是个回归，被站长一眼看出来了**。主题的样式表
+  是给宿主 DOM 写的，里面有一批裸元素规则——wzbc-violet 就有 `body{background-image: 三枚柔紫高光}`、
+  `h1,h2{font-family: 像素体; font-weight:400}`、`input,select,textarea{font-size}`、`table{font-size}`、
+  `th,td{border-bottom}`、`html{overflow-x:clip}`。它们一起作用到插件自己的 `<body>`/`<h2>` 上：
+  实测 `body` 的 `background-image` 从 `none` 变成 `radial-gradient(920px 480px…)`、`h2` 从插件自己的
+  无衬线 600 掉成像素体 400、`input` 14px→13px、`html` overflow-x visible→clip。改成只注入令牌：
+  `theme.TokenStyle()` 从主题声明的 CSS 里抽出 `:root`/`html` 块上的自定义属性与 `color-scheme`
+  （`@media` 包裹保留，明暗双主题靠它切换），其余选择器一概不带。两道闸各管一半——选择器闸挡住
+  `body{--bg:…}`（写在非根选择器上的令牌不进插件页，回落到插件默认值 + JS 桥），属性闸挡住
+  `html{overflow-x:clip}` 这类根元素上的宿主决定；两处各做过变异取证。
+  抽取器自己也被注释咬过一次：注释不是选择器也不是属性名的一部分，但按字节切分时
+  `--bg: #f7f5f0; /* 纸感暖白 */` 会让注释尾巴粘进下一条的属性名，wzbc-violet 那一整块配色因此
+  被静默丢掉、`--plugin-bg` 悄悄用回回退值——只有真机计算值暴露了它，单元测试当时全绿。
+  真机复验（浏览器直接开注入后的插件 HTML，桥不触发、`documentElement` 无内联 `style`）：
+  九个 `--plugin-*` 全是主题值、`color-scheme` 随主题，同时 `background-image:none`、`h2` 回到插件自己的
+  字体与字重、`input` 14px、`overflow-x:visible`；`init.theme` 会写的九个值与它们逐项相等，
+  所以桥到达时不再产生第二次变化。**未做的**：逐帧录屏（截图通道不可用）。
 - **皮肤库列表页第一屏服务端渲染**（上一条 hreflang 的落地续集）：列表是 SPA 路由，交出的 HTML 里
   `#app` 只有一个转圈。Bing 的规范说关键内容别藏在客户端渲染后面，GEO 那边更硬——
   GPTBot/ClaudeBot/PerplexityBot **不执行 JS**，对它们这一页就是空的。于是玩家真正会搜的那一页

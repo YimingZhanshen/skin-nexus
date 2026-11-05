@@ -292,17 +292,21 @@ v2 的 UI 采用**固定插槽 + iframe/schema 页面**，不允许第三方直�
   页面型 iframe 使用 `panel` 背景、`max-width` 760（管理页 1080）与 28px 内边距；
   h2 22px / 正文 15px / 次要文字 13px；按钮提交中禁用；移动端触控目标 ≥44px；
   不加载外部字体/CDN；图片 lazy；错误文案可翻译；宿主在 iframe 8s 未 `ready` 时显示重试层。
-- **主题在首帧就位，不等桥**：插件页的 HTML 由宿主发出，宿主会把当前主题的样式表
-  （`/theme-assets/<id>/style.css`，同源）与一段把主题令牌映射到 `--plugin-*` 的 `<style>`
-  **插进 `</head>` 之前**——顺序是关键：它必须排在插件自己那段 `:root{--plugin-*:…}` 之后，
-  同特异性下后写的赢。于是第一帧就是站点当前的配色，不再出现「默认深色一闪、随后跳成主题」。
+- **主题在首帧就位，不等桥**：插件页的 HTML 由宿主发出，宿主会往 `</head>` 之前插两段 `<style>`——
+  先是当前主题的**根令牌**（`<style id="skin-theme-tokens">`，从主题样式表里抽出的 `:root`/`html`
+  自定义属性与 `color-scheme`，`@media` 包裹原样保留），再是把它们映射到 `--plugin-*` 的一段
+  （`<style id="skin-plugin-theme">`）。顺序是关键：两段都排在插件自己那段 `:root{--plugin-*:…}` 之后，
+  同特异性下后写的赢，于是第一帧就是站点当前的配色，不再出现「默认深色一闪、随后跳成主题」。
+  **只有令牌过来，主题的裸元素规则不过来**——`body{background-image:…}`、`h1,h2{font-family:…}`、
+  `input{font-size:…}` 这类写给宿主 DOM 的选择器不会作用到插件文档上，插件的字体、排版、装饰由自己决定。
   桥里的 `init.theme` 照旧发送（`dark` 判定、语言、用户态仍然只有这条路能到），
   所以**插件不要把 `--plugin-*` 写成自己的硬编码值来"固定外观"**：那正是被覆盖的那一层。
   要自定义，请用自己的变量名（如 `--my-thing: var(--plugin-accent)`），或在 `:root` 里带上
-  更高的特异性。注入表取的源令牌是 `--bg --panel --border --text --muted --accent --jade --danger --ok`
-  （链接取 `--jade`、成功色取 `--ok`）。**`color-scheme` 也别自己写**：主题样式表排在插件那段
-  `:root` 之后，主题声明了就用主题的（写 `dark` 只会造成一次明暗纠正）；这段注入只在有主题时发生：
-  没启用主题时插件文件**一字不改**地发出。
+  更高的特异性。映射取的源令牌是 `--bg --panel --border --text --muted --accent --jade --danger --ok`
+  （链接取 `--jade`、成功色取 `--ok`），**主题必须把这些写在 `:root`/`html` 上**——写在 `body` 上的
+  令牌进不了插件页，那一页会先用插件默认值、等桥到达才纠正（就是这次要消掉的那一下）。
+  `color-scheme` 也别自己写：注入段排在插件那段之后，主题声明了就用主题的。
+  这段注入只在有主题时发生：没启用主题时插件文件**一字不改**地发出。
 - 页面型 iframe 自带页面标题（h2），宿主不再重复渲染标题；插槽型 iframe 保持无标题。
 - SSR 详情页 slot 会自动追加宿主上下文查询参数：`?tid=<id>&hash=<texture-hash>`，
   slot 页面可直接从 `location.search` 读取（见 `texture-provenance`）。
