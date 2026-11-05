@@ -134,19 +134,43 @@ func normalize(lang string) string {
 	return ZhCN
 }
 
-// ResolveLang picks the language for a request: the SPA-written preference
-// first, then Accept-Language, then zh-CN (the site's origin language).
-// A cookie naming a language we do not ship is treated as no preference at all,
-// so a stale or hand-edited value cannot pin the wrong language on a reader.
+// ExplicitLang answers the language the URL itself names via `?hl=`, or "" when
+// the URL says nothing (or names a language we do not ship).
+//
+// This exists because a locale that lives only in a cookie or an Accept-Language
+// header is not a page a crawler can be pointed at: Google's rendering service
+// clears cookies and storage during page load, and hreflang alternates have to
+// resolve to distinct URLs. `?hl=` is the addressable form, so the emitter uses
+// it for the self-canonical and the two alternates.
+func ExplicitLang(r *http.Request) string {
+	return matchLang(r.URL.Query().Get("hl"))
+}
+
+// matchLang folds a language tag to one of the two we ship, or "".
+func matchLang(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case strings.ToLower(En):
+		return En
+	case strings.ToLower(ZhCN):
+		return ZhCN
+	}
+	return ""
+}
+
+// ResolveLang picks the language for a request: what the URL says first, then the
+// SPA-written preference, then Accept-Language, then zh-CN (the site's origin
+// language). A value naming a language we do not ship is treated as no preference
+// at all, so a stale cookie or a hand-written `?hl=` cannot pin the wrong language
+// on a reader.
 func ResolveLang(r *http.Request) string {
+	if l := ExplicitLang(r); l != "" {
+		return l
+	}
 	if c, err := r.Cookie(CookieName); err == nil {
 		// Compared folded: the constants carry the case the SPA writes
 		// ("zh-CN"), a hand-edited cookie need not respect it.
-		switch strings.ToLower(strings.TrimSpace(c.Value)) {
-		case strings.ToLower(En):
-			return En
-		case strings.ToLower(ZhCN):
-			return ZhCN
+		if l := matchLang(c.Value); l != "" {
+			return l
 		}
 	}
 	if l := parseAcceptLanguage(r.Header.Get("Accept-Language")); l != "" {

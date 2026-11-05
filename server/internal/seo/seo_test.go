@@ -121,20 +121,29 @@ func TestSitemapXML(t *testing.T) {
 		{Path: "/skinlib/42", LastMod: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)},
 		{Path: "/skinlib/43"},
 	})
+	// The sitemap lists the URLs that are their own canonical: one per shipped
+	// language. The bare path only appears as hreflang="x-default", because a
+	// visit to it canonicalises to whichever locale the negotiation picked — a
+	// <loc> for it would be a third copy of the same page, which is exactly the
+	// duplicate cluster the search engines ask us to consolidate.
 	for _, want := range []string{
-		"<loc>https://skin.test/</loc>",
-		"<loc>https://skin.test/skinlib</loc>",
-		"<loc>https://skin.test/skinlib/42</loc>",
+		"<loc>https://skin.test/?hl=zh-CN</loc>",
+		"<loc>https://skin.test/?hl=en</loc>",
+		"<loc>https://skin.test/skinlib/42?hl=zh-CN</loc>",
+		"<loc>https://skin.test/skinlib/42?hl=en</loc>",
+		"<loc>https://skin.test/skinlib/43?hl=en</loc>",
+		`hreflang="x-default" href="https://skin.test/skinlib/42"`,
 		"<lastmod>2026-10-01</lastmod>",
-		"<loc>https://skin.test/skinlib/43</loc>",
 	} {
 		if !strings.Contains(xml, want) {
 			t.Fatalf("missing %q in %q", want, xml)
 		}
 	}
-	// entry without lastmod must not carry an empty <lastmod> element
-	if strings.Count(xml, "<lastmod>") != 1 {
-		t.Fatalf("lastmod should appear once: %q", xml)
+	// one page with a date contributes one <lastmod> per language; the entry
+	// without a date contributes none at all (an empty <lastmod> is worse than
+	// no <lastmod>)
+	if got := strings.Count(xml, "<lastmod>"); got != 2 {
+		t.Fatalf("lastmod appears %d times, want 2 (the dated page, once per language): %q", got, xml)
 	}
 	// player profile pages are gone from the sitemap (SPA shells, no
 	// anonymous content — soft-404 poison)

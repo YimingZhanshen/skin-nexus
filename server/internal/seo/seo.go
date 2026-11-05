@@ -188,15 +188,46 @@ type PageMeta struct {
 	Path        string // canonical path below the site base ("/profile/steve")
 	OGImage     string // absolute per-page image; "" = site-wide OG image
 	NoIndex     bool   // private content viewed by its owner: never index
-	JSONLD      string // pre-marshalled JSON-LD block ("" = none); "</" is
+	// Lang is the language this page is served in ("zh-CN" / "en"). Set it and
+	// the head declares the locale as its own canonical URL (`?hl=`) plus an
+	// alternate for the other language; leave it empty on pages that are not
+	// language-addressable, which then keep the single locale-blind canonical.
+	Lang   string
+	JSONLD string // pre-marshalled JSON-LD block ("" = none); "</" is
 	// escaped on injection so user-supplied names can never close the
 	// script element early.
+}
+
+// The two languages the server-rendered pages ship. Kept as literals here
+// rather than importing webi18n: seo is below the render layer and must stay
+// addressable without pulling the catalog in.
+const (
+	langZhCN = "zh-CN"
+	langEn   = "en"
+)
+
+// localeURL is the addressable form of a page URL for one language.
+func localeURL(u, lang string) string {
+	if lang == "" {
+		return u
+	}
+	if strings.Contains(u, "?") {
+		return u + "&hl=" + lang
+	}
+	return u + "?hl=" + lang
 }
 
 // siteJSONLD builds the site-wide schema.org graph (WebSite + Organization).
 // It is emitted on every rendered page so search and AI crawlers can resolve
 // the site entity even before they reach a detail page.
-func (e *Engine) siteJSONLD(s Settings) string {
+//
+// lang names the language the page is served in; `inLanguage` used to be pinned
+// to zh-CN on every page, including the English ones. The SearchAction node is
+// deliberately absent: it pointed at the skin library list, which is a
+// client-rendered shell marked noindex, and Bing's own rule for markup that does
+// not match the page is to ignore the annotation. It can come back with a
+// server-rendered list.
+func (e *Engine) siteJSONLD(s Settings, lang string) string {
 	base := strings.TrimRight(s.Canonical, "/")
 	if base == "" {
 		base = strings.TrimRight(e.def.BaseURL, "/")
@@ -221,6 +252,10 @@ func (e *Engine) siteJSONLD(s Settings) string {
 	}
 	siteID := base + "/#website"
 	orgID := base + "/#organization"
+	inLanguage := lang
+	if inLanguage == "" {
+		inLanguage = langZhCN
+	}
 	obj := map[string]any{
 		"@context": "https://schema.org",
 		"@graph": []any{
@@ -230,13 +265,8 @@ func (e *Engine) siteJSONLD(s Settings) string {
 				"url":         base + "/",
 				"name":        name,
 				"description": desc,
-				"inLanguage":  "zh-CN",
+				"inLanguage":  inLanguage,
 				"publisher":   map[string]any{"@id": orgID},
-				"potentialAction": map[string]any{
-					"@type":       "SearchAction",
-					"target":      base + "/skinlib?q={search_term_string}",
-					"query-input": "required name=search_term_string",
-				},
 			},
 			map[string]any{
 				"@type":       "Organization",
@@ -316,6 +346,20 @@ func (e *Engine) RenderHeadWith(ctx context.Context, indexHTML string, pm PageMe
 	} else {
 		canonical += "/"
 	}
+	// A page whose language came from a cookie or a header is not a URL a
+	// crawler can be pointed at, so a locale-served page canonicalises to its
+	// `?hl=` form and names the other language as an alternate. x-default stays
+	// the bare URL: that is the one serving the visitor's own preference.
+	noindex := s.NoIndex || pm.NoIndex
+	selfCanonical, other, bareCanonical := "", "", canonical
+	if pm.Lang != "" && !noindex {
+		other = langEn
+		if pm.Lang == langEn {
+			other = langZhCN
+		}
+		selfCanonical = localeURL(bareCanonical, pm.Lang)
+		canonical = selfCanonical
+	}
 	var sb strings.Builder
 	sb.WriteString("<title>" + esc(title) + "</title>\n")
 	if desc != "" {
@@ -327,6 +371,11 @@ func (e *Engine) RenderHeadWith(ctx context.Context, indexHTML string, pm PageMe
 	sb.WriteString(`<meta name="robots" content="` + robotsContent(s, pm.NoIndex) + `">` + "\n")
 	if canonical != "" {
 		sb.WriteString(`<link rel="canonical" href="` + esc(canonical) + `">` + "\n")
+		if selfCanonical != "" {
+			sb.WriteString(`<link rel="alternate" hreflang="` + esc(pm.Lang) + `" href="` + esc(selfCanonical) + `">` + "\n")
+			sb.WriteString(`<link rel="alternate" hreflang="` + esc(other) + `" href="` + esc(localeURL(bareCanonical, other)) + `">` + "\n")
+			sb.WriteString(`<link rel="alternate" hreflang="x-default" href="` + esc(bareCanonical) + `">` + "\n")
+		}
 	}
 	sb.WriteString(`<meta property="og:title" content="` + esc(title) + `">` + "\n")
 	sb.WriteString(`<meta property="og:type" content="website">` + "\n")
@@ -336,6 +385,12 @@ func (e *Engine) RenderHeadWith(ctx context.Context, indexHTML string, pm PageMe
 	}
 	if canonical != "" {
 		sb.WriteString(`<meta property="og:url" content="` + esc(canonical) + `">` + "\n")
+	}
+	if pm.Lang != "" && !noindex {
+		// Social crawlers read these two, and they agree with the hreflang set
+		// above: what this page is, and what its sibling is.
+		sb.WriteString(`<meta property="og:locale" content="` + esc(pm.Lang) + `">` + "\n")
+		sb.WriteString(`<meta property="og:locale:alternate" content="` + esc(other) + `">` + "\n")
 	}
 	if desc != "" {
 		sb.WriteString(`<meta property="og:description" content="` + esc(desc) + `">` + "\n")
@@ -355,7 +410,7 @@ func (e *Engine) RenderHeadWith(ctx context.Context, indexHTML string, pm PageMe
 	if desc != "" {
 		sb.WriteString(`<meta name="twitter:description" content="` + esc(desc) + `">` + "\n")
 	}
-	if siteLD := e.siteJSONLD(s); siteLD != "" {
+	if siteLD := e.siteJSONLD(s, pm.Lang); siteLD != "" {
 		sb.WriteString(`<script type="application/ld+json">` +
 			strings.ReplaceAll(siteLD, "</", "<\\/") + `</script>` + "\n")
 	}
@@ -396,18 +451,32 @@ func SitemapXML(canonical, baseURL string, entries []SitemapEntry) string {
 	}
 	var sb strings.Builder
 	sb.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
-	sb.WriteString(`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` + "\n")
-	// Only public, crawlable routes: the landing page, the anonymous-readable
-	// skin library list (/skinlib, 2026-10-27 逻辑修复：公开列表须收录、注册页
-	// 不收录), and the server-rendered texture detail pages. /user/* stays
-	// behind login — never advertise it.
-	statics := []string{"/", "/skinlib"}
+	sb.WriteString(`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" ` +
+		`xmlns:xhtml="http://www.w3.org/1999/xhtml">` + "\n")
+	// Only public, crawlable routes: the landing page and the server-rendered
+	// texture detail pages. The skin library list (/skinlib) is left out while it
+	// is a client-rendered shell — the shell always carries noindex, so listing it
+	// asks a crawler to index a URL this same site tells it to exclude. Rendering
+	// the list server-side is what earns it back (and with it the internal links
+	// a category page is supposed to hand out). /user/* stays behind login — never
+	// advertise it.
+	statics := []string{"/"}
+	// One entry per language: a locale that only exists behind a cookie is not a
+	// URL, and the sitemap is where a crawler learns the two it does have.
 	writeURL := func(p string, lastmod time.Time) {
-		sb.WriteString("  <url><loc>" + esc(base+p) + "</loc>")
-		if !lastmod.IsZero() {
-			sb.WriteString("<lastmod>" + lastmod.UTC().Format("2006-01-02") + "</lastmod>")
+		bare := base + p
+		for _, lang := range []string{langZhCN, langEn} {
+			sb.WriteString("  <url><loc>" + esc(localeURL(bare, lang)) + "</loc>")
+			if !lastmod.IsZero() {
+				sb.WriteString("<lastmod>" + lastmod.UTC().Format("2006-01-02") + "</lastmod>")
+			}
+			for _, alt := range []string{langZhCN, langEn} {
+				sb.WriteString(`<xhtml:link rel="alternate" hreflang="` + alt +
+					`" href="` + esc(localeURL(bare, alt)) + `"/>`)
+			}
+			sb.WriteString(`<xhtml:link rel="alternate" hreflang="x-default" href="` + esc(bare) + `"/>`)
+			sb.WriteString("</url>\n")
 		}
-		sb.WriteString("</url>\n")
 	}
 	for _, p := range statics {
 		writeURL(p, time.Time{})

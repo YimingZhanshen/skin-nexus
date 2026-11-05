@@ -372,6 +372,6 @@ func renderLanding(ctx context.Context, seoEng *seo.Engine, appearEng *appearanc
 	if err := landingTmpl.Execute(&sb, v); err != nil {
 		return "<!DOCTYPE html><html><body><h1>landing render error</h1></body></html>"
 	}
-	html := seoEng.RenderHeadWith(ctx, sb.String(), seo.PageMeta{Description: intro})
+	html := seoEng.RenderHeadWith(ctx, sb.String(), seo.PageMeta{Description: intro, Lang: d.Lang})
 	return appearEng.Render(ctx, html)
 }

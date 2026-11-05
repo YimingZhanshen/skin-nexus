@@ -4,6 +4,26 @@
 
 ## 2026-11-05
 
+- **两种语言从此是两种 URL**（SEO/GEO 第一片）。此前一个 URL 靠 cookie 与
+  `Accept-Language` 决定语言：`hreflang` 全仓零命中，canonical 不带语言，站点图谱里
+  `inLanguage` 无论页面是什么语言都写死 `zh-CN`——爬虫只会编入它碰巧抓到的那一个变体，
+  另一种语言在索引里等于不存在（Google 的 get-started 与 Bing 的规范都要求「显式声明本地化版本」）。
+  现在 `?hl=zh-CN|en` 是一等 URL：`ResolveLang` 把它排在 cookie 与请求头之前（渲染服务
+  会清空 cookie，把语言只存在 cookie 里等于对爬虫不存在），页面自 canonical 到带 `?hl`
+  的自己、把另一语言声明成 alternate、裸路径留作 `x-default`（它本来就 canonical 到某个
+  语言页，再列一条 `<loc>` 只会造出第三个副本）。`og:locale` / `og:locale:alternate` /
+  `inLanguage` 跟着页面走。
+  sitemap 两处一起纠正：每个页面按语言各列一条 `<loc>` 并带 `xhtml:link` 交替声明；
+  `/skinlib` 列表页**暂时从 sitemap 移除**——它是客户端渲染的壳，壳一律 `noindex`，
+  一边递 URL 一边叫人别索引是自相矛盾的信号（真要拿回这一页，办法是服务端渲染列表，
+  而不是把 `noindex` 摘掉）。同理由是指向 `/skinlib?q=` 的 `SearchAction`：
+  Bing 对「标注与页面不符」的处理是忽略标注，Google 也已下线站点搜索框富结果，
+  这一节点一并去掉，列表页服务端化之后可以名正言顺地回来。
+  真机验证（本地实例）：`/` 与 `/?hl=en` 分别给出
+  `rel="canonical" href="…/?hl=zh-CN"` / `…?hl=en`，两条 `hreflang` 交替 + `x-default`，
+  `og:locale` 与 `inLanguage` 随页面语言变化。
+
+
 - **把安全加固那一轮自己弄坏的东西逐项找回来**（七路并行审计，每条结论都回读代码复核后才写在这里）。
   同一轮里最像的一条：`477267b` 之后插件桥的静默回归不是孤例，加固的问题形态基本都是
   「**守卫只落了一半**」或「**失败不留声音**」。这轮修掉九处，四处只补文档口径，两处记账不动手：
