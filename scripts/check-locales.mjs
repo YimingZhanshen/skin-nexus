@@ -119,7 +119,7 @@ const SSR_CATALOG = ['zh-CN', 'en'].map((l) => [`server/internal/webi18n/catalog
 // `errors.*` must never appear here (that namespace belongs to the envelope
 // gate above), and page labels sit under `ui.` rather than `common.` because
 // `common.*` is already an error-code namespace the backend declares.
-const SSR_NS = new Set(['page', 'ui', 'detail', 'edit', 'report', 'notfound', 'seo', 'viewer', 'landing', 'device'])
+const SSR_NS = new Set(['page', 'ui', 'detail', 'lib', 'edit', 'report', 'notfound', 'seo', 'viewer', 'landing', 'device'])
 // Only these trees render page copy. Widening the scan to every Go file would
 // read the backend's error-code declarations (`report.resolved`, `common.bad_id`)
 // as if they were page keys and demand a catalog entry for each.

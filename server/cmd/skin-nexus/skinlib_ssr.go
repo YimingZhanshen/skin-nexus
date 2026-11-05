@@ -73,7 +73,7 @@ var ssrListTmpl = template.Must(template.New("ssr-skinlib").Funcs(tmplFuncs).Par
 <section class="ssr-list">
   <h1>{{.Title}}</h1>
   <p class="ssr-meta">{{.Count}}</p>
-  {{if .Empty}}<p class="ssr-meta">{{t .Lang "skinlib.empty"}}</p>{{else}}
+  {{if .Empty}}<p class="ssr-meta">{{t .Lang "lib.empty"}}</p>{{else}}
   <ul class="ssr-grid">
     {{range .Cards}}
     <li><a href="{{.Href}}"><img src="{{.Img}}" alt="{{.Alt}}" width="128" height="128" loading="lazy" /><span class="ssr-n">{{.Name}}</span><span class="ssr-w">{{.Who}}</span></a></li>
@@ -192,18 +192,18 @@ func prerenderSkinlib(ctx context.Context, r *http.Request, st skinlibLister, si
 			TID: row.TID, Name: row.Name, Alt: alt,
 			Href: "/skinlib/" + strconv.FormatInt(row.TID, 10),
 			Img:  "/preview/" + strconv.FormatInt(row.TID, 10),
-			Who:  webi18n.F(lang, "skinlib.by", "name", row.Nickname),
+			Who:  webi18n.F(lang, "lib.by", "name", row.Nickname),
 		})
 	}
-	title := webi18n.T(lang, "skinlib.title")
+	title := webi18n.T(lang, "lib.title")
 	if page > 1 {
-		title = title + " " + webi18n.F(lang, "skinlib.page", "n", strconv.Itoa(page))
+		title = title + " " + webi18n.F(lang, "lib.page", "n", strconv.Itoa(page))
 	}
 	data := ssrListData{
 		Lang: lang, Title: title, Style: template.CSS(ssrListStyle),
-		Count: webi18n.F(lang, "skinlib.count", "n", strconv.Itoa(total)),
+		Count: webi18n.F(lang, "lib.count", "n", strconv.Itoa(total)),
 		Cards: cards, Empty: len(cards) == 0,
-		PrevName: webi18n.T(lang, "skinlib.prev"), NextName: webi18n.T(lang, "skinlib.next"),
+		PrevName: webi18n.T(lang, "lib.prev"), NextName: webi18n.T(lang, "lib.next"),
 	}
 	if page > 1 {
 		data.Prev = skinlibHref("/skinlib", page-1, sort, typ, q, lang)
@@ -217,7 +217,7 @@ func prerenderSkinlib(ctx context.Context, r *http.Request, st skinlibLister, si
 	}
 	pm := seo.PageMeta{
 		TitleSuffix: title,
-		Description: webi18n.F(lang, "skinlib.description",
+		Description: webi18n.F(lang, "lib.description",
 			"site", siteName, "n", strconv.Itoa(total)),
 		Path: "/skinlib", Lang: lang,
 	}
