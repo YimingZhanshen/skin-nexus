@@ -299,7 +299,10 @@ v2 的 UI 采用**固定插槽 + iframe/schema 页面**，不允许第三方直�
   桥里的 `init.theme` 照旧发送（`dark` 判定、语言、用户态仍然只有这条路能到），
   所以**插件不要把 `--plugin-*` 写成自己的硬编码值来"固定外观"**：那正是被覆盖的那一层。
   要自定义，请用自己的变量名（如 `--my-thing: var(--plugin-accent)`），或在 `:root` 里带上
-  更高的特异性。这段注入只在有主题时发生：没启用主题时插件文件**一字不改**地发出。
+  更高的特异性。注入表取的源令牌是 `--bg --panel --border --text --muted --accent --jade --danger --ok`
+  （链接取 `--jade`、成功色取 `--ok`）。**`color-scheme` 也别自己写**：主题样式表排在插件那段
+  `:root` 之后，主题声明了就用主题的（写 `dark` 只会造成一次明暗纠正）；这段注入只在有主题时发生：
+  没启用主题时插件文件**一字不改**地发出。
 - 页面型 iframe 自带页面标题（h2），宿主不再重复渲染标题；插槽型 iframe 保持无标题。
 - SSR 详情页 slot 会自动追加宿主上下文查询参数：`?tid=<id>&hash=<texture-hash>`，
   slot 页面可直接从 `location.search` 读取（见 `texture-provenance`）。

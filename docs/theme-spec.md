@@ -74,6 +74,13 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 「落地页 token 命名空间」专节），主题切换即整站换肤。
 变量集以 `web/src/style.css` 的实际定义为准（AI 生成前可对照最新版）。
 
+**`color-scheme` 也要自己声明**（`:root { color-scheme: light }` 或 `dark`，与你的 `--bg` 明暗一致）：
+插件页的 HTML 由宿主注入本主题的样式表，若主题不写 `color-scheme`，插件自己那段
+`:root { color-scheme: dark }` 就会留下——结果是「浅色配色 + 深色滚动条与表单控件」。
+宿主桥按 `--bg` 的亮度判定明暗，注入表取的九个源变量是
+`--bg --panel --border --text --muted --accent --jade --danger --ok`（链接取 `--jade`、成功色取 `--ok`，
+这两个在 §11 的派生令牌里，别忘了覆盖）。
+
 ## 4. 选择器稳定区（安全区）
 
 ✅ **允许**：基于语义类名与 data 属性样式化：
