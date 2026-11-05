@@ -165,7 +165,13 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 ## 8. 高级：自定义 head HTML
 
 `custom_head_html`（admin 外观配置，随自定义 CSS 之后注入 `<head>`）可贴任意 head 片段
-（`<link>`/`<meta>`/`<script>` 等），适合挂统计脚本、字体、favicon——当前无独立输入框，
+（`<link>`/`<meta>`/`<script>` 等）——**能贴什么由本站 CSP 决定，不是由这个字段决定**：
+`script-src 'self' 'unsafe-inline'`、`style-src 'self' 'unsafe-inline'`、`font-src 'self' data:`。
+所以内联 `<script>`/`<style>` 与**站内自托管**的 `.js`/`.css`/字体都可以（favicon 属于
+`img-src`/文档请求，同样没问题）；而 `src="https://某个统计站/…"` 这种**第三方 origins 的脚本、
+样式表与字体一律被浏览器拒掉**——控制台会报 CSP violation，页面上不留痕迹地不执行。要挂第三方统计，
+要么把它的脚本自托管到站点里，要么在反代最外层改 CSP（改法见 deploy.md §3「安全响应头」，两处只配一层）。
+适合的场景因此是：自托管资源、结构化数据、`<meta>`、内联小段脚本。当前无独立输入框，
 可经 admin 外观 API（`POST /api/admin/v1/appearance`，字段 `custom_head_html`）设置。
 与自定义 CSS/JS 同一信任面。
 
@@ -201,8 +207,9 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 ② 打包成 zip 走 admin「外观」→ 本地主题包上传（热生效、免重启），或放入
 `data/themes/<id>/` 后**重启服务**才识别，面板选中保存才生效；③ 改样式后升
 `version` 或强刷缓存；④ 资源文件平铺放包根、全小写；⑤ `extends`/`slots`/`requires`
-里前两个当前不生效、`requires` 生效（写 `">=0.1"` 即可）；⑥ 如需挂统计/字体等 head
-内容，用 `custom_head_html`（admin 外观 API）而不是主题 JS。
+里前两个当前不生效、`requires` 生效（写 `">=0.1"` 即可）；⑥ 如需挂 head 内容（自托管统计、
+`<meta>`、结构化数据），用 `custom_head_html`（admin 外观 API）而不是主题 JS；**第三方 origins
+的脚本/样式/字体会被本站 CSP 拒绝**，边界见 §8。
 
 生成后：按上方「安装」步骤部署，admin 面板「外观」选择该主题保存即生效。
 

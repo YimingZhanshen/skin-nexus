@@ -4,6 +4,76 @@
 
 ## 2026-11-05
 
+- **把安全加固那一轮自己弄坏的东西逐项找回来**（七路并行审计，每条结论都回读代码复核后才写在这里）。
+  同一轮里最像的一条：`477267b` 之后插件桥的静默回归不是孤例，加固的问题形态基本都是
+  「**守卫只落了一半**」或「**失败不留声音**」。这轮修掉九处，四处只补文档口径，两处记账不动手：
+  · 主题市场的 install/uninstall/upload 三条路由注册时漏了 `b.auth`（`adminapi/appearance.go:90-92`），
+    而 `actorUID` 只有 `auth` 会注入 → `pluginSuper` 永远看到 actor 0 → **面板里这三个动作对谁都 403**，
+    README 却写着「主题市场、本地主题包上传」。补齐认证链后真机复验：装一个不存在的包回
+    `409 theme.not_found`（说明请求到达了服务），修前是 `403 admin.web_session_required`。
+  · 全局 1 MiB 请求体上限只豁免插件上传，主题上传自己声明的 16 MiB 根本没机会生效
+    （`adminapi.go` 的豁免现在是一张 `packageUploadRoutes` 表，并加了一条读自身源码的闸：
+    解析 multipart 的路由必须在表里，表里的路由必须真的解析 multipart——两个方向都会红）。
+  · `X-Admin-Token` 排在会话之前：浏览器只要曾经存过令牌就每个请求都带，于是人被判成机器、
+    actor 归零，所有「必须网页会话」的操作对登录着的超管也是 403。现在令牌匹配时若同请求带着
+    会话 cookie，先认人；纯机器调用与「带一个不是管理员的 cookie」仍然落回原通道（两条都测了）。
+    面板另外补了「本机仍存着 API 令牌 / 清除令牌」一行——之前这张卡在 `permission>0` 后就隐藏，
+    管理员既看不见也清不掉自己浏览器里那个凭据。
+  · 一个站点只有一枚 `skin_csrf`（`Path=/`），但每个插件 iframe 各存各的：`/_csrf` 每调一次就
+    重新签发，后开的页面把先开的顶掉，先那个的写操作全部 403 `plugin.csrf_failed`，页面开着
+    12 小时过期也是同一条路径。现在同一浏览器重复申请拿回同一个值（只认 64 位小写十六进制，
+    外部塞进来的值一律换掉），两条断言都在 `plugin/csrf_stability_test.go`。
+  · `/avatar/hash/{hash}` 是 `65e2beb` 那条私有材质门禁的**兄弟路由**，但它没被改：不查可见性、
+    `private` 硬编 false、响应 `public, max-age=86400`——库里 `avatar.go:299-301` 那句
+    「按 content address 寻址所以不用查」的前提，被同仓库 `avatar.go:408-411` 的注释直接否定。
+    现在与 `/texture-render` 同规则：允许的人看到脸，其他人拿到默认头像且一律 `private, no-store`；
+    公开哈希的缓存行为不变（一条测试专门钉这点，免得把性能修没了）。
+  · 插件 KV / 文档前缀扫描挂了 `ESCAPE '!'` 却把 `prefix` 原值绑定，`dialect.LikePrefix` 写好了
+    **零调用点**：前缀含 `_`（`cfg_` 这种）就多命中、含 `!` 就 0 行，全静默。假实现用
+    `strings.HasPrefix`、AST 闸只看 Go 侧 `%` 拼接，所以两道门禁都看不见——补的是真库断言
+    （`store/plugin_kv_prefix_test.go`，SQLite 腿，`cfg_`/`urgent!`/`50%` 三种前缀各一条）。
+  · `dcc72b3`「日志不留明文邮箱」遮住了 SMTP 那两行，漏了更持久的那处：登录把
+    `req.Identifier`（注释自己写着「email or nickname」）原样写进 `access_logs.who`，保留 90 天、
+    面板可搜。现在经 `redact.Identifier` ——昵称原样留（管理员要靠它对上号），含 `@` 的才遮；
+    顺手修了 `redact.Email` 用字节切片取首字符导致非 ASCII 用户名截出半个字符的问题。
+    另加一条读自身源码的闸，防止新的日志写入点又用原文。
+  · 「全站安全响应头」此前不是全站：`pub.WrapRoot(securityHeaders(...))` 让 CustomSkinAPI 的
+    `GET /{player}.json` 在包装**外层**就答完，nosniff/CSP/XFO/Referrer-Policy 一条都没有。
+    包装顺序换正，闸读 `main.go` 自己那行（不是测合成 handler，而是测接线，因为翻错顺序只有真接线看得见）。
+  · 插件 `navigate` 桥的过滤是 `startsWith('/') && !startsWith('//')`：`/\evil.com` 能过、
+    浏览器按 `\`→`/` 归一后整页跳到别人的站；反过来一个**同站完整 URL** 会被静默丢掉。
+    现在解析成 URL 再比 origin（同源放行、跨源拒绝、非 URL 拒绝），闸看源码形状。
+  · 顺带发现并修掉一条真实回显：主题包校验失败时响应里带着服务端临时目录路径
+    （`mkdir C:\Users\…\skintheme-4290567848: Access is denied`），而且主机磁盘权限问题被说成
+    「你的包有问题」，把人推去重打包。决定留在响应里、细节进日志（`?inspect=1` 才是给人看的结构化通道）。
+- **E1 的覆盖面补到 OIDC 那条腿**（`c8dcbb9` 今天才进 main，演示机还在 11-02 的 `sha-92bff16`，
+  生产未 pull——`token_digest_v1` 至今没在任何实例落过，所以这是唯一一次不用追加第二次不可逆重写的窗口）。
+  `oidc_refresh_tokens.token` 是 64 hex 随机串、30 天有效、按主键原文精确匹配，拿到就能换新的
+  access+refresh 对（`oidc/storage.go:308`），比 E1 当初收的三列更长命；README:48 那句
+  「读到库不等于读到还能用的登录态」对它不成立。现在它也进 `digestRewrites`，签发/查回/轮换/吊销
+  一律「客户端拿原文、库里存摘要」；实现陷阱记在代码里：`GetRefreshToken` 必须把 `rec.Token`
+  换回玩家呈报的原值，否则 `RotateRefreshToken` 的 `WHERE token = ?` 会对摘要再取一次摘要、
+  刷新轮换直接坏掉（集成腿加了「在途刷新穿过重写仍可用」这条断言，四引擎都跑）。
+  同处把「什么仍然保持原文、为什么」写实：`client_token`（单独不能认证 + 协议要求原样回吐 +
+  `CHAR(32)` 装不下）、OIDC 的 `code`/`device_code`（一次一用、几分钟失效）、`user_code`
+  （故意低熵给人抄，摘要形式反而把「读到库」变成「离线爆破」），以及导入器原样搬进来、
+  本程序从不读取的 `users.verification_token`。
+- **上手门槛那两条**：`docker-compose.quickstart.yml` 从来没引用 `SKIN_SETUP_TOKEN`，而 deploy.md:145
+  承诺「自己定一个则跨重启不变」——`.env` 只做插值，不进 `environment:` 就进不了容器，
+  所以零编辑路径上这个开关**一直是空的**；README 的安装段落也整个跳过了令牌这一格。
+  两个 compose 示例现在都转发它，中英文 README 的段落补上这一格与取值来源，`check-docs` 加第 5 条：
+  README 的 `cat > .env` 块、README.en 的同一块、quickstart 自己头注释里的同一块必须三方一致，
+  且列出的每个变量都得真的被 quickstart 引用（把这条删掉立刻红，验过）。
+  另外把 `SKIN_TRUSTED_PROXIES` 的反直觉之处写进 deploy.md:144：**列了清单就不再默认信 loopback**，
+  同机 nginx 要把 `127.0.0.1/32,::1/128` 一起列上；只按「我的反代是 Cloudflare」去填 CF 公网段，
+  `clientIP()` 会退回对端地址、每个访客塌成同一个 IP，注册每 IP 上限第三个人被挡、
+  四类 `ip:` 限流桶全站共用一只、审计与 `users.ip` 一律记成对端地址。行为本身有测试钉住，坑在文档。
+- **主题规范与 CSP 对不上的一句**：`theme-spec.md` 让人用 `custom_head_html`「挂统计脚本、字体」，
+  而 CSP 是 `script-src 'self' 'unsafe-inline'`、`font-src 'self' data:`——内联与**自托管**可用，
+  第三方 origins 的脚本/样式/字体会被浏览器拒绝。deploy.md:455 早已说明 `unsafe-inline` 是有意的产品取舍，
+  所以改的是规范措辞（§8 与 §9 的安装清单都补上了这条边界），不是放松 CSP。
+
+
 - **修掉我自己 11-04 引入的插件桥失效**（站长报的是「插件 UI 不适配自定义主题」，症状只是最表面那一层）：
   安全轮那条 `477267b`「postMessage 不再发往任意源」把宿主→iframe 的 targetOrigin 从 `'*'` 改成站点自己的源。
   但 frame 是 `sandbox="allow-scripts allow-forms"`（**故意**不给 `allow-same-origin`，否则插件 JS 能读站点 cookie），

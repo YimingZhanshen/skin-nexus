@@ -2,7 +2,8 @@
 //
 // Docs here are operational promises, not prose: an env table an operator
 // copy-pastes from, a compatibility matrix that says what works, a competitor
-// study that must be traceable to a snapshot. Four failures are checked:
+// study that must be traceable to a snapshot, and a quick start that has to
+// match the file it tells you to run. Five failures are checked:
 //
 //   1. a relative link that goes nowhere (the reader finds out, not us);
 //   2. a markdown table whose rows have differing column counts (GFM renders a
@@ -148,6 +149,41 @@ for (const name of known) {
 for (const name of documented) {
   if (!known.includes(name) && !composeOnly.includes(name)) {
     fail(`deploy.md documents ${name}, which no code reads (add it to env.go with its consumer, or drop the row)`)
+  }
+}
+
+// ---- 5: the quick-start .env block must match what compose forwards --------
+// Compose reads .env only to interpolate *this file*; a variable that is not
+// referenced in it never reaches the container. So a quick start can be wrong in
+// a way no runtime check notices: the operator sets a documented variable, the
+// service ignores it, and the behaviour they were promised silently is not there.
+// That is how SKIN_SETUP_TOKEN ended up wired into the wizard but not into the
+// one-command path.
+function envBlockKeys(text, label, stripHash = false) {
+  // The same block lives in a YAML comment header, so allow the leading "#".
+  const body = stripHash ? text.split('\n').map((l) => l.replace(/^\s*#\s?/, '')).join('\n') : text
+  const m = body.match(/cat > \.env <<EOF\n([\s\S]*?)\n\s*EOF/)
+  if (!m) {
+    fail(`${label}: no \`cat > .env <<EOF … EOF\` block found — the quick start moved, or this gate went blind`)
+    return []
+  }
+  return [...new Set([...m[1].matchAll(/(SKIN_[A-Z0-9_]+)=/g)].map((x) => x[1]))]
+}
+const readme = readFileSync(join(root, 'README.md'), 'utf8')
+const readmeEn = readFileSync(join(root, 'README.en.md'), 'utf8')
+const quickYml = readFileSync(join(root, 'docker-compose.quickstart.yml'), 'utf8')
+const zhKeys = envBlockKeys(readme, 'README.md')
+const enKeys = envBlockKeys(readmeEn, 'README.en.md')
+const ymlKeys = envBlockKeys(quickYml, 'docker-compose.quickstart.yml (header comment)', true)
+if (zhKeys.length < 4) fail(`README.md's quick start lists only ${zhKeys.length} variables — the parser is blind`)
+const keySet = (arr) => [...arr].sort().join(',')
+if (keySet(zhKeys) !== keySet(enKeys)) fail(`README.md and README.en.md promise different quick-start variables: ${keySet(zhKeys)} vs ${keySet(enKeys)}`)
+if (keySet(zhKeys) !== keySet(ymlKeys)) {
+  fail(`docker-compose.quickstart.yml's own header lists ${keySet(ymlKeys)} but the READMEs say ${keySet(zhKeys)} — one of the two is stale instructions`)
+}
+for (const name of zhKeys) {
+  if (!quickYml.includes(`\${${name}`)) {
+    fail(`${name} is in the quick-start .env but docker-compose.quickstart.yml never references it, so it never reaches the container`)
   }
 }
 

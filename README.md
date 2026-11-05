@@ -26,11 +26,14 @@ SKIN_BASE_URL=https://skin.example.com
 SKIN_DB_PASSWORD=$(openssl rand -hex 16)
 SKIN_DB_ROOT_PASSWORD=$(openssl rand -hex 16)
 SKIN_ADMIN_TOKEN=$(openssl rand -hex 32)
+SKIN_SETUP_TOKEN=$(openssl rand -hex 16)
 EOF
 docker compose -f docker-compose.quickstart.yml up -d
 ```
 
-打开 `http://<主机>:8080/setup`，填站点名、管理员账号和皮肤域。以后升级就是
+打开 `http://<主机>:8080/setup`，填站点名、管理员账号、皮肤域，以及上面那个 `SKIN_SETUP_TOKEN`
+（空库时谁先提交这张表单谁就是超管，所以先要一个只有你拿得到的值；没设的话它会每次启动随机生成，
+在 `docker compose logs skin-nexus` 那行 install token 里）。以后升级就是
 `docker compose pull && docker compose up -d`，数据卷不动。
 
 已有外部数据库（MySQL / MariaDB / PostgreSQL）、或想跑一个文件库（SQLite）、裸二进制与源码构建：见 [`docs/deploy.md`](docs/deploy.md) 与 [`docs/build.md`](docs/build.md)。

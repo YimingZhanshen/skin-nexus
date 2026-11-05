@@ -373,6 +373,11 @@ func (m *Mysql) ListUserAccessTokens(ctx context.Context, uid int64) ([]oidc.Acc
 }
 
 // ---- refresh tokens ----
+//
+// Stored as hex(sha256(value)) and looked up by that digest, like the session
+// and launcher tokens (see digest.go). The client keeps holding the raw value —
+// only the column changes — and every function below takes and returns that raw
+// value, so `oidc.Storage` never sees a digest it might hash twice.
 
 // SaveRefreshToken stores an opaque refresh token.
 func (m *Mysql) SaveRefreshToken(ctx context.Context, rec oidc.RefreshTokenRecord) error {
@@ -387,13 +392,18 @@ func (m *Mysql) SaveRefreshToken(ctx context.Context, rec oidc.RefreshTokenRecor
 	_, err = m.db.ExecContext(ctx,
 		`INSERT INTO oidc_refresh_tokens (token, uid, client_id, scopes, selected_pid, auth_time, expires_at, created_at, revoked)
 		 VALUES (?,?,?,?,?,?,?,?,?)`,
-		rec.Token, rec.UserID, rec.ClientID, scopes, nullableInt(rec.SelectedPID),
+		credentialDigest(rec.Token), rec.UserID, rec.ClientID, scopes, nullableInt(rec.SelectedPID),
 		nullableTime(rec.AuthTime), rec.ExpiresAt, createdAt, rec.Revoked)
 	return err
 }
 
 // GetRefreshToken returns a refresh token by value. Revoked rows are returned
 // as well (Revoked true); liveness is the caller's call.
+//
+// The record comes back carrying the *presented* value, not the column: the
+// caller feeds `rec.Token` straight into RotateRefreshToken / RevokeRefreshToken
+// (oidc/storage.go hands the whole record over), and a record holding the digest
+// would be digested a second time there and match nothing.
 func (m *Mysql) GetRefreshToken(ctx context.Context, token string) (oidc.RefreshTokenRecord, error) {
 	var rec oidc.RefreshTokenRecord
 	var scopes string
@@ -401,7 +411,7 @@ func (m *Mysql) GetRefreshToken(ctx context.Context, token string) (oidc.Refresh
 	var authTime sql.NullTime
 	err := m.db.QueryRowContext(ctx,
 		`SELECT token, uid, client_id, scopes, selected_pid, auth_time, expires_at, created_at, revoked
-		 FROM oidc_refresh_tokens WHERE token = ?`, token).
+		 FROM oidc_refresh_tokens WHERE token = ?`, credentialDigest(token)).
 		Scan(&rec.Token, &rec.UserID, &rec.ClientID, &scopes, &sel,
 			&authTime, &rec.ExpiresAt, &rec.CreatedAt, &rec.Revoked)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -415,6 +425,7 @@ func (m *Mysql) GetRefreshToken(ctx context.Context, token string) (oidc.Refresh
 	}
 	rec.SelectedPID = sel.Int64
 	rec.AuthTime = authTime.Time
+	rec.Token = token
 	return rec, nil
 }
 
@@ -429,7 +440,7 @@ func (m *Mysql) RotateRefreshToken(ctx context.Context, old, new oidc.RefreshTok
 	}
 	defer tx.Rollback()
 	res, err := tx.ExecContext(ctx,
-		`UPDATE oidc_refresh_tokens SET revoked = 1 WHERE token = ? AND revoked = 0`, old.Token)
+		`UPDATE oidc_refresh_tokens SET revoked = 1 WHERE token = ? AND revoked = 0`, credentialDigest(old.Token))
 	if err != nil {
 		return err
 	}
@@ -447,7 +458,7 @@ func (m *Mysql) RotateRefreshToken(ctx context.Context, old, new oidc.RefreshTok
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO oidc_refresh_tokens (token, uid, client_id, scopes, selected_pid, auth_time, expires_at, created_at, revoked)
 		 VALUES (?,?,?,?,?,?,?,?,?)`,
-		new.Token, new.UserID, new.ClientID, scopes, nullableInt(new.SelectedPID),
+		credentialDigest(new.Token), new.UserID, new.ClientID, scopes, nullableInt(new.SelectedPID),
 		nullableTime(new.AuthTime), new.ExpiresAt, createdAt, new.Revoked); err != nil {
 		return err
 	}
@@ -457,7 +468,7 @@ func (m *Mysql) RotateRefreshToken(ctx context.Context, old, new oidc.RefreshTok
 // RevokeRefreshToken marks one refresh token revoked (idempotent).
 func (m *Mysql) RevokeRefreshToken(ctx context.Context, token string) error {
 	_, err := m.db.ExecContext(ctx,
-		`UPDATE oidc_refresh_tokens SET revoked = 1 WHERE token = ?`, token)
+		`UPDATE oidc_refresh_tokens SET revoked = 1 WHERE token = ?`, credentialDigest(token))
 	return err
 }
 

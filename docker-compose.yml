@@ -39,6 +39,7 @@ services:
       SKIN_DATA_DIR: /data                          # textures/keys/themes root
       SKIN_AUTO_MIGRATE: 'true'                     # empty DB -> apply migrations/
       SKIN_ADMIN_TOKEN: CHANGE_ME                   # openssl rand -hex 32 (machine/API fallback)
+      SKIN_SETUP_TOKEN: ''                          # install-wizard token /setup asks for; '' = a fresh random value printed on the boot log line each start
       # optional modules (default off):
       # SKIN_OIDC_ENABLED: 'true'                   # launcher passwordless login (yggc/OIDC)
       # Signed plugin market defaults to the upstream registry; override both

@@ -26,11 +26,15 @@ SKIN_BASE_URL=https://skin.example.com
 SKIN_DB_PASSWORD=$(openssl rand -hex 16)
 SKIN_DB_ROOT_PASSWORD=$(openssl rand -hex 16)
 SKIN_ADMIN_TOKEN=$(openssl rand -hex 32)
+SKIN_SETUP_TOKEN=$(openssl rand -hex 16)
 EOF
 docker compose -f docker-compose.quickstart.yml up -d
 ```
 
-Open `http://<host>:8080/setup` and fill in the site name, admin account and skin domain. Upgrades are
+Open `http://<host>:8080/setup` and fill in the site name, admin account, skin domains and the
+`SKIN_SETUP_TOKEN` above — on an empty database whoever submits that form becomes the super admin, so
+the step asks for a value only the operator has. Leave it unset and the site mints a fresh one on every
+start and prints it on the `docker compose logs skin-nexus` install-token line. Upgrades are
 `docker compose pull && docker compose up -d`; data volumes are never touched.
 
 An external database (MySQL / MariaDB / PostgreSQL), a single-file SQLite database, a bare binary or a source build: [`docs/deploy.md`](docs/deploy.md) and [`docs/build.md`](docs/build.md).

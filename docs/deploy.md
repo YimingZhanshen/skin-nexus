@@ -141,7 +141,7 @@ environment:
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `SKIN_SITE_NAME` | `SkinNexus` | 站点名（面板可改） |
-| `SKIN_TRUSTED_PROXIES` | 空（= loopback + RFC1918 全信任） | 逗号分隔的 CIDR 列表，指定**哪些对端可以声称** `X-Forwarded-For`。留空沿用历史行为（同机 nginx / docker bridge 场景不用改）；一旦配置，只有列出的网段被信任，其余对端来的 XFF 一律不信。写错（非 CIDR）直接启动失败，而不是悄悄放宽信任——认证限流与审计里的 IP 全靠这条 |
+| `SKIN_TRUSTED_PROXIES` | 空（= loopback + RFC1918 全信任） | 逗号分隔的 CIDR 列表，指定**哪些对端可以声称** `X-Forwarded-For`。留空沿用历史行为（同机 nginx / docker bridge 场景不用改）；一旦配置，只有列出的网段被信任，其余对端来的 XFF 一律不信。写错（非 CIDR）直接启动失败，而不是悄悄放宽信任——认证限流与审计里的 IP 全靠这条。**这条是「替换」不是「追加」**：列了清单，loopback 就不再自动可信，所以同机 nginx 必须把 `127.0.0.1/32,::1/128` 一起列上。只按「我的反代是 Cloudflare」去列 CF 公网段而真实对端是本机，`clientIP()` 会退回对端地址、每个访客都塌成同一个 IP：注册的每 IP 上限第三个人就被挡，认证/找回密码/邮箱验证那几只 `ip:` 限流桶全站共用一个，审计与 `users.ip` 一律记成对端地址。CDN 场景的常规做法是**不设这个变量**，改开面板「安全与限流 → CDN 加速开关」（见 §3 末） |
 | `SKIN_SETUP_TOKEN` | 空（每次启动临时生成并打进日志） | 安装向导的一次性令牌。空库时 `/api/v1/setup` 谁先提交谁当超管，所以这一步要一个只有运维者拿得到的值：留空则本次启动随机生成并在日志里打印 `setup: ... install token "xxxxxxxxxx"`，`docker compose logs skin-nexus` 可见；自己定一个则跨重启不变。填错只回 403，不写任何数据；站点初始化后本变量不再起作用。**另一面也要知道**：随机源不可用时（`crypto/rand` 失败）既没有你的令牌也没有随机令牌，向导就是**裸开的**，此时唯一的提示是启动日志里那条 `setup: WARNING the install wizard is unguarded`——把站点暴露出去之前先 grep 这一行；自己设 `SKIN_SETUP_TOKEN` 就不依赖随机源 |
 | `SKIN_SERVER_NAME` | `SkinNexus` | Yggdrasil 元数据里的服务器显示名（面板可改） |
 | `SKIN_SKIN_DOMAINS` | 空 | 皮肤域白名单，逗号分隔；不接联盟填本站域名，接入 MUA Union 以联盟公布清单为准（改动会破坏联盟互认） |
@@ -298,16 +298,21 @@ docker compose pull && docker compose up -d    # 只换容器，卷不动，数�
 > 命令幂等，可反复执行；大库可先 `--limit 500` 试一段。文件缺失或不可解码的材质只计数、不猜测。
 
 > **升到「会话与启动器令牌只存摘要」的版本：这一次升级不可回滚**。新版首次启动会在一个事务里把
-> `web_sessions.token`、`ygg_tokens.access_token`、`ygg_join_sessions.access_token` 三处凭证列改写为
-> `hex(sha256(原值))`，并在同一事务里落一枚
+> `web_sessions.token`、`ygg_tokens.access_token`、`ygg_join_sessions.access_token`、
+> `oidc_refresh_tokens.token` 四处凭证列改写为 `hex(sha256(原值))`，并在同一事务里落一枚
 > `options` 标记；启动日志给出改写行数（`auth: rewrote N stored token(s) as digests (this happens once)`），
 > 只跑一次。摘要不可逆：代码退回旧版后，库里已经取不出原文，比对一律落空，**所有网页会话与启动器登录都要
 > 重新登录一次**（账号密码不受影响），且无法用代码修复。要退回只有两条路——接受重登，或按 §2.6 从升级前的
 > 备份恢复。所以 `pull` 之前先备份。
 >
+> `oidc_refresh_tokens.token` 在这一列里最要单独说一句：它是 OIDC 设备码登录发给启动器的**刷新令牌**，
+> 30 天有效、按主键原文精确比对，拿到它就能换出新的 access+refresh 对——比 E1 当初收的那三列更长命。
+>
 > 客户端手里那把原文不受影响：比对与查库都走同一套摘要，升级瞬间仍在线的会话继续可用（含 `validate` /
 > `refresh` / `join` / `hasJoined`）。`ygg_tokens.client_token` 故意保持原文——它单独不能认证任何事
 > （用到它的端点都还要求一把有效 accessToken），而 Yggdrasil 要求服务端把它原样回吐，摘要形式做不到。
+> OIDC 的 `code` / `device_code` 也是原文：一次一用、几分钟就失效；`user_code` 更是故意留原文，
+> 它只有 8 位、给人抄录，摘要形式反而把「读到库」变成「离线爆破」。
 > 升级后可核对：`fsck` 会输出 `credentials_at_rest rows=N digest_migrated=true`。
 
 > **材质目录对账 `fsck`**（缺省只读）：报「有文件无行」的孤儿字节、「有行无文件」的悬空引用、

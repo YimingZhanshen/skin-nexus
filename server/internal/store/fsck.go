@@ -122,7 +122,7 @@ func (m *Mysql) FSCKClosetOnMissingTextures(ctx context.Context) (int, error) {
 
 // FSCKCredentialDigestState answers「一份库备份里能不能直接读到活的登录态」.
 //
-// After the digest build has booted, those three columns hold hex(sha256(value));
+// After the digest build has booted, those columns hold hex(sha256(value));
 // before it they hold the exact string a client presents — and nothing about the
 // stored value separates the two forms (same length, same alphabet), which is the
 // reason the reads were rewritten instead of doubled. So this reports the marker
@@ -135,6 +135,7 @@ func (m *Mysql) FSCKCredentialDigestState(ctx context.Context) (rows int, migrat
 		`SELECT COUNT(*) FROM ygg_tokens WHERE access_token <> ''`,
 		`SELECT COUNT(*) FROM ygg_join_sessions WHERE access_token <> ''`,
 		`SELECT COUNT(*) FROM web_sessions`,
+		`SELECT COUNT(*) FROM oidc_refresh_tokens WHERE token <> ''`,
 	} {
 		var n int
 		if err = m.db.QueryRowContext(ctx, q).Scan(&n); err != nil {

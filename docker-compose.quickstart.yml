@@ -5,12 +5,19 @@
 #   SKIN_DB_PASSWORD=$(openssl rand -hex 16)
 #   SKIN_DB_ROOT_PASSWORD=$(openssl rand -hex 16)
 #   SKIN_ADMIN_TOKEN=$(openssl rand -hex 32)
+#   SKIN_SETUP_TOKEN=$(openssl rand -hex 16)
 #   EOF
 #   docker compose -f docker-compose.quickstart.yml up -d
 #
 # This file is the zero-edit variant of docker-compose.yml: every required
-# value comes from .env or the shell. For external MySQL, pinned images,
-# reverse-proxy notes and backups, use docker-compose.yml and docs/deploy.md.
+# value comes from .env or the shell. A key listed here is the only key that
+# reaches the container — compose reads .env to interpolate this file, it does
+# not hand the whole file to the service — so a variable that is documented but
+# missing below silently does nothing. SKIN_SETUP_TOKEN is the install-wizard
+# token /setup asks for; leaving it unset falls back to a fresh random value
+# printed on the boot log line every time the site is still uninitialised.
+# For external MySQL, pinned images, reverse-proxy notes and backups, use
+# docker-compose.yml and docs/deploy.md.
 
 services:
   skin-nexus:
@@ -27,6 +34,7 @@ services:
       SKIN_DATA_DIR: /data
       SKIN_AUTO_MIGRATE: 'true'
       SKIN_ADMIN_TOKEN: '${SKIN_ADMIN_TOKEN:?set SKIN_ADMIN_TOKEN in .env}'
+      SKIN_SETUP_TOKEN: '${SKIN_SETUP_TOKEN:-}'
       SKIN_PLUGIN_MARKET_URL: '${SKIN_PLUGIN_MARKET_URL:-https://yimingzhanshen.github.io/skin-nexus-plugins/v1/registry.json}'
       SKIN_PLUGIN_TRUST_KEYS: '${SKIN_PLUGIN_TRUST_KEYS:-market-2026-10:ID2EWgcfs1E4UbGCCX9WjD0aCgTof3oeuHV03IpdGNY=}'
       SKIN_THEME_MARKET_URL: '${SKIN_THEME_MARKET_URL:-https://yimingzhanshen.github.io/skin-nexus-plugins/themes/v1/registry.json}'

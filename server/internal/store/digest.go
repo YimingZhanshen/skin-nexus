@@ -4,18 +4,34 @@ package store
 //
 // Passwords, e-mail verification tokens and password-reset tokens have always
 // been stored as digests. The session and launcher tokens were the exception:
-// they sat in `web_sessions`, `ygg_tokens` and `ygg_join_sessions` as the exact
-// strings a client presents, so one read of those tables (a backup, an SQL
-// error echoing a row, a compromised dump) handed over live logins and live
-// launcher sessions. This file closes that gap: the tables hold
-// hex(sha256(value)) and are keyed by it, which is all any lookup ever needed.
+// they sat in `web_sessions`, `ygg_tokens`, `ygg_join_sessions` and
+// `oidc_refresh_tokens` as the exact strings a client presents, so one read of
+// those tables (a backup, an SQL error echoing a row, a compromised dump) handed
+// over live logins and live launcher sessions. This file closes that gap: the
+// tables hold hex(sha256(value)) and are keyed by it, which is all any lookup
+// ever needed. The OIDC refresh token belongs here for the same reason and is
+// the longest-lived of the lot: 30 days, rotating, and by itself enough to mint
+// a fresh access+refresh pair.
 //
-// What stays verbatim, and why: `ygg_tokens.client_token`. It is the launcher's
-// per-install pairing id — every endpoint that consumes it also requires a valid
-// access token, so it cannot authenticate by itself — and Yggdrasil expects the
-// server to hand the same value back, which a one-way form cannot do. It is also
-// CHAR(32), where a SHA-256 hex digest needs 64: storing its digest would cost
-// a table rebuild on SQLite for a value that is not a usable credential.
+// What stays verbatim, and why:
+//   - `ygg_tokens.client_token`. It is the launcher's per-install pairing id —
+//     every endpoint that consumes it also requires a valid access token, so it
+//     cannot authenticate by itself — and Yggdrasil expects the server to hand
+//     the same value back, which a one-way form cannot do. It is also CHAR(32),
+//     where a SHA-256 hex digest needs 64: storing its digest would cost a
+//     table rebuild on SQLite for a value that is not a usable credential.
+//   - `oidc_auth_requests.code` and `oidc_device_auth.device_code`, both
+//     single-use and dead within minutes, and `oidc_device_auth.user_code`,
+//     which is deliberately low-entropy because a human types it — digesting a
+//     short code turns a database read into an offline cracking exercise, which
+//     is worse than what it stores.
+//   - `users.verification_token`, a column this application never reads; the
+//     migration importer copies it forward from a Blessing database.
+//
+// The list above is `token_digest_v1`'s contract. Adding a column to
+// `digestRewrites` after a release cannot reuse the marker: a database that
+// already ran v1 looks done, and a row cannot be told apart as raw or digested
+// (both are 64 hex). A later addition needs its own marker and its own claim.
 
 import (
 	"context"
@@ -57,6 +73,7 @@ var digestRewrites = []digestRewrite{
 	{table: "ygg_tokens", column: "access_token", key: "id"},
 	{table: "ygg_join_sessions", column: "access_token", key: "id"},
 	{table: "web_sessions", column: "token", key: "token", byColumn: true},
+	{table: "oidc_refresh_tokens", column: "token", key: "token", byColumn: true},
 }
 
 // EnsureTokenDigests rewrites pre-digest rows once, at boot, in a single
