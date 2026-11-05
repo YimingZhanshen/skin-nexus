@@ -168,6 +168,10 @@ func runFSCK(args []string, out io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("sitemap coverage: %w", err)
 	}
+	credRows, credDigested, err := st.FSCKCredentialDigestState(ctx)
+	if err != nil {
+		return fmt.Errorf("credential digest state: %w", err)
+	}
 	fmt.Fprintf(out, "fsck %s engine=%s rows=%d addresses=%d tombstones=%d open_reports=%d\n",
 		cfg.TexturesDir, st.Engine(), rows, len(usage), tombs, openReports)
 	fmt.Fprintf(out, "files=%d orphans=%d struck_only=%d missing=%d unknown_names=%d recycled_slots=%d\n",
@@ -181,6 +185,8 @@ func runFSCK(args []string, out io.Writer) error {
 		dupPairs, dupExtra, dangling)
 	fmt.Fprintf(out, "sitemap public=%d listed=%d omitted=%d (limit %d, lowest ids win, so the newest skins are the ones missing)\n",
 		pub, listed, pub-listed, store.SitemapIDLimit)
+	fmt.Fprintf(out, "credentials_at_rest rows=%d digest_migrated=%v (raw and digest are the same shape, so only the marker says which; ygg client_token stays verbatim by design)\n",
+		credRows, credDigested)
 	if dupExtra > 0 {
 		fmt.Fprintln(out, "note: the library's like counts are a COUNT over that pivot, so every extra row is a ♥ that never happened; a unique index is the fix and it cannot be added before these rows are resolved")
 	}

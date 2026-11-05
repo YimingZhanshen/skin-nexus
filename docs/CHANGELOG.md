@@ -4,6 +4,22 @@
 
 ## 2026-11-05
 
+- **会话与启动器令牌改为只存摘要（不可回滚的一次升级）**：`web_sessions.token`、
+  `ygg_tokens.access_token`、`ygg_join_sessions.access_token` 原先存的是客户端呈报的那串原文，
+  于是任何一次库读取——备份、SQL 报错回显、被拖走的 dump——都是一张「还能登录的账号表」。现在存
+  `hex(sha256(原值))`，比对与查库都先摘要再比；摘要与原文同为 64 位十六进制，长度与前缀都分不开，
+  所以不做双读、不加判别列、迁移水位也不为它扩张：首次启动在**一个事务**里改写存量行并落
+  `options` 标记，标记与改写同时可见或同时不存在，日志给出行数，之后每次启动都跳过。
+  `ygg_tokens.client_token` 故意留原文（它单独不能认证，Yggdrasil 又要求服务端原样回吐，且列宽
+  `CHAR(32)` 装不下摘要）。**回滚语义变了**：旧代码退回后比不中任何一条，所有人要重新登录一次，
+  且无法用代码修复——`docs/deploy.md` §2.5 把这条写在了升级注意事项里。
+  验收是一台真站的两份二进制：旧版建号、登录、签一把在途令牌（库里此刻是原文），换新版开同一套库
+  （`auth: rewrote 2 stored token(s) as digests`，原文随即取不出），再用**同一把**在途凭证走完
+  `validate 204 → refresh 200 → join 204 → hasJoined 200`，升级前签发的网页 cookie 仍然 200；
+  第二次启动不重复改写。改写 SQL 由 `digestRewrites` 列表自己拼，所以另加一条走 CI 四引擎腿的
+  集成用例（MySQL/MariaDB/PostgreSQL/SQLite 各跑一遍，断改写前后行数相等）。变异三次：摘要截半 →
+  红在三列的期望摘要；漏掉 `web_sessions` → 红在 `rewrote 2 rows, want 3` 与 `in-flight session = 0 not found`；
+  `fsck` 改成恒报 `digest_migrated=true` → 红在「空库」与「升级前」两行。
 - **日志策略改回来了（站长拍板）**：昨晚把访问日志里的 `client_token` 落成了 sha256 前缀，
   今天按「管理员要能拿日志排障」的要求恢复原文，并把理由写进用例注释——clientToken 单独不能
   认证任何事（用到它的端点都还要求一把有效 accessToken），而它对排障的价值恰恰是分辨两台安装。

@@ -268,3 +268,68 @@ func TestSQLiteEngineEnsureTokenDigestsRewritesExistingRowsOnce(t *testing.T) {
 		t.Errorf("post-rewrite token unreadable: %v", err)
 	}
 }
+
+// fsck cannot tell a raw token from a digest by looking at the value — that is
+// the whole reason the rewrite is single-shot instead of a dual-format read — so
+// what it reports is the marker plus how many rows the rewrite would have had to
+// cover. Both halves are asserted, because each one alone would let a healthy-
+// looking line sit next to a table full of live sessions.
+func TestSQLiteEngineFSCKReportsWhetherCredentialsWereRewritten(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid := newMeasureUser(t, st, "fsck-cred@example.com", "fsckcred")
+	now := time.Now().UTC()
+
+	rows, migrated, err := st.FSCKCredentialDigestState(ctx)
+	if err != nil {
+		t.Fatalf("empty database: %v", err)
+	}
+	if rows != 0 || migrated {
+		t.Errorf("empty database = (%d, %v), want (0, false)", rows, migrated)
+	}
+
+	plant := func(table, sql string, args ...any) {
+		t.Helper()
+		if _, err := st.db.ExecContext(ctx, sql, args...); err != nil {
+			t.Fatalf("plant %s: %v", table, err)
+		}
+	}
+	plant("ygg_tokens",
+		`INSERT INTO ygg_tokens (user_id, client_token, access_token, created_at, expires_at, invalidated) VALUES (?,?,?,?,?,0)`,
+		uid, testClientToken32, rawAccessToken, now, now.Add(time.Hour))
+	plant("web_sessions", `INSERT INTO web_sessions (token, user_id, created_at, expires_at) VALUES (?,?,?,?)`,
+		rawSessionToken, uid, now, now.Add(time.Hour))
+
+	rows, migrated, err = st.FSCKCredentialDigestState(ctx)
+	if err != nil {
+		t.Fatalf("pre-upgrade state: %v", err)
+	}
+	if rows != 2 || migrated {
+		t.Errorf("raw credentials on site = (%d, %v), want (2, false) — this is the state an upgrade finds", rows, migrated)
+	}
+
+	if n, err := st.EnsureTokenDigests(ctx); err != nil || n != 2 {
+		t.Fatalf("rewrite = %d %v, want 2", n, err)
+	}
+	rows, migrated, err = st.FSCKCredentialDigestState(ctx)
+	if err != nil {
+		t.Fatalf("post-upgrade state: %v", err)
+	}
+	if rows != 2 || !migrated {
+		t.Errorf("after the rewrite = (%d, %v), want (2, true)", rows, migrated)
+	}
+
+	// The marker makes the work single-shot: a raw row that arrives afterwards
+	// (a restored partial backup, an old binary still writing) is reported as
+	// covered by the count but is not repaired, and fsck must not claim otherwise.
+	plant("ygg_join_sessions",
+		`INSERT INTO ygg_join_sessions (access_token, uuid, server_id, server_ip, created_at, expires_at) VALUES (?,?,?,?,?,?)`,
+		rawLauncherToken, "069a79f444e94726a5befca90e38aaf5", "srv-fsck", "203.0.113.9", now, now.Add(time.Hour))
+	rows, migrated, err = st.FSCKCredentialDigestState(ctx)
+	if err != nil {
+		t.Fatalf("late raw row: %v", err)
+	}
+	if rows != 3 || !migrated {
+		t.Errorf("late raw row = (%d, %v), want (3, true): the marker stays, the row is not rewritten", rows, migrated)
+	}
+}

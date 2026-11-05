@@ -120,6 +120,35 @@ func (m *Mysql) FSCKClosetOnMissingTextures(ctx context.Context) (int, error) {
 	return n, err
 }
 
+// FSCKCredentialDigestState answers「一份库备份里能不能直接读到活的登录态」.
+//
+// After the digest build has booted, those three columns hold hex(sha256(value));
+// before it they hold the exact string a client presents — and nothing about the
+// stored value separates the two forms (same length, same alphabet), which is the
+// reason the reads were rewritten instead of doubled. So this reports the marker
+// the rewrite commits, next to the number of credential rows it would have
+// covered: a count without the marker proves nothing, and the marker without the
+// count hides a site whose tables are still full of live sessions.
+// `ygg_tokens.client_token` is deliberately absent: it stays verbatim.
+func (m *Mysql) FSCKCredentialDigestState(ctx context.Context) (rows int, migrated bool, err error) {
+	for _, q := range []string{
+		`SELECT COUNT(*) FROM ygg_tokens WHERE access_token <> ''`,
+		`SELECT COUNT(*) FROM ygg_join_sessions WHERE access_token <> ''`,
+		`SELECT COUNT(*) FROM web_sessions`,
+	} {
+		var n int
+		if err = m.db.QueryRowContext(ctx, q).Scan(&n); err != nil {
+			return
+		}
+		rows += n
+	}
+	var marked int
+	if err = m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM options WHERE k = ?`, tokenDigestMarker).Scan(&marked); err != nil {
+		return
+	}
+	return rows, marked > 0, nil
+}
+
 // FSCKSitemapCoverage compares the public library with what the sitemap can
 // enumerate. PublicTextureIDs takes the lowest ids up to SitemapIDLimit, so on a
 // site past that ceiling the omitted pages are the newest skins — the content a

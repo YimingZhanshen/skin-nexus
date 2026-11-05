@@ -297,6 +297,19 @@ docker compose pull && docker compose up -d    # 只换容器，卷不动，数�
 >
 > 命令幂等，可反复执行；大库可先 `--limit 500` 试一段。文件缺失或不可解码的材质只计数、不猜测。
 
+> **升到「会话与启动器令牌只存摘要」的版本：这一次升级不可回滚**。新版首次启动会在一个事务里把
+> `web_sessions.token`、`ygg_tokens.access_token`、`ygg_join_sessions.access_token` 三处凭证列改写为
+> `hex(sha256(原值))`，并在同一事务里落一枚
+> `options` 标记；启动日志给出改写行数（`auth: rewrote N stored token(s) as digests (this happens once)`），
+> 只跑一次。摘要不可逆：代码退回旧版后，库里已经取不出原文，比对一律落空，**所有网页会话与启动器登录都要
+> 重新登录一次**（账号密码不受影响），且无法用代码修复。要退回只有两条路——接受重登，或按 §2.6 从升级前的
+> 备份恢复。所以 `pull` 之前先备份。
+>
+> 客户端手里那把原文不受影响：比对与查库都走同一套摘要，升级瞬间仍在线的会话继续可用（含 `validate` /
+> `refresh` / `join` / `hasJoined`）。`ygg_tokens.client_token` 故意保持原文——它单独不能认证任何事
+> （用到它的端点都还要求一把有效 accessToken），而 Yggdrasil 要求服务端把它原样回吐，摘要形式做不到。
+> 升级后可核对：`fsck` 会输出 `credentials_at_rest rows=N digest_migrated=true`。
+
 > **材质目录对账 `fsck`**（缺省只读）：报「有文件无行」的孤儿字节、「有行无文件」的悬空引用、
 > 只被墓碑引用的违规文件，以及 `AUTOINCREMENT` 之前留下的行 id 错配格。`--fix` 只 unlink
 > **既无行也无墓碑**的地址——被墓碑引用的是违规判定的最后一份物证，不自动删；`--deep`

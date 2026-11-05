@@ -64,12 +64,14 @@ var digestRewrites = []digestRewrite{
 // historical row shape the same way.
 //
 // The work is irreversible — a digest cannot be turned back into the token — so
-// it is guarded twice, deliberately: the marker read above short-circuits every
-// later boot, and the INSERT IGNORE claim inside the transaction is what makes a
-// concurrent boot walk away instead of digesting values that are already
-// digests. Removing either one still passes, so both must stay: re-running this
-// rewrite would silently log out every account on the site, and a guard you can
-// delete without a test noticing is not a guard.
+// it is guarded twice, deliberately: the marker read above answers every ordinary
+// boot without opening a transaction, and the do-nothing claim inside the
+// transaction is what makes a *concurrent* boot walk away instead of digesting
+// values that are already digests. The pair is the safety net, not either half:
+// one test asserts the behaviour they both produce ("a second pass rewrites
+// nothing"), and deleting one still leaves that green. That redundancy is the
+// point, because re-running the rewrite would silently log out every account on
+// the site and only the race can produce it.
 //
 // It returns the number of rows rewritten (0 when the work was already done).
 func (m *Mysql) EnsureTokenDigests(ctx context.Context) (int, error) {
