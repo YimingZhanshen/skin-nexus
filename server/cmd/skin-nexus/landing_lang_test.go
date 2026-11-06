@@ -23,6 +23,7 @@ func renderLandingLang(t *testing.T, lang string) string {
 			Year:      2026,
 			ThemeBase: themeBaseCSS,
 			Intro:     webi18n.T(lang, "landing.intro"),
+			Facts:     landingFacts(lang),
 			LoggedIn:  true,
 			Unread:    2,
 		},
