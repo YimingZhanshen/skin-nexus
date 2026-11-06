@@ -42,6 +42,7 @@ var testTables = []string{
 	"union_kv", "web_sessions", "audit_log", "options",
 	"ygg_join_sessions", "ygg_tokens", "uuid_map", "textures", "players", "users",
 	"invitation_codes", "user_closet", "password_reset_tokens", "access_logs", "schema_migrations",
+	"access_log_details",
 	"plugin_meta", "plugin_secrets", "plugin_kv", "plugin_docs", "plugin_migrations", "plugin_install_tx",
 	"host_jobs", "texture_reports", "texture_tombstones",
 	"email_verify_tokens", "notifications",
