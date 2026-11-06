@@ -249,14 +249,16 @@ func TestG10UnknownMethodIsSilent(t *testing.T) {
 			t.Fatalf("%s accepted an empty stored hash", m)
 		}
 	}
-	// OBSERVED, and it widens the hole above: the three modern method NAMES
-	// have no computeLegacy case either (password.go:130-149 — they are meant
-	// to be reached through the PHC prefix dispatch at password.go:109), so a
-	// row with an empty password column verifies for them too.
+	// The three modern method NAMES have no computeLegacy case either — they are
+	// meant to be reached through the PHC prefix dispatch, which an empty stored
+	// string never enters. G10 pinned this as OBSERVED (a row with an empty
+	// password column verified for them too); it is closed by the empty-digest
+	// guard alongside the assertion above, so the expectation here is now the
+	// opposite of what the finding recorded.
 	for _, m := range []string{MethodBCRYPT, MethodARGON2I, MethodPHPDefault} {
 		v := NewLegacyVerifier([]MethodSalt{{Method: m}})
-		if _, ok := v.VerifyLegacy(g10PW, ""); !ok {
-			t.Fatalf("OBSERVED TODAY: the %q slot accepts an empty stored hash", m)
+		if _, ok := v.VerifyLegacy(g10PW, ""); ok {
+			t.Fatalf("the %q slot accepts an empty stored hash — the guard regressed", m)
 		}
 	}
 	empty := NewLegacyVerifier(nil)
