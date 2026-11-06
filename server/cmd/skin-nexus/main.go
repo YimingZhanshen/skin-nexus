@@ -1121,9 +1121,10 @@ func spaHandler(dir string, seoEng *seo.Engine, appearEng *appearance.Engine, si
 	if st, err := os.Stat(dir); err == nil && st.IsDir() {
 		fs := http.FileServer(http.Dir(dir))
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			persistLang(w, r)
 			p := strings.TrimPrefix(r.URL.Path, "/")
 			if p == "" && landing != nil {
-				html := renderLanding(r.Context(), seoEng, appearEng, landing(r))
+				html := renderLanding(r, seoEng, appearEng, landing(r))
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				_, _ = w.Write([]byte(html))
 				return

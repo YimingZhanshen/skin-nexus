@@ -55,6 +55,8 @@ type ssrListData struct {
 	PrevName string
 	NextName string
 	Style    template.CSS
+	// LangSwitch: 与分页同排但语义不同的语言对照链接（D7/S2）。
+	LangSwitch template.HTML
 }
 
 const ssrListStyle = `.ssr-list{max-width:1040px;margin:0 auto;padding:24px 20px 40px;color-scheme:light dark}
@@ -66,6 +68,10 @@ const ssrListStyle = `.ssr-list{max-width:1040px;margin:0 auto;padding:24px 20px
 .ssr-grid .ssr-n{display:block;margin-top:6px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ssr-grid .ssr-w{display:block;font-size:12px;opacity:.66}
 .ssr-pager{display:flex;gap:14px;margin-top:22px;font-size:14px}
+.langsw{display:flex;gap:10px;align-items:center;font-size:13px}
+.langsw a{color:var(--muted);text-decoration:none;padding:2px 6px;border-radius:8px}
+.langsw a:hover{color:var(--text);text-decoration:underline}
+.langsw a[aria-current="true"]{color:var(--text);font-weight:600;text-decoration:none}
 @media (prefers-reduced-motion:reduce){.ssr-grid img{transition:none}}`
 
 var ssrListTmpl = template.Must(template.New("ssr-skinlib").Funcs(tmplFuncs).Parse(`
@@ -73,6 +79,7 @@ var ssrListTmpl = template.Must(template.New("ssr-skinlib").Funcs(tmplFuncs).Par
 <section class="ssr-list">
   <h1>{{.Title}}</h1>
   <p class="ssr-meta">{{.Count}}</p>
+  {{.LangSwitch}}
   {{if .Empty}}<p class="ssr-meta">{{t .Lang "lib.empty"}}</p>{{else}}
   <ul class="ssr-grid">
     {{range .Cards}}
@@ -204,6 +211,9 @@ func prerenderSkinlib(ctx context.Context, r *http.Request, st skinlibLister, si
 		Count: webi18n.F(lang, "lib.count", "n", strconv.Itoa(total)),
 		Cards: cards, Empty: len(cards) == 0,
 		PrevName: webi18n.T(lang, "lib.prev"), NextName: webi18n.T(lang, "lib.next"),
+		// The switch is locale, the pager below is pagination: same row shape,
+		// different meaning, and neither may silently replace the other.
+		LangSwitch: langSwitchFor(r, lang),
 	}
 	if page > 1 {
 		data.Prev = skinlibHref("/skinlib", page-1, sort, typ, q, lang)

@@ -73,6 +73,9 @@ type texDetailData struct {
 	FooterHTML template.HTML
 	ThemeBase  template.CSS
 
+	// LangSwitch: 顶栏里可见的中·EN 对照链接，渲染前由请求算出（D7/S2）。
+	LangSwitch template.HTML
+
 	HeadAnchors template.HTML
 	BodyAnchor  template.HTML
 	PluginSlot  template.HTML
@@ -123,6 +126,10 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
   .topnav a:hover { background: var(--hover-wash); color: var(--jade-hi); text-decoration: none; }
   .topnav a.primary { background: var(--cinnabar); color: var(--on-cinnabar); font-weight: 600; }
   .topnav a.primary:hover { background: var(--cinnabar-hi); color: var(--on-cinnabar); }
+  .langsw { display: flex; gap: 10px; align-items: center; margin-left: auto; font-size: var(--fs-s); }
+  .langsw a { color: var(--muted); text-decoration: none; padding: 4px 8px; border-radius: var(--r-s); }
+  .langsw a:hover { color: var(--text); text-decoration: underline; }
+  .langsw a[aria-current="true"] { color: var(--text); font-weight: 600; text-decoration: none; }
   .unread-badge { display: inline-block; min-width: 16px; margin-left: 6px; padding: 0 5px; border-radius: 9px; background: var(--cinnabar); color: var(--on-cinnabar); font-size: 11px; line-height: 17px; text-align: center; font-weight: 600; }
   .wrap { flex: 1 0 auto; width: 100%; max-width: 940px; margin: 0 auto; padding: 32px 24px 56px; }
   .crumb { font-size: var(--fs-s); color: var(--muted); margin: 0 0 16px; }
@@ -210,6 +217,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
         <a href="/skinlib">{{t .Lang "page.skinlib"}}</a>
         {{if .LoggedIn}}<a href="/user/dashboard">{{t .Lang "page.userCenter"}}{{if .Unread}}<span class="unread-badge">{{.Unread}}</span>{{end}}</a>{{else}}<a href="/login">{{t .Lang "page.login"}}</a><a class="primary" href="/register">{{t .Lang "page.register"}}</a>{{end}}
       </nav>
+      {{.LangSwitch}}
     </div>
   </header>
   <div class="wrap" id="main-content" tabindex="-1">
@@ -358,6 +366,7 @@ func texJSONLD(d texDetailData, canonical string) string {
 func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearance.Engine, siteName, baseURL string, texURL func(ctx context.Context, hash, url, typ string) string, slotHTML func(string, map[string]string) string) http.HandlerFunc {
 	base := strings.TrimRight(baseURL, "/")
 	return func(w http.ResponseWriter, r *http.Request) {
+		persistLang(w, r)
 		lang := webi18n.ResolveLang(r)
 		tid, err := strconv.ParseInt(r.PathValue("tid"), 10, 64)
 		if err != nil || tid <= 0 {
@@ -458,6 +467,7 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 		}
 		d.HeadAnchors = template.HTML(landingHeadAnchors)
 		d.BodyAnchor = template.HTML(landingBodyAnchor)
+		d.LangSwitch = langSwitchFor(r, d.Lang)
 		if err := texDetailTmpl.Execute(&sb, d); err != nil {
 			http.Error(w, "render error", http.StatusInternalServerError)
 			return

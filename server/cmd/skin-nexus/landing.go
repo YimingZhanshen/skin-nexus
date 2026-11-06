@@ -12,9 +12,9 @@ package main
 // app, with fallbacks).
 
 import (
-	"context"
 	"embed"
 	"html/template"
+	"net/http"
 	"strings"
 	"time"
 
@@ -64,6 +64,9 @@ type landingData struct {
 	LoggedIn bool
 	// Unread: 站内通知未读数，SSR 与 SPA 同一来源（2026-11-02）
 	Unread int
+	// LangSwitch: 可见的中·EN 对照链接，由 renderLanding 从请求算出，
+	// 调用点无法漏填（2026-11-07 D7/S2）
+	LangSwitch template.HTML
 }
 
 var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`<!DOCTYPE html>
@@ -115,6 +118,10 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
                   background: var(--ink-3); border: 1px solid var(--cinnabar); color: var(--cinnabar);
                   font-size: 12px; line-height: 17px; text-align: center; font-weight: 600; }
   .cta a:focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
+  .langsw { display: flex; justify-content: center; gap: 12px; margin: 18px 0 0; font-size: var(--fs-s); }
+  .langsw a { color: var(--muted); text-decoration: none; padding: 4px 8px; border-radius: var(--r-s); }
+  .langsw a:hover { color: var(--text); text-decoration: underline; }
+  .langsw a[aria-current="true"] { color: var(--text); font-weight: 600; text-decoration: none; }
   /* 统计卡：赭石回纹角饰（小音量），数字用赭石（朱砂只留给主按钮） */
   .stats { display: flex; gap: 16px; margin: 32px 0; }
   .stats div { position: relative; flex: 1; text-align: center; padding: 22px 12px; border-radius: var(--r-l);
@@ -297,6 +304,7 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
         <a class="alt" href="/skinlib">{{t .Lang "landing.browseSkinlib"}}</a>{{else}}<a class="primary" href="/register">{{t .Lang "landing.registerAccount"}}</a>
         <a class="alt" href="/login">{{t .Lang "page.login"}}</a>{{end}}
       </div>
+      {{.LangSwitch}}
     </header>
     <section class="stats">
       <div><b>{{.Users}}</b><span>{{t .Lang "landing.statUsers"}}</span></div>
@@ -349,13 +357,17 @@ type landingView struct {
 }
 
 // renderLanding renders the landing page through the same SEO + appearance
-// injection layers as the SPA shell.
-func renderLanding(ctx context.Context, seoEng *seo.Engine, appearEng *appearance.Engine, d landingData) string {
+// injection layers as the SPA shell. It takes the request, not a context, for
+// one reason: the language switch can only be derived from the URL, and a
+// render path that receives the request cannot forget to emit it.
+func renderLanding(r *http.Request, seoEng *seo.Engine, appearEng *appearance.Engine, d landingData) string {
+	ctx := r.Context()
 	// A missing language means a call site forgot to resolve one, not that the
 	// reader wants zh-CN — fall back loudly in the code, quietly in the page.
 	if d.Lang == "" {
-		d.Lang = webi18n.ZhCN
+		d.Lang = webi18n.ResolveLang(r)
 	}
+	d.LangSwitch = langSwitchFor(r, d.Lang)
 	d.Year = time.Now().Year()
 	d.FooterHTML = appearEng.FooterData(ctx, d.SiteName, d.SiteURL, d.Year).HTML()
 	intro := webi18n.T(d.Lang, "landing.intro")
