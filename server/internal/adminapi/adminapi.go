@@ -118,6 +118,7 @@ func (b *Backend) Handler() http.Handler {
 	// open to every admin; the writes are super-admin (permission=2) web-session
 	// only and are guarded inside the handler, not by the b.auth wrapper.
 	mux.HandleFunc("GET /api/admin/v1/access-log/detail-mode", b.auth(b.handleDetailModeGet))
+	mux.HandleFunc("GET /api/admin/v1/access-log/details", b.auth(b.handleAccessLogDetails))
 	mux.HandleFunc("POST /api/admin/v1/access-log/detail-mode", b.auth(b.handleDetailModeSet))
 	mux.HandleFunc("DELETE /api/admin/v1/access-log/detail-mode", b.auth(b.handleDetailModeDelete))
 	// Invitation codes (1:1 live blessing plugin admin surface).

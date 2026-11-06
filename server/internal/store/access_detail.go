@@ -34,6 +34,7 @@ import (
 
 	"skin-nexus/server/internal/accesslog"
 	"skin-nexus/server/internal/dbx"
+	"skin-nexus/server/internal/dialect"
 )
 
 // minDetailRetention is the floor both sweepers accept, mirroring
@@ -123,6 +124,66 @@ func (m *Mysql) SweepAccessDetailCredentials(ctx context.Context) (int64, error)
 		return 0, fmt.Errorf("store: sweep access detail credentials: %w", err)
 	}
 	return res.RowsAffected()
+}
+
+// AccessDetailRow is one diagnostic detail row, as the panel reads it.
+// CredentialRef is deliberately NOT part of this struct: the reader API answers
+// `credential_present` and nothing else, so a log viewer cannot be turned into a
+// credential export even by an operator who can read the table.
+type AccessDetailRow struct {
+	ID            int64     `json:"id"`
+	StatusCode    int       `json:"status_code"`
+	DurationMS    int64     `json:"duration_ms"`
+	UpstreamCode  string    `json:"upstream_code,omitempty"`
+	Headers       string    `json:"headers_json,omitempty"`
+	Body          string    `json:"body_excerpt,omitempty"`
+	CredentialSet bool      `json:"credential_present"`
+	CapturedAt    time.Time `json:"captured_at"`
+}
+
+// AccessDetailRows fetches the detail rows for one page of summary ids in a
+// single statement. The ids come from the page the panel is already showing,
+// and one query for N rows is the whole point: the alternative — a lookup per
+// row — is the N+1 shape G5 removed from the player list, and it would be paid
+// on every log page view by an operator who may not even expand anything.
+//
+// Ids with no detail row are simply absent (the panel renders "no detail" for
+// them). Order is by id DESC to match the summary page newest-first.
+func (m *Mysql) AccessDetailRows(ctx context.Context, ids []int64) ([]AccessDetailRow, error) {
+	if len(ids) == 0 {
+		return []AccessDetailRow{}, nil
+	}
+	args := make([]any, 0, len(ids))
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	query := `SELECT id, status_code, duration_ms, upstream_code, headers_json, body_excerpt,
+	                 credential_ref, captured_at
+	            FROM access_log_details WHERE id IN (` +
+		dialect.Placeholders(len(ids)) + `) ORDER BY id DESC`
+	rows, err := m.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("store: read access_log_details: %w", err)
+	}
+	defer rows.Close()
+	out := make([]AccessDetailRow, 0, len(ids))
+	for rows.Next() {
+		var (
+			r    AccessDetailRow
+			hdrs sql.NullString
+			body sql.NullString
+			up   sql.NullString
+			cred sql.NullString
+		)
+		if err := rows.Scan(&r.ID, &r.StatusCode, &r.DurationMS, &up, &hdrs, &body, &cred, &r.CapturedAt); err != nil {
+			return nil, fmt.Errorf("store: scan access detail: %w", err)
+		}
+		r.UpstreamCode, r.Headers, r.Body = up.String, hdrs.String, body.String
+		// Only "is there one" survives — never the value itself.
+		r.CredentialSet = cred.Valid && cred.String != ""
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // logAccessDetailFailure reports a detail-write problem to the operator log
