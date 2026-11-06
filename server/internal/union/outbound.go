@@ -38,6 +38,12 @@ func (o *Outbound) SetAccess(l *accesslog.Logger) { o.access = l }
 // logOut records one outbound call: outcome ok (2xx) / error (transport or
 // decode) / fail (hub non-2xx); detail carries method, path, status and
 // latency — the operator's "did the hub answer, and how fast" line.
+//
+// The detail capture is built here rather than from a request: this is the one
+// logged surface that knows the upstream status and the transport error before
+// anything is written, and it has no client headers to whitelist. Like every
+// other capture it is dropped by accesslog.Logger unless the diagnostic window
+// is open.
 func (o *Outbound) logOut(method, path string, status int, dur time.Duration, err error) {
 	if o.access == nil {
 		return
@@ -54,7 +60,23 @@ func (o *Outbound) logOut(method, path string, status int, dur time.Duration, er
 		Outcome: outcome,
 		Who:     method + " " + path,
 		Detail:  fmt.Sprintf("status=%d dur=%dms", status, dur.Milliseconds()),
+		Capture: outCapture(status, dur, err),
 	})
+}
+
+// outCapture shapes the union_out detail row. upstream_code keeps the hub's
+// answer when there was one ("hub.504") and the transport failure when there
+// was not ("transport"), because those are the two different debugging
+// questions; the error text itself already lives in the caller's audit row.
+func outCapture(status int, dur time.Duration, err error) *accesslog.Capture {
+	c := &accesslog.Capture{StatusCode: status, DurationMS: dur.Milliseconds()}
+	switch {
+	case err != nil && status > 0:
+		c.UpstreamCode = fmt.Sprintf("hub.%d", status)
+	case err != nil:
+		c.UpstreamCode = "transport"
+	}
+	return c
 }
 
 // keyStore semantics: the member key is read on every request and rewritten

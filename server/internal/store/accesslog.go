@@ -25,19 +25,35 @@ type AccessRow struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-// InsertAccessLog appends one observability row. Errors are returned so the
-// accesslog sink can swallow them — the CALLER never sees a failure (the
+// InsertAccessLog appends one observability row — and, when the caller attached
+// a diagnostic capture, the matching access_log_details row. Errors are returned
+// so the accesslog sink can swallow them — the CALLER never sees a failure (the
 // logger contract: logging never breaks a request).
+//
+// The detail row's primary key is the summary row's own id (the table has no
+// autoincrement by design), so the two inserts cannot be independent calls: the
+// id is carried from here. A detail failure — duplicate id included — is logged
+// and dropped, never returned, because the summary line the panel pages through
+// did land and the request must not pay for a missing extra.
 func (m *Mysql) InsertAccessLog(ctx context.Context, e accesslog.Entry) error {
 	var uid sql.NullInt64
 	if e.UID > 0 {
 		uid = sql.NullInt64{Int64: e.UID, Valid: true}
 	}
-	_, err := m.db.ExecContext(ctx,
+	id, err := m.db.InsertReturningID(ctx,
 		`INSERT INTO access_logs (kind, outcome, uid, who, ip, ua, detail)
 		 VALUES (?,?,?,?,?,?,?)`,
 		e.Kind, e.Outcome, uid, e.Who, e.IP, e.UA, e.Detail)
-	return err
+	if err != nil {
+		return err
+	}
+	if e.Capture == nil {
+		return nil // window closed (or nothing to capture): summary row only
+	}
+	if derr := m.InsertAccessDetail(ctx, id, e.Capture); derr != nil {
+		logAccessDetailFailure(id, derr)
+	}
+	return nil
 }
 
 // ListAccessLogs pages the table newest-first. kind is an exact match

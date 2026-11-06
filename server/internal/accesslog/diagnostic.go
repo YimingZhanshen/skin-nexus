@@ -33,6 +33,12 @@ const (
 	// DefaultDetailRetentionDays is the owner-decided default (90) used when
 	// the option is absent or unreadable.
 	DefaultDetailRetentionDays = 90
+	// MaxDetailRetentionDays clamps the option for the sweeper's duration math.
+	// Without it, an option typed as 999999999 days overflows int64 nanoseconds
+	// into a NEGATIVE window, and a negative window makes the cutoff land in the
+	// future — i.e. "delete every detail row on the next tick". Ten years of
+	// access logs is far past any reason to keep them, and far inside the range.
+	MaxDetailRetentionDays = 3650
 )
 
 // OptionReader reads one site option (ok = the row exists). It is a func type
@@ -115,4 +121,20 @@ func (d *Diagnostic) RetentionDays(ctx context.Context) int {
 		return DefaultDetailRetentionDays
 	}
 	return n
+}
+
+// RetentionWindow converts RetentionDays into the duration the detail sweeper
+// trims `captured_at` against. It reads the option on every call: the panel
+// value is hot (an operator who shortens 90d to 7d expects the next tick to
+// obey), and the clamp keeps an absurd value from overflowing into a negative
+// window that would delete the table.
+//
+// This is the LOG-retention clock. Credential material does not run on it — see
+// CredentialTTL and store.SweepAccessDetailCredentials.
+func (d *Diagnostic) RetentionWindow(ctx context.Context) time.Duration {
+	days := d.RetentionDays(ctx)
+	if days > MaxDetailRetentionDays {
+		days = MaxDetailRetentionDays
+	}
+	return time.Duration(days) * 24 * time.Hour
 }

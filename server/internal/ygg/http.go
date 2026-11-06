@@ -71,12 +71,24 @@ func (a *API) SetFallback(f *Fallback) { a.fallback = f }
 func (a *API) SetAccess(l *accesslog.Logger) { a.access = l }
 
 // accessLog is the nil-safe recording call shared by every handler.
+//
+// The Capture it attaches is the diagnostic-mode detail row for THIS request
+// (headers/body excerpt/status/latency, plus whatever MarkCredential named):
+// accesslog.Logger drops the whole capture unless the super-admin window is
+// open, so on the always-on surface nothing changes — the summary columns stay
+// the only thing recorded, exactly as internal/ygg/accesslog_credentials_test.go
+// pins. Handlers must not be reordered around this call to chase a status code:
+// a 0 here honestly means "the response was not written when the line was
+// recorded".
 func (a *API) accessLog(r *http.Request, e accesslog.Entry) {
 	if a.access == nil {
 		return
 	}
 	e.IP = clientIP(r)
 	e.UA = r.UserAgent()
+	if e.Capture == nil {
+		e.Capture = accesslog.Attach(r)
+	}
 	a.access.Log(r.Context(), e)
 }
 
@@ -270,6 +282,10 @@ func (a *API) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
 	if a.svc.Limiter != nil {
 		a.svc.Limiter.Succeed(idKey)
 	}
+	// The token minted by this call is what the launcher will present next;
+	// naming it here keeps it inside the diagnostic window and out of the
+	// summary line (see the refresh handler for the same split).
+	accesslog.MarkCredential(r.Context(), t.AccessToken)
 	a.accessLog(r, accesslog.Entry{Kind: accesslog.YggAuthenticate,
 		Outcome: accesslog.OutcomeOK, Who: req.Username, Detail: "client_token=" + req.ClientToken})
 	writeTokenResponse(w, t, players, req.RequestUser)
@@ -308,6 +324,11 @@ func (a *API) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		}
 		pid = p
 	}
+	// The accessToken this request presents is named here so the diagnostic
+	// detail row can carry it — and only while the super-admin window is open
+	// (accesslog.Logger drops the capture otherwise). The wire response is
+	// untouched, and the summary line keeps its no-accessToken rule.
+	accesslog.MarkCredential(r.Context(), req.AccessToken)
 	t, players, err := a.svc.Refresh(r.Context(), req.AccessToken, req.ClientToken, pid)
 	if err != nil {
 		a.accessLog(r, accesslog.Entry{Kind: accesslog.YggRefresh,
@@ -332,6 +353,7 @@ func (a *API) handleValidate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "IllegalArgumentException", "invalid JSON body")
 		return
 	}
+	accesslog.MarkCredential(r.Context(), req.AccessToken)
 	if err := a.svc.Validate(r.Context(), req.AccessToken, req.ClientToken); err != nil {
 		a.accessLog(r, accesslog.Entry{Kind: accesslog.YggValidate,
 			Outcome: accesslog.OutcomeFail, Detail: "invalid_token"})
@@ -399,6 +421,7 @@ func (a *API) handleJoin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "IllegalArgumentException", "invalid arguments")
 		return
 	}
+	accesslog.MarkCredential(r.Context(), req.AccessToken)
 	err := a.svc.Join(r.Context(), req.AccessToken, uu, req.ServerID, clientIP(r))
 	switch {
 	case errors.Is(err, ErrEmailUnverified):

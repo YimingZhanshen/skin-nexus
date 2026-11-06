@@ -279,6 +279,14 @@ func main() {
 	log.Printf("theme market: market=%q trustKeys=%d themesDir=%s", cfg.ThemeMarketURL, len(themeTrustKeys), cfg.ThemesDir)
 
 	accessLog := accesslog.New(st.InsertAccessLog)
+	// Diagnostic mode (2026-11-05 拍板): the same switch the panel API writes.
+	// While `access_detail_until` is in the future, each logged request also
+	// gets an access_log_details row (headers/body excerpt/credential, see
+	// internal/accesslog/detail.go). The option is re-read per logged request
+	// and the clock is Go-side, so a super admin closing the window takes effect
+	// immediately and without a restart. Unwired = permanently closed.
+	detailDiag := &accesslog.Diagnostic{Option: st.GetOption, Now: time.Now}
+	accessLog.SetDiagnostic(detailDiag)
 
 	// Plugin host: scans <data>/plugins; invalid directories are
 	// recorded as errored entries and never abort boot. Hooks are fail-open
@@ -452,8 +460,25 @@ func main() {
 		ticker := time.NewTicker(6 * time.Hour)
 		defer ticker.Stop()
 		for range ticker.C {
-			if n, err := st.PurgeAccessLogs(context.Background(), 90*24*time.Hour); err == nil && n > 0 {
+			bg := context.Background()
+			if n, err := st.PurgeAccessLogs(bg, 90*24*time.Hour); err == nil && n > 0 {
 				log.Printf("access_logs: purged %d rows older than 90d", n)
+			}
+			// Two clocks on the detail table, on this same tick (no second
+			// goroutine). Retention follows the panel option, read now; the
+			// credential deadline is fixed at 24h and does not (see
+			// store.SweepAccessDetailCredentials for why those must not merge).
+			if window := detailDiag.RetentionWindow(bg); window > 0 {
+				if n, err := st.PurgeAccessDetails(bg, window); err != nil {
+					log.Printf("access_log_details: purge failed: %v", err)
+				} else if n > 0 {
+					log.Printf("access_log_details: purged %d rows older than %s", n, window)
+				}
+			}
+			if n, err := st.SweepAccessDetailCredentials(bg); err != nil {
+				log.Printf("access_log_details: credential sweep failed: %v", err)
+			} else if n > 0 {
+				log.Printf("access_log_details: cleared credentials on %d expired row(s) (%s after capture)", n, accesslog.CredentialTTL)
 			}
 		}
 	}()
@@ -957,8 +982,11 @@ func main() {
 	}
 	// securityHeaders must be the outermost wrapper: pub.WrapRoot answers the
 	// CustomSkinAPI `GET /{player}.json` routes itself, so anything it wraps
-	// never sees a header applied underneath it.
-	srv := newHTTPServer(addr, securityHeaders(pub.WrapRoot(gzipHandler(root))))
+	// never sees a header applied underneath it. accesslog.Observe sits just
+	// inside it: it notes the status code and a bounded body prefix for the
+	// diagnostic detail rows and forwards every byte (see internal/accesslog/
+	// observe.go — it persists nothing by itself).
+	srv := newHTTPServer(addr, securityHeaders(accesslog.Observe(pub.WrapRoot(gzipHandler(root)))))
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.ListenAndServe() }()
 

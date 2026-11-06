@@ -195,12 +195,26 @@ func (b *Backend) SyncProfileCreate(ctx context.Context, uuid, name string) {
 
 // webAccessLog records a web-side entry with the request's IP/UA attached
 // (nil-safe through the logger).
+//
+// The capture it attaches is the diagnostic-mode detail row: the browser's
+// web-session token is named here (it travels in a cookie, so the middleware
+// cannot see it), and accesslog.Logger drops the whole capture unless the
+// super-admin window is open. With the window closed this records exactly what
+// it recorded before — the access_logs summary line and nothing else.
 func (b *Backend) webAccessLog(r *http.Request, e accesslog.Entry) {
 	if b.Access == nil {
 		return
 	}
 	e.IP = ygg.ClientIP(r)
 	e.UA = r.UserAgent()
+	if e.Capture == nil {
+		e.Capture = accesslog.Attach(r)
+	}
+	if e.Capture != nil && e.Capture.Credential == "" {
+		if c, err := r.Cookie(sessionCookie); err == nil {
+			e.Capture.Credential = c.Value
+		}
+	}
 	b.Access.Log(r.Context(), e)
 }
 
