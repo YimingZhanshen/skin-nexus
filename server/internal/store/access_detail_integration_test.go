@@ -51,22 +51,30 @@ func TestAccessLogDetailsShape(t *testing.T) {
 	}
 
 	// 凭据列默认空：摘要行规则之外的东西，只有开着诊断模式才会写进来。
-	// 判空走 CASE 而不是直接扫列——TIMESTAMPTZ 扫进 Go string 在 PG 腿上会
-	// 报类型错，那不是被测语义。
-	if !columnIsEmpty(ctx, t, m, "credential_ref") {
+	// 判空写法按列的类型分开：TEXT 才谈「空串」；DATETIME 拿 '' 去比在
+	// MySQL 8.0 是 Error 1525 Incorrect DATETIME value、在 PG 腿上是 invalid
+	// input syntax for type timestamp，而 SQLite 会默默吞下这条 —— 2bcdfdb 的
+	// 两条 CI 腿就是这么红的。时间列只判 IS NULL。
+	if !columnBlank(ctx, t, m, "credential_ref", true) {
 		t.Error("credential_ref defaulted to a non-empty value")
 	}
-	if !columnIsEmpty(ctx, t, m, "credentials_until") {
+	if !columnBlank(ctx, t, m, "credentials_until", false) {
 		t.Error("credentials_until set without a credential")
 	}
 }
 
-// columnIsEmpty reports whether a column is NULL or the empty string, in SQL
-// that all three engines answer the same way.
-func columnIsEmpty(ctx context.Context, t *testing.T, m *Mysql, col string) bool {
+// columnBlank reports whether a column is NULL — and, for text columns only,
+// also the empty string. `text` is what the engine may compare against ''
+// without a type error; passing it explicitly keeps the SQLite leg from
+// silently endorsing SQL the other two engines reject.
+func columnBlank(ctx context.Context, t *testing.T, m *Mysql, col string, text bool) bool {
 	t.Helper()
 	var one int
-	q := "SELECT CASE WHEN " + col + " IS NULL OR " + col + " = '' THEN 1 ELSE 0 END FROM access_log_details WHERE id = 4242"
+	cond := col + " IS NULL"
+	if text {
+		cond += " OR " + col + " = ''"
+	}
+	q := "SELECT CASE WHEN " + cond + " THEN 1 ELSE 0 END FROM access_log_details WHERE id = 4242"
 	if err := m.db.QueryRowContext(ctx, q).Scan(&one); err != nil {
 		t.Fatalf("probe %s: %v", col, err)
 	}
