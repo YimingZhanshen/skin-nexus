@@ -64,7 +64,7 @@ func TestAccessLogDetailsShape(t *testing.T) {
 }
 
 // columnBlank reports whether a column is NULL — and, for text columns only,
-// also the empty string. `text` is what the engine may compare against ''
+// also the empty string. `text` is what the engine may compare against ”
 // without a type error; passing it explicitly keeps the SQLite leg from
 // silently endorsing SQL the other two engines reject.
 func columnBlank(ctx context.Context, t *testing.T, m *Mysql, col string, text bool) bool {
