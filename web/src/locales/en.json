@@ -14,6 +14,10 @@
       "token_invalid": "Admin token invalid or not signed in",
       "web_session_required": "This action needs an admin web session, not a token call"
     },
+    "access_log": {
+      "detail_until_past": "The expiry must be an absolute RFC3339 timestamp with a zone, later than now",
+      "detail_until_too_far": "The diagnostic window may be opened for at most 24 hours; shorten the expiry"
+    },
     "auth": {
       "credentials": "Wrong account or password",
       "current_password": "Current password is incorrect",
@@ -676,6 +680,17 @@
     "accessSearchPlaceholder": "Search user / IP / detail…",
     "accessTotal": "{total} entries",
     "accessEmpty": "No log entries yet",
+    "accessDetailTitle": "Diagnostic mode (detail logs)",
+    "accessDetailHint": "While temporarily enabled, access logging also records response status, duration and more, kept for the retention window and closing automatically at expiry. Enabling and disabling both require a super admin account.",
+    "accessDetailOn": "Enabled",
+    "accessDetailOff": "Off",
+    "accessDetailExpires": "Expires: {time}",
+    "accessDetailRemaining": "{seconds} seconds remaining",
+    "accessDetailHours": "On for {hours}h",
+    "accessDetailCustom": "Custom expiry",
+    "accessDetailApply": "Set expiry",
+    "accessDetailDisable": "Disable now",
+    "accessDetailInvalid": "Pick a valid expiry time",
     "colTime": "Time",
     "colKind": "Kind",
     "colOutcome": "Result",

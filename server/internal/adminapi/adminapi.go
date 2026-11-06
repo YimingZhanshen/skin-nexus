@@ -114,6 +114,12 @@ func (b *Backend) Handler() http.Handler {
 	// Access/communication logs (2026-10-26 运维观测面): web + launcher
 	// logins, ygg server traffic, union traffic — filterable/paged.
 	mux.HandleFunc("GET /api/admin/v1/access-logs", b.auth(b.handleAccessLogs))
+	// Access-log diagnostic mode switch (2026-11-05 拍板, slice 5b): the read is
+	// open to every admin; the writes are super-admin (permission=2) web-session
+	// only and are guarded inside the handler, not by the b.auth wrapper.
+	mux.HandleFunc("GET /api/admin/v1/access-log/detail-mode", b.auth(b.handleDetailModeGet))
+	mux.HandleFunc("POST /api/admin/v1/access-log/detail-mode", b.auth(b.handleDetailModeSet))
+	mux.HandleFunc("DELETE /api/admin/v1/access-log/detail-mode", b.auth(b.handleDetailModeDelete))
 	// Invitation codes (1:1 live blessing plugin admin surface).
 	mux.HandleFunc("GET /api/admin/v1/invitation-codes", b.auth(b.handleInvitationList))
 	mux.HandleFunc("POST /api/admin/v1/invitation-codes", b.auth(b.handleInvitationGenerate))

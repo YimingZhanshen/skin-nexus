@@ -2,7 +2,7 @@
 // AccessLogsView (2026-10-26 观测面): web/launcher logins, Yggdrasil
 // server traffic and Union traffic in one filterable page — the admin's
 // "what is happening right now" view. Read-only; retention is server-side
-// (90 days).
+// (90 days). Diagnostic-mode switch (2026-11-05, slice 5b): super admin only.
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
@@ -25,6 +25,15 @@ const KINDS = [
   'union_in', 'union_out',
 ]
 
+// Diagnostic-mode switch state (GET /access-log/detail-mode).
+const detailEnabled = ref(false)
+const detailUntil = ref('')
+const detailRemaining = ref(0)
+const detailError = ref('')
+const detailBusy = ref(false)
+const detailPresetHours = [1, 6, 24]
+const detailCustom = ref('')
+
 async function load() {
   error.value = ''
   try {
@@ -35,6 +44,53 @@ async function load() {
     logs.value = d.logs || []
     total.value = d.total || 0
   } catch (e) { error.value = e.message }
+}
+
+async function loadDetail() {
+  try {
+    const d = await fetchJSON('/api/admin/v1/access-log/detail-mode')
+    detailEnabled.value = !!d.enabled
+    detailUntil.value = d.until || ''
+    detailRemaining.value = d.seconds_remaining || 0
+  } catch (e) { detailError.value = e.message }
+}
+
+// Post an absolute RFC3339 expiry and refresh the switch state.
+async function setDetailUntil(rfc) {
+  detailError.value = ''
+  detailBusy.value = true
+  try {
+    await fetchJSON('/api/admin/v1/access-log/detail-mode', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ until: rfc }),
+    })
+    await loadDetail()
+  } catch (e) { detailError.value = e.message } finally { detailBusy.value = false }
+}
+
+// A preset opens the window N hours from now; the backend rejects >24h, and
+// the picker's largest preset matches that cap so the UI never offers a value
+// it will refuse.
+function applyPreset(h) {
+  setDetailUntil(new Date(Date.now() + h * 3600 * 1000).toISOString())
+}
+
+// datetime-local yields a naive local string; Date() anchors it to the
+// browser zone and toISOString() returns the absolute UTC RFC3339 the API wants.
+function applyCustom() {
+  if (!detailCustom.value) return
+  const d = new Date(detailCustom.value)
+  if (Number.isNaN(d.getTime())) { detailError.value = t('admin.accessDetailInvalid'); return }
+  setDetailUntil(d.toISOString())
+}
+
+async function disableDetail() {
+  detailError.value = ''
+  detailBusy.value = true
+  try {
+    await fetchJSON('/api/admin/v1/access-log/detail-mode', { method: 'DELETE' })
+    await loadDetail()
+  } catch (e) { detailError.value = e.message } finally { detailBusy.value = false }
 }
 
 function search() { page.value = 1; load() }
@@ -63,13 +119,40 @@ function outcomeClass(o) {
   return { ok: 'oc-ok', miss: 'oc-miss', denied: 'oc-warn' }[o] || 'oc-bad'
 }
 
-onMounted(load)
+onMounted(() => { load(); loadDetail() })
 </script>
 
 <template>
   <div class="card">
     <h2 style="margin-top: 0;">{{ t('admin.accessTitle') }}</h2>
     <p class="muted" style="margin-top: -6px;">{{ t('admin.accessHint') }}</p>
+    <section class="detail-mode">
+      <h3 class="dm-title">{{ t('admin.accessDetailTitle') }}</h3>
+      <p class="muted">{{ t('admin.accessDetailHint') }}</p>
+      <p class="dm-state">
+        <span class="oc" :class="detailEnabled ? 'oc-ok' : 'oc-miss'">
+          {{ detailEnabled ? t('admin.accessDetailOn') : t('admin.accessDetailOff') }}
+        </span>
+        <span v-if="detailEnabled" class="muted">
+          {{ t('admin.accessDetailExpires', { time: fmtTime(detailUntil) }) }}
+          · {{ t('admin.accessDetailRemaining', { seconds: detailRemaining }) }}
+        </span>
+      </p>
+      <div class="row dm-controls">
+        <button v-for="h in detailPresetHours" :key="h" class="secondary"
+                :disabled="detailBusy" @click="applyPreset(h)">
+          {{ t('admin.accessDetailHours', { hours: h }) }}
+        </button>
+        <input v-model="detailCustom" type="datetime-local" :aria-label="t('admin.accessDetailCustom')" />
+        <button class="secondary" :disabled="detailBusy || !detailCustom" @click="applyCustom">
+          {{ t('admin.accessDetailApply') }}
+        </button>
+        <button v-if="detailEnabled" class="danger" :disabled="detailBusy" @click="disableDetail">
+          {{ t('admin.accessDetailDisable') }}
+        </button>
+      </div>
+      <div class="error" role="alert" v-if="detailError">{{ detailError }}</div>
+    </section>
     <div class="row">
       <select v-model="kind" @change="search" style="max-width: 200px;">
         <option value="">{{ t('admin.accessKindAll') }}</option>
@@ -105,9 +188,13 @@ onMounted(load)
 </template>
 
 <style scoped>
-/* UA/detail are single-line ellipsis cells with hover title: a raw
-   word-break let auto-layout starve the UA column to ~1 char per line
-   (rows grew screen-tall). Fixed column budget = stable geometry. */
+/* diagnostic-mode switch: a quiet bordered band above the filters; the state
+   badge reuses the table's outcome tones so ON/OFF reads the same language. */
+.detail-mode { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 10px 0 4px; }
+.dm-title { margin: 0 0 2px; font-size: var(--fs-m, 1rem); }
+.dm-state { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.dm-controls { flex-wrap: wrap; gap: 8px; }
+.dm-controls input[type="datetime-local"] { max-width: 220px; }
 .logs-table { min-width: 960px; width: 100%; table-layout: fixed; }
 /* fixed layout + every cell ellipsizes: nothing spills into a neighbour */
 .logs-table td { overflow: hidden; text-overflow: ellipsis; }

@@ -62,6 +62,10 @@ var settingsWhitelist = []settingSpec{
 	{"login_fail_limit", true, "security", "同账号连续失败锁定阈值（0=关闭；重启后生效）", false},
 	{"cdn_enabled", false, "security", "CDN 加速开关（启用后按下方头顺序解析真实客户端 IP；仅当 Nginx/CDN 会覆盖这些头时开启，立即生效）", false},
 	{"cdn_headers", false, "security", "CDN 真实 IP 头（按顺序匹配，逗号分隔；默认 CF-Connecting-IP,True-Client-IP,Ali-CDN-Real-IP,X-Real-IP,X-Forwarded-For）", false},
+	// 访问日志诊断模式明细保留天数（2026-11-05 拍板，默认 90）。归入 security 组：
+	// 面板现有分组里没有独立的日志/留存组，明细行的留存即数据最小化策略，与安全同节；
+	// 新增组 id 会让 SettingsView 的 GROUP_ORDER（本切片不改动）把它甩到末尾且无标题。
+	{"access_detail_retention_days", false, "security", "访问日志诊断明细保留天数（默认 90；清扫器据此删除过期的 access_log_details 行；立即生效）", false},
 	{"skin_domains", true, "ygg", "皮肤域名（CSV，ygg metadata 皮肤来源）", false},
 	{"ygg_token_expire_1", false, "ygg", "ygg 令牌软窗口（秒，默认 259200=3 天）：validate/join 有效期，过后可 refresh 换新", false}, // B5（blessing yggdrasil-connect 原名，callbacks.php:93-98 默认值）
 	{"ygg_token_expire_2", false, "ygg", "ygg 令牌硬窗口（秒，默认 604800=7 天）：refresh 有效期，过后须重新登录", false},
@@ -170,7 +174,8 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		}
 		val = strings.Join(clean, ",")
 	case "rate_limit_auth", "login_fail_limit", "regs_per_ip", "player_name_length_min", "player_name_length_max",
-		"ygg_token_expire_1", "ygg_token_expire_2", "ygg_tokens_limit", "ygg_rate_limit", "email_verify_grace_days":
+		"ygg_token_expire_1", "ygg_token_expire_2", "ygg_tokens_limit", "ygg_rate_limit", "email_verify_grace_days",
+		"access_detail_retention_days":
 		// numeric knobs (review P2: garbage silently desynced panel vs boot
 		// fallback, and negatives silently disabled the limiter layers)
 		n, err := strconv.Atoi(val)

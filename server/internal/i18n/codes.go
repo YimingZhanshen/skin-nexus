@@ -50,6 +50,12 @@ const (
 	MsgSettingUnknown   = "option.unknown_key"
 	MsgOptionSaveFailed = "option.save_failed"
 
+	// access-log diagnostic mode (2026-11-05 拍板). The operator fixes the two
+	// input failures differently — a bad/expired timestamp vs a window past the
+	// 24h cap — so they carry distinct codes rather than one "invalid value".
+	MsgDetailUntilPast   = "access_log.detail_until_past"    // not an absolute, future RFC3339 time
+	MsgDetailUntilTooFar = "access_log.detail_until_too_far" // the expiry is past the 24-hour cap
+
 	// auth / account
 	MsgCredentials      = "auth.credentials" // wrong identifier or password
 	MsgCurrentPassword  = "auth.current_password"

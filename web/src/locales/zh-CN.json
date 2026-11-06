@@ -14,6 +14,10 @@
       "token_invalid": "管理员令牌无效或未登录",
       "web_session_required": "该操作需要管理员网页会话，不接受令牌调用"
     },
+    "access_log": {
+      "detail_until_past": "到期时间需为带时区的绝对 RFC3339 时间，且晚于当前时刻",
+      "detail_until_too_far": "诊断窗口最长只能开启 24 小时，请缩短到期时间"
+    },
     "auth": {
       "credentials": "账号或密码错误",
       "current_password": "当前密码不正确",
@@ -676,6 +680,17 @@
     "accessSearchPlaceholder": "搜索 用户 / IP / 详情…",
     "accessTotal": "共 {total} 条",
     "accessEmpty": "暂无日志",
+    "accessDetailTitle": "诊断模式（明细日志）",
+    "accessDetailHint": "临时开启后，访问日志会额外记录响应状态与耗时等明细，仅保留设定的天数；到期自动关闭。开启与关闭都需要超级管理员账号。",
+    "accessDetailOn": "已开启",
+    "accessDetailOff": "未开启",
+    "accessDetailExpires": "到期时间：{time}",
+    "accessDetailRemaining": "剩余 {seconds} 秒",
+    "accessDetailHours": "开启 {hours} 小时",
+    "accessDetailCustom": "自定义到期时间",
+    "accessDetailApply": "设置到期",
+    "accessDetailDisable": "立即关闭",
+    "accessDetailInvalid": "请选择一个有效的到期时间",
     "colTime": "时间",
     "colKind": "类型",
     "colOutcome": "结果",
