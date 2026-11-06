@@ -105,6 +105,15 @@ func NeedsRehash(method string) bool {
 }
 
 func verifyLegacyOne(method, password, salt, stored string) bool {
+	// 空存储摘要不是「没设密码」，是「什么都能登」：下面最后一行拿
+	// computeLegacy 的结果与它比，而对 legacy 表里没有计算分支的 method
+	// （bcrypt / argon2i / php_password_hash，以及任何将来新增的名字）
+	// computeLegacy 返回空串，空串 == 空串 就通过了。存量脏行（blessing 导入
+	// 里 password 为空的老用户）走的正是这条路，2026-11-07 通宵轮 G10 取证发现，
+	// 断言在 empty_stored_test.go。
+	if stored == "" {
+		return false
+	}
 	// PHC family first (contains '$' — must not hit embedded-salt parsing).
 	if strings.HasPrefix(stored, "$2") || strings.HasPrefix(stored, "$argon2") {
 		return verifyPHC(password, stored)
