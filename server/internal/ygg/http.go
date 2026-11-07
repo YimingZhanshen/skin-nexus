@@ -201,7 +201,42 @@ func (a *API) skinDomains(r *http.Request) []string {
 		add(u.Host)
 	}
 	add(r.Host)
+	// Additive twin (slice 2, analysis/g10-e3 Q2 finding 1): authlib-injector
+	// compares a texture URL against URI.getHost(), which has NO port, so a
+	// port-bearing entry above (site.invalid:8443) can never match — the
+	// launcher loads the account yet skins silently fail. For every entry that
+	// carries an explicit port, ALSO publish the same host without it. The
+	// loop reads a fixed snapshot of the entries already emitted, so every
+	// pre-existing entry keeps its exact position; only a still-unseen twin is
+	// appended, and dedup guarantees each host appears exactly once.
+	base := len(out)
+	for i := 0; i < base; i++ {
+		add(portlessTwin(out[i]))
+	}
 	return out
+}
+
+// portlessTwin returns the host-without-port form of an entry, or "" when the
+// entry carries no explicit port (a plain host, an IPv6 literal without a
+// port, an empty or otherwise malformed value). "" is never appended to the
+// list. SplitHostPort is used rather than splitting on ':' so an IPv6 literal
+// ("[::1]:8443") is understood; its brackets are restored, because that is the
+// exact form a client's URI.getHost() reports. A port must be all digits — a
+// stray colon inside a host-like value invents no bogus entry.
+func portlessTwin(entry string) string {
+	host, port, err := net.SplitHostPort(entry)
+	if err != nil || host == "" || port == "" {
+		return ""
+	}
+	for i := 0; i < len(port); i++ {
+		if port[i] < '0' || port[i] > '9' {
+			return ""
+		}
+	}
+	if strings.HasPrefix(entry, "[") {
+		return "[" + host + "]"
+	}
+	return host
 }
 
 // apiLocation derives the ALI value from the request so the deployment

@@ -59,4 +59,5 @@ JWT access token 实测形状：`aud="2"（shared_client_id）、sub=uid、scope
 | 「换肤必须先入柜」 | ➖ 不复刻 | 拍板：那是老站 UI 流程而非数据约束，强加会破坏已验收的 setSkin 直连；衣柜按收藏集合上线 |
 | 认证限流返回 429 | 🔧 偏差备案 | legacy 契约从未定义限流；只追加 TooManyRequests，冻结的错误体形状不变，阈值面板可调 |
 | 老站 `password` 列为空的账号 | 🔧 偏差备案（2026-11-07 起） | 老站的摘要比较里，「未计算的 method」返回空串，碰上 `password` 列也是空串时**相等即通过**——空密码列等于任何密码都能登录。本站现在一律先拒空摘要（`server/internal/auth/password.go` 的 `verifyLegacyOne`，断言在 `server/internal/auth/empty_stored_test.go`）。**行为变化要记账**：`password` 列为空的迁移行不再能用任何密码登录，需走找回密码或由管理员代设；这与「空密码可登录」的老站行为是刻意偏差，那条行为本身是个洞不是兼容面 |
+| `skinDomains` 带端口条目 | 🔧 偏差备案（2026-11-09 起） | authlib-injector 一类客户端把纹理主机与 `URI.getHost()` 比对，而 `getHost()` **不含端口**，所以列表里 `site.invalid:8443` 这种条目永远匹配不上——账号能登、皮肤静默不加载。本站现在为每个带显式端口的条目**同时发布去端口孪生**（`server/internal/ygg/http.go` 的 `portlessTwin`，测试 `skindomains_test.go`）。**只增不改**：已发布的条目一字不动、位置不变（孪生追加在快照之后），无端口的部署输出一模一样；能看见差异的是 `skinDomains` 数组变长这一件事 |
 | `api/profiles/minecraft/{name}` 别名、`minecraftservices/publickeys` | ➖ 不复刻 | 旧站自身 404，平价即可 |
