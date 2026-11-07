@@ -256,14 +256,17 @@ func TestG10RenameDoesNotRecomputeTheUUID(t *testing.T) {
 	if !strings.Contains(err.Error(), "UNIQUE") && !strings.Contains(err.Error(), "constraint") {
 		t.Fatalf("expected a uuid_map uniqueness failure, got %v", err)
 	}
-	// OBSERVED, and it is the user-facing half of the finding: CreatePlayer
-	// returns the RAW driver error (web.go:828-831 never calls isDupKey, unlike
-	// AdminRenamePlayer at player_admin.go:103/:111), so
-	// errors.Is(err, store.ErrDuplicate) is FALSE one layer up and
-	// account.CreatePlayer (players.go:151-153) answers CodeInternal
-	// "could not create the player" instead of CodeNameTaken.
-	if errors.Is(err, ErrDuplicate) {
-		t.Fatal("OBSERVED TODAY: this error is NOT wrapped as ErrDuplicate; if it starts being wrapped, update deliberately and fix the caller's message")
+	// This half was updated DELIBERATELY in slice 3 (P2), exactly as this file's
+	// own instruction anticipated ("if it starts being wrapped, update
+	// deliberately and fix the caller's message"). CreatePlayer now routes a
+	// players/uuid_map unique-key collision through isDupKey and wraps it as
+	// ErrDuplicate (web.go wrapPlayerCollision), so account.CreatePlayer's
+	// duplicate branch (players.go:151-153) answers CodeNameTaken — a 409-shaped
+	// "the name is not available" — instead of the CodeInternal 500-shaped answer
+	// this test used to pin. The raw constraint text is preserved in the chain
+	// for diagnostics (asserted just above).
+	if !errors.Is(err, ErrDuplicate) {
+		t.Fatalf("a reused (renamed-away) name must surface as ErrDuplicate so the caller reports CodeNameTaken, got %v", err)
 	}
 }
 

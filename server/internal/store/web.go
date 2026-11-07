@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"skin-nexus/server/internal/avatargen"
 	"skin-nexus/server/internal/dbx"
 	"skin-nexus/server/internal/dialect"
@@ -823,13 +824,27 @@ func (m *Mysql) CreatePlayer(ctx context.Context, uid int64, name string) (int64
 
 	pid, err := tx.InsertReturningID(ctx, `INSERT INTO players (uid, name) VALUES (?,?)`, uid, name)
 	if err != nil {
-		return 0, "", err
+		return 0, "", wrapPlayerCollision(err)
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO uuid_map (name, uuid, player_id) VALUES (?,?,?)`, name, uuid, pid); err != nil {
-		return 0, "", err
+		return 0, "", wrapPlayerCollision(err)
 	}
 	return pid, uuid, tx.Commit()
+}
+
+// wrapPlayerCollision maps a players.name OR uuid_map unique-key collision onto
+// ErrDuplicate — the same treatment AdminRenamePlayer gives at
+// player_admin.go:103/:111. Without it, a name abandoned by a rename re-derives
+// the identical OfflineUUID the renamed row still owns (铁律 2 keeps the uuid),
+// the uuid_map insert fails on UNIQUE(uuid), and the raw driver error escapes as
+// an opaque 500-shaped answer (CodeInternal) for what is really "the name is not
+// available". The driver text is kept in the chain for diagnostics.
+func wrapPlayerCollision(err error) error {
+	if err == nil || !isDupKey(err) {
+		return err
+	}
+	return fmt.Errorf("%w: %v", ErrDuplicate, err)
 }
 
 // SetPlayerTextures points a player at texture ids (0 = clear).
