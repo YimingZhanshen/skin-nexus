@@ -89,6 +89,13 @@ type Capture struct {
 	// Credential is the plaintext accessToken / web-session token. It reaches
 	// the database only while the diagnostic window is open.
 	Credential string
+	// OutcomePending is not a column: it is the recorder telling the store
+	// "the StatusCode and DurationMS above are what was true when I logged,
+	// and the response has not been written yet — come back for the real
+	// numbers". Attach sets it; a recorder that already knows the answer
+	// (union outbound reports the hub's status) leaves it false, so the
+	// hand-off never overwrites a number that was deliberately chosen.
+	OutcomePending bool
 }
 
 // Sanitized returns a copy clipped to what the detail table may hold: the
@@ -106,7 +113,9 @@ func (c *Capture) Sanitized() *Capture {
 		}
 	}
 	out.Headers = keep
-	out.Body = cut(c.Body, MaxBodyExcerpt)
+	// Scrub first, cap second: truncating a JSON body can cut mid-value and
+	// leave something unparseable, which the scrubber would then drop whole.
+	out.Body = cut(ScrubBody(c.Body), MaxBodyExcerpt)
 	out.UpstreamCode = cut(c.UpstreamCode, MaxUpstreamCode)
 	out.Credential = cut(c.Credential, MaxCredentialRef)
 	return &out
@@ -148,6 +157,12 @@ func Attach(r *http.Request) *Capture {
 	c.Headers = r.Header
 	if l := liveOf(r.Context()); l != nil {
 		c.StatusCode, c.DurationMS, c.Body, c.Credential = l.snapshot()
+		// 0 from the slot means the status line has not been written yet, and
+		// Observe is on this request — so the real numbers are still to come.
+		// Without Observe there is nobody to hand them back, and the row keeps
+		// what the recorder saw instead of waiting for an update that never
+		// arrives.
+		c.OutcomePending = c.StatusCode == 0
 	}
 	return c
 }

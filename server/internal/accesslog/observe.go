@@ -37,6 +37,7 @@ type live struct {
 	wroteHeader bool
 	body        []byte
 	credential  string
+	finalizers  []func(status int, durationMS int64)
 }
 
 type liveContextKey struct{}
@@ -85,6 +86,51 @@ func (l *live) markCredential(credential string) {
 	l.credential = credential
 }
 
+// finalize is the post-response hand-off (2026-11-09 rig finding). The recorder
+// logs when the handler has decided the outcome — before the response line is
+// written — so a detail row can only learn the real status and the full
+// duration here, after the wrapped handler returns. Status inference follows
+// net/http: a handler that returns without writing anything gets an implicit
+// 200, while a handler that panics without writing is left at 0 because the
+// recovery above this wrapper, not this wrapper, decides what that becomes.
+// A finalizer registered after this point never runs; the row then honestly
+// keeps the pre-response values.
+func (l *live) finalize(panicked bool) {
+	now := observeNow()
+	l.mu.Lock()
+	d := now.Sub(l.start).Milliseconds()
+	if d < 0 {
+		d = 0
+	}
+	status := l.status
+	if !l.wroteHeader && !panicked {
+		status = http.StatusOK
+	}
+	fs := l.finalizers
+	l.finalizers = nil
+	l.mu.Unlock()
+	for _, f := range fs {
+		f(status, d)
+	}
+}
+
+// OnResponseEnd registers fn to run once this request's response is finished,
+// with the final status code and the full duration. It is a no-op without
+// Observe (no slot) or with a nil argument, so the logging path can call it
+// unconditionally.
+func OnResponseEnd(ctx context.Context, fn func(status int, durationMS int64)) {
+	if ctx == nil || fn == nil {
+		return
+	}
+	l := liveOf(ctx)
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	l.finalizers = append(l.finalizers, fn)
+	l.mu.Unlock()
+}
+
 // liveOf returns the observation slot for this request (nil = no middleware).
 func liveOf(ctx context.Context) *live {
 	if ctx == nil {
@@ -108,8 +154,14 @@ func Observe(next http.Handler) http.Handler {
 		if r.Body != nil && r.ContentLength != 0 {
 			r.Body = &teeReader{ReadCloser: r.Body, live: l}
 		}
+		// The deferred closure, not a deferred method call: `panicked` must be
+		// read when the panic is already on its way, not when the defer is
+		// registered.
+		panicked := true
+		defer func() { l.finalize(panicked) }()
 		next.ServeHTTP(&statusWriter{ResponseWriter: w, live: l},
 			r.WithContext(context.WithValue(r.Context(), liveContextKey{}, l)))
+		panicked = false
 	})
 }
 

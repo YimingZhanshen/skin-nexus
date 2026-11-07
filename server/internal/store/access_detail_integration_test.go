@@ -11,7 +11,12 @@ package store
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"strings"
 	"testing"
+
+	"skin-nexus/server/internal/accesslog"
 )
 
 func TestAccessLogDetailsShape(t *testing.T) {
@@ -79,4 +84,91 @@ func columnBlank(ctx context.Context, t *testing.T, m *Mysql, col string, text b
 		t.Fatalf("probe %s: %v", col, err)
 	}
 	return one == 1
+}
+
+// TestIntegrationAccessDetailRowsReadsARealIdList is the leg the 5d reader never
+// had: every earlier test replaced the fetch seam with a stub, so the SQL that
+// actually reaches a database was never executed. On the 2026-11-09 rig run it
+// failed there — dialect.Placeholders already returns "(?, ?)" and the query
+// wrapped it in another pair of parentheses, so SQLite answered
+// "SQL logic error: row value misused" and the panel's expand button was a 500
+// on every engine. Pinned here against a real table, with the three list shapes
+// the panel produces: several ids, one id, and ids with no detail row.
+func TestIntegrationAccessDetailRowsReadsARealIdList(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+
+	ids := []int64{881001, 881002, 881003}
+	for i, id := range ids {
+		h := http.Header{}
+		h.Set("User-Agent", "rig/1")
+		c := &accesslog.Capture{
+			StatusCode:   200 + i,
+			DurationMS:   int64(10 + i),
+			UpstreamCode: "hub.test",
+			Headers:      h,
+			Body:         `{"n":1}`,
+		}
+		if id == 881002 {
+			c.Credential = "token-881002-never-returned"
+		}
+		if err := m.InsertAccessDetail(ctx, id, c); err != nil {
+			t.Fatalf("insert %d: %v", id, err)
+		}
+	}
+
+	got, err := m.AccessDetailRows(ctx, ids)
+	if err != nil {
+		t.Fatalf("AccessDetailRows over 3 real ids: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("rows = %d, want 3 (%+v)", len(got), got)
+	}
+	// Newest id first, matching the summary page's newest-first order.
+	if got[0].ID != 881003 || got[2].ID != 881001 {
+		t.Errorf("order = [%d %d %d], want 881003,881002,881001", got[0].ID, got[1].ID, got[2].ID)
+	}
+	if got[0].StatusCode != 202 || got[0].DurationMS != 12 {
+		t.Errorf("row 881003 status/duration = %d/%d, want 202/12", got[0].StatusCode, got[0].DurationMS)
+	}
+	if got[0].UpstreamCode != "hub.test" {
+		t.Errorf("upstream_code = %q, want hub.test", got[0].UpstreamCode)
+	}
+	if !strings.Contains(got[0].Headers, "rig/1") {
+		t.Errorf("headers_json = %q, want the whitelisted User-Agent", got[0].Headers)
+	}
+	// The reader answers "is there a credential" and nothing else: the middle
+	// row says yes, and the plaintext token must not be reachable through the
+	// JSON the panel receives.
+	if !got[1].CredentialSet || got[0].CredentialSet || got[2].CredentialSet {
+		t.Errorf("credential_present = [%v %v %v], want only the middle row true",
+			got[0].CredentialSet, got[1].CredentialSet, got[2].CredentialSet)
+	}
+	raw, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(raw), "token-881002-never-returned") {
+		t.Fatalf("the reader serialised a credential: %s", raw)
+	}
+
+	// One id (a single expanded row) and an id with no detail row are the two
+	// shapes left; neither may error.
+	one, err := m.AccessDetailRows(ctx, []int64{881002})
+	if err != nil || len(one) != 1 {
+		t.Fatalf("single-id read = (%d rows, %v), want 1 row", len(one), err)
+	}
+	mixed, err := m.AccessDetailRows(ctx, []int64{881001, 881999})
+	if err != nil {
+		t.Fatalf("mixed read: %v", err)
+	}
+	if len(mixed) != 1 || mixed[0].ID != 881001 {
+		t.Fatalf("mixed read = %+v, want only the id that exists", mixed)
+	}
+	// An empty list never reaches SQL and must stay a non-nil slice: the reader
+	// API promises [] and not null.
+	empty, err := m.AccessDetailRows(ctx, nil)
+	if err != nil || empty == nil || len(empty) != 0 {
+		t.Fatalf("empty read = (%v, %v), want an empty non-nil slice", empty, err)
+	}
 }

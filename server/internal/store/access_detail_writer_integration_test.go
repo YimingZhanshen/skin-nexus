@@ -21,7 +21,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
@@ -474,5 +476,204 @@ func TestIntegrationDetailSweepersOnEmptyTable(t *testing.T) {
 	}
 	if n, err := m.PurgeAccessDetails(ctx, 90*24*time.Hour); err != nil || n != 0 {
 		t.Fatalf("purge on an empty table = (%d, %v), want (0, nil)", n, err)
+	}
+}
+
+// (f) the row must learn the FINAL outcome. The recorder logs when the handler
+// has decided the answer — before the status line is written — so a row whose
+// status/duration were only ever snapshotted at log time reads 0 and a
+// half-measured number: the two columns the panel shows. Observe hands the
+// finished outcome back, and InsertAccessLog registers the write.
+func TestIntegrationDetailRowLearnsTheFinalOutcome(t *testing.T) {
+	m := openTestStore(t)
+	vals := map[string]string{}
+	detWindow(vals)
+	detClockAt(m, detBase)
+	l := detLogger(m, vals)
+
+	h := accesslog.Observe(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accesslog.MarkCredential(r.Context(), detSecret)
+		// The tee only sees bytes the handler actually reads, so read the body
+		// here exactly like a yggdrasil handler does before it logs.
+		body, _ := io.ReadAll(r.Body)
+		if len(body) == 0 {
+			t.Error("the handler read no request body")
+		}
+		// Attaching here is what every recorder does: the status does not
+		// exist yet, so the capture goes in with 0.
+		l.Log(r.Context(), accesslog.Entry{Kind: accesslog.YggAuthenticate,
+			Outcome: accesslog.OutcomeOK, UA: "rig/1", Capture: accesslog.Attach(r)})
+		time.Sleep(15 * time.Millisecond)
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/api/yggdrasil/authserver/authenticate",
+		strings.NewReader(`{"username":"rig"}`))
+	req.Header.Set("User-Agent", "rig/1")
+	h.ServeHTTP(httptest.NewRecorder(), req)
+
+	id := detSummaryID(t, m)
+	r := detOne(t, m, id)
+	if r.status != http.StatusBadGateway {
+		t.Errorf("status_code = %d after the response, want 502 — 0 means the outcome never reached the row", r.status)
+	}
+	if r.duration < 15 {
+		t.Errorf("duration_ms = %d, want >= 15 (measured only up to the log call)", r.duration)
+	}
+	// The backfill touches the outcome columns and nothing else: the credential
+	// and its own short deadline are not collateral.
+	if r.cred != detSecret {
+		t.Errorf("credential_ref = %q after the backfill, want the plaintext token", r.cred)
+	}
+	if !r.until.Valid {
+		t.Error("credentials_until was dropped by the outcome backfill")
+	}
+	if !strings.Contains(r.headers, "rig/1") {
+		t.Errorf("headers_json was clobbered by the backfill: %s", r.headers)
+	}
+	// The body excerpt came from the tee, which has now read the request body.
+	if !strings.Contains(r.body, "username") {
+		t.Errorf("body_excerpt = %q, want the tee'd request body", r.body)
+	}
+}
+
+// (g) a request that never passes through Observe keeps what the recorder saw
+// and must not error — this is the boot/test/direct-call shape, where there is
+// no outcome to hand back.
+func TestIntegrationDetailWithoutObserveKeepsTheLoggedOutcome(t *testing.T) {
+	m := openTestStore(t)
+	vals := map[string]string{}
+	detWindow(vals)
+	detClockAt(m, detBase)
+
+	detLogger(m, vals).Log(context.Background(), accesslog.Entry{Kind: accesslog.WebLogin,
+		Outcome: accesslog.OutcomeOK, Capture: detCapture()})
+
+	id := detSummaryID(t, m)
+	r := detOne(t, m, id)
+	if r.status != 502 || r.duration != 17 {
+		t.Errorf("status/duration = %d/%d, want the recorder's own 502/17 (no Observe, no backfill)",
+			r.status, r.duration)
+	}
+}
+
+// (h) the backfill must not resurrect a credential the sweeper already wiped:
+// updating by id only ever writes the two outcome columns.
+func TestIntegrationDetailOutcomeBackfillDoesNotWriteCredentials(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	detClockAt(m, detBase)
+	if err := m.InsertAccessDetail(ctx, 790501, &accesslog.Capture{
+		StatusCode: 0, Credential: detSecret}); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	// The credential deadline is captured_at+24h, so the sweep only wipes it
+	// once the Go clock is past that — same rule the 6h ticker runs under.
+	detClockAt(m, detBase.Add(25*time.Hour))
+	if n, err := m.SweepAccessDetailCredentials(ctx); err != nil {
+		t.Fatalf("sweep: %v", err)
+	} else if n != 1 {
+		t.Fatalf("swept %d rows, want 1", n)
+	}
+	if err := m.UpdateAccessDetailOutcome(ctx, 790501, http.StatusTeapot, 33); err != nil {
+		t.Fatalf("backfill: %v", err)
+	}
+	r := detOne(t, m, 790501)
+	if r.status != http.StatusTeapot || r.duration != 33 {
+		t.Errorf("status/duration = %d/%d, want 418/33", r.status, r.duration)
+	}
+	if r.cred != "" || r.until.Valid {
+		t.Errorf("outcome backfill re-wrote credential material: cred=%q until=%v", r.cred, r.until)
+	}
+	// A row that is not there is not an error: the logger never fails a request.
+	if err := m.UpdateAccessDetailOutcome(ctx, 790502, 200, 5); err != nil {
+		t.Errorf("backfill of a missing row = %v, want nil", err)
+	}
+	// And a status of 0 means "never observed", not "the response was 0":
+	// writing it would replace a number the recorder chose with a fake one.
+	if err := m.InsertAccessDetail(ctx, 790503, detCapture()); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	if err := m.UpdateAccessDetailOutcome(ctx, 790503, 0, 9999); err != nil {
+		t.Fatalf("unobserved outcome = %v, want nil", err)
+	}
+	if r3 := detOne(t, m, 790503); r3.status != 502 || r3.duration != 17 {
+		t.Errorf("a 0 status overwrote the recorder's numbers: %d/%d, want 502/17", r3.status, r3.duration)
+	}
+}
+
+// (i) the hand-off must not overwrite a status the recorder chose on purpose.
+// Union outbound reports the HUB's status code, not this station's response,
+// and that number is the whole point of the row — a blanket backfill would
+// replace "hub answered 502" with "we answered 200" and destroy the evidence.
+func TestIntegrationDetailHandoffDoesNotOverwriteAChosenStatus(t *testing.T) {
+	m := openTestStore(t)
+	vals := map[string]string{}
+	detWindow(vals)
+	detClockAt(m, detBase)
+	l := detLogger(m, vals)
+
+	h := accesslog.Observe(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// OutcomePending stays false: this capture carries its own numbers.
+		l.Log(r.Context(), accesslog.Entry{Kind: accesslog.UnionOut,
+			Outcome: accesslog.OutcomeFail, Capture: detCapture()})
+		w.WriteHeader(http.StatusOK)
+	}))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/u", nil))
+
+	r := detOne(t, m, detSummaryID(t, m))
+	if r.status != 502 || r.duration != 17 {
+		t.Errorf("status/duration = %d/%d, want the recorder's 502/17 — the hand-off clobbered a chosen status",
+			r.status, r.duration)
+	}
+	if r.upstream != "hub.timeout" {
+		t.Errorf("upstream_code = %q, want hub.timeout", r.upstream)
+	}
+}
+
+// (j) the column itself, not just the helper: a caller that reached
+// InsertAccessDetail with a raw authenticate body still must not put a
+// password into access_log_details. This is the rig finding written as a test —
+// the body_excerpt used to be the plaintext password, on a 7..90 day clock,
+// readable by any admin with permission >= 1.
+func TestIntegrationDetailBodyNeverStoresAPassword(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	detClockAt(m, detBase)
+	const pw = "hunter2-never-stored"
+
+	h := http.Header{}
+	h.Set("User-Agent", "launcher/3.5")
+	c := &accesslog.Capture{
+		StatusCode: 0,
+		DurationMS: 4,
+		Headers:    h,
+		Body:       `{"username":"rig@localhost","password":"` + pw + `"}`,
+	}
+	if err := m.InsertAccessDetail(ctx, 790601, c); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	r := detOne(t, m, 790601)
+	if strings.Contains(r.body, pw) {
+		t.Fatalf("body_excerpt stored the password: %q", r.body)
+	}
+	if !strings.Contains(r.body, "rig@localhost") {
+		t.Errorf("body_excerpt lost the debugging value too: %q", r.body)
+	}
+	// And through the reader API's own struct, which is what a panel sees.
+	rows, err := m.AccessDetailRows(ctx, []int64{790601})
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("read back = (%d rows, %v)", len(rows), err)
+	}
+	if strings.Contains(rows[0].Body, pw) || strings.Contains(rows[0].Headers, pw) {
+		t.Fatalf("the reader returned a password: body=%q headers=%q", rows[0].Body, rows[0].Headers)
+	}
+	// A body whose shape is unknown is dropped rather than guessed at — the
+	// marker must be visible, so an operator knows nothing was captured.
+	if err := m.InsertAccessDetail(ctx, 790602, &accesslog.Capture{
+		Body: "password=" + pw + "&username=rig"}); err != nil {
+		t.Fatalf("insert form body: %v", err)
+	}
+	if r2 := detOne(t, m, 790602); strings.Contains(r2.body, pw) || !strings.Contains(strings.ToLower(r2.body), "redact") {
+		t.Errorf("form-encoded body stored as %q, want a redaction marker", r2.body)
 	}
 }

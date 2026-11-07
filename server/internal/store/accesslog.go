@@ -52,6 +52,17 @@ func (m *Mysql) InsertAccessLog(ctx context.Context, e accesslog.Entry) error {
 	}
 	if derr := m.InsertAccessDetail(ctx, id, e.Capture); derr != nil {
 		logAccessDetailFailure(id, derr)
+	} else if e.Capture.OutcomePending {
+		// The recorder logged before the response line existed. Observe hands
+		// the finished status and total duration back here, so the row the
+		// operator reads is not the half-measured one. Same detached context
+		// the insert used; a failure is logged and dropped, never surfaced.
+		detailID := id
+		accesslog.OnResponseEnd(ctx, func(status int, durationMS int64) {
+			if err := m.UpdateAccessDetailOutcome(ctx, detailID, status, durationMS); err != nil {
+				logAccessDetailFailure(detailID, err)
+			}
+		})
 	}
 	return nil
 }

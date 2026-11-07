@@ -85,6 +85,33 @@ func (m *Mysql) InsertAccessDetail(ctx context.Context, id int64, c *accesslog.C
 	return nil
 }
 
+// UpdateAccessDetailOutcome backfills the two columns the recorder could not
+// know at log time (accesslog.Capture.OutcomePending): the status the response
+// finally carried and the request's full duration. Called from the Observe
+// hand-off once the response is on the wire.
+//
+// Exactly two columns, and a missing row is not an error — the summary line
+// landed, the detail row may have been refused by the 1:1 key, and nothing in
+// the logging path may turn into a request failure. A zero status means the
+// outcome was never observed (a panic before the status line, or no Observe at
+// all); writing 0 over a number the recorder chose would be the worse lie, so
+// the row is left alone.
+func (m *Mysql) UpdateAccessDetailOutcome(ctx context.Context, id int64, status int, durationMS int64) error {
+	if status <= 0 {
+		return nil
+	}
+	if durationMS < 0 {
+		durationMS = 0
+	}
+	_, err := m.db.ExecContext(ctx,
+		`UPDATE access_log_details SET status_code = ?, duration_ms = ? WHERE id = ?`,
+		status, durationMS, id)
+	if err != nil {
+		return fmt.Errorf("store: update access detail outcome %d: %w", id, err)
+	}
+	return nil
+}
+
 // PurgeAccessDetails drops detail rows older than the retention window
 // (accesslog.Diagnostic.RetentionWindow). Returns the number deleted for the
 // operator log line.
@@ -157,10 +184,15 @@ func (m *Mysql) AccessDetailRows(ctx context.Context, ids []int64) ([]AccessDeta
 	for _, id := range ids {
 		args = append(args, id)
 	}
+	// dialect.Placeholders already returns the parenthesized list — wrapping it
+	// in another pair turns the IN into a row-value comparison, which SQLite
+	// rejects outright ("row value misused") and every other engine answers its
+	// own way. access_detail_integration_test.go runs this statement against a
+	// real table because a stubbed seam cannot catch that.
 	query := `SELECT id, status_code, duration_ms, upstream_code, headers_json, body_excerpt,
 	                 credential_ref, captured_at
-	            FROM access_log_details WHERE id IN (` +
-		dialect.Placeholders(len(ids)) + `) ORDER BY id DESC`
+	            FROM access_log_details WHERE id IN ` +
+		dialect.Placeholders(len(ids)) + ` ORDER BY id DESC`
 	rows, err := m.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("store: read access_log_details: %w", err)
