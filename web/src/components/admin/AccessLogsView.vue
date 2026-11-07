@@ -34,8 +34,71 @@ const detailBusy = ref(false)
 const detailPresetHours = [1, 6, 24]
 const detailCustom = ref('')
 
+// Per-row detail expansion (ticket 5d-ui). The backend endpoint
+// GET /access-log/details?ids= takes the ids already on the visible page and
+// answers them in ONE store query, so we batch the whole page rather than
+// firing a request per row (that would rebuild the N+1 the backend removed).
+// Details are fetched lazily on the first expand, reset whenever the page or
+// filters change so a stale map is never shown against new rows.
+const details = ref({}) // id -> detail row, absent means "no detail recorded"
+const detailsLoaded = ref(false)
+const detailsBusy = ref(false)
+const detailsError = ref('')
+const detailsLimited = ref(false)
+const expanded = ref({}) // id -> true while its detail sub-row is open
+
+async function loadPageDetails() {
+  if (detailsLoaded.value || detailsBusy.value) return
+  const ids = logs.value.map((r) => r.id).filter((n) => Number.isFinite(n))
+  if (!ids.length) { detailsLoaded.value = true; return }
+  detailsError.value = ''
+  detailsBusy.value = true
+  try {
+    const d = await fetchJSON(`/api/admin/v1/access-log/details?ids=${ids.join(',')}`)
+    const map = {}
+    for (const row of (d.rows || [])) map[row.id] = row
+    details.value = map
+    detailsLimited.value = !!d.limited
+    detailsLoaded.value = true
+  } catch (e) { detailsError.value = e.message } finally { detailsBusy.value = false }
+}
+
+function toggleDetail(id) {
+  const next = { ...expanded.value }
+  if (next[id]) {
+    delete next[id]
+  } else {
+    next[id] = true
+    loadPageDetails()
+  }
+  expanded.value = next
+}
+
+// detailFor is "" / undefined for a row that has no detail record, which the
+// template renders as "no detail exists", never as an empty box.
+function detailFor(id) { return details.value[id] }
+
+// headers_json carries only the two whitelisted request headers and may be
+// absent, empty or (rarely) malformed JSON. Never throw at render time: fall
+// back to an empty list so a bad row degrades to "no headers" rather than
+// taking the whole table down.
+function headersList(raw) {
+  if (!raw) return []
+  let parsed
+  try { parsed = JSON.parse(raw) } catch (e) { return [] }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return []
+  return Object.entries(parsed).map(([k, v]) => ({ k, v: String(v) }))
+}
+
 async function load() {
   error.value = ''
+  // A new page/filters invalidates the batch: clear the map, the expansion and
+  // the loaded flag so the next expand re-fetches against the new visible ids.
+  details.value = {}
+  detailsLoaded.value = false
+  detailsLimited.value = false
+  detailsError.value = ''
+  expanded.value = {}
   try {
     const qs = new URLSearchParams({ page: String(page.value) })
     if (kind.value) qs.set('kind', kind.value)
@@ -170,16 +233,66 @@ onMounted(() => { load(); loadDetail() })
         <th>{{ t('admin.colTime') }}</th><th>{{ t('admin.colKind') }}</th>
         <th>{{ t('admin.colOutcome') }}</th><th>{{ t('admin.colWho') }}</th>
         <th>IP</th><th>UA</th><th>{{ t('admin.colDetail') }}</th>
+        <th>{{ t('admin.colAccessDetail') }}</th>
       </tr>
-      <tr v-for="row in logs" :key="row.id">
-        <td class="nowrap muted">{{ fmtTime(row.createdAt) }}</td>
-        <td class="nowrap">{{ t(`admin.kind.${row.kind}`) }}</td>
-        <td class="nowrap"><span class="oc" :class="outcomeClass(row.outcome)">{{ t(`admin.outcome.${row.outcome}`) }}</span></td>
-        <td class="nowrap who">{{ row.who || '—' }} <span class="muted" v-if="row.uid">#{{ row.uid }}</span></td>
-        <td class="nowrap"><code class="ip">{{ row.ip || '—' }}</code></td>
-        <td class="ua" :title="row.ua || ''">{{ row.ua || '—' }}</td>
-        <td class="detail" :title="row.detail || ''">{{ row.detail || '—' }}</td>
-      </tr>
+      <template v-for="row in logs" :key="row.id">
+        <tr>
+          <td class="nowrap muted">{{ fmtTime(row.createdAt) }}</td>
+          <td class="nowrap">{{ t(`admin.kind.${row.kind}`) }}</td>
+          <td class="nowrap"><span class="oc" :class="outcomeClass(row.outcome)">{{ t(`admin.outcome.${row.outcome}`) }}</span></td>
+          <td class="nowrap who">{{ row.who || '—' }} <span class="muted" v-if="row.uid">#{{ row.uid }}</span></td>
+          <td class="nowrap"><code class="ip">{{ row.ip || '—' }}</code></td>
+          <td class="ua" :title="row.ua || ''">{{ row.ua || '—' }}</td>
+          <td class="detail" :title="row.detail || ''">{{ row.detail || '—' }}</td>
+          <td class="expand">
+            <button class="secondary" :aria-expanded="expanded[row.id] ? 'true' : 'false'"
+                    @click="toggleDetail(row.id)">
+              {{ expanded[row.id] ? t('admin.accessDetailCollapse') : t('admin.accessDetailExpand') }}
+            </button>
+          </td>
+        </tr>
+        <tr v-if="expanded[row.id]" class="sub-row">
+          <td :colspan="8">
+            <div v-if="detailsError" class="error" role="alert">{{ detailsError }}</div>
+            <div v-else-if="!detailsLoaded" class="muted">{{ t('admin.accessDetailLoading') }}</div>
+            <div v-else-if="detailFor(row.id)" class="axd">
+              <dl class="axd-grid">
+                <dt>{{ t('admin.accessDetailStatus') }}</dt>
+                <dd>{{ detailFor(row.id).status_code }}</dd>
+                <dt>{{ t('admin.accessDetailDuration') }}</dt>
+                <dd>{{ t('admin.accessDetailDurationValue', { n: detailFor(row.id).duration_ms }) }}</dd>
+                <template v-if="detailFor(row.id).upstream_code">
+                  <dt>{{ t('admin.accessDetailUpstream') }}</dt>
+                  <dd>{{ detailFor(row.id).upstream_code }}</dd>
+                </template>
+                <dt>{{ t('admin.accessDetailCaptured') }}</dt>
+                <dd>{{ fmtTime(detailFor(row.id).captured_at) }}</dd>
+              </dl>
+              <div class="axd-block">
+                <span class="axd-label">{{ t('admin.accessDetailHeaders') }}</span>
+                <dl v-if="headersList(detailFor(row.id).headers_json).length" class="axd-grid">
+                  <template v-for="h in headersList(detailFor(row.id).headers_json)" :key="h.k">
+                    <dt>{{ h.k }}</dt>
+                    <dd><code>{{ h.v }}</code></dd>
+                  </template>
+                </dl>
+                <span v-else class="muted">—</span>
+              </div>
+              <div class="axd-block" v-if="detailFor(row.id).body_excerpt">
+                <span class="axd-label">{{ t('admin.accessDetailBody') }}</span>
+                <code class="axd-body">{{ detailFor(row.id).body_excerpt }}</code>
+              </div>
+              <p class="axd-cred" :class="detailFor(row.id).credential_present ? 'oc-warn' : 'oc-miss'">
+                {{ detailFor(row.id).credential_present
+                   ? t('admin.accessDetailCredential')
+                   : t('admin.accessDetailNoCredential') }}
+              </p>
+            </div>
+            <div v-else class="muted">{{ t('admin.accessDetailNone') }}</div>
+            <p v-if="detailsLimited" class="axd-limited">{{ t('admin.accessDetailLimited') }}</p>
+          </td>
+        </tr>
+      </template>
     </table>
     </div>
     <p class="muted" v-else-if="!error">{{ t('admin.accessEmpty') }}</p>
@@ -195,7 +308,7 @@ onMounted(() => { load(); loadDetail() })
 .dm-state { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
 .dm-controls { flex-wrap: wrap; gap: 8px; }
 .dm-controls input[type="datetime-local"] { max-width: 220px; }
-.logs-table { min-width: 960px; width: 100%; table-layout: fixed; }
+.logs-table { min-width: 1080px; width: 100%; table-layout: fixed; }
 /* fixed layout + every cell ellipsizes: nothing spills into a neighbour */
 .logs-table td { overflow: hidden; text-overflow: ellipsis; }
 .logs-table th:nth-child(1), .logs-table td:nth-child(1) { width: 160px; }
@@ -205,7 +318,9 @@ onMounted(() => { load(); loadDetail() })
 .logs-table th:nth-child(5), .logs-table td:nth-child(5) { width: 112px; }
 .logs-table th:nth-child(6), .logs-table td:nth-child(6) { width: 210px; }
 /* col7 (detail) takes the remainder of the fixed layout */
+.logs-table th:nth-child(8), .logs-table td:nth-child(8) { width: 118px; }
 .logs-table td.detail { font-family: var(--mono, monospace); font-size: var(--fs-xs); }
+.logs-table td.expand { text-align: right; }
 .nowrap { white-space: nowrap; }
 .who { font-weight: 600; }
 .ip { font-size: var(--fs-xs); }
@@ -220,4 +335,17 @@ onMounted(() => { load(); loadDetail() })
 .oc-miss { color: var(--muted); border-color: var(--line); }
 .oc-warn { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 40%, transparent); }
 .oc-bad { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+/* detail sub-row: an expanded request's diagnostic fields, kept visually under
+   the summary line it belongs to. The cell spans all columns and never
+   ellipsizes, so the body excerpt and headers wrap instead of clipping. */
+.logs-table tr.sub-row > td { overflow: visible; padding: 10px 14px; border-top: 1px solid var(--line); }
+.axd { display: flex; flex-direction: column; gap: 8px; }
+.axd-grid { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
+.axd-grid dt { color: var(--muted); font-size: var(--fs-xs); }
+.axd-grid dd { margin: 0; font-size: var(--fs-xs); }
+.axd-block { display: flex; flex-direction: column; gap: 2px; }
+.axd-label { color: var(--muted); font-size: var(--fs-xs); }
+.axd-body { font-family: var(--mono, monospace); font-size: var(--fs-xs); white-space: pre-wrap; word-break: break-all; }
+.axd-cred { margin: 0; font-size: var(--fs-xs); font-weight: 600; }
+.axd-limited { margin: 0; font-size: var(--fs-xs); color: var(--gold); }
 </style>
