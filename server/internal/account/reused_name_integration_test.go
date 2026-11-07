@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -67,8 +68,18 @@ func TestIntegrationReusedNameReportsNameTakenNotInternal(t *testing.T) {
 		t.Fatalf("create user: %v", err)
 	}
 
-	const oldName = "P2ReusedOldName"
-	const newName = "P2ReusedNewName"
+	// Both player names are per-run, not constants: the collision this test
+	// reproduces lives in uuid_map.uuid, and OfflineUUID is a pure function of
+	// the name, so a fixed name would collide with the row a PREVIOUS run left
+	// behind and fail at the very first create instead of at the recreate.
+	// base36(nanos) is unique per run; the 3-char prefixes keep both names
+	// inside players.name's 16-char column.
+	b36 := strconv.FormatInt(suffix, 36)
+	oldName := "P2o" + b36
+	newName := "P2n" + b36
+	if len(oldName) > 16 || len(newName) > 16 {
+		t.Fatalf("fixture names must fit players.name VARCHAR(16): %q / %q", oldName, newName)
+	}
 
 	view, created, e := svc.CreatePlayer(ctx, uid, oldName, CallMeta{})
 	if e != nil || !created || view.ID == 0 {
