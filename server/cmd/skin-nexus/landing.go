@@ -158,43 +158,50 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
   .scene { position: fixed; inset: auto 0 0 0; height: 44vh; min-height: 250px;
            pointer-events: none; z-index: 0; overflow: hidden; }
   .scene-mountains { position: absolute; inset: auto 0 0 0; width: 100%; height: 100%; display: block; }
-  .scene-fog { position: absolute; left: -60%; width: 220%; height: 110px;
-               background: radial-gradient(50% 100% at 50% 100%, rgba(233, 237, 241, .05), transparent 70%); }
-  .fog-a { bottom: 56px; animation: fogdrift 70s linear infinite; }
-  .fog-b { bottom: 150px; opacity: .7; animation: fogdrift 110s linear infinite reverse; }
-  @keyframes fogdrift { from { transform: translateX(-4%); } to { transform: translateX(4%); } }
+  /* 三层山色与雾底走令牌，不在 SVG 属性里抄十六进制（var() 在 fill= 这类呈现属性里
+     不被解析，所以用 class 上色 —— 与 SPA 的 .auth-scene .mtn-* 同一写法）。 */
+  .scene .mtn-far { fill: var(--mtn-far); opacity: .55; }
+  .scene .mtn-mid { fill: var(--mtn-mid); opacity: .8; }
+  .scene .mtn-near { fill: var(--mtn-near); }
+  #scene-mist stop { stop-color: var(--panel); }
+  .scene-fog { position: absolute; left: 0; width: 100%; height: 112px;
+               background: radial-gradient(50% 100% at 50% 100%, var(--fog), transparent 70%); }
+  /* 两层雾 = 纵深；70s/110s 的循环漂移去掉，永动背景是这一轮点名的生成感，
+     而 --fog 手抄一遍更是第二真源（theme-base.css 的 :6 明令禁止）。 */
+  .fog-a { bottom: 56px; }
+  .fog-b { bottom: 152px; opacity: .7; }
   .wrap { position: relative; z-index: 1; flex: 1 0 auto; width: 100%; max-width: 1040px; margin: 0 auto; padding: 32px 24px 56px; }
   /* 首屏 */
   .hero { position: relative; padding: 72px 0 44px; text-align: center; }
   .hero > * { position: relative; }
-  .hero h1 { margin: 0 0 10px; font-family: var(--font-serif); font-size: 48px; font-weight: 600;
+  .hero h1 { margin: 0 0 12px; font-family: var(--font-serif); font-size: 48px; font-weight: 600;
              letter-spacing: .06em; line-height: 1.25; }
-  .hero .tag { color: var(--moon-2); font-size: 16px; margin: 0 0 28px; }
-  .cta a { display: inline-block; margin: 0 8px; padding: 11px 28px; border-radius: var(--r-s);
+  .hero .tag { color: var(--moon-2); font-size: var(--fs-m); margin: 0 0 28px; }
+  .cta a { display: inline-block; margin: 0 8px; padding: 12px 28px; border-radius: var(--r-s);
            font-size: var(--fs-m); text-decoration: none; font-weight: 600;
            transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); }
   .cta .primary { background: var(--cinnabar); color: var(--on-cinnabar); }
   .cta .primary:hover { background: var(--cinnabar-hi); }
   .cta .alt { border: 1px solid var(--line); color: var(--moon); }
   .cta .alt:hover { background: var(--ink-2); border-color: var(--ochre); }
-  .unread-badge { display: inline-block; min-width: 16px; margin-left: 6px; padding: 0 5px; border-radius: 9px;
+  .unread-badge { display: inline-block; min-width: 20px; margin-left: 6px; padding: 0 6px; border-radius: 10px;
                   background: var(--ink-3); border: 1px solid var(--cinnabar); color: var(--cinnabar);
-                  font-size: 12px; line-height: 17px; text-align: center; font-weight: 600; }
+                  font-size: var(--fs-xs); line-height: 20px; text-align: center; font-weight: 600; }
   .cta a:focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
-  .langsw { display: flex; justify-content: center; gap: 12px; margin: 18px 0 0; font-size: var(--fs-s); }
+  .langsw { display: flex; justify-content: center; gap: 12px; margin: 16px 0 0; font-size: var(--fs-s); }
   .langsw a { color: var(--muted); text-decoration: none; padding: 4px 8px; border-radius: var(--r-s); }
   .langsw a:hover { color: var(--text); text-decoration: underline; }
   .langsw a[aria-current="true"] { color: var(--text); font-weight: 600; text-decoration: none; }
   /* 统计卡：赭石回纹角饰（小音量），数字用赭石（朱砂只留给主按钮） */
   .stats { display: flex; gap: 16px; margin: 32px 0; }
-  .stats div { position: relative; flex: 1; text-align: center; padding: 22px 12px; border-radius: var(--r-l);
+  .stats div { position: relative; flex: 1; text-align: center; padding: 24px 12px; border-radius: var(--r-l);
                background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
                font-variant-numeric: tabular-nums; }
   .stats div::before, .stats div::after { content: ""; position: absolute; width: 10px; height: 10px;
                border: 1.5px solid var(--ochre); opacity: .6; }
   .stats div::before { top: 6px; left: 6px; border-right: none; border-bottom: none; }
   .stats div::after { bottom: 6px; right: 6px; border-left: none; border-top: none; }
-  .stats b { display: block; font-size: 30px; color: var(--ochre); font-weight: 600; }
+  .stats b { display: block; font-size: var(--fs-2xl); color: var(--ochre); font-weight: 600; }
   .stats span { font-size: var(--fs-s); color: var(--moon-2); }
   /* 祥云分隔：一枝纹样 repeat-x */
   .divider { height: 26px; margin: 4px 0 0; opacity: .55; background-repeat: repeat-x;
@@ -202,7 +209,7 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
              background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='132' height='26' viewBox='0 0 132 26'%3E%3Cpath d='M8 19c0-5 4-8 8-7 1-6 10-8 13-2 5-2 10 1 9 6 4 0 7 1 9 3' fill='none' stroke='%23c9a06a' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M60 19c7 0 10-6 16-6 7 0 9 6 16 6 6 0 9-4 14-4' fill='none' stroke='%23c9a06a' stroke-width='1.2' opacity='.65'/%3E%3C/svg%3E"); }
   /* 皮肤库入口：次级按钮（与 CTA 描边款同语言，赭石线 + 金边 hover） */
   .more { text-align: center; margin: 20px 0 0; }
-  .more a { display: inline-block; padding: 9px 24px; border-radius: var(--r-s);
+  .more a { display: inline-block; padding: 8px 24px; border-radius: var(--r-s);
             border: 1px solid var(--line-strong); color: var(--moon);
             font-size: var(--fs-s); font-weight: 600; text-decoration: none;
             transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); }
@@ -214,29 +221,29 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
      （--panel / --line / --r-l / --shadow），单列自上而下，不加栅格框架。 */
   .facts { margin: 4px 0 0; padding: 20px 20px 8px; border-radius: var(--r-l);
            background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); }
-  .facts h2 { font-family: var(--font-serif); font-size: 20px; margin: 0 0 6px; font-weight: 600;
+  .facts h2 { font-family: var(--font-serif); font-size: var(--fs-l); margin: 0 0 8px; font-weight: 600;
               letter-spacing: .04em; }
   .facts dl { margin: 0; }
   .facts .fact { padding: 12px 0; border-top: 1px solid var(--line); }
   .facts .fact:first-child { border-top: none; }
   .facts dt { font-size: var(--fs-m); font-weight: 600; color: var(--moon); line-height: 1.6; }
   .facts dd { margin: 4px 0 0; font-size: var(--fs-s); color: var(--moon-2); line-height: 1.75; }
-  .feat h2 { font-family: var(--font-serif); font-size: 24px; margin: 36px 0 18px; font-weight: 600;
+  .feat h2 { font-family: var(--font-serif); font-size: var(--fs-xl); margin: 40px 0 16px; font-weight: 600;
              letter-spacing: .04em; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 16px; }
-  .grid figure { margin: 0; padding: 14px; border-radius: var(--r-l); text-align: center;
+  .grid figure { margin: 0; padding: 16px; border-radius: var(--r-l); text-align: center;
                  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
-                 transition: border-color .12s, transform .12s; }
+                 transition: border-color var(--t-fast) var(--ease); }
   .grid figure:hover { border-color: var(--ochre); }
   .grid img { max-width: 112px; max-height: 112px; image-rendering: pixelated; }
   .grid figcaption { font-size: var(--fs-s); color: var(--moon-2); margin-top: 8px;
                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  footer.site-footer { position: relative; z-index: 1; flex: none; margin-top: 32px; padding: 18px 24px 24px;
+  footer.site-footer { position: relative; z-index: 1; flex: none; margin-top: 32px; padding: 16px 24px 24px;
            text-align: center; font-size: var(--fs-xs); color: var(--muted); border-top: 1px solid var(--line); }
   footer.site-footer a { color: var(--jade); text-decoration: none; }
   footer.site-footer a:hover { color: var(--jade-hi); text-decoration: underline; }
-  .site-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 0 0 8px; }
-  .site-footer-text { margin: 0 0 6px; white-space: pre-line; }
+  .site-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 16px; margin: 0 0 8px; }
+  .site-footer-text { margin: 0 0 8px; white-space: pre-line; }
   .site-footer-credit { margin: 0; }
   /* 品牌标识入场编舞：1600ms 共此时钟，offset 为关键帧内百分比；
      keyframe 缓动一律字面值（var() 在 @keyframes 内会被 Chromium 静默丢弃）。 */
@@ -300,10 +307,9 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
       transform: none !important;
       stroke-dashoffset: 0 !important;
     }
-    .scene-fog { animation: none !important; }
   }
   @media (max-width: 640px) {
-    .wrap { padding: 20px 14px 40px; }
+    .wrap { padding: 20px 16px 40px; }
     .hero { padding: 48px 0 28px; }
     .hero h1 { font-size: 32px; }
     .stats { flex-wrap: wrap; gap: 8px; margin: 24px 0; }
@@ -319,16 +325,13 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
     <svg class="scene-mountains" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320" preserveAspectRatio="none">
       <defs>
         <linearGradient id="scene-mist" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#16202e" stop-opacity="0"/>
-          <stop offset="1" stop-color="#16202e" stop-opacity=".55"/>
+          <stop offset="0" stop-opacity="0"/>
+          <stop offset="1" stop-opacity=".55"/>
         </linearGradient>
       </defs>
-      <path d="M0,200 L100,162 220,190 340,128 470,172 600,118 730,164 860,108 990,158 1120,124 1260,168 1360,138 1440,162 V320 H0 Z"
-            fill="#2c3d54" opacity=".55"/>
-      <path d="M0,240 L140,206 300,236 440,190 580,230 720,186 880,226 1030,196 1180,236 1320,200 1440,226 V320 H0 Z"
-            fill="#243347" opacity=".8"/>
-      <path d="M0,280 L160,256 330,276 520,250 700,272 900,248 1090,270 1280,250 1440,268 V320 H0 Z"
-            fill="#1c2839"/>
+      <path class="mtn-far" d="M0,200 L100,162 220,190 340,128 470,172 600,118 730,164 860,108 990,158 1120,124 1260,168 1360,138 1440,162 V320 H0 Z"/>
+      <path class="mtn-mid" d="M0,240 L140,206 300,236 440,190 580,230 720,186 880,226 1030,196 1180,236 1320,200 1440,226 V320 H0 Z"/>
+      <path class="mtn-near" d="M0,280 L160,256 330,276 520,250 700,272 900,248 1090,270 1280,250 1440,268 V320 H0 Z"/>
       <rect x="0" y="0" width="1440" height="320" fill="url(#scene-mist)"/>
     </svg>
     <div class="scene-fog fog-a"></div>

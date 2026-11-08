@@ -263,3 +263,39 @@ func TestAbsURL(t *testing.T) {
 		}
 	}
 }
+
+// The 404 is the smallest SSR surface and the one nobody looks at: it used to
+// carry its own copy of the palette (--ink/--moon/--jade as literals plus a
+// hand-typed font stack). theme-base.css calls a copied :root a bug, and this
+// copy had already drifted — the literals were written before 月下仙山 moved.
+func TestTexNotFoundCarriesThemeBaseOnce(t *testing.T) {
+	var sb strings.Builder
+	if err := texNotFoundTmpl.Execute(&sb, map[string]any{
+		"SiteName": "SkinNexus", "Lang": "zh-CN",
+		"Title": "页面不存在", "Msg": "页面不存在", "ThemeBase": themeBaseCSS,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body := sb.String()
+	if n := strings.Count(body, "--bg:"); n != 1 {
+		t.Errorf("the 404 must carry exactly one token block, found %d", n)
+	}
+	// --jade legitimately appears once: inside the embedded token block. More
+	// than once means the page copied it again.
+	if n := strings.Count(body, "--jade: #67b7a0"); n != 1 {
+		t.Errorf("--jade must come from the token block only, found %d copies", n)
+	}
+	for _, copied := range []string{"--ink: #16202e", "--moon: #e9edf1", `"Segoe UI", "PingFang SC"`} {
+		if strings.Contains(body, copied) {
+			t.Errorf("the 404 still hand-copies a token value: %q", copied)
+		}
+	}
+	for _, want := range []string{"background: var(--bg)", "color: var(--text)", "font-family: var(--font-sans)"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the 404 must consume the contract instead of its own literals, missing %q", want)
+		}
+	}
+	if strings.Contains(body, "{{") {
+		t.Errorf("an unsubstituted template action leaked into the 404")
+	}
+}

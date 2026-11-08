@@ -59,17 +59,21 @@ type ssrListData struct {
 	LangSwitch template.HTML
 }
 
+// 爬虫可见的皮肤库列表片段。它渲染在宿主文档里，令牌已由应用样式/theme-base 定义，
+// 所以这里只消费 --line / --r-* / --fs-* / --muted，不再自带一套灰边与圆角（同
+// theme-base.css 的「SSR 里禁止再复制 :root 值」）。次级文字改用 --muted 而不是
+// opacity .66/.72 —— 缩小透明度会把小字号的对比度一起拉下去。
 const ssrListStyle = `.ssr-list{max-width:1040px;margin:0 auto;padding:24px 20px 40px;color-scheme:light dark}
-.ssr-list h1{margin:0 0 6px;font-size:26px}
-.ssr-list .ssr-meta{margin:0 0 18px;opacity:.72;font-size:14px}
-.ssr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;list-style:none;margin:0;padding:0}
-.ssr-grid a{display:block;text-decoration:none;color:inherit;border:1px solid rgba(127,127,127,.28);border-radius:12px;padding:8px}
-.ssr-grid img{display:block;width:100%;height:auto;aspect-ratio:1/1;object-fit:cover;border-radius:8px;image-rendering:pixelated}
-.ssr-grid .ssr-n{display:block;margin-top:6px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ssr-grid .ssr-w{display:block;font-size:12px;opacity:.66}
-.ssr-pager{display:flex;gap:14px;margin-top:22px;font-size:14px}
-.langsw{display:flex;gap:10px;align-items:center;font-size:13px}
-.langsw a{color:var(--muted);text-decoration:none;padding:2px 6px;border-radius:8px}
+.ssr-list h1{margin:0 0 8px;font-size:var(--fs-xl)}
+.ssr-list .ssr-meta{margin:0 0 16px;color:var(--muted);font-size:var(--fs-s)}
+.ssr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:16px;list-style:none;margin:0;padding:0}
+.ssr-grid a{display:block;text-decoration:none;color:inherit;border:1px solid var(--line);border-radius:var(--r-l);padding:8px}
+.ssr-grid img{display:block;width:100%;height:auto;aspect-ratio:1/1;object-fit:cover;border-radius:var(--r-s);image-rendering:pixelated}
+.ssr-grid .ssr-n{display:block;margin-top:4px;font-size:var(--fs-s);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ssr-grid .ssr-w{display:block;font-size:var(--fs-xs);color:var(--muted)}
+.ssr-pager{display:flex;gap:16px;margin-top:24px;font-size:var(--fs-s)}
+.langsw{display:flex;gap:8px;align-items:center;font-size:var(--fs-s)}
+.langsw a{color:var(--muted);text-decoration:none;padding:2px 6px;border-radius:var(--r-s)}
 .langsw a:hover{color:var(--text);text-decoration:underline}
 .langsw a[aria-current="true"]{color:var(--text);font-weight:600;text-decoration:none}
 @media (prefers-reduced-motion:reduce){.ssr-grid img{transition:none}}`

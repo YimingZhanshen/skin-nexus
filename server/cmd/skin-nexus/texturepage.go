@@ -105,12 +105,12 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
   a { color: var(--jade); text-decoration: none; }
   a:hover { color: var(--jade-hi); text-decoration: underline; }
   :focus-visible { outline: 2px solid var(--jade); outline-offset: 2px; }
-  .skip-link { position: absolute; left: -9999px; top: 8px; z-index: 90;
+  .skip-link { position: absolute; left: -9999px; top: 8px; z-index: var(--z-modal);
                background: var(--panel); color: var(--text); border: 1px solid var(--line-strong);
                border-radius: var(--r-m); padding: 8px 16px; }
   .skip-link:focus { left: 12px; }
   .wrap:focus { outline: none; }
-  .topbar { position: sticky; top: 0; z-index: 50; flex: none; height: var(--topbar-h, 56px);
+  .topbar { position: sticky; top: 0; z-index: var(--z-topbar); flex: none; height: var(--topbar-h, 56px);
             background: color-mix(in srgb, var(--bg) 82%, transparent);
             -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
             border-bottom: 1px solid var(--line); }
@@ -118,26 +118,27 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
                   display: flex; align-items: center; justify-content: space-between; gap: 16px; }
   .topbar .brand { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--moon); }
   .topbar .brand:hover { text-decoration: none; }
-  .topbar .brand img { width: 26px; height: 26px; display: block; flex: none; }
-  .topbar .brand span { font-family: var(--font-serif); font-size: 20px; font-weight: 600; letter-spacing: .06em;
+  .topbar .brand img { width: 24px; height: 24px; display: block; flex: none; }
+  .topbar .brand span { font-family: var(--font-serif); font-size: var(--fs-l); font-weight: 600; letter-spacing: .06em;
                         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .topnav { display: flex; align-items: center; gap: 4px; flex: none; }
   .topnav a { padding: 6px 10px; border-radius: var(--r-s); color: var(--jade); font-size: var(--fs-s); }
   .topnav a:hover { background: var(--hover-wash); color: var(--jade-hi); text-decoration: none; }
   .topnav a.primary { background: var(--cinnabar); color: var(--on-cinnabar); font-weight: 600; }
   .topnav a.primary:hover { background: var(--cinnabar-hi); color: var(--on-cinnabar); }
-  .langsw { display: flex; gap: 10px; align-items: center; margin-left: auto; font-size: var(--fs-s); }
+  .langsw { display: flex; gap: 8px; align-items: center; margin-left: auto; font-size: var(--fs-s); }
   .langsw a { color: var(--muted); text-decoration: none; padding: 4px 8px; border-radius: var(--r-s); }
   .langsw a:hover { color: var(--text); text-decoration: underline; }
   .langsw a[aria-current="true"] { color: var(--text); font-weight: 600; text-decoration: none; }
-  .unread-badge { display: inline-block; min-width: 16px; margin-left: 6px; padding: 0 5px; border-radius: 9px; background: var(--cinnabar); color: var(--on-cinnabar); font-size: 11px; line-height: 17px; text-align: center; font-weight: 600; }
+  /* 与 SPA 侧栏的 .nav-badge 同一形态（同宽同高同字号），SSR 与面板不再各写一套 */
+  .unread-badge { display: inline-block; min-width: 20px; margin-left: 6px; padding: 0 6px; border-radius: 10px; background: var(--cinnabar); color: var(--on-cinnabar); font-size: var(--fs-xs); line-height: 20px; text-align: center; font-weight: 600; }
   .wrap { flex: 1 0 auto; width: 100%; max-width: 940px; margin: 0 auto; padding: 32px 24px 56px; }
   .crumb { font-size: var(--fs-s); color: var(--muted); margin: 0 0 16px; }
   .crumb .sep { color: var(--muted); }
   .card { background: var(--panel); border: 1px solid var(--line);
           border-radius: var(--r-l); padding: 32px;
           box-shadow: var(--shadow); }
-  h1 { margin: 0 0 6px; font-family: var(--font-serif); font-size: 30px; font-weight: 600;
+  h1 { margin: 0 0 8px; font-family: var(--font-serif); font-size: var(--fs-2xl); font-weight: 600;
        letter-spacing: .03em; overflow-wrap: anywhere; }
   .sub { color: var(--moon-2); font-size: var(--fs-m); margin: 0 0 24px; }
   .viewer { display: flex; justify-content: center; align-items: center;
@@ -159,44 +160,44 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
   .meta dd { margin: 0; font-size: var(--fs-s); font-weight: 600; overflow-wrap: anywhere;
              font-variant-numeric: tabular-nums; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .actions a, .actions button { display: inline-block; padding: 9px 20px; border-radius: var(--r-s);
+  .actions a, .actions button { display: inline-block; padding: 8px 20px; border-radius: var(--r-s);
         font-size: var(--fs-s); font-weight: 600; text-decoration: none; cursor: pointer;
         font-family: inherit; transition: background var(--t-fast) var(--ease),
-        border-color var(--t-fast) var(--ease), transform var(--t-fast) var(--ease),
+        border-color var(--t-fast) var(--ease),
         box-shadow var(--t-fast) var(--ease); }
   .actions .primary { background: var(--cinnabar); color: var(--on-cinnabar); border: none; }
-  .actions .primary:hover { background: var(--cinnabar-hi); transform: translateY(-1px);
-        box-shadow: 0 6px 16px -8px var(--glow-cinnabar); text-decoration: none; }
-  .actions .primary:active { transform: translateY(0); }
+  /* 与 SPA 按钮同一 hover：底色走一步 + 一层中性抬升，不再上浮 1px、不再打彩晕 */
+  .actions .primary:hover { background: var(--cinnabar-hi);
+        box-shadow: 0 4px 12px -8px var(--glow-cinnabar); text-decoration: none; }
   .actions .alt { border: 1px solid var(--line-strong); color: var(--moon);
                   background: transparent; }
   .actions .alt:hover { background: var(--ink-3); border-color: var(--gold);
                   color: var(--moon); text-decoration: none; }
   .like-btn.liked { color: var(--danger); border-color: var(--danger); }
-  footer.site-footer { position: relative; flex: none; margin-top: 32px; padding: 18px 24px 24px;
+  footer.site-footer { position: relative; flex: none; margin-top: 32px; padding: 16px 24px 24px;
            text-align: center; font-size: var(--fs-xs); color: var(--muted); border-top: 1px solid var(--line); }
   footer.site-footer a { color: var(--jade); }
   footer.site-footer a:hover { color: var(--jade-hi); }
-  .site-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 0 0 8px; }
-  .site-footer-text { margin: 0 0 6px; white-space: pre-line; }
+  .site-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 16px; margin: 0 0 8px; }
+  .site-footer-text { margin: 0 0 8px; white-space: pre-line; }
   .site-footer-credit { margin: 0; }
-  .detail-block { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .detail-block { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
   .detail-block h2 { font-size: var(--fs-m); margin: 0 0 8px; }
   .md.md.md-wide p, .md.md.md-wide li { max-width: none; }
   .source-line { margin: 0 0 8px; color: var(--muted); font-size: var(--fs-s); }
   .source-line a { color: var(--jade); }
   .report-dialog { border: 1px solid var(--border); border-radius: var(--r-m); background: var(--panel);
-    color: var(--text); max-width: 420px; width: calc(100% - 32px); padding: 18px; }
+    color: var(--text); max-width: 420px; width: calc(100% - 32px); padding: 20px; }
   .report-dialog label { display: block; margin: 10px 0; font-size: var(--fs-s); }
   .report-dialog select, .report-dialog textarea { width: 100%; margin-top: 4px; }
   .report-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
-  .report-error { color: var(--danger-ink, var(--danger, #d9564c)); font-size: var(--fs-s); }
+  .report-error { color: var(--danger-ink, var(--danger)); font-size: var(--fs-s); }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
   @media (max-width: 560px) {
-    .topbar-inner { padding: 0 14px; }
+    .topbar-inner { padding: 0 16px; }
     .topbar .brand span { display: none; }
     .topnav a { padding: 5px 8px; }
-    .wrap { padding: 20px 14px 40px; }
+    .wrap { padding: 20px 16px 40px; }
     .card { padding: 20px; }
     h1 { font-size: 23px; }
     .viewer { min-height: 240px; }
@@ -316,13 +317,11 @@ var texNotFoundTmpl = template.Must(template.New("tex404").Funcs(tmplFuncs).Pars
 <title>{{.Title}}</title>
 <meta name="robots" content="noindex, nofollow" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-<style>
-  :root { color-scheme: dark; --ink: #16202e; --moon: #e9edf1; --jade: #67b7a0;
-          --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif; }
-  body { margin: 0; font-family: "Segoe UI", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif;
-         background: var(--ink); color: var(--moon); display: grid; place-items: center; min-height: 100vh; }
+<style>{{.ThemeBase}}
+  body { margin: 0; font-family: var(--font-sans);
+         background: var(--bg); color: var(--text); display: grid; place-items: center; min-height: 100vh; }
   .box { text-align: center; }
-  .box h1 { font-family: var(--font-serif); font-size: 40px; margin: 0 0 8px; }
+  .box h1 { font-family: var(--font-serif); font-size: var(--fs-2xl); margin: 0 0 8px; }
   a { color: var(--jade); }
 </style>
 <!--skin-theme-->
@@ -523,10 +522,13 @@ func texDescription(d texDetailData) string {
 // read differently, and the title used to say 材质不存在 even for an unknown URL.
 func writeTexNotFound(ctx context.Context, w http.ResponseWriter, siteName string, appearEng *appearance.Engine, lang, titleKey, msgKey string) {
 	var sb strings.Builder
-	_ = texNotFoundTmpl.Execute(&sb, map[string]string{
+	_ = texNotFoundTmpl.Execute(&sb, map[string]any{
 		"SiteName": siteName, "Lang": lang,
 		"Title": webi18n.F(lang, titleKey, "site", siteName),
 		"Msg":   webi18n.T(lang, msgKey),
+		// The token block, not a copy of it: this page had its own --ink/--moon/
+		// --jade literals and they were already stale.
+		"ThemeBase": themeBaseCSS,
 	})
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)
