@@ -50,17 +50,25 @@
   --accent-wash: rgba(176, 69, 58, .14); /* 导航活动态底雾（主题可覆盖） */
   --sel: rgba(176, 69, 58, .35);          /* 选区 */
   --fog: rgba(233, 237, 241, .05);        /* 场景雾 */
-  --glow-cinnabar: rgba(176, 69, 58, .6); /* 主按钮 hover 光晕 */
-  --glow-danger: rgba(217, 86, 76, .6);
+  /* hover 抬升用的阴影色。这里曾经是朱砂/红石彩晕（.6 透明度的品牌色光斑），
+     全站按钮一 hover 就发光 —— 去 AI 味第一轮把它收回到中性墨色：层次靠面阶与
+     发丝线，不靠彩晕。键名必须留着：已上架的主题包在覆盖这两个键，改名等于让
+     那些覆盖静默变成死变量（同版本制品不可重签，发现不了）。 */
+  --glow-cinnabar: rgba(3, 8, 16, .45);
+  --glow-danger: rgba(3, 8, 16, .5);
   --ring-cinnabar: rgba(176, 69, 58, .18);/* 输入焦点环 */
   /* 远山场景三层色（auth 场景板装饰） */
   --mtn-far: #2c3d54; --mtn-mid: #243347; --mtn-near: #1c2839;
-  /* ── 形与层 ── */
-  --r-s: 4px;
-  --r-m: 6px;
-  --r-l: 10px;
-  --shadow: 0 12px 32px -18px rgba(3, 8, 16, .8);
-  --shadow-lift: 0 18px 40px -20px rgba(3, 8, 16, .9);
+  /* ── 形与层 ──
+     嵌套半径：外层 = 内层 + 两者之间的 padding。控件 6、卡片 14 为基准，
+     --r-m 留给中间层（面板内的小卡、表格容器）。 */
+  --r-s: 6px;
+  --r-m: 10px;
+  --r-l: 14px;
+  /* 暗色底的层次来自面阶 + 发丝线 + 顶边高光，不来自外阴影（阴影在 #101825 上
+     只会糊成一片脏）。浮层是唯一例外：它浮在内容之上，需要一点中性小投影。 */
+  --shadow: inset 0 1px 0 rgba(233, 237, 241, .045);
+  --shadow-lift: inset 0 1px 0 rgba(233, 237, 241, .06), 0 16px 32px -24px rgba(0, 0, 0, .55);
   --topbar-h: 56px;
   /* ── 间距刻度（4px 基） ── */
   --sp-1: 4px;
@@ -91,4 +99,8 @@
   --font-sans: "Segoe UI", "Inter", "PingFang SC", "HarmonyOS Sans SC",
                "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
   --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
+  /* 数字与机读串（id / hash / 时间戳）用的等宽栈。六个管理面板一直在写
+     font-family: var(--mono, …)，各自带一份兜底 —— 键不存在时没人报错，只是每屏
+     的等宽字面长得不一样。补齐键名即收口，兜底留着不影响旧浏览器。 */
+  --mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Consolas, "Liberation Mono", monospace;
 }
