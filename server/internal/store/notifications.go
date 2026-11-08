@@ -43,8 +43,8 @@ func (m *Mysql) InsertNotification(ctx context.Context, uid int64, kind string, 
 	_, _ = m.db.ExecContext(ctx,
 		`DELETE FROM notifications WHERE created_at < ?`, m.now().UTC().Add(-notifRetention))
 	_, err := m.db.ExecContext(ctx,
-		`INSERT INTO notifications (uid, kind, tid, ref) VALUES (?,?,?,?)`,
-		uid, kind, tid, ref)
+		`INSERT INTO notifications (uid, kind, tid, ref, created_at) VALUES (?,?,?,?,?)`,
+		uid, kind, tid, ref, m.now().UTC())
 	return err
 }
 

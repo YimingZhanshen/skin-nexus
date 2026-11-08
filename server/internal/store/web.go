@@ -64,7 +64,7 @@ func (m *Mysql) EnsureSuperAdmin(ctx context.Context) (int64, bool, error) {
 }
 
 func (m *Mysql) createUser(ctx context.Context, email, nickname, passwordHash string, playerLimit, permission int, ip string) (int64, error) {
-	return insertUser(ctx, m.db, email, nickname, passwordHash, playerLimit, permission, ip)
+	return insertUser(ctx, m.db, email, nickname, passwordHash, playerLimit, permission, ip, m.now().UTC())
 }
 
 // NicknameTaken says which half of the (nickname, email) pair a rejected

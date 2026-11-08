@@ -14,6 +14,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sort"
+	"time"
 )
 
 // SetupSpec is everything the install wizard collects in one submission.
@@ -32,11 +33,15 @@ type execer interface {
 	InsertReturningID(ctx context.Context, query string, args ...any) (int64, error)
 }
 
-func insertUser(ctx context.Context, ex execer, email, nickname, passwordHash string, playerLimit, permission int, ip string) (int64, error) {
+// insertUser writes both timestamps from the caller's clock. Leaving them to
+// the column DEFAULT would put the account's age on the database clock while
+// the email-verify grace period ages it on the application clock
+// (ygg.Service.verificationBlocks) — two clocks, one value.
+func insertUser(ctx context.Context, ex execer, email, nickname, passwordHash string, playerLimit, permission int, ip string, now time.Time) (int64, error) {
 	uid, err := ex.InsertReturningID(ctx,
-		`INSERT INTO users (email, nickname, password, password_algo, player_limit, email_verified, can_join_server, permission, ip)
-		 VALUES (?,?,?,'argon2id',?,0,1,?,?)`,
-		nullableStr(email), nickname, passwordHash, playerLimit, permission, nullableStr(ip))
+		`INSERT INTO users (email, nickname, password, password_algo, player_limit, email_verified, can_join_server, permission, ip, created_at, updated_at)
+		 VALUES (?,?,?,'argon2id',?,0,1,?,?,?,?)`,
+		nullableStr(email), nickname, passwordHash, playerLimit, permission, nullableStr(ip), now, now)
 	if err != nil {
 		if isDupKey(err) {
 			return 0, ErrDuplicate
@@ -71,7 +76,7 @@ func (m *Mysql) ClaimSetup(ctx context.Context, spec SetupSpec) (uid int64, clai
 		return 0, false, nil
 	}
 
-	uid, err = insertUser(ctx, tx, spec.Email, spec.Nickname, spec.PasswordHash, spec.PlayerLimit, 2, "")
+	uid, err = insertUser(ctx, tx, spec.Email, spec.Nickname, spec.PasswordHash, spec.PlayerLimit, 2, "", m.now().UTC())
 	if err != nil {
 		return 0, false, err
 	}

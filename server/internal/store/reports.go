@@ -49,8 +49,8 @@ func normalizeReportOpts(o ReportOpts) ReportOpts {
 // mapped to ErrDuplicateReport so the HTTP layer can return 409.
 func (m *Mysql) CreateReport(ctx context.Context, textureID, reporterUID int64, reason, detail string) (int64, error) {
 	rid, err := m.db.InsertReturningID(ctx,
-		`INSERT INTO texture_reports (texture_id, reporter_uid, reason, detail, status)
-		 VALUES (?,?,?,?,'open')`, textureID, reporterUID, reason, nullableStr(detail))
+		`INSERT INTO texture_reports (texture_id, reporter_uid, reason, detail, status, created_at)
+		 VALUES (?,?,?,?,'open',?)`, textureID, reporterUID, reason, nullableStr(detail), m.now().UTC())
 	if err != nil {
 		if isDupKey(err) {
 			return 0, ErrDuplicateReport
