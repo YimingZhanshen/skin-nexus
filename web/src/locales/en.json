@@ -1111,5 +1111,124 @@
     "nameBody": "Nickname: 2–24 characters — letters, digits, underscore or Chinese — used to sign in and displayed here. Profile name: by default 3–16 letters, digits or underscore (admins can widen it), and it is the name you show in game. Renaming never changes the UUID and does not revoke existing grants.",
     "passwordTitle": "Forgotten or changed passwords",
     "passwordBody": "\"Forgot password\" on the sign-in card sends a reset mail (the site needs a configured mail service) and the link works for half an hour. Changing a password invalidates every launcher grant, so the next start needs a fresh login. If mail never arrives, check spam, then ask the site admin."
+  },
+  "settings": {
+    "site_name": {
+      "desc": "Site name (header and page titles)"
+    },
+    "server_name": {
+      "desc": "Server name"
+    },
+    "site_url": {
+      "desc": "Site address (absolute http(s) URL) — the shared base for page links, the sitemap, and texture/preview/avatar URLs; applies on restart. The OIDC issuer comes only from SKIN_OIDC_ISSUER / SKIN_BASE_URL, not from this field."
+    },
+    "announcement": {
+      "desc": "Site announcement (Markdown: headings, bold, links, lists; sanitized twice, hidden when empty)"
+    },
+    "invite_required": {
+      "desc": "Require an invite code to register (applies immediately)"
+    },
+    "require_verification": {
+      "desc": "Require email verification before joining a server (applies immediately; new accounts then receive a verification mail automatically — pair it with the grace period below)"
+    },
+    "email_verify_grace_days": {
+      "desc": "Email-verification grace period in days: for N days after signup an unverified account still passes, 0 = enforce at once (applies immediately)"
+    },
+    "regs_per_ip": {
+      "desc": "Maximum accounts per IP address (0 = unlimited, applies immediately)"
+    },
+    "smtp_host": {
+      "desc": "SMTP server (empty = mail disabled; smtp_user or smtp_from must also be set as the sender, or mail counts as unconfigured; applies immediately)"
+    },
+    "smtp_port": {
+      "desc": "SMTP port (465 = implicit TLS; any other port upgrades with STARTTLS when offered; default 465)"
+    },
+    "smtp_user": {
+      "desc": "SMTP username (most providers expect the full email address)"
+    },
+    "smtp_pass": {
+      "desc": "SMTP password or app token (QQ and 163 want an app token, not the login password); never echoed back, and empty keeps the stored value"
+    },
+    "smtp_from": {
+      "desc": "Sender address (empty = use smtp_user; accepts the Name <a{'@'}b.c> form)"
+    },
+    "rate_limit_auth": {
+      "desc": "Auth-endpoint requests per IP per 10 minutes (0 = off; applies on restart)"
+    },
+    "login_fail_limit": {
+      "desc": "Consecutive failures that lock an account (0 = off; applies on restart)"
+    },
+    "cdn_enabled": {
+      "desc": "CDN mode: read the real client IP from the header order below. Enable only when Nginx or your CDN overwrites those headers (applies immediately)"
+    },
+    "cdn_headers": {
+      "desc": "Real-client-IP headers, tried in order, comma-separated (default CF-Connecting-IP, True-Client-IP, Ali-CDN-Real-IP, X-Real-IP, X-Forwarded-For)"
+    },
+    "access_detail_retention_days": {
+      "desc": "Days the diagnostic window keeps access-log detail rows (default 90); the sweeper deletes older access_log_details rows (applies immediately)"
+    },
+    "skin_domains": {
+      "desc": "Skin domains (CSV) allowed as texture sources in yggdrasil metadata"
+    },
+    "ygg_token_expire_1": {
+      "desc": "yggdrasil soft token window in seconds (default 259200 = 3 days): how long validate/join accepts a token; after it, refresh still works"
+    },
+    "ygg_token_expire_2": {
+      "desc": "yggdrasil hard token window in seconds (default 604800 = 7 days): how long refresh is accepted; after it the launcher must log in again"
+    },
+    "ygg_tokens_limit": {
+      "desc": "yggdrasil tokens per user (default 10, 0 = unlimited): over the limit the oldest are invalidated and audited"
+    },
+    "ygg_search_profile_max": {
+      "desc": "Profiles per batch lookup (default 5, 1-100)"
+    },
+    "ygg_rate_limit": {
+      "desc": "Minimum interval in milliseconds between authentications of the same name (default 1000, 0 = off)"
+    },
+    "ygg_mojang_fallback": {
+      "desc": "Mojang fallback: query the official service when profile/hasJoined misses locally (on by default, applies immediately)"
+    },
+    "max_upload_file_size": {
+      "desc": "Texture upload size cap in KB (never above the server’s hard limit; applies immediately)"
+    },
+    "player_name_rule": {
+      "desc": "Player-name rule: official / cjk / utf8 / custom (guards new writes only, applies immediately)"
+    },
+    "custom_player_name_regexp": {
+      "desc": "Custom player-name regexp (used when the rule is custom)"
+    },
+    "player_name_length_min": {
+      "desc": "Minimum player-name length in characters"
+    },
+    "player_name_length_max": {
+      "desc": "Maximum player-name length in characters"
+    },
+    "texture_name_regexp": {
+      "desc": "Texture-note naming regexp (empty = unlimited; guards uploads and renames alike)"
+    },
+    "union_enabled": {
+      "desc": "Union module switch (hot toggle: off means every union route answers 404 and signing falls back to the local key)"
+    },
+    "union_api_root": {
+      "desc": "Union hub API root (default https://skin.mualliance.ltd/api/union, applies immediately)"
+    },
+    "union_member_key": {
+      "desc": "Union member key issued by the hub; never echoed back, empty keeps the stored value, applies immediately"
+    },
+    "union_enable_update": {
+      "desc": "Allow the hub to rotate the member key remotely (updatebackendkey; applies on restart)"
+    },
+    "union_enable_oauth2": {
+      "desc": "Union OAuth2 federated login (applies on restart)"
+    },
+    "union_queryemail_mode": {
+      "desc": "Union email query mode: full / off (applies on restart)"
+    },
+    "union_oauth2_sig_private_key": {
+      "desc": "Private key that signs Union OAuth2 user info (PEM; never echoed back, empty keeps the stored value, generated on first boot, applies on restart)"
+    },
+    "union_oauth2_sig_public_key": {
+      "desc": "Public key that verifies Union OAuth2 user info (PEM; generated on first boot when empty, applies on restart)"
+    }
   }
 }

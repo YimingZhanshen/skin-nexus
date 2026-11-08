@@ -10,12 +10,11 @@ package adminapi
 // other half and is tested just as hard.
 
 import (
-	"strings"
 	"testing"
 )
 
 func secretSpec() settingSpec {
-	return settingSpec{key: "smtp_pass", group: "mail", desc: "SMTP 密码", secret: true}
+	return settingSpec{key: "smtp_pass", group: "mail", secret: true}
 }
 
 func TestProjectSpecMasksSecrets(t *testing.T) {
@@ -37,7 +36,7 @@ func TestProjectSpecMasksSecrets(t *testing.T) {
 
 	// A non-secret is unaffected — otherwise this change would have broken every
 	// other field in the panel.
-	plain := settingSpec{key: "site_name", group: "basic", desc: "站点名称"}
+	plain := settingSpec{key: "site_name", group: "basic"}
 	got := projectSpec(plain, "SkinNexus", "default-name")
 	if got.Value != "SkinNexus" || got.Default != "default-name" || got.Secret || !got.Set {
 		t.Errorf("ordinary setting was masked: %+v", got)
@@ -74,8 +73,8 @@ func TestSecretKeysAreFlagged(t *testing.T) {
 		if s.secret && !want[s.key] {
 			t.Errorf("%s is flagged secret without being in the known set — say why in this test", s.key)
 		}
-		if s.secret && !strings.Contains(s.desc, "不回显") {
-			t.Errorf("%s: the panel copy must tell the operator the field is write-only", s.key)
-		}
+		// Whether each secret's sentence actually tells the operator the field is
+		// write-only is checked in check-locales rule 7 — the copy moved to the
+		// locale dictionaries, so the dictionary is where the claim lives.
 	}
 }

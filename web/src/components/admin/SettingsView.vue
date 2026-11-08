@@ -8,6 +8,9 @@ import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
 import ThemeMarketSection from './ThemeMarketSection.vue'
 
+// t() and nothing else renders these, so the sentences must stay legal message
+// templates: check-locales rule 7 rejects a bare @ or | in settings.*.desc,
+// which is what took the whole settings screen down (the compiler threw).
 const { t } = useI18n()
 const emit = defineEmits(['settings-changed'])
 
@@ -236,10 +239,11 @@ onMounted(load)
       <template v-for="grp in groupedSettings" :key="grp.id">
         <h3 class="settings-group-title">{{ groupTitle(grp.id) }}</h3>
         <div class="row" v-for="s in grp.items" :key="s.key" style="margin-top: 12px; align-items: center;">
-          <!-- Chinese-first label: server-provided desc is primary, the raw key
-               demoted to a small muted hint -->
+          <!-- The server sends a key, not a sentence: the panel's language is the
+               operator's, and the copy exists once per locale. The raw option key
+               stays below as the thing to grep for in the logs. -->
           <label style="width: 240px; font-weight: 600; font-size: var(--fs-xs);">
-            {{ s.desc }}
+            {{ t(s.descKey) }}
             <span class="muted" style="display: block; font-weight: 400; font-size: var(--fs-xs);">{{ s.key }}</span>
           </label>
           <input v-if="boolKeys.has(s.key)"

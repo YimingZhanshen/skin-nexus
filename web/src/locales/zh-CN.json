@@ -1111,5 +1111,124 @@
     "nameBody": "昵称：2–24 位，字母、数字、下划线或中文，只用于登录本站与显示。角色名：默认 3–16 位字母、数字、下划线（管理员可放宽），它就是你在游戏里的名字；改名不改变 UUID，也不会让已有授权失效。",
     "passwordTitle": "忘记或想改密码",
     "passwordBody": "登录页的「忘记密码」走邮件重置（需站点已配置邮件服务），链接半小时有效。改密码会使所有启动器授权失效，下次启动需重新登录。收不到邮件先查垃圾箱，再联系站点管理员。"
+  },
+  "settings": {
+    "site_name": {
+      "desc": "站点名称（页头/标题）"
+    },
+    "server_name": {
+      "desc": "服务器名称"
+    },
+    "site_url": {
+      "desc": "站点地址（http(s) 绝对地址；页面链接、sitemap 与纹理/预览/头像 URL 的共同基址，重启后一起生效。OIDC issuer 只认 SKIN_OIDC_ISSUER/SKIN_BASE_URL，不由此项决定）"
+    },
+    "announcement": {
+      "desc": "站点公告（Markdown，支持标题/粗体/链接/列表；双层消毒渲染，留空隐藏）"
+    },
+    "invite_required": {
+      "desc": "注册强制邀请码（立即生效）"
+    },
+    "require_verification": {
+      "desc": "进服前须邮箱验证（立即生效；开启后新注册账号会自动收到验证邮件，配合下方宽限期使用）"
+    },
+    "email_verify_grace_days": {
+      "desc": "邮箱验证宽限期（天；注册后 N 天内即使未验证也放行，0=立即执行门禁；立即生效）"
+    },
+    "regs_per_ip": {
+      "desc": "每 IP 可注册账号数上限（0=不限制，立即生效）"
+    },
+    "smtp_host": {
+      "desc": "SMTP 服务器地址（留空=关闭邮件功能；须同时配 smtp_user 或 smtp_from 作为发件人，否则视为未配置；立即生效）"
+    },
+    "smtp_port": {
+      "desc": "SMTP 端口（465=隐式 TLS 直连；其它端口自动 STARTTLS 升级；默认 465）"
+    },
+    "smtp_user": {
+      "desc": "SMTP 用户名（多数服务商填完整邮箱地址）"
+    },
+    "smtp_pass": {
+      "desc": "SMTP 密码/授权码（QQ/163 等填授权码，不是登录密码；不回显，留空=保持原值）"
+    },
+    "smtp_from": {
+      "desc": "发件人（留空=用 smtp_user；可写 Name <a{'@'}b.c> 形式）"
+    },
+    "rate_limit_auth": {
+      "desc": "认证端点每 IP 每 10 分钟请求数上限（0=关闭；重启后生效）"
+    },
+    "login_fail_limit": {
+      "desc": "同账号连续失败锁定阈值（0=关闭；重启后生效）"
+    },
+    "cdn_enabled": {
+      "desc": "CDN 加速开关（启用后按下方头顺序解析真实客户端 IP；仅当 Nginx/CDN 会覆盖这些头时开启，立即生效）"
+    },
+    "cdn_headers": {
+      "desc": "CDN 真实 IP 头（按顺序匹配，逗号分隔；默认 CF-Connecting-IP,True-Client-IP,Ali-CDN-Real-IP,X-Real-IP,X-Forwarded-For）"
+    },
+    "access_detail_retention_days": {
+      "desc": "访问日志诊断明细保留天数（默认 90；清扫器据此删除过期的 access_log_details 行；立即生效）"
+    },
+    "skin_domains": {
+      "desc": "皮肤域名（CSV，ygg metadata 皮肤来源）"
+    },
+    "ygg_token_expire_1": {
+      "desc": "ygg 令牌软窗口（秒，默认 259200=3 天）：validate/join 有效期，过后可 refresh 换新"
+    },
+    "ygg_token_expire_2": {
+      "desc": "ygg 令牌硬窗口（秒，默认 604800=7 天）：refresh 有效期，过后须重新登录"
+    },
+    "ygg_tokens_limit": {
+      "desc": "每用户 ygg 令牌数上限（默认 10，0=不限）：超限淘汰最旧令牌并留审计"
+    },
+    "ygg_search_profile_max": {
+      "desc": "批量查角色单次上限（默认 5，1-100）"
+    },
+    "ygg_rate_limit": {
+      "desc": "同名认证最小间隔（毫秒，默认 1000，0=关闭）"
+    },
+    "ygg_mojang_fallback": {
+      "desc": "Mojang 官方兜底（profile/hasJoined 本地未命中时向官方查询；默认开，立即生效）"
+    },
+    "max_upload_file_size": {
+      "desc": "材质上传大小上限（KB，不超过服务端硬顶，立即生效）"
+    },
+    "player_name_rule": {
+      "desc": "角色名规则：official/cjk/utf8/custom（仅拦新写入，立即生效）"
+    },
+    "custom_player_name_regexp": {
+      "desc": "自定义角色名正则（player_name_rule=custom 时生效）"
+    },
+    "player_name_length_min": {
+      "desc": "角色名最小长度（字符）"
+    },
+    "player_name_length_max": {
+      "desc": "角色名最大长度（字符）"
+    },
+    "texture_name_regexp": {
+      "desc": "材质备注命名正则（空=不限制，上传与改名同受此规则）"
+    },
+    "union_enabled": {
+      "desc": "Union 联盟模块开关（热切换：关=全路由 404、签名回本地密钥）"
+    },
+    "union_api_root": {
+      "desc": "Union hub API 根（默认 https://skin.mualliance.ltd/api/union，立即生效）"
+    },
+    "union_member_key": {
+      "desc": "Union 成员密钥（联盟下发；不回显，留空=保持原值，立即生效）"
+    },
+    "union_enable_update": {
+      "desc": "允许 hub 远程轮换成员密钥（updatebackendkey，重启后生效）"
+    },
+    "union_enable_oauth2": {
+      "desc": "Union OAuth2 联合登录（重启后生效）"
+    },
+    "union_queryemail_mode": {
+      "desc": "Union 查询邮箱模式：full/off（重启后生效）"
+    },
+    "union_oauth2_sig_private_key": {
+      "desc": "Union OAuth2 用户信息签名私钥（PEM；不回显，留空=保持原值，首启自动生成，重启后生效）"
+    },
+    "union_oauth2_sig_public_key": {
+      "desc": "Union OAuth2 用户信息签名公钥（PEM；留空首启自动生成，重启后生效）"
+    }
   }
 }

@@ -377,6 +377,53 @@ for (const rel of UI_DIRS.flatMap(walk).filter((r) => r.endsWith('.vue'))) {
 }
 
 
+// 7. every settings knob must carry a description key in both locales. The panel
+//    receives `settings.<key>.desc` as a key, not as copy: the sentence is written
+//    once per language here, so an English panel cannot show a Chinese label — and
+//    the whitelist in settings.go is the only list of what exists. Missing and
+//    surplus entries are both failures: the first renders a raw key, the second is
+//    copy nobody can reach.
+const SETTINGS_SOURCE = 'server/internal/adminapi/settings.go'
+const settingsSrc = readFileSync(resolve(root, SETTINGS_SOURCE), 'utf8')
+const settingsEntry = /^\s*\{"([a-z0-9_]+)",\s*(?:true|false),\s*"([a-z]+)",\s*(true|false)\}/gm
+const settingKnobs = [...settingsSrc.matchAll(settingsEntry)].map((m) => ({ key: m[1], secret: m[3] === 'true' }))
+const settingKeys = settingKnobs.map((k) => k.key)
+if (settingKeys.length < 30) {
+  errors.push(`${SETTINGS_SOURCE}: only ${settingKeys.length} whitelist entries parsed — the struct shape changed and this check is now blind`)
+}
+// A credential field has to say so in its own sentence: an operator who types a
+// secret into a box that keeps whatever is stored has written it into a mask.
+// The claim lives in the copy, so it is checked against the copy.
+const WRITE_ONLY = { 'zh-CN': '不回显', en: /never echoed back/i }
+for (const locale of LOCALES) {
+  const block = loaded[locale].settings || {}
+  const want = new Set(settingKeys)
+  for (const knob of settingKnobs) {
+    const entry = block[knob.key] && block[knob.key].desc
+    if (typeof entry !== 'string' || entry.trim() === '') {
+      errors.push(`${locale}: settings.${knob.key}.desc is missing — the panel has no sentence to show for this knob`)
+      continue
+    }
+    if (knob.secret) {
+      const test = WRITE_ONLY[locale]
+      if (typeof test === 'string' ? !entry.includes(test) : !test.test(entry)) {
+        errors.push(`${locale}: settings.${knob.key}.desc must tell the operator the field is write-only (looked for ${test})`)
+      }
+    }
+    // vue-i18n compiles every message, so @ and | are syntax: a sentence that
+// mentions an email address (`Name <a@b.c>`) threw SyntaxError in the parser and
+    // blanked the whole settings screen. Reserved characters must arrive escaped
+    // as {'@'} / {'|'}, which is what the placeholder-stripped form leaves clean.
+    const bare = entry.replace(/\{[^{}]*\}/g, '')
+    if (/[@|]/.test(bare)) {
+      errors.push(`${locale}: settings.${knob.key}.desc contains a bare @ or | that vue-i18n reads as message syntax — write it as {'@'} / {'|'} (found at "${bare.slice(bare.search(/[@|]/), 24)}")`)
+    }
+  }
+  for (const key of Object.keys(block)) {
+    if (!want.has(key)) errors.push(`${locale}: settings.${key} has no whitelist entry in ${SETTINGS_SOURCE} (dead copy)`)
+  }
+}
+
 if (errors.length) {
   console.error('check-locales: FAILED')
   for (const e of errors) console.error('  - ' + e)
