@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -169,6 +170,16 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 		if len([]rune(*req.Name)) > 50 {
 			writeErrCode(w, http.StatusBadRequest, "name is too long", i18n.MsgTooLong)
 			return
+		}
+		// The naming rule guards the name, not the door it came through: without
+		// this, a legal upload followed by a rename is a way around it.
+		if *req.Name != "" {
+			if re, _, _ := b.Store.GetOption(r.Context(), "texture_name_regexp"); re != "" {
+				if rx, err := regexp.Compile(re); err == nil && !rx.MatchString(*req.Name) {
+					writeErrCode(w, http.StatusBadRequest, "texture name breaks the site naming rule", account.CodeMetadata)
+					return
+				}
+			}
 		}
 	}
 	if req.Detail != nil {

@@ -9,7 +9,16 @@ import (
 
 	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/store"
+	"skin-nexus/server/internal/ugctext"
 )
+
+// closetAlias is the one policy for a closet label: strip what a renderer cannot
+// undo, then bound it. item_name is a TEXT column, so the database imposes no
+// ceiling of its own. Empty stays legal — it means "no alias".
+func closetAlias(raw string) (string, bool) {
+	name := ugctext.Visible(strings.TrimSpace(raw))
+	return name, len([]rune(name)) <= 50
+}
 
 // GET /api/v1/me/closet — the user's closet entries with texture metadata.
 func (b *Backend) handleClosetList(w http.ResponseWriter, r *http.Request) {
@@ -116,7 +125,12 @@ func (b *Backend) handleClosetAdd(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusBadRequest, "textureId required", i18n.MsgMissingField)
 		return
 	}
-	created, err := b.Store.AddClosetEntry(r.Context(), uid, req.TextureID, strings.TrimSpace(req.ItemName))
+	itemName, ok := closetAlias(req.ItemName)
+	if !ok {
+		writeErrCode(w, http.StatusBadRequest, "closet alias is limited to 50 characters", i18n.MsgTooLong)
+		return
+	}
+	created, err := b.Store.AddClosetEntry(r.Context(), uid, req.TextureID, itemName)
 	if errors.Is(err, store.ErrNotFound) {
 		writeErrCode(w, http.StatusNotFound, "texture not found", i18n.MsgTextureNotFound)
 		return
@@ -148,7 +162,12 @@ func (b *Backend) handleClosetRename(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
-	if err := b.Store.SetClosetItemName(r.Context(), uid, id, strings.TrimSpace(req.ItemName)); errors.Is(err, store.ErrNotFound) {
+	itemName, ok := closetAlias(req.ItemName)
+	if !ok {
+		writeErrCode(w, http.StatusBadRequest, "closet alias is limited to 50 characters", i18n.MsgTooLong)
+		return
+	}
+	if err := b.Store.SetClosetItemName(r.Context(), uid, id, itemName); errors.Is(err, store.ErrNotFound) {
 		writeErrCode(w, http.StatusNotFound, "closet entry not found", i18n.MsgClosetNotFound)
 		return
 	} else if err != nil {

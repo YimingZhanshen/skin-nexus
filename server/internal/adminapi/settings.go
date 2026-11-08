@@ -78,7 +78,7 @@ var settingsWhitelist = []settingSpec{
 	{"custom_player_name_regexp", false, "texture", "自定义角色名正则（player_name_rule=custom 时生效）", false},
 	{"player_name_length_min", false, "texture", "角色名最小长度（字符）", false},
 	{"player_name_length_max", false, "texture", "角色名最大长度（字符）", false},
-	{"texture_name_regexp", false, "texture", "材质备注命名正则（空=不限制，仅拦新上传）", false},
+	{"texture_name_regexp", false, "texture", "材质备注命名正则（空=不限制，上传与改名同受此规则）", false},
 	{"union_enabled", false, "union", "Union 联盟模块开关（热切换：关=全路由 404、签名回本地密钥）", false}, // Union（blessing yggdrasil-connect 原名；union_enabled 为本项目新增键——老站用插件启停表达，无 option 行。热切换 2026-10-24 拍板）
 	{"union_api_root", false, "union", "Union hub API 根（默认 https://skin.mualliance.ltd/api/union，立即生效）", false},
 	{"union_member_key", false, "union", "Union 成员密钥（联盟下发；不回显，留空=保持原值，立即生效）", true},
