@@ -23,6 +23,7 @@ const KINDS = [
   'ygg_authenticate', 'ygg_refresh', 'ygg_validate',
   'ygg_join', 'ygg_hasjoined', 'ygg_profile',
   'union_in', 'union_out',
+  'plugin',
 ]
 
 // Diagnostic-mode switch state (GET /access-log/detail-mode).

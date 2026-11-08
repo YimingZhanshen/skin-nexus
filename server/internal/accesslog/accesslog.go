@@ -27,6 +27,10 @@ const (
 	YggProfile      = "ygg_profile"
 	UnionIn         = "union_in"
 	UnionOut        = "union_out"
+	// The panel labels this column with `admin.kind.<kind>` composed at runtime,
+	// so rule 9 of check-locales enumerates the vocabulary out of this block: a
+	// kind written inline at a call site gets no label and no filter option.
+	Plugin = "plugin"
 )
 
 // Outcomes (column: outcome VARCHAR(16)).

@@ -330,7 +330,7 @@ func main() {
 				outcome = accesslog.OutcomeFail
 			}
 			accessLog.Log(ctx, accesslog.Entry{
-				Kind: "plugin", Outcome: outcome, UID: uid, Who: name, IP: ip,
+				Kind: accesslog.Plugin, Outcome: outcome, UID: uid, Who: name, IP: ip,
 				Detail: fmt.Sprintf("%s %s tier=%s status=%d %dms", method, path, tier, status, ms),
 			})
 		},

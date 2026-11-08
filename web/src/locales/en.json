@@ -707,7 +707,8 @@
       "ygg_hasjoined": "Join check",
       "ygg_profile": "Profile fetch",
       "union_in": "Union inbound",
-      "union_out": "Union outbound"
+      "union_out": "Union outbound",
+      "plugin": "Plugin route"
     },
     "outcome": {
       "ok": "OK",

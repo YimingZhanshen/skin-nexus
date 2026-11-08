@@ -707,7 +707,8 @@
       "ygg_hasjoined": "进服核验",
       "ygg_profile": "档案查询",
       "union_in": "Union 入站",
-      "union_out": "Union 出站"
+      "union_out": "Union 出站",
+      "plugin": "插件路由"
     },
     "outcome": {
       "ok": "成功",

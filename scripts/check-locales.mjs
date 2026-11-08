@@ -539,6 +539,97 @@ const auditKeyOf = (action) => `audit.action.${action.replace(/\./g, '__')}`
   }
 }
 
+// 9. every access-log kind must carry a label in both locales AND stay in the
+//    panel's filter list.
+//
+// The Kind column renders `t('admin.kind.' + row.kind)` — a key composed at
+// runtime, so the literal scan that protects rules 1-3 never sees it. The Go
+// source owns the vocabulary, exactly like the audit actions in rule 8: the
+// kinds are read out of internal/accesslog's Kinds block and every one of them
+// has to have a label and a filter option.
+//
+// A caller that writes `Kind: "something"` as a bare string in an
+// accesslog.Entry is a defect on its own terms: it adds a value the gate cannot
+// enumerate, which is precisely how plugin-route rows ended up rendering the
+// key path `admin.kind.plugin` in an English panel.
+const ACCESS_LOG_KINDS_FILE = 'server/internal/accesslog/accesslog.go'
+const ACCESS_LOG_VIEW = 'web/src/components/admin/AccessLogsView.vue'
+const KIND_FLOOR = 10
+
+function kindConstants(src) {
+  const at = src.indexOf('// Kinds')
+  if (at < 0) return null
+  const open = src.indexOf('const (', at)
+  const close = src.indexOf('\n)', open)
+  if (open < 0 || close < 0) return null
+  const out = new Map()
+  for (const m of src.slice(open, close).matchAll(/([A-Z]\w*)\s*=\s*"([a-z_]+)"/g)) out.set(m[2], m[1])
+  return out
+}
+
+function entryKindLiterals(src, rel) {
+  const marker = 'accesslog.Entry{'
+  const out = []
+  for (let i = src.indexOf(marker); i >= 0; i = src.indexOf(marker, i + marker.length)) {
+    const brace = i + marker.length - 1
+    let depth = 0
+    let end = brace
+    while (end < src.length) {
+      const c = src[end]
+      if (c === '"' || c === '`' || c === "'") { end = skipQuoted(src, end)[1]; continue }
+      if (c === '{') depth++
+      else if (c === '}') { depth--; if (depth === 0) break }
+      end++
+    }
+    for (const m of src.slice(brace, end).matchAll(/\bKind:\s*"([^"]*)"/g)) {
+      const line = 1 + src.slice(0, brace + m.index).split('\n').length - 1
+      out.push([m[1], `${rel}:${line}`])
+    }
+    i = end
+  }
+  return out
+}
+
+const accessKinds = new Map()
+{
+  const src = readFileSync(resolve(root, ACCESS_LOG_KINDS_FILE), 'utf8')
+  const consts = kindConstants(src)
+  if (!consts || consts.size < KIND_FLOOR) {
+    errors.push(`${ACCESS_LOG_KINDS_FILE}: only ${consts ? consts.size : 0} kind constants parsed — the Kinds block moved and this check is now blind`)
+  }
+  if (consts) for (const value of consts.keys()) accessKinds.set(value, ACCESS_LOG_KINDS_FILE)
+}
+for (const rel of goSources('server')) {
+  const src = readFileSync(resolve(root, rel), 'utf8')
+  for (const [value, where] of entryKindLiterals(src, rel)) {
+    errors.push(`${where}: accesslog.Entry writes kind "${value}" as a bare string — declare it in the Kinds block of ${ACCESS_LOG_KINDS_FILE} so the panel vocabulary stays enumerable`)
+  }
+}
+{
+  const src = readFileSync(resolve(root, ACCESS_LOG_VIEW), 'utf8')
+  const block = src.match(/const KINDS = \[([\s\S]*?)\]/)
+  if (!block) {
+    errors.push(`${ACCESS_LOG_VIEW}: no KINDS array — the filter list moved and this check is now blind`)
+  }
+  const listed = new Set()
+  for (const m of (block ? block[1] : '').matchAll(/'([a-z_]+)'/g)) listed.add(m[1])
+  for (const [value, where] of accessKinds) {
+    LOCALES.forEach((locale, idx) => {
+      if (!sets[idx].has(`admin.kind.${value}`)) {
+        errors.push(`${locale}: no admin.kind.${value} entry — the Kind column renders the key path for rows written at ${where}`)
+      }
+    })
+    if (!listed.has(value)) {
+      errors.push(`${ACCESS_LOG_VIEW}: the server writes kind "${value}" but the filter dropdown never offers it`)
+    }
+  }
+  for (const value of listed) {
+    if (!accessKinds.has(value)) {
+      errors.push(`${ACCESS_LOG_VIEW}: the filter offers kind "${value}" which no server code writes (dead option)`)
+    }
+  }
+}
+
 if (errors.length) {
 
   console.error('check-locales: FAILED')
