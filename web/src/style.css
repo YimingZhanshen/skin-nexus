@@ -64,7 +64,7 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
 .topbar.wide .topbar-inner { max-width: 1440px; }
 .topbar .brand { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--moon); }
 .topbar .brand:hover { text-decoration: none; }
-.topbar .brand-n { width: 26px; height: 26px; display: block; flex: none; }
+.topbar .brand-n { width: 24px; height: 24px; display: block; flex: none; }
 .topbar .brand-name { font-family: var(--font-serif); font-size: var(--fs-l); font-weight: 600; letter-spacing: .06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-right { display: flex; align-items: center; gap: 8px; flex: none; }
 .topbar-right select { width: auto; padding: 4px 8px; min-height: 32px; font-size: var(--fs-s); }
@@ -84,12 +84,12 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
 .crumb a { color: var(--jade); }
 .crumb .sep { margin: 0 6px; color: var(--muted); }
 .site-footer {
-  flex: none; margin-top: 32px; padding: 18px 24px 24px;
+  flex: none; margin-top: 32px; padding: 16px 24px 24px;
   border-top: 1px solid var(--line); text-align: center;
   font-size: var(--fs-xs); color: var(--muted);
 }
-.site-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 0 0 8px; }
-.site-footer-text { margin: 0 0 6px; white-space: pre-line; }
+.site-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 16px; margin: 0 0 8px; }
+.site-footer-text { margin: 0 0 8px; white-space: pre-line; }
 .site-footer-credit { margin: 0; }
 .site-footer a { color: var(--jade); }
 
@@ -112,11 +112,12 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
 .auth-scene .mtn-mid { fill: var(--mtn-mid); opacity: .8; }
 .auth-scene .mtn-near { fill: var(--mtn-near); }
 .locale-sel { width: 110px; }
-.auth-scene .scene-fog { position: absolute; left: -60%; width: 220%; height: 90px;
+.auth-scene .scene-fog { position: absolute; left: 0; width: 100%; height: 96px;
   background: radial-gradient(50% 100% at 50% 100%, var(--fog), transparent 70%); }
-.auth-scene .fog-a { bottom: 40px; animation: fogdrift 70s linear infinite; }
-.auth-scene .fog-b { bottom: 120px; opacity: .7; animation: fogdrift 110s linear infinite reverse; }
-@keyframes fogdrift { from { transform: translateX(-4%); } to { transform: translateX(4%); } }
+/* 两层雾是场景的纵深，不是永动机：70s/110s 的循环漂移是「AI 做的页面」最容易被
+   认出的动作之一，去掉之后层次仍然在（不同高度 + 不同透明度）。 */
+.auth-scene .fog-a { bottom: 40px; }
+.auth-scene .fog-b { bottom: 120px; opacity: .7; }
 .auth-scene .scene-copy { position: relative; }
 .auth-scene .scene-copy h1 { font-family: var(--font-serif); font-size: var(--fs-2xl); letter-spacing: .06em; }
 .auth-scene .scene-fact { color: var(--moon-2); max-width: 30em; margin: 8px 0 0; }
@@ -137,7 +138,7 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
   border: 1px solid var(--line);
   border-radius: var(--r-l);
   padding: 24px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
   box-shadow: var(--shadow);
   transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-mid) var(--ease);
 }
@@ -163,17 +164,18 @@ button {
   font-size: var(--fs-s);
   font-weight: 600;
   transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease),
-              transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+              box-shadow var(--t-fast) var(--ease);
 }
-button:hover { background: var(--cinnabar-hi); transform: translateY(-1px); box-shadow: 0 6px 16px -8px var(--glow-cinnabar); }
-button:active { transform: translateY(0); }
+/* hover 只做两件事：底色走一步、加一层中性抬升。原来还额外把整枚按钮抬起 1px 并
+   打出朱砂彩晕——"每个按钮一点就发光、就跳一下"是界面里最容易辨认的生成感。 */
+button:hover { background: var(--cinnabar-hi); box-shadow: 0 4px 12px -8px var(--glow-cinnabar); }
 button.secondary { background: transparent; border: 1px solid var(--line-strong); color: var(--moon); }
 button.secondary:hover { background: var(--ink-3); border-color: var(--gold); color: var(--moon); box-shadow: none; }
 button.danger { background: var(--danger); color: var(--on-danger); }
-button.danger:hover { background: var(--danger-hi); box-shadow: 0 6px 16px -8px var(--glow-danger); }
+button.danger:hover { background: var(--danger-hi); box-shadow: 0 4px 12px -8px var(--glow-danger); }
 button.danger-outline { border: 1px solid var(--danger); background: transparent; color: var(--danger-ink, var(--danger)); }
 button.danger-outline:hover { background: var(--danger); color: var(--on-danger); }
-button:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
 button:disabled:hover { background: var(--cinnabar); }
 button.secondary:disabled:hover { background: transparent; }
 
@@ -217,15 +219,16 @@ label.required { color: var(--cinnabar); }
 }
 @keyframes skn-spin { to { transform: rotate(360deg); } }
 
-/* Tab 全站唯一形态：描边胶囊（覆盖全局 button 主色底） */
+/* Tab 全站唯一形态：描边胶囊退成描边方块——999px 让每一组切换都长成 pill，
+   而 pill 是这一轮点名要收掉的趋势之一；选中态另有底色与描边，不靠形状表意。 */
 .tabs { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 .tab {
   background: transparent; border: 1px solid var(--line); color: var(--muted);
-  padding: 6px 14px; min-height: 36px; border-radius: 999px;
+  padding: 6px 16px; min-height: 36px; border-radius: var(--r-m);
   cursor: pointer; font-size: var(--fs-s); font-weight: 500;
   transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
-.tab:hover { background: transparent; border-color: var(--line-strong); color: var(--moon); transform: none; box-shadow: none; }
+.tab:hover { background: transparent; border-color: var(--line-strong); color: var(--moon); box-shadow: none; }
 .tab.active { background: var(--accent-wash); border-color: var(--cinnabar); color: var(--moon); font-weight: 600; }
 
 button.ghost { background: transparent; border: none; color: var(--muted); font-weight: 500; padding: 4px 8px; min-height: 32px; }
@@ -312,9 +315,9 @@ tbody tr:hover, table tr:hover { background: var(--hover-wash); }
 .nav-item.active .nav-ico { opacity: 1; }
 /* 未读通知数（大改新增） */
 .nav-badge {
-  margin-left: auto; min-width: 18px; padding: 0 5px; border-radius: 9px;
+  margin-left: auto; min-width: 20px; padding: 0 6px; border-radius: 10px;
   background: var(--cinnabar); color: var(--on-cinnabar);
-  font-size: var(--fs-xs); line-height: 18px; text-align: center; font-weight: 600;
+  font-size: var(--fs-xs); line-height: 20px; text-align: center; font-weight: 600;
 }
 /* 底部用户卡（大改新增） */
 .user-chip {
