@@ -24,6 +24,18 @@ const configError = ref('')
 const configOk = ref('')
 const configSaving = ref(false)
 const guardsBypassed = ref(false)
+// Row actions and the guard-bypass switch all compute "the opposite of what the
+// row currently says". A second click before the answer lands sends the same
+// patch again and writes a second audit row for one operator decision — and
+// uninstall can purge data, so the second click is not merely noise.
+const rowBusy = ref(new Set())
+const setRowBusy = (name, on) => {
+  const next = new Set(rowBusy.value)
+  if (on) next.add(name)
+  else next.delete(name)
+  rowBusy.value = next
+}
+const bypassBusy = ref(false)
 
 async function load() {
   loadError.value = ''
@@ -82,29 +94,37 @@ async function saveConfig() {
 }
 
 async function rollback(p) {
+  if (rowBusy.value.has(p.name)) return
   actionError.value = ''
   if (!(await confirmDialog(t('admin.pluginsRollbackConfirm', { name: p.title || p.name }), { danger: true }))) return
+  setRowBusy(p.name, true)
   try {
     await fetchJSON(`/api/admin/v1/plugins/${encodeURIComponent(p.name)}/rollback`, { method: 'POST' })
     await load()
     await loadPluginUI()
   } catch (e) { actionError.value = e.message }
+  finally { setRowBusy(p.name, false) }
 }
 
 async function uninstall(p) {
+  if (rowBusy.value.has(p.name)) return
   actionError.value = ''
   if (!(await confirmDialog(t('admin.pluginsUninstallConfirm', { name: p.title || p.name }), { danger: true }))) return
+  setRowBusy(p.name, true)
   try {
     await fetchJSON(`/api/admin/v1/plugins/${encodeURIComponent(p.name)}`, { method: 'DELETE' })
     await load()
     await loadPluginUI()
   } catch (e) { actionError.value = e.message }
+  finally { setRowBusy(p.name, false) }
 }
 
 async function toggleBypass() {
+  if (bypassBusy.value) return
   actionError.value = ''
   const next = !guardsBypassed.value
   if (next && !(await confirmDialog(t('admin.pluginsGuardBypassConfirm'), { danger: true }))) return
+  bypassBusy.value = true
   try {
     const d = await fetchJSON('/api/admin/v1/plugins/guards/bypass', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -112,18 +132,21 @@ async function toggleBypass() {
     })
     guardsBypassed.value = !!d.guardsBypassed
   } catch (e) { actionError.value = e.message }
+  finally { bypassBusy.value = false }
 }
 
 async function act(p, action) {
+  if (rowBusy.value.has(p.name)) return
   actionError.value = ''
   if (action === 'enable' && !(await confirmDialog(t('admin.pluginsEnableConfirm'), { danger: true }))) return
+  setRowBusy(p.name, true)
   try {
     await fetchJSON(`/api/admin/v1/plugins/${encodeURIComponent(p.name)}/${action}`, { method: 'POST' })
     await load()
     await loadPluginUI()
   } catch (e) {
     actionError.value = e.message
-  }
+  } finally { setRowBusy(p.name, false) }
 }
 
 function trustText(p) {
@@ -166,7 +189,7 @@ onMounted(async () => {
     <p class="muted">{{ t('admin.pluginsHint') }}</p>
     <p class="muted" v-if="readOnly">{{ t('admin.pluginsReadOnly') }}</p>
     <label v-if="isSuper" class="row" style="align-items:center;gap:8px;margin:8px 0;">
-      <input type="checkbox" :checked="guardsBypassed" @change="toggleBypass" />
+      <input type="checkbox" :checked="guardsBypassed" :disabled="bypassBusy" @change="toggleBypass" />
       <span class="muted">{{ t('admin.pluginsGuardBypass') }}</span>
     </label>
     <div class="error" role="alert" v-if="loadError">{{ loadError }}</div>
@@ -208,11 +231,11 @@ onMounted(async () => {
         <div class="plugin-actions">
           <button class="secondary" @click="openConfig(p)">{{ t('admin.pluginsConfig') }}</button>
           <template v-if="!readOnly">
-            <button v-if="!p.enabled" @click="act(p, 'enable')">{{ t('admin.pluginsEnable') }}</button>
-            <button v-else class="secondary" @click="act(p, 'disable')">{{ t('admin.pluginsDisable') }}</button>
-            <button class="secondary" @click="act(p, 'reload')">{{ t('admin.pluginsReload') }}</button>
-            <button class="secondary" @click="rollback(p)">{{ t('admin.pluginsRollback') }}</button>
-            <button class="danger-outline" @click="uninstall(p)">{{ t('admin.pluginsUninstall') }}</button>
+            <button v-if="!p.enabled" :disabled="rowBusy.has(p.name)" @click="act(p, 'enable')">{{ t('admin.pluginsEnable') }}</button>
+            <button v-else class="secondary" :disabled="rowBusy.has(p.name)" @click="act(p, 'disable')">{{ t('admin.pluginsDisable') }}</button>
+            <button class="secondary" :disabled="rowBusy.has(p.name)" @click="act(p, 'reload')">{{ t('admin.pluginsReload') }}</button>
+            <button class="secondary" :disabled="rowBusy.has(p.name)" @click="rollback(p)">{{ t('admin.pluginsRollback') }}</button>
+            <button class="danger-outline" :disabled="rowBusy.has(p.name)" @click="uninstall(p)">{{ t('admin.pluginsUninstall') }}</button>
           </template>
         </div>
       </div>

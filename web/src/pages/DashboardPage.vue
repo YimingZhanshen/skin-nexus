@@ -34,6 +34,17 @@ const texTotal = ref(0)
 const texQ = ref('')
 const texType = ref('')
 const newTexId = ref(0)
+// Rows with a write in flight. The three row handlers below each read the row's
+// own state to decide what to send, so a second click before the answer lands
+// sends the same patch again — and for a delete, it opens a second confirmation
+// for a texture that is already gone.
+const rowBusy = ref(new Set())
+const setRowBusy = (id, on) => {
+  const next = new Set(rowBusy.value)
+  if (on) next.add(id)
+  else next.delete(id)
+  rowBusy.value = next
+}
 let texTimer = 0
 let texSeq = 0
 const announcement = ref('')
@@ -207,17 +218,22 @@ async function loadAnnouncement() {  try {
 }
 
 async function addToCloset(tx) {
+  if (rowBusy.value.has(tx.id)) return
   pageErr.value = ''
+  setRowBusy(tx.id, true)
   try {
     await api.closetAdd(tx.id)
     tx.inCloset = true // the list row carries its own state; no full closet fetch
   } catch (e) { if (!guard401(e)) pageErr.value = e.message } // 入柜失败显示在纹理卡区（页级横幅）
+  finally { setRowBusy(tx.id, false) }
 }
 
 // 删除自己的材质：先不带 force，409 会带回「谁还在用它」，用户确认后再解绑删除。
 async function removeTexture(tx) {
+  if (rowBusy.value.has(tx.id)) return
   if (!(await confirmDialog(t('dashboard.deleteConfirm', { name: tx.description || ('#' + tx.id) }), { danger: true }))) return
   pageErr.value = ''
+  setRowBusy(tx.id, true)
   try {
     try {
       await api.textureDelete(tx.id)
@@ -236,15 +252,19 @@ async function removeTexture(tx) {
     }
     await load()
   } catch (e) { if (!guard401(e)) pageErr.value = e.message }
+  finally { setRowBusy(tx.id, false) }
 }
 
 // 纠正手臂模型：只有旧式 64×32 材质判不出来，其余情况服务端已经替用户判对。
 async function setModel(tx, model) {
+  if (rowBusy.value.has(tx.id) || tx.model === model) return
   pageErr.value = ''
+  setRowBusy(tx.id, true)
   try {
     await api.skinlibPatch(tx.id, { model })
     tx.model = model
   } catch (e) { if (!guard401(e)) pageErr.value = e.message }
+  finally { setRowBusy(tx.id, false) }
 }
 
 async function doUpload() {
@@ -476,7 +496,7 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
         <td>{{ tx.type }}</td>
         <td>
           <!-- 64×32 旧格式没有可判定的像素，识别只会给出 default；这里保留纠正入口 -->
-          <select v-if="tx.type === 'skin'" class="model-fix" :value="tx.model"
+          <select v-if="tx.type === 'skin'" class="model-fix" :value="tx.model" :disabled="rowBusy.has(tx.id)"
                   :aria-label="t('dashboard.colModel')" @change="setModel(tx, $event.target.value)">
             <option value="default">{{ t('dashboard.modelDefault') }}</option>
             <option value="slim">{{ t('dashboard.modelSlim') }}</option>
@@ -487,9 +507,9 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
         <td class="muted">{{ shortHash(tx.hash) }}</td>
         <td>
           <div class="row" style="gap: 6px; flex-wrap: wrap;">
-            <button class="secondary" v-if="!tx.inCloset" @click="addToCloset(tx)">{{ t('dashboard.closetAdd') }}</button>
+            <button class="secondary" :disabled="rowBusy.has(tx.id)" v-if="!tx.inCloset" @click="addToCloset(tx)">{{ t('dashboard.closetAdd') }}</button>
             <span class="muted" v-else style="font-size: var(--fs-xs);">{{ t('dashboard.closetIn') }}</span>
-            <button class="danger-outline" @click="removeTexture(tx)">{{ t('dashboard.textureDelete') }}</button>
+            <button class="danger-outline" :disabled="rowBusy.has(tx.id)" @click="removeTexture(tx)">{{ t('dashboard.textureDelete') }}</button>
           </div>
         </td>
       </tr>

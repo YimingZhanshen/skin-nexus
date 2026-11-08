@@ -11,6 +11,15 @@ const invFree = ref([])
 const invUsed = ref([])
 const invError = ref('')
 const invNew = ref({ amount: 1, description: '' })
+// Two clicks on the generate button makes two batches while the operator counted one, and the
+// list they then hand out has twice the codes they meant to issue.
+const invBusy = ref(new Set())
+const setInvBusy = (key, on) => {
+  const next = new Set(invBusy.value)
+  if (on) next.add(key)
+  else next.delete(key)
+  invBusy.value = next
+}
 
 async function load() {
   invError.value = ''
@@ -22,7 +31,9 @@ async function load() {
 }
 
 async function invGenerate() {
+  if (invBusy.value.has('generate')) return
   invError.value = ''
+  setInvBusy('generate', true)
   try {
     await fetchJSON('/api/admin/v1/invitation-codes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -31,12 +42,15 @@ async function invGenerate() {
     invNew.value = { amount: 1, description: '' }
     await load()
   } catch (e) { invError.value = e.message }
+  finally { setInvBusy('generate', false) }
 }
 
 async function invEdit(ic) {
+  if (invBusy.value.has(ic.id)) return
   const next = await promptDialog(t('admin.invitationDescPrompt'), ic.description || '')
   if (next === null) return
   invError.value = ''
+  setInvBusy(ic.id, true)
   try {
     await fetchJSON('/api/admin/v1/invitation-codes', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -44,6 +58,7 @@ async function invEdit(ic) {
     })
     await load()
   } catch (e) { invError.value = e.message }
+  finally { setInvBusy(ic.id, false) }
 }
 
 onMounted(load)
@@ -56,7 +71,7 @@ onMounted(load)
     <div class="row">
       <input v-model.number="invNew.amount" type="number" min="1" max="1000" :placeholder="t('admin.invitationAmountPh')" style="max-width: 100px;" />
       <input v-model="invNew.description" :placeholder="t('admin.invitationDescPh')" style="max-width: 320px;" />
-      <button @click="invGenerate">{{ t('admin.invitationGenerate') }}</button>
+      <button :disabled="invBusy.has('generate')" @click="invGenerate">{{ t('admin.invitationGenerate') }}</button>
     </div>
     <div class="error" role="alert" v-if="invError">{{ invError }}</div>
     <h3>{{ t('admin.invitationAvailable') }}</h3>
@@ -69,7 +84,7 @@ onMounted(load)
         <td><code>{{ ic.code }}</code></td>
         <td class="muted">{{ ic.description || '—' }}</td>
         <td class="muted">{{ (ic.generated_at || '').slice(0, 19).replace('T', ' ') }}</td>
-        <td><button class="secondary" @click="invEdit(ic)">{{ t('admin.invitationEditDesc') }}</button></td>
+        <td><button class="secondary" :disabled="invBusy.has(ic.id)" @click="invEdit(ic)">{{ t('admin.invitationEditDesc') }}</button></td>
       </tr>
     </table>
     </div>

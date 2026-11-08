@@ -31,6 +31,17 @@ const loading = ref(false)
 const err = ref('')
 const ok = ref('')
 const justLiked = ref(null)  // the ♥ that just landed, so the page can offer the next step
+// Rows with a write in flight. Every one of these handlers reads the row's
+// current value to compute the next one, so a second click before the first
+// answer lands sends the same patch twice and reports 「已保存」 for a change
+// that did not happen.
+const busyTid = ref(new Set())
+const setBusy = (tid, on) => {
+  const next = new Set(busyTid.value)
+  if (on) next.add(tid)
+  else next.delete(tid)
+  busyTid.value = next
+}
 // The server-rendered detail page hands its tid back here as
 // /skinlib#wear-12-skin: the wearer picker lives in this page, not in that one,
 // and duplicating it in the Go template would be a second implementation of the
@@ -95,6 +106,7 @@ function goPage(p) {
 async function toggleLike(it) {
   // 访客点 ♥ = 明确登录引导（2026-10-27 逻辑修复：原只塞一行红字）
   if (!me.value) { emit('login'); return }
+  if (busyTid.value.has(it.tid)) return
   err.value = ''
   if (it.liked) {
     // The heart is worded as「收进衣柜」, so un-clicking it takes something out of
@@ -103,6 +115,7 @@ async function toggleLike(it) {
     const name = it.name || ('#' + it.tid)
     if (!(await confirmDialog(t('skinlib.unlikeConfirm', { name })))) return
   }
+  setBusy(it.tid, true)
   try {
     if (it.liked) {
       const res = await api.skinlibUnlike(it.tid)
@@ -120,32 +133,42 @@ async function toggleLike(it) {
     }
   } catch (e) {
     if (!guard401(e)) err.value = e.message
+  } finally {
+    setBusy(it.tid, false)
   }
 }
 
 async function togglePublic(it) {
+  if (busyTid.value.has(it.tid)) return
   err.value = ''
   ok.value = ''
+  setBusy(it.tid, true)
   try {
     await api.skinlibPatch(it.tid, { public: !it.public })
     it.public = !it.public
     ok.value = t('common.saved')
   } catch (e) {
     if (!guard401(e)) err.value = e.message
+  } finally {
+    setBusy(it.tid, false)
   }
 }
 
 async function renameItem(it) {
+  if (busyTid.value.has(it.tid)) return
   const next = await promptDialog(t('skinlib.renamePrompt'), it.name || '')
   if (next === null) return
   err.value = ''
   ok.value = ''
+  setBusy(it.tid, true)
   try {
     await api.skinlibPatch(it.tid, { name: next.trim() })
     it.name = next.trim()
     ok.value = t('common.saved')
   } catch (e) {
     if (!guard401(e)) err.value = e.message
+  } finally {
+    setBusy(it.tid, false)
   }
 }
 
@@ -254,14 +277,14 @@ onMounted(async () => {
             <span class="uploader">{{ it.nickname }}</span>
           </div>
           <div class="skin-card-actions">
-            <button class="like-btn" :class="{ liked: it.liked }"
+            <button class="like-btn" :class="{ liked: it.liked }" :disabled="busyTid.has(it.tid)"
                     :title="t(it.liked ? 'skinlib.likedTip' : 'skinlib.likeTip')" @click="toggleLike(it)">
               ♥ {{ it.likes }}<span class="like-state" v-if="it.liked">{{ t('skinlib.closetBadge') }}</span>
             </button>
             <template v-if="canEdit(it)">
-              <button class="ghost" @click="renameItem(it)">{{ t('skinlib.rename') }}</button>
-              <button class="ghost" @click="togglePublic(it)">
-                {{ it.public ? t('skinlib.makePrivate') : t('skinlib.makePublic') }}
+              <button class="ghost" :disabled="busyTid.has(it.tid)" @click="renameItem(it)">{{ t('skinlib.rename') }}</button>
+              <button class="ghost" :disabled="busyTid.has(it.tid)" @click="togglePublic(it)">
+                {{ busyTid.has(it.tid) ? t('skinlib.saving') : (it.public ? t('skinlib.makePrivate') : t('skinlib.makePublic')) }}
               </button>
             </template>
           </div>

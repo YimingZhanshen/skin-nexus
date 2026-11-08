@@ -28,6 +28,7 @@ const newEmail = ref('')
 const curPw = ref('')
 const newPw = ref('')
 const pwBusy = ref(false)
+const mailBusy = ref(false)
 
 // account delete
 const delPw = ref('')
@@ -72,11 +73,13 @@ async function changePassword() {
 }
 
 async function requestEmailVerification() {
-  err.value = ''; ok.value = ''
+  if (mailBusy.value) return
+  err.value = ''; ok.value = ''; mailBusy.value = true
   try {
     await api.requestEmailVerification()
     ok.value = t('auth.verifySent')
   } catch (e) { if (!guard401(e)) err.value = e.message }
+  finally { mailBusy.value = false }
 }
 
 async function setAvatarTid(tid) {
@@ -149,7 +152,7 @@ onMounted(load)
     </div>
     <div class="row" style="margin-top: 8px;">
       <button @click="saveProfile">{{ t('common.save') }}</button>
-      <button class="secondary" v-if="mailEnabled && me && !me.emailVerified" @click="requestEmailVerification">{{ t('auth.verifySubmit') }}</button>
+      <button class="secondary" v-if="mailEnabled && me && !me.emailVerified" :disabled="mailBusy" @click="requestEmailVerification">{{ mailBusy ? t('auth.verifySubmitting') : t('auth.verifySubmit') }}</button>
       <span class="muted" v-if="me">{{ t('profile.verifiedState', { state: me.emailVerified ? t('profile.verified') : t('profile.unverified') }) }}</span>
     </div>
     <div class="muted" style="margin-top: 6px; font-size: var(--fs-xs);">{{ t('profile.emailResetHint') }}</div>

@@ -184,6 +184,7 @@ const oidcClients = ref([])
 const oidcError = ref('')
 const newClient = ref({ client_id: '', name: '', redirect_uris: '', public: true })
 const lastSecret = ref('') // shown once after create
+const oidcBusy = ref(false)
 
 async function loadOIDC() {
   oidcError.value = ''
@@ -193,7 +194,8 @@ async function loadOIDC() {
   } catch (e) { oidcError.value = e.message }
 }
 async function createClient() {
-  oidcError.value = ''; lastSecret.value = ''
+  if (oidcBusy.value) return
+  oidcError.value = ''
   const body = {
     client_id: newClient.value.client_id.trim(),
     name: newClient.value.name.trim() || newClient.value.client_id.trim(),
@@ -202,14 +204,20 @@ async function createClient() {
     public: newClient.value.public,
   }
   if (!body.client_id) { oidcError.value = t('admin.oidcIdRequired'); return }
+  oidcBusy.value = true
   try {
     const d = await fetchJSON('/api/admin/v1/oidc/clients', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
-    if (d.secret) lastSecret.value = d.secret // only visible now — copy it!
+    // The secret is handed over once and never stored in a readable form, so a
+    // second submit must not blank what the first one just produced. It is
+    // replaced only by the next successful create — a public client genuinely
+    // has none, so clearing there is the server telling us so.
+    lastSecret.value = d.secret || ''
     newClient.value = { client_id: '', name: '', redirect_uris: '', public: true }
     await loadOIDC()
   } catch (e) { oidcError.value = e.message }
+  finally { oidcBusy.value = false }
 }
 async function deleteClient(id) {
   if (!(await confirmDialog(t('admin.oidcDeleteConfirm', { id }), { danger: true }))) return
@@ -360,7 +368,7 @@ onMounted(load)
         <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
           <input type="checkbox" v-model="newClient.public" /> {{ t('admin.oidcPublicCheckbox') }}
         </label>
-        <button @click="createClient">{{ t('admin.oidcCreate') }}</button>
+        <button :disabled="oidcBusy" @click="createClient">{{ oidcBusy ? t('admin.oidcCreating') : t('admin.oidcCreate') }}</button>
       </div>
       <textarea v-model="newClient.redirect_uris" :placeholder="t('admin.oidcRedirectPlaceholder')" rows="2"
                 style="margin-top: 8px; width: 100%;"></textarea>
