@@ -120,10 +120,26 @@ const SSR_CATALOG = ['zh-CN', 'en'].map((l) => [`server/internal/webi18n/catalog
 // gate above), and page labels sit under `ui.` rather than `common.` because
 // `common.*` is already an error-code namespace the backend declares.
 const SSR_NS = new Set(['page', 'ui', 'detail', 'lib', 'edit', 'report', 'notfound', 'seo', 'viewer', 'landing', 'device'])
+// Dotted literals that sit in page-rendering code but are not copy keys. Each is
+// a name some other layer owns; the gate cannot tell them from a typo'd key, so
+// the list is where the judgement is recorded — add to it deliberately, the same
+// way a new SSR_NS member is a deliberate decision.
+const SSR_NONCOPY_LITERALS = new Set([
+  'vcs.revision', 'vcs.time', // debug.ReadBuildInfo setting keys
+  'favicon.ico', 'manifest.webmanifest', // static file names
+  'user.deleted', // audit action names (the SPA's audit.action.* keys mirror them)
+  'oidc.device_approve', 'oidc.device_deny', 'oidc.tokens_revoke_all', 'oidc.token_revoke', // audit events
+  'skinlib.detail.sidebar', // plugin slot id (internal/plugin/spec.go owns it)
+  'auth.invalid_token', 'auth.account_disabled', // bearer codes written inline, not as const declarations
+])
 // Only these trees render page copy. Widening the scan to every Go file would
 // read the backend's error-code declarations (`report.resolved`, `common.bad_id`)
 // as if they were page keys and demand a catalog entry for each.
-const SSR_PAGE_DIRS = ['server/cmd/skin-nexus', 'server/internal/oidc', 'server/internal/webi18n']
+// internal/seo is scanned for the same reason the pages are: it writes the
+// <title> and description shipped in a crawlable response. It sits below
+// webi18n and must not import it (seo.go:201-203), so the literals here are
+// checked as references — the caller injects the translated copy.
+const SSR_PAGE_DIRS = ['server/cmd/skin-nexus', 'server/internal/oidc', 'server/internal/webi18n', 'server/internal/seo']
 const SSR_FILE_EXT = new Set(['js', 'css', 'html', 'htm', 'json', 'md', 'png', 'svg', 'txt', 'wasm', 'pem'])
 
 function goSources(dir, out = []) {
@@ -165,12 +181,20 @@ for (const rel of ssrSources) {
   const src = readFileSync(resolve(root, rel), 'utf8')
   for (const m of src.matchAll(/"([a-z][a-zA-Z0-9]*(?:\.[a-zA-Z0-9_]+)+)"/g)) {
     const key = m[1]
-    if (!SSR_NS.has(key.split('.')[0])) continue
+    const line = 1 + src.slice(0, m.index).split('\n').length - 1
     if (SSR_FILE_EXT.has(key.split('.').pop())) continue
     // An error code that happens to read like a page key (`report.resolved`) is
     // the envelope's, not this catalog's.
     if (declared.has(key)) continue
-    if (!ssrReferenced.has(key)) ssrReferenced.set(key, `${rel}:${1 + src.slice(0, m.index).split('\n').length - 1}`)
+    if (!SSR_NS.has(key.split('.')[0])) {
+      // Silently skipping an unknown namespace is how a typo'd key — or a new
+      // namespace nobody agreed to — passes for copy-free and stays untranslated.
+      if (!SSR_NONCOPY_LITERALS.has(key)) {
+        errors.push(`${rel}:${line}: dotted literal '${key}' is neither a catalog namespace (${[...SSR_NS].join('/')}) nor a declared non-copy literal — add the namespace deliberately, or list the literal with the reason`)
+      }
+      continue
+    }
+    if (!ssrReferenced.has(key)) ssrReferenced.set(key, `${rel}:${line}`)
   }
 }
 for (const key of catalogs[0].keys()) {
@@ -234,7 +258,30 @@ function at(obj, path) {
 }
 
 const LITERAL_KEY = /\bt\(\s*['"]([a-z][\w-]*(?:\.[\w-]+)+)['"]/g
-const TEMPLATE_PREFIX = /\bt\(\s*`([a-z][\w-]*(?:\.[\w-]+)*)\.\$\{/g
+// Every template-literal key: the static part before the first `${`. Two shapes
+// reach a family — `admin.kind.${row.kind}` (group, then leaf) and
+// `admin.perm${p}` (stem, then leaf). The stem shape used to be invisible: the
+// old pattern demanded a dot immediately before `${`, so an enumeration could
+// lose entries in both locales and the gate stayed green.
+const TEMPLATE_KEY = /\bt\(\s*`([^`$]*)\$\{/g
+
+function leafCount(node) {
+  if (node && typeof node === 'object') return Object.values(node).reduce((n, v) => n + leafCount(v), 0)
+  return node === undefined ? 0 : 1
+}
+
+// familyExists — does this dynamic key have somewhere to land? An empty group
+// counts as nowhere: `t(\`admin.kind.${x}\`)` renders a raw path for every x.
+function familyExists(obj, staticPart) {
+  if (staticPart === '') return false
+  if (staticPart.endsWith('.')) return leafCount(at(obj, staticPart.slice(0, -1))) > 0
+  const cut = staticPart.lastIndexOf('.')
+  const parent = cut < 0 ? null : staticPart.slice(0, cut)
+  const stem = cut < 0 ? staticPart : staticPart.slice(cut + 1)
+  const node = parent === null ? obj : at(obj, parent)
+  if (!node || typeof node !== 'object') return false
+  return Object.keys(node).some((k) => k.startsWith(stem))
+}
 
 for (const rel of UI_DIRS.flatMap(walk)) {
   if (rel.endsWith('locales/i18n.js') || rel.endsWith('errors.js')) {
@@ -249,10 +296,10 @@ for (const rel of UI_DIRS.flatMap(walk)) {
       errors.push(`${rel}:${lineOf(m.index)}: t('${m[1]}') has no entry in ${missing.join('/')}`)
     }
   }
-  for (const m of text.matchAll(TEMPLATE_PREFIX)) {
-    const missing = LOCALES.filter((l) => typeof at(loaded[l], m[1]) !== 'object')
+  for (const m of text.matchAll(TEMPLATE_KEY)) {
+    const missing = LOCALES.filter((l) => !familyExists(loaded[l], m[1]))
     if (missing.length) {
-      errors.push(`${rel}:${lineOf(m.index)}: t(\`${m[1]}.\${…}\`) has no '${m[1]}' group in ${missing.join('/')}`)
+      errors.push(`${rel}:${lineOf(m.index)}: t(\`${m[1]}\${…}\`) has no family under '${m[1].replace(/\.$/, '')}' in ${missing.join('/')} — an enumeration needs at least one entry per locale`)
     }
   }
 }
