@@ -122,7 +122,10 @@
     "device": {
       "code_invalid": "That user code is wrong or already used. Get a new one from the launcher.",
       "code_expired": "This user code has expired. Get a new one from the launcher.",
-      "approve_failed": "Approval failed — try again; if it keeps failing, get a fresh user code in the launcher."
+      "approve_failed": "Approval failed — try again; if it keeps failing, get a fresh user code in the launcher.",
+      "form_invalid": "The consent form could not be read. Reload the page and try again.",
+      "deny_failed": "Denying this user code failed — try again; if it keeps failing, get a fresh user code in the launcher.",
+      "decision_unknown": "That was neither an approve nor a deny — use one of the buttons on the page."
     },
     "setup": {
       "already_done": "This site is already initialised",

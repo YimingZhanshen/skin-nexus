@@ -163,9 +163,9 @@ const (
 	MsgJobNotResumable = "job.not_resumable" // cancelled past its replay window
 
 	// OIDC client registry + authorized-apps self-service
-	MsgOIDCSharedClient   = "oidc.shared_client"   // launcher-wide client, not deletable
-	MsgOIDCGrantNotFound  = "oidc.grant_not_found" // no such jti, or it belongs to someone else
-	MsgOIDCRevokePartial  = "oidc.revoke_partial"  // some tokens revoked, some survived — never report success
+	MsgOIDCSharedClient  = "oidc.shared_client"   // launcher-wide client, not deletable
+	MsgOIDCGrantNotFound = "oidc.grant_not_found" // no such jti, or it belongs to someone else
+	MsgOIDCRevokePartial = "oidc.revoke_partial"  // some tokens revoked, some survived — never report success
 
 	// setup / install
 	MsgSetupDone      = "setup.already_done"
@@ -179,4 +179,10 @@ const (
 	MsgDeviceCodeInvalid = "device.code_invalid"
 	MsgDeviceCodeExpired = "device.code_expired"
 	MsgDeviceApproveFail = "device.approve_failed"
+	// Consent-form failures the gate found when internal/oidc came under it:
+	// three of these shipped as bare prose, one of them in Chinese, and a
+	// browser cannot translate a sentence it has to match by spelling.
+	MsgDeviceFormInvalid     = "device.form_invalid"
+	MsgDeviceDenyFailed      = "device.deny_failed"
+	MsgDeviceDecisionUnknown = "device.decision_unknown"
 )

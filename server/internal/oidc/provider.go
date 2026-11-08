@@ -360,13 +360,13 @@ func (p *Provider) deviceSubmit(w http.ResponseWriter, r *http.Request) {
 			PID      int64  `json:"pid"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeJSON(w, map[string]any{"error": "bad body"})
+			writeJSON(w, errEnvelope(i18n.MsgDeviceFormInvalid, "the consent form could not be read"))
 			return
 		}
 		userCode, decision, pid = body.UserCode, body.Decision, body.PID
 	} else {
 		if err := r.ParseForm(); err != nil {
-			writeJSON(w, map[string]any{"error": "bad form"})
+			writeJSON(w, errEnvelope(i18n.MsgDeviceFormInvalid, "the consent form could not be read"))
 			return
 		}
 		userCode = r.FormValue("user_code")
@@ -394,14 +394,14 @@ func (p *Provider) deviceSubmit(w http.ResponseWriter, r *http.Request) {
 		})
 	case "deny":
 		if err := p.DenyDevice(r.Context(), userCode); err != nil {
-			writeJSON(w, map[string]any{"error": "拒绝失败"})
+			writeJSON(w, errEnvelope(i18n.MsgDeviceDenyFailed, "denial failed, please try again"))
 			return
 		}
 		p.auditEvent("oidc.device_deny", map[string]any{
 			"uid": uid, "user_code": userCode, "client_id": rec.ClientID,
 		})
 	default:
-		writeJSON(w, map[string]any{"error": "bad decision"})
+		writeJSON(w, errEnvelope(i18n.MsgDeviceDecisionUnknown, "the decision is neither approve nor deny"))
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true})
