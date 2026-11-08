@@ -111,5 +111,8 @@
   "viewer.reportDuplicate": "你已经举报过该材质。",
   "viewer.reportFailed": "提交失败，请稍后重试。",
   "viewer.saveFailed": "保存失败，请稍后重试",
-  "viewer.sourceUrlRequired": "二创/转载必须填写 http(s) 原始发布地址"
+  "viewer.sourceUrlRequired": "二创/转载必须填写 http(s) 原始发布地址",
+  "seo.siteTitleDescriptor": "Minecraft 皮肤站 · 皮肤、披风与角色管理",
+  "seo.siteDescriptionWithSite": "{site}：上传与分享 Minecraft 皮肤和披风，管理角色、衣柜与皮肤库，支持 Yggdrasil 外置登录与启动器接入。",
+  "seo.siteDescription": "Minecraft 皮肤站：上传与分享皮肤、披风，管理角色、衣柜与皮肤库，支持 Yggdrasil 外置登录与启动器接入。"
 }

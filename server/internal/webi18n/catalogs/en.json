@@ -111,5 +111,8 @@
   "viewer.reportDuplicate": "You already reported this texture.",
   "viewer.reportFailed": "Could not submit — please try again.",
   "viewer.saveFailed": "Could not save — please try again.",
-  "viewer.sourceUrlRequired": "Derivative and repost need the original http(s) URL."
+  "viewer.sourceUrlRequired": "Derivative and repost need the original http(s) URL.",
+  "seo.siteTitleDescriptor": "Minecraft skin site · skins, capes and profile management",
+  "seo.siteDescriptionWithSite": "{site}: upload and share Minecraft skins and capes, manage your profiles, your closet and the public skin library, with Yggdrasil external login and launcher support.",
+  "seo.siteDescription": "Minecraft skin site: upload and share skins and capes, manage profiles, your closet and the public skin library, with Yggdrasil external login and launcher support."
 }

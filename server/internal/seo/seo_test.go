@@ -25,7 +25,7 @@ func (f *fakeOpts) SetOption(_ context.Context, k, v string) error {
 func TestSettingsDefaults(t *testing.T) {
 	e := NewEngine(&fakeOpts{}, Defaults{SiteName: "SkinNexus", BaseURL: "https://skin.test"})
 	s := e.Settings(context.Background())
-	if s.Title != defaultTitle("SkinNexus") {
+	if s.Title != defaultTitle("SkinNexus", zhCopy) {
 		t.Fatalf("title = %q", s.Title)
 	}
 	if len([]rune(s.Title)) < 15 {
@@ -191,10 +191,10 @@ func TestPerPageOGImage(t *testing.T) {
 
 func TestDefaultTitleKeepsLongSiteName(t *testing.T) {
 	long := "这是一个足够长的站点名称不需要后缀"
-	if got := defaultTitle(long); got != long {
+	if got := defaultTitle(long, zhCopy); got != long {
 		t.Fatalf("long site name got %q", got)
 	}
-	if got := defaultTitle("示例站"); !strings.HasPrefix(got, "示例站｜") || len([]rune(got)) < 15 {
+	if got := defaultTitle("示例站", zhCopy); !strings.HasPrefix(got, "示例站｜") || len([]rune(got)) < 15 {
 		t.Fatalf("short site name got %q", got)
 	}
 }

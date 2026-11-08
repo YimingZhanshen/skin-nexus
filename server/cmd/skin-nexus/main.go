@@ -1195,6 +1195,7 @@ func spaHandler(dir string, seoEng *seo.Engine, appearEng *appearance.Engine, si
 				}
 				html := string(raw)
 				meta := pageMetaFor(p)
+				meta.Copy = seoCopyFor(webi18n.ResolveLang(r))
 				// The library list is the one SPA route that is public content a
 				// crawler is asked to index, so its first page ships in the HTML:
 				// Bing says critical content must not live behind client-side

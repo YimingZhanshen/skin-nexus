@@ -25,14 +25,14 @@ func (m *memOpts) SetOption(_ context.Context, k, v string) error {
 func TestRenderHeadWithAlwaysEmitsTitle(t *testing.T) {
 	e := NewEngine(&memOpts{}, Defaults{SiteName: "示例站", BaseURL: "https://skin.example.com"})
 	out := e.RenderHeadWith(context.Background(), "<html><head><!--skin-seo--></head></html>", PageMeta{Description: "desc"})
-	if !strings.Contains(out, "<title>"+defaultTitle("示例站")+"</title>") {
+	if !strings.Contains(out, "<title>"+defaultTitle("示例站", zhCopy)+"</title>") {
 		t.Fatalf("title missing:\n%s", out)
 	}
 	if !strings.Contains(out, `<link rel="canonical" href="https://skin.example.com/">`) {
 		t.Fatalf("canonical missing:\n%s", out)
 	}
 	out2 := e.RenderHeadWith(context.Background(), "<html><head><!--skin-seo--></head></html>", PageMeta{TitleSuffix: "Steve", Path: "/profile/Steve"})
-	if !strings.Contains(out2, "<title>Steve - "+defaultTitle("示例站")+"</title>") {
+	if !strings.Contains(out2, "<title>Steve - "+defaultTitle("示例站", zhCopy)+"</title>") {
 		t.Fatalf("per-page title missing:\n%s", out2)
 	}
 }

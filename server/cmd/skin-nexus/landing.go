@@ -26,6 +26,21 @@ import (
 //go:embed theme-base.css
 var themeBaseFS embed.FS
 
+// seoCopyFor resolves the sentences the head falls back to when the operator
+// left the SEO title or description empty, in the language being served. seo
+// sits below webi18n and must not import it, so the injection lives here; the
+// alternative is an English site whose <title> and description stay Chinese
+// forever precisely because nobody wrote them. An unknown or empty language
+// falls back to zh-CN inside webi18n.T, which is what the locale-blind pages
+// already serve.
+func seoCopyFor(lang string) seo.SiteCopy {
+	return seo.SiteCopy{
+		TitleDescriptor:     webi18n.T(lang, "seo.siteTitleDescriptor"),
+		DescriptionWithSite: webi18n.T(lang, "seo.siteDescriptionWithSite"),
+		Description:         webi18n.T(lang, "seo.siteDescription"),
+	}
+}
+
 // themeBaseCSS carries the single source of truth for design tokens
 // (same file web/src/style.css @imports). SSR pages inject it before
 // <!--skin-theme--> so theme packs keep overriding the contract keys.
@@ -456,6 +471,6 @@ func renderLanding(r *http.Request, seoEng *seo.Engine, appearEng *appearance.En
 	if err := landingTmpl.Execute(&sb, v); err != nil {
 		return "<!DOCTYPE html><html><body><h1>landing render error</h1></body></html>"
 	}
-	html := seoEng.RenderHeadWith(ctx, sb.String(), seo.PageMeta{Description: intro, Lang: d.Lang})
+	html := seoEng.RenderHeadWith(ctx, sb.String(), seo.PageMeta{Description: intro, Lang: d.Lang, Copy: seoCopyFor(d.Lang)})
 	return appearEng.Render(ctx, html)
 }

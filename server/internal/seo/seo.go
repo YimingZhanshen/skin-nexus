@@ -26,6 +26,10 @@ type Settings struct {
 	SitemapOn   bool   `json:"sitemap"`
 	Robots      string `json:"robots"`
 	NoIndex     bool   `json:"noindex"`
+	// TitleGenerated says Title is this package's own suggestion rather than
+	// something the operator wrote. Rendering needs the distinction: a generated
+	// title follows the language of the page, an operator's title never does.
+	TitleGenerated bool `json:"-"`
 }
 
 // OptionStore is the persistence port (satisfied by *store.Mysql).
@@ -91,7 +95,8 @@ func (e *Engine) Settings(ctx context.Context) Settings {
 
 	// defaults
 	if s.Title == "" {
-		s.Title = defaultTitle(e.def.SiteName)
+		s.Title = defaultTitle(e.def.SiteName, zhCopy)
+		s.TitleGenerated = true
 	}
 	if s.Canonical == "" {
 		s.Canonical = strings.TrimRight(e.def.BaseURL, "/")
@@ -133,33 +138,75 @@ func (e *Engine) Save(ctx context.Context, s Settings) error {
 // length; a bare site name is often too short (Bing flags <15 characters).
 const titleDescriptor = "Minecraft 皮肤站 · 皮肤、披风与角色管理"
 
-func defaultTitle(siteName string) string {
+const (
+	descWithSiteZh = "{site}：上传与分享 Minecraft 皮肤和披风，管理角色、衣柜与皮肤库，支持 Yggdrasil 外置登录与启动器接入。"
+	descBareZh     = "Minecraft 皮肤站：上传与分享皮肤、披风，管理角色、衣柜与皮肤库，支持 Yggdrasil 外置登录与启动器接入。"
+)
+
+// SiteCopy is the language-dependent text the head falls back to when the
+// operator left the SEO title or description empty. The package sits below the
+// render layer and must not import webi18n, so the caller injects the sentences
+// for the language it is serving. An empty field falls back to the Chinese this
+// package has always shipped, so a caller that knows nothing about languages
+// keeps its previous output byte for byte.
+type SiteCopy struct {
+	// TitleDescriptor is appended to a site name too short to rank on its own.
+	TitleDescriptor string
+	// DescriptionWithSite carries the site name where "{site}" appears;
+	// Description is the nameless form. Substitution is a literal replace, not a
+	// format verb, so a site name containing % can never misformat a page.
+	DescriptionWithSite string
+	Description         string
+}
+
+var zhCopy = SiteCopy{
+	TitleDescriptor:     titleDescriptor,
+	DescriptionWithSite: descWithSiteZh,
+	Description:         descBareZh,
+}
+
+func (c SiteCopy) filled() SiteCopy {
+	if c.TitleDescriptor == "" {
+		c.TitleDescriptor = zhCopy.TitleDescriptor
+	}
+	if c.DescriptionWithSite == "" {
+		c.DescriptionWithSite = zhCopy.DescriptionWithSite
+	}
+	if c.Description == "" {
+		c.Description = zhCopy.Description
+	}
+	return c
+}
+
+func defaultTitle(siteName string, c SiteCopy) string {
+	c = c.filled()
 	name := strings.TrimSpace(siteName)
 	if name == "" {
-		return titleDescriptor
+		return c.TitleDescriptor
 	}
 	if utf8.RuneCountInString(name) >= 15 {
 		return name
 	}
-	return name + "｜" + titleDescriptor
+	return name + "｜" + c.TitleDescriptor
 }
 
-func defaultDescription(siteName string) string {
+func defaultDescription(siteName string, c SiteCopy) string {
+	c = c.filled()
 	name := strings.TrimSpace(siteName)
 	if name == "" {
-		return "Minecraft 皮肤站：上传与分享皮肤、披风，管理角色、衣柜与皮肤库，支持 Yggdrasil 外置登录与启动器接入。"
+		return c.Description
 	}
-	return name + "：上传与分享 Minecraft 皮肤和披风，管理角色、衣柜与皮肤库，支持 Yggdrasil 外置登录与启动器接入。"
+	return strings.ReplaceAll(c.DescriptionWithSite, "{site}", name)
 }
 
 // FillDefaults returns a ready-to-save Settings with one-click suggestions.
 func (e *Engine) FillDefaults(ctx context.Context) Settings {
 	s := e.Settings(ctx)
 	if s.Title == "" {
-		s.Title = defaultTitle(e.def.SiteName)
+		s.Title = defaultTitle(e.def.SiteName, zhCopy)
 	}
 	if s.Description == "" {
-		s.Description = defaultDescription(e.def.SiteName)
+		s.Description = defaultDescription(e.def.SiteName, zhCopy)
 	}
 	s.SitemapOn = true
 	s.NoIndex = false
@@ -196,6 +243,10 @@ type PageMeta struct {
 	JSONLD string // pre-marshalled JSON-LD block ("" = none); "</" is
 	// escaped on injection so user-supplied names can never close the
 	// script element early.
+	// Copy carries the sentences the head uses when the operator left the SEO
+	// title or description empty, in the language this page is served in. Zero
+	// value keeps the Chinese these pages shipped before per-language copy.
+	Copy SiteCopy
 }
 
 // The two languages the server-rendered pages ship. Kept as literals here
@@ -228,7 +279,7 @@ func localeURL(u, lang string) string {
 // the server (skinlib_ssr.go). It is annotated only where the promise is
 // checkable: Bing ignores markup that does not match the page, and Google's own
 // note is that structured data buys rich results, not AI citation.
-func (e *Engine) siteJSONLD(s Settings, lang string) string {
+func (e *Engine) siteJSONLD(s Settings, lang string, c SiteCopy) string {
 	base := strings.TrimRight(s.Canonical, "/")
 	if base == "" {
 		base = strings.TrimRight(e.def.BaseURL, "/")
@@ -245,7 +296,7 @@ func (e *Engine) siteJSONLD(s Settings, lang string) string {
 	}
 	desc := s.Description
 	if desc == "" {
-		desc = defaultDescription(e.def.SiteName)
+		desc = defaultDescription(e.def.SiteName, c)
 	}
 	logo := s.OGImage
 	if logo == "" {
@@ -309,7 +360,10 @@ func (e *Engine) LLMSTxt(ctx context.Context) string {
 	}
 	desc := s.Description
 	if desc == "" {
-		desc = defaultDescription(e.def.SiteName)
+		// llms.txt is one document with no language in its URL, so it keeps the
+		// sentence this package has always served rather than inventing a
+		// per-crawler language decision.
+		desc = defaultDescription(e.def.SiteName, zhCopy)
 	}
 	var sb strings.Builder
 	sb.WriteString("# " + name + "\n\n> " + desc + "\n\n")
@@ -339,12 +393,23 @@ func (e *Engine) RenderHeadWith(ctx context.Context, indexHTML string, pm PageMe
 		s.Robots = defaultRobots(s.Canonical, s.SitemapOn, true)
 	}
 	title := s.Title
+	if s.TitleGenerated {
+		// Nobody wrote this title, so it belongs to the page's language rather
+		// than to whatever language the cache happened to suggest.
+		title = defaultTitle(e.def.SiteName, pm.Copy)
+	}
 	if pm.TitleSuffix != "" {
-		title = pm.TitleSuffix + " - " + s.Title
+		title = pm.TitleSuffix + " - " + title
 	}
 	desc := s.Description
 	if pm.Description != "" {
 		desc = pm.Description
+	}
+	if desc == "" {
+		// A page with no description at all used to ship none, while the
+		// JSON-LD on the same page described the site. Both now say the same
+		// thing, in the language the page is served in.
+		desc = defaultDescription(e.def.SiteName, pm.Copy)
 	}
 	canonical := strings.TrimRight(s.Canonical, "/")
 	if pm.Path != "" {
@@ -416,7 +481,7 @@ func (e *Engine) RenderHeadWith(ctx context.Context, indexHTML string, pm PageMe
 	if desc != "" {
 		sb.WriteString(`<meta name="twitter:description" content="` + esc(desc) + `">` + "\n")
 	}
-	if siteLD := e.siteJSONLD(s, pm.Lang); siteLD != "" {
+	if siteLD := e.siteJSONLD(s, pm.Lang, pm.Copy); siteLD != "" {
 		sb.WriteString(`<script type="application/ld+json">` +
 			strings.ReplaceAll(siteLD, "</", "<\\/") + `</script>` + "\n")
 	}

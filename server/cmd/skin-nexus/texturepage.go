@@ -454,6 +454,7 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 			Path:        "/skinlib/" + strconv.FormatInt(row.TID, 10),
 			OGImage:     d.PreviewAbsURL,
 			Lang:        d.Lang,
+			Copy:        seoCopyFor(d.Lang),
 			JSONLD:      texJSONLD(d, canonical),
 		}
 		// Private content viewed by its owner must never be indexed.
