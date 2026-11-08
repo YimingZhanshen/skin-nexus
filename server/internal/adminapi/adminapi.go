@@ -180,7 +180,6 @@ func (b *Backend) Handler() http.Handler {
 		mux.HandleFunc("POST /api/admin/v1/plugins/{name}/rollback", b.auth(b.handlePluginRollback))
 		mux.HandleFunc("DELETE /api/admin/v1/plugins/{name}", b.auth(b.handlePluginUninstall))
 		mux.HandleFunc("GET /api/admin/v1/market/catalog", b.auth(b.handleMarketCatalog))
-		mux.HandleFunc("POST /api/admin/v1/market/plan", b.auth(b.handleMarketPlan))
 		mux.HandleFunc("POST /api/admin/v1/market/install", b.auth(b.handleMarketInstall))
 		mux.HandleFunc("POST /api/admin/v1/market/upload", b.auth(b.handleMarketUpload))
 		mux.HandleFunc("PUT /api/admin/v1/plugins/{name}/config", b.auth(b.handlePluginConfigSave))

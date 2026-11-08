@@ -56,16 +56,9 @@ const (
 const CredentialTTL = 24 * time.Hour
 
 // detailHeaderWhitelist is the whole of what headers_json may contain, in the
-// order the panel reads it. Keep in sync with DetailHeaderWhitelist's contract:
-// adding a header here means shipping its value into a table an operator can
-// export, so anything user- or secret-shaped stays out.
+// order the panel reads it. Adding a header here means shipping its value into
+// a table an operator can export, so anything user- or secret-shaped stays out.
 var detailHeaderWhitelist = []string{"User-Agent", "X-Request-Id"}
-
-// DetailHeaderWhitelist copies the header allow-list (exported for tests and
-// for the reader API, which must not be able to mutate the gate).
-func DetailHeaderWhitelist() []string {
-	return append([]string(nil), detailHeaderWhitelist...)
-}
 
 // Capture is the per-request material a recorder hands to the logger. Every
 // field is optional: an empty Capture records an empty detail row, and the

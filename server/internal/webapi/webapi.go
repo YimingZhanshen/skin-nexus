@@ -282,7 +282,6 @@ func (b *Backend) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/skinlib/{tid}/like", b.handleSkinlibUnlike)
 	mux.HandleFunc("PATCH /api/v1/skinlib/{tid}", b.handleSkinlibPatch)
 	mux.HandleFunc("POST /api/v1/skinlib/{tid}/report", b.handleTextureReport)
-	mux.HandleFunc("GET /api/v1/stats", b.handleStats)
 	// Site announcement (blessing parity): public read, admin-edited via
 	// the settings panel (option `announcement`). Markdown source; the
 	// response carries both the raw text and server-sanitized HTML.
@@ -1155,16 +1154,6 @@ func (b *Backend) setPlayerTexture(w http.ResponseWriter, r *http.Request, kind 
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "playerId": pid})
-}
-
-func (b *Backend) handleStats(w http.ResponseWriter, r *http.Request) {
-	// Session-gated (review P3: the weak-hash count was public).
-	if _, err := b.currentUser(r); err != nil {
-		writeErrCode(w, http.StatusUnauthorized, "not logged in", i18n.MsgUnauthorized)
-		return
-	}
-	weak, _ := b.Store.WeakHashCount(r.Context())
-	writeJSON(w, http.StatusOK, map[string]interface{}{"weakHashUsers": weak})
 }
 
 // handleAnnouncement: public site announcement. Markdown source (raw) plus

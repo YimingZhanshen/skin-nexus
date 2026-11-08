@@ -469,16 +469,6 @@ var sessionCookie = func(r *http.Request) string {
 	return ""
 }
 
-// SetSessionCookieName overrides the session cookie name at wiring time.
-func SetSessionCookieName(name string) {
-	sessionCookie = func(r *http.Request) string {
-		if c, err := r.Cookie(name); err == nil {
-			return c.Value
-		}
-		return ""
-	}
-}
-
 // tokenWrapper re-shapes device polling errors to the launcher contract:
 // HTTP 400 + {error,...} (RFC 8628 states). If the engine already complies it
 // passes through untouched.

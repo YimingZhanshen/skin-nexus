@@ -125,22 +125,6 @@ func (m *Manager) MarketCatalog(ctx context.Context, force bool) ([]MarketEntry,
 	return out, nil
 }
 
-func (m *Manager) MarketPlan(ctx context.Context, name string) (*InstallPlan, error) {
-	reg, err := m.fetchRegistry(ctx, false)
-	if err != nil {
-		return nil, err
-	}
-	for _, p := range reg.Packages {
-		if p.Name == name {
-			return m.PlanInstall(PlanInput{
-				Name: p.Name, Version: p.Version, Permissions: p.Capabilities,
-				Requires: p.Requires, Conflicts: p.Conflicts,
-			})
-		}
-	}
-	return nil, ErrPluginNotFound
-}
-
 // MarketInstall downloads a signed artifact from the trusted registry, checks
 // transport SHA-256, then hands it to the bundle installer for signature,
 // staging and atomic swap.

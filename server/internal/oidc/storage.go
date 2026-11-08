@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"strconv"
 	"sync"
@@ -577,6 +576,3 @@ func randomHex(n int) string {
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }
-
-// MarshalDeviceState is a debug helper kept for tests.
-func MarshalDeviceState(v any) []byte { b, _ := json.Marshal(v); return b }

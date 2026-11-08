@@ -83,22 +83,6 @@ func (b *Backend) handleMarketCatalog(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"packages": list})
 }
 
-func (b *Backend) handleMarketPlan(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Name string `json:"name"`
-	}
-	if err := jsonDecode(r, &body); err != nil || body.Name == "" {
-		writeErrCode(w, http.StatusBadRequest, "name required", i18n.MsgMissingField)
-		return
-	}
-	plan, err := b.plugins.Host.MarketPlan(r.Context(), body.Name)
-	if err != nil {
-		writeLogged(r, w, http.StatusBadGateway, i18n.MsgMarketUpstream, "upstream request failed", err)
-		return
-	}
-	writeJSON(w, http.StatusOK, plan)
-}
-
 func (b *Backend) handleMarketInstall(w http.ResponseWriter, r *http.Request) {
 	actor, ok := b.pluginSuper(w, r)
 	if !ok {
