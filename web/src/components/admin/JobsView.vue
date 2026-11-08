@@ -79,7 +79,10 @@ async function act(row, kind) {
 }
 
 const canCancel = (s) => ['queued', 'running', 'paused'].includes(s)
-const canResume = (s) => ['paused', 'failed'].includes(s)
+// The set the server answers for, read off jobs/store.go Resume — its WHERE
+// clause takes cancelled/cancelling too. The button used to hide for exactly
+// those two, so a cancelled job could be seen but never restarted from the panel.
+const canResume = (s) => ['paused', 'failed', 'cancelled', 'cancelling'].includes(s)
 
 function stateTone(s) {
   return { done: 'oc-ok', failed: 'oc-bad', cancelled: 'oc-miss', running: 'oc-warn' }[s] || 'oc-miss'

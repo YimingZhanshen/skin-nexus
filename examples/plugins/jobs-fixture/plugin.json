@@ -1,0 +1,40 @@
+{
+  "name": "jobs-fixture",
+  "version": "1.0.0",
+  "hookApi": 2,
+  "entrypoint": "index.js",
+  "title": "Jobs Fixture",
+  "author": "SkinNexus",
+  "description": "Test fixture: a stepped durable job with no upstream and no side effects, so the panel's cancel/resume path can be exercised on a local server.",
+  "permissions": [
+    "http:routes:admin",
+    "schedule:jobs"
+  ],
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/admin/start",
+      "tier": "admin",
+      "csrf": true,
+      "rateLimit": "30/m"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/jobs",
+      "tier": "admin",
+      "rateLimit": "120/m"
+    }
+  ],
+  "jobs": [
+    {
+      "name": "tick",
+      "timeoutMS": 30000,
+      "maxAttempts": 3
+    }
+  ],
+  "minServer": ">=0.5.0",
+  "requires": {
+    "plugins": {},
+    "server": ">=0.5.0"
+  }
+}

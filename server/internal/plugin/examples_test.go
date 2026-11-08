@@ -15,14 +15,17 @@ func examplesDir() string {
 }
 
 func TestShippedExamplesLoadAndRun(t *testing.T) {
-	m := NewHost(RuntimeConfig{Dir: examplesDir(), HostVersion: "0.4.0", Store: newMemPlatformStore()})
+	// HostVersion is the host the examples ship against; the binary's own
+	// version. A stale value here silently rejects any example that declares a
+	// minServer, because the rejection looks like a bug in the example.
+	m := NewHost(RuntimeConfig{Dir: examplesDir(), HostVersion: "0.5.0", Store: newMemPlatformStore()})
 	t.Cleanup(func() { _ = m.Close() })
 	if err := m.Load(examplesDir()); err != nil {
 		t.Fatal(err)
 	}
 	list := m.List()
-	if len(list) != 2 {
-		t.Fatalf("examples = %d, want 2 (%+v)", len(list), list)
+	if len(list) != 3 {
+		t.Fatalf("examples = %d, want 3 (%+v)", len(list), list)
 	}
 	for _, st := range list {
 		if st.State != "disabled" {
@@ -30,7 +33,7 @@ func TestShippedExamplesLoadAndRun(t *testing.T) {
 		}
 	}
 	ctx := context.Background()
-	for _, name := range []string{"hello-world", "hello-ui"} {
+	for _, name := range []string{"hello-world", "hello-ui", "jobs-fixture"} {
 		if err := m.Enable(ctx, name); err != nil {
 			t.Fatalf("enable %s: %v", name, err)
 		}
@@ -44,7 +47,7 @@ func TestShippedExamplesLoadAndRun(t *testing.T) {
 	if html := m.SlotHTML("app.topbar.after"); !strings.Contains(html, "/plugin-assets/hello-ui/hello.html") {
 		t.Fatalf("slot html = %s", html)
 	}
-	for _, name := range []string{"hello-world", "hello-ui"} {
+	for _, name := range []string{"hello-world", "hello-ui", "jobs-fixture"} {
 		if err := m.Disable(ctx, name); err != nil {
 			t.Fatalf("disable %s: %v", name, err)
 		}

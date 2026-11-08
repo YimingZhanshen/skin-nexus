@@ -464,10 +464,14 @@ skin.jobs.list(1) / status(id) / cancel(id) / resume(id); // 仅 admin 路由
 
 ## 11. 示例与官方插件
 
-主仓库只保留两个最小夹具（供文档与测试）：
+主仓库只保留三个最小夹具（供文档与测试）：
 
 - `examples/plugins/hello-world`：零权限日志；
-- `examples/plugins/hello-ui`：iframe 页面 + slot。
+- `examples/plugins/hello-ui`：iframe 页面 + slot；
+- `examples/plugins/jobs-fixture`：`schedule:jobs` 的最小夹具。它不联网、不写数据，
+  把 12 个 step 烧在 job VM 里，只为让面板的「任务队列」页在本地机器上出现一条
+  真的 running 行——取消与恢复是这页存在的理由，而真实声明 jobs 的官方插件都要
+  访问上游，无法在没有外网的 rig 上造出可取消的任务。
 
 完整官方插件（12 个：config-greeter / nav-links / player-notes / texture-cdn /
 lifecycle-log / signup-guard / texture-provenance / signup-survey / avatar-cdn /
