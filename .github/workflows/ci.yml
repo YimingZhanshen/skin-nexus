@@ -97,7 +97,7 @@ jobs:
           go-version: '1.26'
           cache-dependency-path: server/go.sum
       - name: Integration test
-        run: go test -tags integration ./internal/store/ ./internal/account/
+        run: go test -p 1 -tags integration ./internal/store/ ./internal/account/ # -p 1: the two suites share one database, and the store suite drops every table before migrating
 
   # The same suite against the other engines the store now claims to speak.
   # MariaDB is on the MySQL wire, so it is the cheap way to catch a statement
@@ -133,7 +133,7 @@ jobs:
           go-version: '1.26'
           cache-dependency-path: server/go.sum
       - name: Integration test
-        run: go test -tags integration ./internal/store/ ./internal/account/
+        run: go test -p 1 -tags integration ./internal/store/ ./internal/account/ # -p 1: the two suites share one database, and the store suite drops every table before migrating
 
   integration-portable:
     runs-on: ubuntu-latest
@@ -174,7 +174,9 @@ jobs:
         # service is also up for that leg and simply goes unused.
         run: |
           rm -rf /tmp/skin-nexus-test && mkdir -p /tmp/skin-nexus-test
-          go test -tags integration ./internal/store/ ./internal/account/
+          # -p 1: the two suites share one database, and the store suite drops
+          # every table before migrating — in parallel they corrupt each other.
+          go test -p 1 -tags integration ./internal/store/ ./internal/account/
 
   web:
     runs-on: ubuntu-latest

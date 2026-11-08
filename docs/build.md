@@ -75,7 +75,7 @@ docker build -t skin-nexus:latest .   # 本地源码构建（离线/内网场景
 | job | 触发 | 内容 |
 |---|---|---|
 | server | 两者 | `gofmt` 空输出 + `go build` + `go vet`（含 `-tags integration`）+ `go test ./...` 覆盖率地板与 0% 包集合比对 + 插件工具链测试 |
-| integration | 两者 | MySQL 8.0 / 5.7 各跑 `-tags integration ./internal/store/ ./internal/account/`。5.7 专抓版本差异 SQL（login COLLATE / prepared 1267） |
+| integration | 两者 | MySQL 8.0 / 5.7 各跑 `-p 1 -tags integration ./internal/store/ ./internal/account/`。`-p 1` 是必需的：两套用例共用同一个库，而 store 那套在迁移前会把所有表 DROP 掉，并行时互相打断（sqlite、postgres、mariadb 三条腿同一签名报错）。5.7 专抓版本差异 SQL（login COLLATE / prepared 1267） |
 | integration-mariadb | 两者 | MariaDB 11.4 / 10.11，同一条命令；抓只有 MySQL 自家扩展能吃下的写法 |
 | integration-portable | 两者 | PostgreSQL 16 与 SQLite 文件库，同一条命令；抓方言与序列差异 |
 | web | 两者 | `npm ci` + `check-locales.mjs` + `npm run build` + `npm audit --audit-level=high`（low 及以上另写 step summary，不阻断） |
