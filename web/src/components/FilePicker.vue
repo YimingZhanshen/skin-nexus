@@ -7,9 +7,13 @@
 // already solved this; this is that shape, reused.
 // Labels come from the dashboard namespace on purpose: it already says 「选择文件」/
 // 「清除已选文件」, and a second copy of the same words in a second namespace is
-// how a panel ends up with three labels for one action.
+// how a panel ends up with three labels for one action. The byte size goes to
+// format.js for the same reason: this component rounded its own way — 1500 B
+// read「1 KB」here and「1.5 KB」in the lists around it, and a gigabyte-sized
+// pick read「1024.0 MB」because the local copy had no GB step.
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { formatBytes } from '../format.js'
 
 const props = defineProps({
   file: { type: Object, default: null },
@@ -38,13 +42,6 @@ function clear() {
   // file again fires no change event and the row looks stuck.
   if (input.value) input.value.value = ''
 }
-
-function formatBytes(n) {
-  if (!Number.isFinite(n) || n <= 0) return ''
-  if (n < 1024) return n + ' B'
-  if (n < 1048576) return (n / 1024).toFixed(0) + ' KB'
-  return (n / 1048576).toFixed(1) + ' MB'
-}
 </script>
 
 <template>
@@ -53,7 +50,7 @@ function formatBytes(n) {
     <div class="fp-row">
       <button type="button" class="secondary" :disabled="disabled" @click="pick">{{ t('dashboard.chooseFile') }}</button>
       <span class="fp-name muted" v-if="file" :title="file.name">
-        {{ file.name }} <span class="muted" v-if="formatBytes(file.size)">· {{ formatBytes(file.size) }}</span>
+        {{ file.name }} <span class="muted" v-if="Number(file.size) > 0">· {{ formatBytes(file.size) }}</span>
       </span>
       <button type="button" class="secondary danger-outline" v-if="file" @click="clear">{{ t('dashboard.clearFile') }}</button>
     </div>
