@@ -44,14 +44,25 @@ func (b *Backend) verificationEnabled(ctx context.Context) bool {
 	return b.VerificationEnabled != nil && b.VerificationEnabled(ctx)
 }
 
+// mailReplyBudget bounds a send whose caller is a browser still waiting for an
+// answer. The mailer's own window is 10s dial + 30s session; the SPA aborts its
+// requests at 15s (web/src/api.js), so an honest 502 written after 30s is a
+// spinner that became a network error — the one answer the player cannot act
+// on. A var so the deadline test does not have to wait the real window.
+var mailReplyBudget = 8 * time.Second
+
 // sendVerificationMail mints a token for uid and mails a link to address.
 // Failure is returned so the caller decides what it means: the request endpoint
 // tells the owner (only they can see it), registration only logs it — a broken
-// SMTP host must never change a protocol response shape.
-func (b *Backend) sendVerificationMail(ctx context.Context, uid int64, address string) error {
+// SMTP host must never change a protocol response shape. A zero budget keeps
+// the mailer's own window, which is right when nobody is waiting on the answer.
+func (b *Backend) sendVerificationMail(ctx context.Context, uid int64, address string, budget time.Duration) error {
 	cfg := b.smtpConfig(ctx)
 	if cfg == nil {
 		return errors.New("mail is not configured")
+	}
+	if budget > 0 {
+		cfg.Budget = budget
 	}
 	var raw [32]byte
 	if _, err := rand.Read(raw[:]); err != nil {
@@ -88,7 +99,7 @@ func (b *Backend) sendVerificationMailDetached(uid int64, address string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), verifyMailTimeout)
 		defer cancel()
-		if err := b.sendVerificationMail(ctx, uid, address); err != nil {
+		if err := b.sendVerificationMail(ctx, uid, address, 0); err != nil {
 			log.Printf("register %d: verification mail: %v", uid, err)
 		}
 	}()
@@ -127,7 +138,7 @@ func (b *Backend) handleEmailVerifyRequest(w http.ResponseWriter, r *http.Reques
 	}
 	// The owner of this mailbox is the only party that can be told about a
 	// failure, so the honest answer is safe here (unlike the reset flow).
-	if err := b.sendVerificationMail(r.Context(), uid, brief.Email); err != nil {
+	if err := b.sendVerificationMail(r.Context(), uid, brief.Email, mailReplyBudget); err != nil {
 		writeLogged(r, w, http.StatusBadGateway, i18n.MsgEmailSendFailed,
 			"could not send the verification mail, try again later", err)
 		return

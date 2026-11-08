@@ -193,11 +193,16 @@ func (b *Backend) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 		"你正在重置 %s 的账号密码。\n\n请在 30 分钟内打开以下链接完成重置：\n%s\n\n若非本人操作，请忽略本邮件——你的密码不会发生任何变化。",
 		cfg.SiteName, link)
 	// A send failure must NOT change the response shape (it would turn SMTP
-	// hiccups into an existence oracle). The user retries; the log carries
-	// the diagnostic for the operator.
-	if err := cfg.Send(req.Email, subject, body); err != nil {
-		log.Printf("password-reset mail to %s: %v", redact.Email(req.Email), err)
-	}
+	// hiccups into an existence oracle), so nothing about this answer depends
+	// on the mail — and waiting for it costs the player up to 40s on a wedged
+	// host, past the SPA's own 15s abort. Fire it off the request, the way
+	// registration already does; the log carries the diagnostic for the
+	// operator, who is the only party that can act on it.
+	go func() {
+		if err := cfg.Send(req.Email, subject, body); err != nil {
+			log.Printf("password-reset mail to %s: %v", redact.Email(req.Email), err)
+		}
+	}()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
