@@ -39,7 +39,12 @@
      6.01:1. Packs that set a light panel should define their own value;
      consumers fall back to var(--danger), i.e. today's rendering. */
   --danger-ink: #ef7a70;
-  --on-danger: #fff;
+  /* The label carried by a filled --danger surface. White on #d9564c measures
+     3.90:1, and 3.31:1 on the --danger-hi hover — under AA for a 14px/600
+     button label — so the default pairs the red with the site's own ink:
+     4.57:1 and 5.40:1. A pack that keeps a light label must set a darker
+     --danger of its own. */
+  --on-danger: var(--ink);
   --ok: #6fbf7d;
   --hover-wash: rgba(233, 237, 241, .05);
   --accent-wash: rgba(176, 69, 58, .14); /* 导航活动态底雾（主题可覆盖） */

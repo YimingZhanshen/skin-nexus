@@ -208,7 +208,7 @@ onMounted(async () => {
       <ul v-if="inspection.permissions && inspection.permissions.length">
         <li v-for="perm in inspection.permissions" :key="perm"><code>{{ perm }}</code></li>
       </ul>
-      <div v-if="inspection.status !== 'verified'" class="error">
+      <div v-if="inspection.status !== 'verified'" class="error" role="status" aria-live="polite">
         <p style="margin-top: 0;"><strong>{{ t('admin.marketRiskTitle') }}</strong></p>
         <p>{{ t('admin.marketRiskBody') }}</p>
         <p v-if="inspection.reason" class="muted">{{ inspection.reason }}</p>
@@ -251,10 +251,10 @@ onMounted(async () => {
             <span v-if="!p.installed" class="badge">{{ t('admin.marketNotInstalled') }}</span>
             <span v-else-if="p.canUpdate" class="badge">{{ p.installed }} → {{ p.version }}</span>
             <span v-else class="badge">{{ p.installed }}</span>
-            <div v-if="planOf(p).missing && planOf(p).missing.length" class="error" style="font-size: var(--fs-xs);">
+            <div v-if="planOf(p).missing && planOf(p).missing.length" class="error" style="font-size: var(--fs-xs);" role="status" aria-live="polite">
               {{ t('admin.marketMissing') }}: {{ planOf(p).missing.join('; ') }}
             </div>
-            <div v-if="planOf(p).conflicts && planOf(p).conflicts.length" class="error" style="font-size: var(--fs-xs);">
+            <div v-if="planOf(p).conflicts && planOf(p).conflicts.length" class="error" style="font-size: var(--fs-xs);" role="status" aria-live="polite">
               {{ t('admin.marketConflicts') }}: {{ planOf(p).conflicts.join('; ') }}
             </div>
           </td>
@@ -279,10 +279,10 @@ onMounted(async () => {
       <ul v-if="planOf(selected).addedPermissions && planOf(selected).addedPermissions.length">
         <li v-for="perm in planOf(selected).addedPermissions" :key="perm"><code>{{ perm }}</code></li>
       </ul>
-      <ul v-if="planOf(selected).missing && planOf(selected).missing.length" class="error">
+      <ul v-if="planOf(selected).missing && planOf(selected).missing.length" class="error" role="status" aria-live="polite">
         <li v-for="m in planOf(selected).missing" :key="m">{{ m }}</li>
       </ul>
-      <ul v-if="planOf(selected).conflicts && planOf(selected).conflicts.length" class="error">
+      <ul v-if="planOf(selected).conflicts && planOf(selected).conflicts.length" class="error" role="status" aria-live="polite">
         <li v-for="c in planOf(selected).conflicts" :key="c">{{ c }}</li>
       </ul>
       <label v-if="planOf(selected).addedPermissions && planOf(selected).addedPermissions.length" class="row" style="align-items:center;gap:8px;">

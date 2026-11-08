@@ -272,7 +272,10 @@ tbody tr:hover, table tr:hover { background: var(--hover-wash); }
   font-variant-numeric: tabular-nums;
 }
 .badge.danger { color: var(--danger-ink, var(--danger)); border-color: var(--danger); }
-.badge.accent { color: var(--cinnabar); border-color: var(--cinnabar); }
+/* --cinnabar (#b0453a) as 12px text on --panel measures 2.94:1. The border can
+   stay brand-red — it is not text — but the label needs the lifted tint, so the
+   accent badge mixes toward --moon instead of borrowing the danger hue. */
+.badge.accent { color: color-mix(in srgb, var(--cinnabar) 60%, var(--moon)); border-color: var(--cinnabar); }
 .badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
 .badge.jade { color: var(--jade); border-color: color-mix(in srgb, var(--jade) 55%, transparent); }
 .badge.gold { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 55%, transparent); }
