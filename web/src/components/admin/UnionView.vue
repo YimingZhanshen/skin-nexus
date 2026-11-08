@@ -129,13 +129,18 @@ const diagRows = computed(() => {
 })
 
 function exportDiagnose() {
+  // The report is a standalone file the operator opens on paper white, so the
+  // two verdict colours are the dark theme's hues taken down to what measures
+  // AA on #fff (--ok is 2.23:1 there, --danger 3.90:1). They used to be
+  // Bootstrap's #198754 / #dc3545 — a passing contrast, but another product's
+  // palette inside ours.
   const rows = diagRows.value.map((r) => {
     const val = r.area
       ? `<textarea readonly rows="8" style="width:100%;box-sizing:border-box;">${String(r.area).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</textarea>`
-      : r.v === 'ok' ? '<span style="color:#198754;font-weight:600;">✔ 成功</span>'
-      : r.v === 'fail' ? '<span style="color:#dc3545;font-weight:600;">✘ 失败</span>'
+      : r.v === 'ok' ? '<span style="color:#2f7d4f;font-weight:600;">✔ 成功</span>'
+      : r.v === 'fail' ? '<span style="color:#a12b20;font-weight:600;">✘ 失败</span>'
       : String(r.v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    return `<tr><th scope="row" style="text-align:left;vertical-align:top;width:20%;padding:6px 10px;">${r.k}</th><td style="padding:6px 10px;">${val}</td></tr>`
+    return `<tr><th scope="row" style="text-align:left;vertical-align:top;width:20%;padding:8px 12px;">${r.k}</th><td style="padding:8px 12px;">${val}</td></tr>`
   }).join('')
   const meta = diag.value
     ? `<p>key_fingerprint: ${diag.value.key_fingerprint || '—'} · private_key_version: ${diag.value.private_key_version || '—'} · server_list_version: ${diag.value.server_list_version || '—'}</p>`
