@@ -2,6 +2,70 @@
 
 > 迭代历史（按日期倒序，每天一条，只记要点）。开发细节见对应 commit；README 状态行只留一句话摘要。
 
+## 2026-11-09
+
+收口 + 优化轮：三条挂了很久的验收账全部拿到真机读数，扫描出的真缺陷逐片修掉，
+门禁自己的盲区补上，文档与实测对齐。24 个提交，全部本地 SQLite rig 验收，
+**生产站与演示站本轮零操作**；不发版（tag 仍 v0.5.0）。
+
+- **三条挂账结清**。① **D9（面板任务取消/恢复）**：examples 里原先只有两个 hello 夹具，
+  都不声明 jobs，本地根本造不出一个 running 任务——新增 `examples/plugins/jobs-fixture`
+  （不联网，在 job VM 里烧时间步）。同时发现面板的「恢复」按钮谓词比后端窄：
+  `jobs/store.go` 的 Resume 收 `cancelled`/`cancelling`，按钮却只认 `paused`/`failed`，
+  等于**已取消的任务只能看着、不能重启**。现在真机走完 running→取消→恢复→done 一整圈。
+  ② **英文管理面板那一屏**：设置面板约 40 条说明是写死的中文串，前端直接
+  `{{ s.description }}` 渲染，英文界面整屏中文；改成后端只发键、前端 `t()` 渲染。
+  ③ **明细 `upstream_code`**：本地起一个只回 500 的假 hub，把 `union_api_root` 指过去再开
+  诊断窗——读到 `hub.500`（4 ms）；关掉假 hub 重放，读到 `transport`（0 ms）。
+  这两条在面板展开行里逐字读到，列名与 `{n} ms` 都是英文。
+- **插件在长步里第一次能自己知道被取消了**。宿主打断不了已经发起的 VM 调用，取消只在步
+  边界生效，而步上限 30 秒；payload 里那个 `cancelRequested` 是步开始前的快照、恒为
+  `false`，全仓除了这一行只有文档提过它。**没改那个字段**（它在 hook 合约里），而是加了一条
+  只读 `skin.jobs.cancelRequested(jobId)`，读 store 的 cancelling/cancelled 两态。
+  真机读数：8 秒预算的步里，取消落下后 **2701 ms** 插件就自行收尾（日志原文见
+  `docs/plugin-spec.md` §10.5 与 S19 提交信息）。
+- **两处「谎报完成」**：OIDC 吊销客户端刷新令牌时错误被 `_ =` 吃掉，照样回
+  `{"ok":true}`——而同文件的 All 分支早就修过同类问题；`join session` 那张表既没人建索引
+  也没人删行，`hasJoined` 每次全表扫（三树 0030 补 uuid 索引 + 挂进既有清扫器）。
+- **入站文本校验缺口**：站点命名规则只管上传不管改名，于是**改名可以绕过规则**；衣柜别名
+  既不封顶也不去隐形字符。改名复用上传的同一条校验，别名加长度帽并复用 `ugctext.Visible`
+  ——没有新造校验器。
+- **半套守卫逐条补全**：SMTP 卡住时找回密码/邮箱验证两个请求能挂 40 秒（注册路径早就
+  detached 了，另两处没有）；三处时间戳交给列 DEFAULT、读取端却按应用钟算窗口（统一到
+  注入钟）；SPA 只写不读 `skin_lang` cookie，把在 SSR 页选的英文抹回中文（读序改成
+  cookie 优先，因为两边都写 cookie，它才是最后一次选择的记录）。
+- **门禁自己的三个盲区**：`check-locales` 的 SSR 扫描面漏了 `internal/seo`、未知前缀静默
+  跳过、拼接键完全不查；UI 键只有上限没有地板（清掉 22 个没人引用的键之后加了地板）；
+  `errorgate` 没吃到 `internal/oidc`，一接上就当场抓出设备码同意页的四条裸文案。
+  本轮末尾又补第九条：**访问日志的 kind 词表**——插件路由的 kind 是在调用点写死的字符串，
+  绕过了词表，于是英文面板把键路径 `admin.kind.plugin` 原样打在表格里（21 行里 8 行）。
+  现在 kind 必须登记成常量、必须有中英标签、必须出现在筛选下拉里，缺一红。
+- **双语从「句子」扩展到「机器名」**：审计动作 53+ 个 snake_case 名进词典（`audit.action.*`），
+  市场包名按当前 locale 取而不是固定先 `zh-CN`；SEO 站点级文案改为调用方注入，英文页不再
+  回吐中文句子。
+- **可访问性补齐**：107 个 `th` 全部带 `scope`、数据表补隐藏 `caption`（骨架占位表在
+  `aria-hidden` 容器里不参与朗读）；两处漏迁的对比度令牌回到 `--danger-ink`（危险按钮
+  3.90:1 → 4.57:1，强调徽章 2.94:1 → 6.09:1，都按 WCAG 相对亮度手算复核过）；市场页五处补 `aria-live`。
+  OIDC 建 client 连点两次会**永久丢掉明文 secret**（第二次提交把它抹空），连同
+  togglePublic / 发信 / 邮箱验证四处一起补 in-flight 守卫。
+- **死代码六处**：`DetailHeaderWhitelist`、`oidc.SetSessionCookieName`、
+  `oidc.MarshalDeviceState`、`POST /api/admin/v1/market/plan` + handler +
+  `Manager.MarketPlan`、`GET /api/v1/stats` + handler。每条都重新 grep 全仓（含 .vue 与
+  生成物目录）确认零引用；`/me` 那个弱哈希数字实际由 `/api/admin/v1/overview` 提供，
+  真机验过两边行为（旧端点 404、overview 仍回数）。
+- **性能只量不改（S23）**：落地页每请求三个 COUNT 加一次 likes 榜，榜那条 SQL 的计划里挂着
+  `USE TEMP B-TREE FOR ORDER BY` 和一条对全部公开材质的相关子查询——**成本随整站公开库大小
+  线性增长且无缓存**（1 条 1.09 ms → 3001 条 4.08 ms → 6001 条 7.37 ms）；
+  `GET /api/v1/me` 逐条 `Path()`+`statFile`，1 条 1.14 ms → 3001 条 128.7 ms →
+  6001 条 255.5 ms。要修 `/me` 必须先给 textures 加 size 列（迁移 + 回填），本轮没做。
+  数字与推算都写进仓外待办，等拍板。
+- **文档与实测对齐六处**：README 中英与竞品表的覆盖率地板还写着 40.0（实测 41.8），实际
+  地板 45.0、本轮同一条命令量到 52.5；`docs/build.md` 说「前端为纯静态 SPA」，与真实存在的
+  三个 SSR 面矛盾；CONTRIBUTING 加语言的步骤只写了 SPA 一侧，照它做完只会得到「一半界面是
+  新语言」，且指向的 `resolveLocale` 早就不存在（实际白名单是同文件的 `asLocale`）；
+  ACCESSIBILITY 把「界面文案全部键值化」从口头承诺改成可查证表述，并写清对比度只量过默认主题；
+  竞品表的集成矩阵从「MySQL 两条腿」纠正为六条腿。
+
 ## 2026-11-07
 
 - **真机把诊断模式走通时抓到三件测试看不见的事，都已修（这是本轮最值钱的读数）**：
