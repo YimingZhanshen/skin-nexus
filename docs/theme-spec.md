@@ -53,15 +53,19 @@ SkinNexus 的应用样式定义了如下 CSS 自定义属性；**主题覆盖它
 
 ```css
 :root {
-  --bg: #0f1115;          /* 页面背景 */
-  --panel: #171a21;       /* 面板/卡片背景 */
-  --border: #262b36;      /* 边框 */
-  --text: #d7dae0;        /* 主文字 */
-  --muted: #8b93a1;       /* 次要文字 */
-  --accent: #4f8cff;      /* 主题色（按钮/链接/高亮） */
-  --danger: #e5534b;      /* 错误/危险 */
+  --bg: #101825;          /* 页面背景 */
+  --panel: #16202e;       /* 面板/卡片背景 */
+  --border: rgba(169, 138, 95, .24); /* 边框 */
+  --text: #e9edf1;        /* 主文字 */
+  --muted: #a8b4c3;       /* 次要文字 */
+  --accent: #b0453a;      /* 主题色（按钮/链接/高亮） */
+  --danger: #d9564c;      /* 错误/危险 */
 }
 ```
+
+> 上面七个默认值是 `server/cmd/skin-nexus/theme-base.css` 里 `:root` 的抄本，
+> `scripts/check-theme-contract.mjs` 会逐键比对两者（CI `docs` job）。真源改了而这里没改，
+> 主题作者就会照着过期色板写包——所以这条闸不许放宽，只能两边一起改。
 
 另有一个应用侧局部变量可覆盖：`--fg`（局部文字色，消费点自带 `inherit` 回退，只在少数组件里引用）。
 其余 `--text-dim` 之类的名字**没有宿主消费点**，覆盖了没有任何效果——只认 §3 列出的契约键与派生键。
@@ -72,7 +76,7 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 （否则后注入的 scoped 样式会在同特异性下压过主题，2026-10-31 azure-glass 管理 dock 回归）。
 无需 `!important`。访客首页（landing）消费**独立的落地页 token 命名空间**（见文末
 「落地页 token 命名空间」专节），主题切换即整站换肤。
-变量集以 `web/src/style.css` 的实际定义为准（AI 生成前可对照最新版）。
+变量集以 `server/cmd/skin-nexus/theme-base.css` 的实际定义为准（AI 生成前可对照最新版）。
 
 **`color-scheme` 也要自己声明**（`:root { color-scheme: light }` 或 `dark`，与你的 `--bg` 明暗一致）：
 插件页的 HTML 由宿主注入本主题的**根令牌**，`color-scheme` 是其中被带过去的一条；主题不写它，

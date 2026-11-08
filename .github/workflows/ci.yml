@@ -245,6 +245,12 @@ jobs:
           node-version: '22'
       - name: Links, tables, snapshot dating, env truth
         run: node scripts/check-docs.mjs
+      - name: Theme contract
+        # The documented token defaults are what a theme author copies from, so a
+        # stale §3 ships packs in colours the host no longer has. The packs
+        # themselves live in the sibling market repo and are not in this checkout;
+        # the gate says so out loud instead of passing quietly.
+        run: node scripts/check-theme-contract.mjs
 
   # Workflow hygiene: this repo's actions push images with GITHUB_TOKEN and gate
   # market signing behind environments, so template injection into an action input
