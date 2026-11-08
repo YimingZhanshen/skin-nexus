@@ -12,7 +12,7 @@ A self-hosted Minecraft skin station. Players upload and manage skins and capes 
 
 One Go binary + Vue 3, on MySQL, MariaDB, PostgreSQL or SQLite — AGPL-3.0. The protocol layer is compatible with [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) and its plugin ecosystem, so a legacy site can be migrated losslessly: primary keys preserved, player UUIDs unchanged, old password hashes still verifiable. A real production site has been migrated and cut over — 67 users / 61 textures, zero rows lost.
 
-Current release v0.5.0 (2026-11-01); `main` is 177 commits ahead of it (as of 2026-11-09).
+Current release v0.5.0 (2026-11-01); `main` keeps moving past it, one slice per commit.
 Iteration history lives in [`docs/CHANGELOG.md`](docs/CHANGELOG.md) (Chinese).
 
 ## Deploy
