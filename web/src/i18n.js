@@ -1,16 +1,18 @@
-// i18n: vue-i18n setup. Locale resolution: localStorage.skin_lang ->
-// skin_lang cookie -> navigator.language -> zh-CN. Fallback is always zh-CN.
+// i18n: vue-i18n setup. Locale resolution: skin_lang cookie ->
+// localStorage.skin_lang -> navigator.language -> zh-CN. Fallback is always zh-CN.
 //
-// The resolved locale is mirrored into a `skin_lang` cookie because the
-// server-rendered pages (texture detail, landing, device) pick their language
-// from it — without the mirror, switching to English in the app would leave
-// every crawlable page in Chinese. The same cookie is then read back here, so
-// the choice made on a server-rendered page survives the jump into the app:
-// ignoring it and re-writing it from localStorage/navigator would erase the
-// visitor's language on the first SPA load. Display preference, not a secret:
-// no HttpOnly (the SPA must write and read it), SameSite=Lax (a launcher
-// opening /device.html is a top-level navigation and must still carry it),
-// Secure only over https, and a year-long lifetime to match localStorage.
+// Both layers write the same two records: the SPA writes the cookie alongside
+// localStorage, and a server-rendered page writes the cookie when the visitor
+// clicks 中文/English on it. The cookie therefore carries whichever choice was
+// made *last*, which is why it is read first — a switch made on a
+// server-rendered page has to survive the jump into the app. localStorage comes
+// second and only matters where cookies are refused, because the server cannot
+// see it and a browser that blocks cookies cannot be given a mirror.
+//
+// The cookie is not HttpOnly for exactly that reason: the SPA must read and
+// write it. SameSite=Lax, because a launcher opening /device.html is a top-level
+// navigation and must still carry it; Secure only over https; a year-long
+// lifetime to match localStorage. Display preference, not a secret.
 import { createI18n } from 'vue-i18n'
 import zhCN from './locales/zh-CN.json'
 import en from './locales/en.json'
@@ -40,10 +42,10 @@ function readLangCookie() {
 }
 
 function initialLocale() {
+  const shared = readLangCookie()
+  if (shared) return shared
   const saved = asLocale(localStorage.getItem(LANG_COOKIE))
   if (saved) return saved
-  const mirrored = readLangCookie()
-  if (mirrored) return mirrored
   const nav = (navigator.language || '').toLowerCase()
   return nav.startsWith('en') ? 'en' : 'zh-CN'
 }
