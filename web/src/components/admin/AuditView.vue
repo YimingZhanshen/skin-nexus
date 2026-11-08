@@ -8,7 +8,7 @@ import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import Pager from '../Pager.vue'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 const rows = ref([])
 const total = ref(0)
@@ -58,6 +58,16 @@ function clearFilters() {
 }
 const filtering = () => !!(q.value.trim() || action.value)
 
+// The audit table stores machine names, one per write site in the server. Every
+// name the current build can write has a label in both locales — rule 8 of
+// check-locales reads the vocabulary back out of the Go source and proves it.
+// A row older than this build has no label and stays as written: raw is
+// unreadable, but `audit.action.seo_save` is unreadable and looks like a bug.
+function actionLabel(name) {
+  const key = `audit.action.${String(name || '').replace(/\./g, '__')}`
+  return te(key) ? t(key) : name
+}
+
 function actorLabel(row) {
   if (row.actorName) return row.actorName
   // 0 is the X-Admin-Token path: no account stands behind it, and pretending
@@ -105,7 +115,7 @@ onMounted(load)
       <select :value="action" :aria-label="t('admin.auditActionFilter')" style="max-width: 200px;"
               @change="setAction($event.target.value)">
         <option value="">{{ t('admin.auditActionAll') }}</option>
-        <option v-for="a in actions" :key="a" :value="a">{{ a }}</option>
+        <option v-for="a in actions" :key="a" :value="a" :title="a">{{ actionLabel(a) }}</option>
       </select>
       <button class="secondary" v-if="filtering()" @click="clearFilters">{{ t('dashboard.texClear') }}</button>
       <span class="muted">{{ t('admin.auditTotal', { total }) }}</span>
@@ -121,7 +131,7 @@ onMounted(load)
         <tr v-for="row in rows" :key="row.id">
           <td class="nowrap muted">{{ fmtTime(row.createdAt) }}</td>
           <td class="nowrap muted" :title="row.actorUid ? ('#' + row.actorUid) : ''">{{ actorLabel(row) }}</td>
-          <td class="nowrap mono">{{ row.action }}</td>
+          <td class="nowrap" :title="row.action">{{ actionLabel(row.action) }}</td>
           <td class="detail" :title="detail(row)">{{ detail(row) || '—' }}</td>
         </tr>
       </table>

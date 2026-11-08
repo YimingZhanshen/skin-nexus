@@ -11,7 +11,7 @@ import Pager from '../Pager.vue'
 import FilePicker from '../FilePicker.vue'
 import EmptyState from '../EmptyState.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const packages = ref([])
 const loading = ref(false)
 const loadError = ref('')
@@ -50,10 +50,14 @@ async function load(refresh = false) {
   }
 }
 
+// A catalog entry carries one string per language its author wrote. The panel's
+// own language wins; anything else is only a fallback, because the old order
+// tried zh-CN first and so an English panel showed Chinese package names.
 function label(obj, fallback) {
   if (!obj) return fallback || ''
-  for (const key of ['zh-CN', 'en']) if (obj[key]) return obj[key]
-  return Object.values(obj)[0] || fallback || ''
+  if (obj[locale.value]) return obj[locale.value]
+  for (const value of Object.values(obj)) if (value) return value
+  return fallback || ''
 }
 
 function planOf(p) {

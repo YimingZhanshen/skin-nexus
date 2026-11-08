@@ -127,8 +127,8 @@ const SSR_NS = new Set(['page', 'ui', 'detail', 'lib', 'edit', 'report', 'notfou
 const SSR_NONCOPY_LITERALS = new Set([
   'vcs.revision', 'vcs.time', // debug.ReadBuildInfo setting keys
   'favicon.ico', 'manifest.webmanifest', // static file names
-  'user.deleted', // audit action names (the SPA's audit.action.* keys mirror them)
-  'oidc.device_approve', 'oidc.device_deny', 'oidc.tokens_revoke_all', 'oidc.token_revoke', // audit events
+  'user.deleted', // plugin event name (internal/plugin/events_bridge.go owns the vocabulary)
+  'oidc.device_approve', 'oidc.device_deny', 'oidc.tokens_revoke_all', 'oidc.token_revoke', // audit actions, labelled by the SPA's audit.action.oidc__* keys
   'skinlib.detail.sidebar', // plugin slot id (internal/plugin/spec.go owns it)
   'auth.invalid_token', 'auth.account_disabled', // bearer codes written inline, not as const declarations
 ])
@@ -424,7 +424,123 @@ for (const locale of LOCALES) {
   }
 }
 
+// 8. every audit action must carry a label in both locales.
+//
+// The audit table stores a machine name per row, and the panel used to render
+// that column verbatim: an English panel showing `admin_user_password_reset`
+// is not bilingual, it is a log dump. The dictionary owns the sentences; the
+// Go source owns the vocabulary — so the vocabulary is read back out of the
+// source and checked, the same way rule 2 checks the error codes and rule 7 the
+// settings knobs.
+//
+// The scan is lexical rather than regex-per-line because an audit call carries
+// a detail map on the same line: `InsertAudit(ctx, uid, "seo_save",
+// map[string]any{"name": …})` has to yield `seo_save` and not the keys of the
+// blob. Top-level string arguments of an emitter call are exactly the actions
+// (account's bridge passes two — the web-side name and the plugin-side one);
+// anything nested inside a map or a call is not.
+const AUDIT_EMITTERS = new Set(['InsertAudit', 'detailInsertAudit', 'Audit', 'audit', 'auditEvent'])
+const AUDIT_ACTION = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)*$/
+const AUDIT_FLOOR = 60
+
+function skipQuoted(src, i) {
+  // returns [contents, index-after] for a Go string/rune literal starting at i
+  const q = src[i]
+  let j = i + 1
+  let out = ''
+  while (j < src.length && src[j] !== q) {
+    if (src[j] === '\\' && q !== '`') { out += src.slice(j, j + 2); j += 2; continue }
+    out += src[j]
+    j++
+  }
+  return [out, j + 1]
+}
+
+function auditArgs(src, start) {
+  // start = index just after the emitter's '('; collect depth-1 double-quoted literals
+  const found = []
+  let i = start
+  let depth = 1
+  while (i < src.length && depth > 0) {
+    const c = src[i]
+    if (c === '/' && src[i + 1] === '/') { while (i < src.length && src[i] !== '\n') i++; continue }
+    if (c === '/' && src[i + 1] === '*') { i += 2; while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i++; i += 2; continue }
+    if (c === '"' || c === '`' || c === "'") {
+      const at = i
+      const [text, next] = skipQuoted(src, i)
+      if (c === '"' && depth === 1 && AUDIT_ACTION.test(text)) found.push([text, at])
+      i = next
+      continue
+    }
+    if (c === '(' || c === '[' || c === '{') depth++
+    else if (c === ')' || c === ']' || c === '}') depth--
+    i++
+  }
+  return found
+}
+
+const auditActions = new Map()
+for (const rel of goSources('server')) {
+  const src = readFileSync(resolve(root, rel), 'utf8')
+  let i = 0
+  while (i < src.length) {
+    const c = src[i]
+    if (c === '/' && src[i + 1] === '/') { while (i < src.length && src[i] !== '\n') i++; continue }
+    if (c === '/' && src[i + 1] === '*') { i += 2; while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i++; i += 2; continue }
+    if (c === '"' || c === '`' || c === "'") { i = skipQuoted(src, i)[1]; continue }
+    if (/[A-Za-z_]/.test(c)) {
+      let j = i
+      while (j < src.length && /[A-Za-z0-9_]/.test(src[j])) j++
+      const ident = src.slice(i, j)
+      let k = j
+      while (k < src.length && /\s/.test(src[k])) k++
+      if (src[k] === '(' && AUDIT_EMITTERS.has(ident)) {
+        for (const [action, at] of auditArgs(src, k + 1)) {
+          if (!auditActions.has(action)) {
+            const line = 1 + src.slice(0, at).split('\n').length - 1
+            auditActions.set(action, `${rel}:${line}`)
+          }
+        }
+      }
+      i = j
+      continue
+    }
+    i++
+  }
+}
+if (auditActions.size < AUDIT_FLOOR) {
+  errors.push(`audit actions: only ${auditActions.size} parsed — the emitter call shape changed and this check is now blind`)
+}
+// `oidc.device_approve` would nest two levels deep inside `audit.action`, so a
+// dotted action maps to a double underscore and stays a single key.
+const auditKeyOf = (action) => `audit.action.${action.replace(/\./g, '__')}`
+{
+  const want = new Set([...auditActions.keys()].map(auditKeyOf))
+  for (const locale of LOCALES) {
+    for (const [action, where] of auditActions) {
+      const key = auditKeyOf(action)
+      if (!sets[locale === LOCALES[0] ? 0 : 1].has(key)) {
+        errors.push(`${locale}: no ${key} entry for the audit action written at ${where}`)
+      }
+    }
+    const block = loaded[locale].audit && loaded[locale].audit.action
+    if (!block || typeof block !== 'object') {
+      errors.push(`${locale}: audit.action is missing — the panel has no label to fall back to`)
+      continue
+    }
+    for (const key of Object.keys(block)) {
+      if (!want.has(`audit.action.${key}`)) errors.push(`${locale}: audit.action.${key} matches no audit action in the server (dead copy)`)
+      // Same message-syntax rule as the settings sentences: these strings are
+      // compiled by vue-i18n on first use, so a bare @ in one label throws when
+      // the operator filters by that action rather than on page load.
+      const bare = String(block[key]).replace(/\{[^{}]*\}/g, '')
+      if (/[@|]/.test(bare)) errors.push(`${locale}: audit.action.${key} contains a bare @ or | that vue-i18n reads as message syntax — write it as {'@'} / {'|'}`)
+    }
+  }
+}
+
 if (errors.length) {
+
   console.error('check-locales: FAILED')
   for (const e of errors) console.error('  - ' + e)
   process.exit(1)

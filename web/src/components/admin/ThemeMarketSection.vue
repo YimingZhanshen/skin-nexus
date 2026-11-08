@@ -11,7 +11,7 @@ import { api } from '../../api.js'
 import FilePicker from '../FilePicker.vue'
 
 const emit = defineEmits(['changed'])
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const packages = ref([])
 const loading = ref(false)
@@ -46,10 +46,13 @@ async function load(refresh = false) {
   }
 }
 
+// The panel's own language comes first: the old order tried zh-CN by hard-coded
+// precedence, so an English panel showed the Chinese name anyway.
 function label(obj, fallback) {
   if (!obj) return fallback || ''
-  for (const key of ['zh-CN', 'en']) if (obj[key]) return obj[key]
-  return Object.values(obj)[0] || fallback || ''
+  if (obj[locale.value]) return obj[locale.value]
+  for (const value of Object.values(obj)) if (value) return value
+  return fallback || ''
 }
 
 async function install(p) {
