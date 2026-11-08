@@ -480,6 +480,13 @@ func main() {
 			} else if n > 0 {
 				log.Printf("access_log_details: cleared credentials on %d expired row(s) (%s after capture)", n, accesslog.CredentialTTL)
 			}
+			// Join sessions expire in 120 seconds and nothing had ever deleted
+			// them: the table only ever grew, while hasJoined scanned it.
+			if n, err := st.PurgeJoinSessions(bg); err != nil {
+				log.Printf("ygg_join_sessions: purge failed: %v", err)
+			} else if n > 0 {
+				log.Printf("ygg_join_sessions: purged %d expired row(s)", n)
+			}
 		}
 	}()
 	backend := webapi.New(st, ts, yggSvc)

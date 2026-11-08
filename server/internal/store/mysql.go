@@ -338,6 +338,20 @@ func (m *Mysql) FindLiveJoins(ctx context.Context, uuid string, now time.Time) (
 	return out, rows.Err()
 }
 
+// PurgeJoinSessions deletes join sessions past their expiry and returns the
+// count for the operator log. ExpiresAt only masked these rows: a 120-second
+// lifetime with no writer ever removing them meant the table grew with traffic
+// while hasJoined scanned it. No horizon parameter — a row is dead the moment
+// expires_at passes, and FindLiveJoins already demands expires_at > now.
+func (m *Mysql) PurgeJoinSessions(ctx context.Context) (int64, error) {
+	res, err := m.db.ExecContext(ctx,
+		`DELETE FROM ygg_join_sessions WHERE expires_at < ?`, m.now().UTC())
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func nullableInt(v int64) interface{} {
 	if v == 0 {
 		return nil
