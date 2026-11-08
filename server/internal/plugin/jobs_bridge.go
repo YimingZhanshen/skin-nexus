@@ -200,6 +200,27 @@ func (rt *runtime) jsJobResume(call goja.FunctionCall) goja.Value {
 	return rt.vm.ToValue(true)
 }
 
+// cancelRequested reads the live row for one job, because the job object a step
+// is handed is a snapshot taken before it started: its own cancelRequested field
+// describes the moment the step began and cannot change while it runs. A long
+// step is the only case where a plugin can still act on a cancellation, and a
+// step has no route user — which is why this call accepts the job identity too
+// instead of demanding an admin route like the four commands above.
+func (rt *runtime) jsJobCancelRequested(call goja.FunctionCall) goja.Value {
+	if !rt.info.hasPermission(PermScheduleJobs) || rt.jobStore == nil {
+		rt.throw(errors.New("jobs.unavailable: queue is not configured"))
+	}
+	if rt.routeUser == nil && rt.jobUser == nil {
+		rt.throw(errors.New("jobs.forbidden: neither an admin route nor a job step"))
+	}
+	id := call.Argument(0).String()
+	j, err := rt.jobStore.Get(rt.jobCtx(), id)
+	if err != nil || j.Plugin != rt.info.Name {
+		rt.throw(errors.New("jobs.not_found"))
+	}
+	return rt.vm.ToValue(j.State == "cancelling" || j.State == "cancelled")
+}
+
 // runJobStep executes one manifest-declared job handler in this runtime. The
 // caller must use a dedicated job VM; the route VM's mutex is never touched.
 func (rt *runtime) runJobStep(ctx context.Context, j *jobs.Job) (jobStepResult, error) {
@@ -224,7 +245,11 @@ func (rt *runtime) runJobStep(ctx context.Context, j *jobs.Job) (jobStepResult, 
 		rt.routeCtx = ctx
 		return reg.fn(goja.Undefined(), rt.vm.ToValue(map[string]any{
 			"jobId": j.ID, "attempt": j.Attempts + 1, "payload": payload,
-			"cursor": cursor, "cancelRequested": false,
+			"cursor": cursor,
+			// A step begins only when the row was not being cancelled, so this
+			// snapshot is genuinely false here. Mid-step, the handler polls
+			// skin.jobs.cancelRequested instead.
+			"cancelRequested": false,
 		}))
 	})
 	if err != nil {

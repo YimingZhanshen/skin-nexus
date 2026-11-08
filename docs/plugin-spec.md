@@ -447,11 +447,14 @@ manifest 声明处理器：
 ```js
 skin.jobs.register("blessing-import", function (job) {
   // job = {jobId, attempt, payload, cursor, cancelRequested}
+  // cancelRequested 是这一步**开始时**读到的快照：长步里它不会自己变 true。
+  // 想在步内感知取消，轮询 skin.jobs.cancelRequested(job.jobId)。
   // delayMS: 可选，0–60000；到点前不会被再次领取
   return { done: false, cursor: {...}, progress: 40, message: "...", delayMS: 250 };
 });
 skin.jobs.submit("blessing-import", {...}); // 仅 admin 路由
 skin.jobs.list(1) / status(id) / cancel(id) / resume(id); // 仅 admin 路由
+skin.jobs.cancelRequested(id); // 只读；job 步内也可调用（步不是 admin 路由）
 ```
 
 - 任务持久化在 `host_jobs`，按 step 保存 `cursor/progress`；每步结束释放租约并重新排队，
@@ -460,6 +463,11 @@ skin.jobs.list(1) / status(id) / cancel(id) / resume(id); // 仅 admin 路由
   塞进一个 step 会触发 `net.rate_limited`。用 `delayMS` 拉开步距，长任务拆成多条记录级 step。
 - 每个 step 在插件专属 job VM 中执行（不占请求 VM 锁）；超时/异常按 `maxAttempts` 退避重试。
 - 取消在 step 之间生效（含排队中的任务）；`cancel` 后任务状态为 `cancelling/cancelled`，`resume` 可重新排队。
+  一个正在跑的长步不会被中断——宿主不能打断 Go 侧的 VM 调用，所以步内只能自己去看：
+  轮询 `skin.jobs.cancelRequested(jobId)`（本插件的 job 才返回 true，别人的 job 报 `jobs.not_found`），
+  看到 true 就把手上的一步收尾并 `return {done:true, ...}` 或带着 cursor 退出，下一步宿主就不再领取。
+  这是 `jobs.v1` 上的**加法**方法：老宿主没有它，跨宿主插件请先
+  `typeof skin.jobs.cancelRequested === 'function'` 再调用，不要指望它一定在。
 - 仅管理员可提交/查看/取消/恢复；任务载荷与进度不对普通用户开放。
 
 ## 11. 示例与官方插件

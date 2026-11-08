@@ -221,6 +221,8 @@ func (rt *runtime) installAPI() {
 			"status":   rt.jsJobStatus,
 			"cancel":   rt.jsJobCancel,
 			"resume":   rt.jsJobResume,
+			// Additive on jobs.v1: read the live cancel flag from inside a step.
+			"cancelRequested": rt.jsJobCancelRequested,
 		},
 		"account": map[string]interface{}{
 			"get":    rt.jsAccountGet,
