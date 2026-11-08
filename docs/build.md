@@ -84,7 +84,7 @@ docker build -t skin-nexus:latest .   # 本地源码构建（离线/内网场景
 | integration-portable | 两者 | PostgreSQL 16 与 SQLite 文件库，同一条命令；抓方言与序列差异 |
 | web | 两者 | `npm ci` + `check-locales.mjs` + `npm run build` + `npm audit --audit-level=high`（low 及以上另写 step summary，不阻断） |
 | codesql | 两者 | CodeQL（go + javascript-typescript），告警进 security tab 作审查队列，非发布门禁 |
-| docs | 两者 | `check-docs.mjs`：死链 / 表格 / 快照 dating / env 双向真源 |
+| docs | 两者 | `check-docs.mjs`：死链 / 表格 / 快照 dating / env 双向真源；`check-theme-contract.mjs`：`theme-spec.md` §3 契约默认值与 `theme-base.css` 逐键比对 + 主题包对宿主令牌的悬空引用（包在姊妹仓，本 checkout 里没有时明确打印跳过而不算通过） |
 | zizmor | 两者 | workflow 自身卫生（模板注入、未固定第三方 action），`continue-on-error`，非阻断 |
 | docker-build | **仅 PR** | `docker build --pull`，不登录 registry、不推送、不打 tag、不写 registry 缓存——只证明多阶段 Dockerfile 仍可构建 |
 | docker | **仅 push** | 多阶段镜像推 GHCR：`ghcr.io/yimingzhanshen/skin-nexus:latest` 与 `:sha-<commit>`（registry + GHA 缓存） |
