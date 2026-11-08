@@ -233,8 +233,19 @@ for (const rel of SSR_PAGE_DIRS.flatMap((dir) => goSources(dir))) {
 // 5. every key a view asks for must exist. vue-i18n renders the raw path when a
 //    lookup misses, and parity between the two dictionaries cannot catch it: a key
 //    missing from *both* files is perfectly "equal". This scans the literals, plus
-//    the prefix of every template-literal key like `admin.kind.${row.kind}` (whose
-//    enumerated values are checked by rules 1 and the enum itself at runtime).
+//    every dynamically built key — `t(\`admin.kind.${x}\`)`, `t('admin.diag.' + x)`,
+//    and the same shapes assigned to a variable before the call.
+//
+//    A dynamic key can only be checked as a family: the gate requires at least one
+//    entry under the prefix in each locale. An empty object is not a family — the
+//    lookup misses for every value, which is the failure this rule exists to catch.
+//
+//    The floor below is the other half. Dead UI keys cannot be listed by a rule
+//    (a dynamic lookup looks dead to any literal scan, and the 22 keys removed in
+//    the same round as this floor prove the heuristic would false-positive), so
+//    the dictionary may not silently shrink: raise UI_KEY_FLOOR when keys are
+//    added, and never lower it without a reason in the commit message.
+const UI_KEY_FLOOR = 992
 const UI_DIRS = ['web/src']
 
 function walk(dir) {
@@ -264,6 +275,12 @@ const LITERAL_KEY = /\bt\(\s*['"]([a-z][\w-]*(?:\.[\w-]+)+)['"]/g
 // old pattern demanded a dot immediately before `${`, so an enumeration could
 // lose entries in both locales and the gate stayed green.
 const TEMPLATE_KEY = /\bt\(\s*`([^`$]*)\$\{/g
+// Keys built one step away from the call site: a dotted string that ends where
+// the interpolation begins (`const key = \`admin.settingsGroup.${g}\`; t(key)`),
+// and a quoted prefix concatenated with a variable (`t('admin.diag.' + it.id)`).
+// The slash-free shape is what keeps API paths out of it.
+const DETACHED_KEY = /[`'"]([a-z][\w-]*(?:\.[\w-]+)*\.)\$\{/g
+const CONCAT_KEY = /['"]([a-z][\w-]*(?:\.[\w-]+)*\.)['"]\s*\+/g
 
 function leafCount(node) {
   if (node && typeof node === 'object') return Object.values(node).reduce((n, v) => n + leafCount(v), 0)
@@ -302,6 +319,18 @@ for (const rel of UI_DIRS.flatMap(walk)) {
       errors.push(`${rel}:${lineOf(m.index)}: t(\`${m[1]}\${…}\`) has no family under '${m[1].replace(/\.$/, '')}' in ${missing.join('/')} — an enumeration needs at least one entry per locale`)
     }
   }
+  for (const pat of [DETACHED_KEY, CONCAT_KEY]) {
+    for (const m of text.matchAll(pat)) {
+      const missing = LOCALES.filter((l) => !familyExists(loaded[l], m[1]))
+      if (missing.length) {
+        errors.push(`${rel}:${lineOf(m.index)}: dynamic key under '${m[1].replace(/\.$/, '')}' has no entry in ${missing.join('/')} — an enumeration needs at least one entry per locale`)
+      }
+    }
+  }
+}
+
+if (sets[0].size < UI_KEY_FLOOR) {
+  errors.push(`UI dictionary has only ${sets[0].size} keys, floor is ${UI_KEY_FLOOR} — keys were removed without a reason`)
 }
 
 
