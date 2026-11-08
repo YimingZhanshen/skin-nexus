@@ -53,6 +53,15 @@
   `Manager.MarketPlan`、`GET /api/v1/stats` + handler。每条都重新 grep 全仓（含 .vue 与
   生成物目录）确认零引用；`/me` 那个弱哈希数字实际由 `/api/admin/v1/overview` 提供，
   真机验过两边行为（旧端点 404、overview 仍回数）。
+- **本轮 CI 红过 8 个提交，两条原因都是我自己造的**（记账，不粉饰）：
+  ① S1 把 `internal/account` 的集成腿加进三条真库腿，却没有串行化——account 腿和 store 腿
+  共用同一个测试库，两边都在迁移前抢着建/清 `schema_migrations`，SQLite 报
+  `UNIQUE constraint failed: schema_migrations.file`、Postgres 报类型目录唯一键冲突；
+  修在 `3188605`（真库腿 `-p 1`，理由写进 workflow 注释）。② S2 带进 gofmt 债
+  （`internal/i18n/codes.go`、`internal/oidc/userapi_test.go`），`server` job 一路红在
+  `test -z "$(gofmt -l .)"`，到 S10 才被顺带清掉。两条从 S9 之后由 CI 全程绿覆盖。
+  流程教训：手工闸清单里必须显式列出 `gofmt -l` 与 `go vet -tags integration`，
+  并且**每推一条就回查那一条 run**，不要攒到收尾。
 - **性能只量不改（S23）**：落地页每请求三个 COUNT 加一次 likes 榜，榜那条 SQL 的计划里挂着
   `USE TEMP B-TREE FOR ORDER BY` 和一条对全部公开材质的相关子查询——**成本随整站公开库大小
   线性增长且无缓存**（1 条 1.09 ms → 3001 条 4.08 ms → 6001 条 7.37 ms）；
