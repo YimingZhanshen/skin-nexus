@@ -83,7 +83,7 @@ Server-rendered SEO, shareable texture detail URLs, a closed texture lifecycle, 
 | OIDC passwordless login | ✅ built in | ⚠️ needs Janus | ⚠️ discovery under-announces | ⚠️ weak details |
 | Texture lifecycle (pixels decide model / violations block re-publish / audited delete with evidence) | ✅ | ⚠️ report delete skips the reference count | ❌ files stay forever | ❌ delete does not count |
 | Error contract (stable code + build gate) | ✅ | ❌ coarse int codes | ⚠️ codes, no gate | ❌ prose only |
-| CI gates (coverage / multi-engine integration matrix) | ⚠️ floor 40% + MySQL/MariaDB/PG/SQLite, six combinations | ⚠️ Codecov, no threshold | ✅ hard 90% | ❌ no CI |
+| CI gates (coverage / multi-engine integration matrix) | ⚠️ floor 45% + MySQL/MariaDB/PG/SQLite, six combinations | ⚠️ Codecov, no threshold | ✅ hard 90% | ❌ no CI |
 | Deployment shape | Go binary / Docker | PHP 8.1 (EOL) + Laravel 10 | Go + PostgreSQL + Redis | FastAPI + SQLite |
 
 </details>

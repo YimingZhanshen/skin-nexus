@@ -57,8 +57,8 @@ URL 的插件 filter 换取 5182 RPS 的纹理分发，代价记在 `compat-matr
 |---|---|---|---|---|---|
 | 错误体带稳定 code | ✅ `{error=code, code, message}` `adminapi/errors.go:31-35`；码目录 `server/internal/i18n/codes.go` | ✅ 三元组 `{object, operation, reason[, params]}`，reason 是闭合的 18 值枚举、**完全不含文案**（`internal/util/response.go:18-37,107-124`） | ❌ `{"detail": "<人话>"}`，无码（`routers/site_routes.py:168`） | ❌ `{code, message}` 的 code 是粗粒度整数 0/1/2，且 message 由后端 `trans()` 本地化（`app/helpers.php:27-46`） | 未取证 |
 | 错误契约被机器强制 | ✅ AST 闸：无码、码非常量、文案含中文一律失败（`server/internal/errorgate/errorgate.go`，两个包的 `errorgate_test.go`） | ⚠️ 未见对应闸 | ❌ 无 CI 可言（`.github/` 不存在） | ❌ | 未取证 |
-| 覆盖率阈值 | ⚠️ 地板 40.0（实测 41.8）+ 0% 包集合钉死，`.github/workflows/ci.yml:41-53`、`server/testdata/coverage-floor.txt` | ✅ **硬阈值 90%**（`.github/workflows/docker-publish.yml:75-83`） | ❌ | ⚠️ 上传 Codecov 但**不设阈值**（`.github/workflows/CI.yml:78-85`） | 未取证 |
-| 集成测试真库矩阵 | ✅ MySQL 8.0 + 5.7 两条腿 `ci.yml:71-96` | 未取证（CI 只有一个 docker 文件） | ❌ 无 CI | ⚠️ 有 PHPUnit 矩阵（其 CI `:78`） | ✅ SQLite/MySQL 双后端（`config.go` 方言分支） |
+| 覆盖率阈值 | ⚠️ 地板 45.0（本地实测 52.5，2026-11-09）+ 0% 包集合钉死，`.github/workflows/ci.yml:35-53`、`server/testdata/coverage-floor.txt` | ✅ **硬阈值 90%**（`.github/workflows/docker-publish.yml:75-83`） | ❌ | ⚠️ 上传 Codecov 但**不设阈值**（`.github/workflows/CI.yml:78-85`） | 未取证 |
+| 集成测试真库矩阵 | ✅ 六条腿：MySQL 8.0/5.7 + MariaDB 11.4/10.11 + PostgreSQL 16 + SQLite 文件库，每腿都跑 `./internal/store/ ./internal/account/`（`ci.yml:72-180`） | 未取证（CI 只有一个 docker 文件） | ❌ 无 CI | ⚠️ 有 PHPUnit 矩阵（其 CI `:78`） | ✅ SQLite/MySQL 双后端（`config.go` 方言分支） |
 | 前端测试/lint 门禁 | ❌ 无 vitest/eslint 配置 | ⚠️ 有 `eslint.config.ts` 但无对应 job | ⚠️ devDeps 声明了 eslint/prettier，无执行入口 | ✅ `yarn lint && fmt:check && type:check`（`CI.yml:87-92`） | 未取证 |
 | 暴露给前端的公共配置是固定白名单 | ✅ 5 个键硬编码 `webapi/webapi.go:414-431` | ✅ 17 键显式列举并校验数量（`internal/service/publicsite/public.go:64-69`） | ⚠️ 有白名单但内联在一个大 handler 里（`routers/site_routes.py:318-366`） | ✅ 只有 4 个键（`HomeController.php:35-40`） | ❌ 模板服务端直读 Config，无前导白名单面 |
 | env 唯一清单 + 未知变量告警 | ✅ `server/internal/config/env.go`，AST 双向对齐 `env_test.go:86,143` + 文档表 `scripts/check-docs.mjs:122-150` | ❌ | ❌ | ❌ | ❌ |

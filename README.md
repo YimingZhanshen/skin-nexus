@@ -82,7 +82,7 @@ docker compose -f docker-compose.quickstart.yml up -d
 | OIDC 免密登录 | ✅ 内置 | ⚠️ 需 Janus 外挂 | ⚠️ discovery 不全 | ⚠️ 细节弱 |
 | 材质生命周期（像素定模型 / 违规禁公开 / 删除留证） | ✅ | ⚠️ 举报删文件跳过引用计数 | ❌ 删除后文件永久留盘 | ❌ 删除不计数 |
 | 错误契约（稳定 code + 构建门禁） | ✅ | ❌ 粗粒度整数 code | ⚠️ 有码无门禁 | ❌ 只有人话 |
-| CI 质量闸（覆盖率 / 多引擎集成矩阵） | ⚠️ 地板 40% + MySQL/MariaDB/PG/SQLite 六组合 | ⚠️ 传 Codecov 不设阈值 | ✅ 硬阈值 90% | ❌ 无 CI |
+| CI 质量闸（覆盖率 / 多引擎集成矩阵） | ⚠️ 地板 45% + MySQL/MariaDB/PG/SQLite 六组合 | ⚠️ 传 Codecov 不设阈值 | ✅ 硬阈值 90% | ❌ 无 CI |
 | 部署形态 | Go 单二进制 / Docker | PHP 8.1（已 EOL）+ Laravel 10 | Go + PostgreSQL + Redis | FastAPI + SQLite |
 
 </details>

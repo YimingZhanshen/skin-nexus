@@ -45,7 +45,11 @@ npm run build     # 产物 web/dist
 npm run dev       # 本地开发（Vite 热更新；API 代理按 vite.config.js）
 ```
 
-前端为纯静态 SPA（Vue 3 + Vite + vue-i18n + skinview3d），构建后由后端在 `/` 挂载。
+前端主体是静态 SPA（Vue 3 + Vite + vue-i18n + skinview3d），构建产物由后端在 `/` 挂载。
+但「纯静态」这个说法不成立：三个页面由 Go 直接渲染 HTML，不走 SPA —— 落地页 `GET /`
+（`renderLanding`）、材质详情页 `GET /skinlib/{tid}`（`texturePageHandler`）、皮肤库列表面向
+爬虫的预渲染（`prerenderSkinlib`）。它们的文案吃 `internal/webi18n` 的目录，不是
+`web/src/locales/`，改这几页的中文要同时动 Go 侧的注入点。
 
 文案平价由 `scripts/check-locales.mjs`（CI 的 web job）钉住，三处一起查：SPA 词典
 `web/src/locales/`、后端错误码目录（`internal/i18n` + `internal/account` 声明的码）、服务端渲染页的

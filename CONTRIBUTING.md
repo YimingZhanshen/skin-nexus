@@ -18,21 +18,42 @@
 
 ## 1. 语言翻译（i18n）
 
-界面文案全部键值化，前端语言包在 `web/src/locales/`（`zh-CN.json` 为键基准，
-`en.json` 为完整样例）。新增一门语言（以 `ja` 为例）：
+界面文案全部键值化，但**词典有两处**，不是一处：
 
-1. 复制 `web/src/locales/zh-CN.json` 为 `ja.json`，逐键翻译（**全量键对齐**，
-   漏键会回退 zh-CN；含 `%{name}` 之类插值占位符的键保持占位符原样）；
-2. 在 [`web/src/i18n.js`](web/src/i18n.js) 注册：`messages` 加 `'ja': ja`，
-   并把语言代码加进 locale 保存值白名单（同文件 resolveLocale 判断处）；
-3. 在 [`web/src/App.vue`](web/src/App.vue) 的语言下拉（`<option>` 列表）加一项；
-4. 自检：`cd web && npm ci && npm run build`，起站后右上角切换语言逐页检查。
+| 覆盖的界面 | 目录 | 谁读它 |
+|---|---|---|
+| SPA：登录后的全部页面与管理面板 | `web/src/locales/`（`zh-CN.json` 为键基准，`en.json` 为完整样例） | vue-i18n |
+| 服务端渲染页：落地页 `GET /`、材质详情页 `GET /skinlib/{tid}`、皮肤库列表的爬虫预渲染 | `server/internal/webi18n/catalogs/`（一门语言一个 JSON） | Go 渲染时 `webi18n.T` |
+
+两处各有多少键由 `node scripts/check-locales.mjs` 直接报出（当前 1117 个 UI key、
+116 个 SSR key）。这道闸同时核：两侧各自的中英键集相等、每个后端错误码都有词条、
+渲染模板里不留未入表的中文，并把 Go 源码里的词表读回来对账（错误码目录、设置项
+说明、审计动作名、访问日志 kind）——新增了机器名却忘了配文案，PR 会被拦下。
+
+**只改现有语言的措辞**：动 JSON 就够，不需要动 Go 代码。
+
+**新增一门语言**（以 `ja` 为例）：两侧都要接线，只接一侧的结果是「一半界面是
+日文、另一半还是中文」，而且没有编译错误可提示你。
+
+1. SPA：复制 `web/src/locales/zh-CN.json` 为 `ja.json` 逐键翻译（**全量键对齐**，
+   漏键会回退 zh-CN；含 `%{name}` 之类插值占位符的键保持占位符原样）→
+   [`web/src/i18n.js`](web/src/i18n.js) 的 `messages` 加 `'ja': ja`，并把 `ja` 加进
+   同文件的 `asLocale` 白名单（cookie 与 localStorage 里读到的值都过它）→
+   [`web/src/App.vue`](web/src/App.vue) 的语言下拉（`<option>` 列表）加一项。
+2. SSR：新增 `server/internal/webi18n/catalogs/ja.json` → `webi18n.go` 的
+   `//go:embed` 行、语言常量、`normalize` 判断（它现在只认 `en`，其余一律回退
+   zh-CN）→ `cmd/skin-nexus/langswitch.go` 的 `langSwitchFor` 语言列表与
+   `langLabelKey`，否则页面上切不到它、`hreflang` 交替链接也不会带上它。
+3. 门禁：`scripts/check-locales.mjs` 顶部的 `LOCALES` 加上 `ja`——不加的话平价
+   检查仍然只比中英，新语言可以缺键而无人报错。
+4. 自检：`node scripts/check-locales.mjs`、`cd web && npm ci && npm run build`，
+   起站后逐页切换检查；SSR 页要单独看，它不吃 vue-i18n 的回退。
 
 补充规则：
 
-- 服务端只发错误码（`server/internal/i18n`），翻译全部落在前端语言包——改翻译**不需要动 Go 代码**；
+- 服务端只发错误码（`server/internal/i18n`），SPA 的译文落 `web/src/locales/`；SSR 页的译文落 `internal/webi18n/catalogs/`。「改翻译不需要动 Go 代码」这句只对**改措辞**成立，对**加语言**不成立；
 - 术语沿用 `zh-CN.json` 既有译法（皮肤/披风/角色/衣柜/皮肤库/邀请码…），新概念先在 PR 描述里定译名；
-- 翻译 PR 也走 CI（前端构建 job 会拦语法/引用错误）。
+- 翻译 PR 也走 CI（web job 跑 check-locales 与前端构建）。
 
 ## 2. 主题包（UI 自定义）
 
