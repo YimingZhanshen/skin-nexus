@@ -118,7 +118,7 @@ if (!existsSync(packsDir)) {
     // in theme-base.css is what check 2 above catches, so the list is printed
     // rather than asserted.
     const overridden = [...refs].filter((k) => hostTokens.has(k)).sort()
-    console.log(`  themes/${dirName}: ${overridden.length} host tokens overridden${overridden.length ? ' — ' + overridden.join(' ') : ''}`)
+    console.log(`  themes/${dirName}: ${overridden.length} host tokens consumed${overridden.length ? ' — ' + overridden.join(' ') : ''}`)
   }
 }
 
