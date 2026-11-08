@@ -70,14 +70,24 @@ docker build -t skin-nexus:latest .   # 本地源码构建（离线/内网场景
 
 ## 五、CI 产物（推荐部署来源）
 
-`.github/workflows/ci.yml` 定义 4 个 job（PR 跑 3 个——docker 仅 push main 触发；integration 含双矩阵腿）：
+`.github/workflows/ci.yml` 定义 10 个 job，push 与 PR 各跑 9 个（`docker` 仅 push、`docker-build` 仅 PR；integration 三腿内含矩阵，实际容器数更多）：
 
-| job | 内容 |
-|---|---|
-| server | `go build` + `go vet` + `go test ./...` |
-| integration | **六种引擎组合**各跑一遍 `-tags integration` 存储层往返：MySQL 8.0 / 5.7、MariaDB 11.4 / 10.11、PostgreSQL 16、SQLite 文件库。5.7 专抓版本差异 SQL，后几家专抓只有单一引擎能吃下的写法（大小写折叠的 LIKE、`DELETE … LIMIT`、显式 id 后的序列） |
-| web | `npm ci && npm run build` |
-| docker | 多阶段镜像推 GHCR：`ghcr.io/yimingzhanshen/skin-nexus:latest` 与 `:sha-<commit>`（GHA 缓存；仅 push main 触发推送，PR 构建不推镜像） |
+| job | 触发 | 内容 |
+|---|---|---|
+| server | 两者 | `gofmt` 空输出 + `go build` + `go vet`（含 `-tags integration`）+ `go test ./...` 覆盖率地板与 0% 包集合比对 + 插件工具链测试 |
+| integration | 两者 | MySQL 8.0 / 5.7 各跑 `-tags integration ./internal/store/ ./internal/account/`。5.7 专抓版本差异 SQL（login COLLATE / prepared 1267） |
+| integration-mariadb | 两者 | MariaDB 11.4 / 10.11，同一条命令；抓只有 MySQL 自家扩展能吃下的写法 |
+| integration-portable | 两者 | PostgreSQL 16 与 SQLite 文件库，同一条命令；抓方言与序列差异 |
+| web | 两者 | `npm ci` + `check-locales.mjs` + `npm run build` + `npm audit --audit-level=high`（low 及以上另写 step summary，不阻断） |
+| codesql | 两者 | CodeQL（go + javascript-typescript），告警进 security tab 作审查队列，非发布门禁 |
+| docs | 两者 | `check-docs.mjs`：死链 / 表格 / 快照 dating / env 双向真源 |
+| zizmor | 两者 | workflow 自身卫生（模板注入、未固定第三方 action），`continue-on-error`，非阻断 |
+| docker-build | **仅 PR** | `docker build --pull`，不登录 registry、不推送、不打 tag、不写 registry 缓存——只证明多阶段 Dockerfile 仍可构建 |
+| docker | **仅 push** | 多阶段镜像推 GHCR：`ghcr.io/yimingzhanshen/skin-nexus:latest` 与 `:sha-<commit>`（registry + GHA 缓存） |
+
+`./internal/account/` 挂在三条真库腿上：它的复用名测试是 UUID 零漂移铁律唯一的自动化回归
+（改名后旧名仍持有原 OfflineUUID，重建同名角色必须答 409 而非 500），且跨引擎成立——
+`dbx.IsDupKey` 对 MySQL/MariaDB/PostgreSQL/SQLite 的唯一键冲突都能归类。
 
 server/web 两个 job 启用 Go modules 与 npm 依赖缓存（`cache-dependency-path`），
 workflow 级 `concurrency` 会在同一 ref 有新推送时取消旧运行，避免排队浪费额度。

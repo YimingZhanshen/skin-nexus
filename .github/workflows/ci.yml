@@ -34,8 +34,8 @@ jobs:
           go vet -tags integration ./...
       - name: Test and coverage floor
         # One run does both jobs: the suite must pass, and its coverage must not
-        # slide. The number is a ratchet, not a target — 41.8% measured
-        # 2026-11-01 against the 40.0 floor in server/testdata/coverage-floor.txt.
+        # slide. The number is a ratchet, not a target — 48.7% measured
+        # 2026-11-05 against the 45.0 floor in server/testdata/coverage-floor.txt.
         # The second half is the part that actually pays: a package losing its
         # last test shows up there even when the total barely moves.
         run: |
@@ -62,9 +62,13 @@ jobs:
       - name: Test plugin tooling
         run: go test ./cmd/skin-plugin/... ./internal/marketfmt/... ./internal/signedpkg/...
 
-  # MySQL round-trip suite over the full 0001-0019 schema (build tag `integration`).
+  # MySQL round-trip suite over the full migration tree (build tag `integration`).
   # 5.7 + 8.0 matrix: two production incidents were 5.7-only SQL issues that
   # the 8.0-only suite could not catch (login COLLATE / prepared 1267).
+  # ./internal/account/ rides along on every engine leg: its reused-name test is
+  # the only automated guard on 铁律 2 (a renamed-away name still owns its
+  # OfflineUUID), and it is engine-agnostic — dbx.IsDupKey classifies the
+  # collision for MySQL/MariaDB/PostgreSQL/SQLite alike.
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -93,7 +97,7 @@ jobs:
           go-version: '1.26'
           cache-dependency-path: server/go.sum
       - name: Integration test
-        run: go test -tags integration ./internal/store/
+        run: go test -tags integration ./internal/store/ ./internal/account/
 
   # The same suite against the other engines the store now claims to speak.
   # MariaDB is on the MySQL wire, so it is the cheap way to catch a statement
@@ -129,7 +133,7 @@ jobs:
           go-version: '1.26'
           cache-dependency-path: server/go.sum
       - name: Integration test
-        run: go test -tags integration ./internal/store/
+        run: go test -tags integration ./internal/store/ ./internal/account/
 
   integration-portable:
     runs-on: ubuntu-latest
@@ -170,7 +174,7 @@ jobs:
         # service is also up for that leg and simply goes unused.
         run: |
           rm -rf /tmp/skin-nexus-test && mkdir -p /tmp/skin-nexus-test
-          go test -tags integration ./internal/store/
+          go test -tags integration ./internal/store/ ./internal/account/
 
   web:
     runs-on: ubuntu-latest
@@ -195,11 +199,12 @@ jobs:
       - name: Build
         run: npm run build
       - name: Dependency audit
-        # The line is critical-only because four `high` advisories today need a
-        # vue-i18n 9→11 major upgrade — a migration large enough that folding it
-        # into another round would make both harder to review. They are listed in
-        # the step summary so the debt stays visible without blocking a build.
-        run: npm audit --audit-level=critical
+        # The line used to be critical-only to defer four `high` advisories that
+        # needed a vue-i18n 9→11 upgrade. That upgrade shipped (package.json pins
+        # ^11.4.16) and `npm audit --audit-level=low` now reports 0 vulnerabilities,
+        # so the deferral has no subject left: high and critical block, and the
+        # summary step below still surfaces everything lower without blocking.
+        run: npm audit --audit-level=high
       - name: Advisory audit summary
         if: always()
         continue-on-error: true
@@ -257,6 +262,26 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Audit workflows
         run: zizmor --format plain .github/workflows/ | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # PR leg for the same Dockerfile: prove the multi-stage build still compiles
+  # before merge. No registry login, no push, no tags, no registry cache — a PR
+  # (including one from a fork, whose GITHUB_TOKEN is read-only) must never be
+  # able to move :latest or write a cache blob. Without this leg a broken
+  # Dockerfile is only discovered after it lands on main.
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build image (no push)
+        # GOPROXY override matches the push job: goproxy.cn is the local-build
+        # default and is slow/unreliable from GitHub's US runners.
+        run: |
+          docker build --pull \
+            --build-arg GOPROXY=https://proxy.golang.org,direct \
+            --build-arg BUILD_COMMIT=${{ github.sha }} \
+            -t skin-nexus:pr .
 
   # Build the production image (multi-stage Dockerfile) and push to GHCR
   # (:latest + :sha-*). Deploy hosts pull ghcr.io directly.
