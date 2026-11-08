@@ -81,7 +81,9 @@
       "upstream_error": "The market is unavailable right now, try again later"
     },
     "oidc": {
-      "shared_client": "The shared launcher client cannot be deleted"
+      "shared_client": "The shared launcher client cannot be deleted",
+      "grant_not_found": "No such authorization, or it belongs to another account",
+      "revoke_partial": "Only some tokens were revoked; the rest are still live. Retry or contact the site owner"
     },
     "option": {
       "save_failed": "Could not save the setting",

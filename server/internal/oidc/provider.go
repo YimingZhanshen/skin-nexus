@@ -320,7 +320,7 @@ func (p *Provider) deviceInfo(w http.ResponseWriter, r *http.Request) {
 	userCode := r.URL.Query().Get("user_code")
 	rec, err := p.backend.GetDeviceAuthByUserCode(r.Context(), userCode)
 	if err != nil || rec.Done || rec.Denied || time.Now().After(rec.ExpiresAt) {
-		writeJSON(w, deviceErr(i18n.MsgDeviceCodeInvalid, "invalid or expired user code"))
+		writeJSON(w, errEnvelope(i18n.MsgDeviceCodeInvalid, "invalid or expired user code"))
 		return
 	}
 	var players []PlayerBrief
@@ -375,18 +375,18 @@ func (p *Provider) deviceSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, err := p.backend.GetDeviceAuthByUserCode(r.Context(), userCode)
 	if err != nil || rec.Done || rec.Denied {
-		writeJSON(w, deviceErr(i18n.MsgDeviceCodeInvalid, "invalid user code"))
+		writeJSON(w, errEnvelope(i18n.MsgDeviceCodeInvalid, "invalid user code"))
 		return
 	}
 	if time.Now().After(rec.ExpiresAt) {
 		// review P2: expired codes could be "approved" (ok:true) yet never yield tokens
-		writeJSON(w, deviceErr(i18n.MsgDeviceCodeExpired, "user code expired"))
+		writeJSON(w, errEnvelope(i18n.MsgDeviceCodeExpired, "user code expired"))
 		return
 	}
 	switch decision {
 	case "approve":
 		if err := p.ApproveDevice(r.Context(), uid, userCode, pid); err != nil {
-			writeJSON(w, deviceErr(i18n.MsgDeviceApproveFail, "approval failed"))
+			writeJSON(w, errEnvelope(i18n.MsgDeviceApproveFail, "approval failed"))
 			return
 		}
 		p.auditEvent("oidc.device_approve", map[string]any{
@@ -523,11 +523,11 @@ func unauthorized(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusUnauthorized)
 }
 
-// deviceErr is the standard envelope: `code` is the half the page can
+// errEnvelope is the standard envelope: `code` is the half the page can
 // translate, the English text is what an older client falls back to. The four
 // answers this replaced were Chinese literals, so the device page showed
 // Chinese to every language but the one it was written in.
-func deviceErr(code, msg string) map[string]any {
+func errEnvelope(code, msg string) map[string]any {
 	return map[string]any{"error": code, "code": code, "message": msg}
 }
 

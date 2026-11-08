@@ -81,7 +81,9 @@
       "upstream_error": "市场暂时不可用，请稍后重试"
     },
     "oidc": {
-      "shared_client": "共享启动器客户端不可删除"
+      "shared_client": "共享启动器客户端不可删除",
+      "grant_not_found": "没有这条授权，或者它不属于当前账号",
+      "revoke_partial": "只吊销了一部分令牌，剩下的仍然有效，请重试或联系站长"
     },
     "option": {
       "save_failed": "设置保存失败",

@@ -732,8 +732,8 @@ func TestTokensListAndRevoke(t *testing.T) {
 		h.ServeHTTP(w, r)
 		return w
 	}
-	if w := other("jti-other"); !strings.Contains(w.Body.String(), "未找到") {
-		t.Fatalf("cross-user revoke = %s", w.Body.String())
+	if w := other("jti-other"); w.Code != 404 || !strings.Contains(w.Body.String(), `"code":"oidc.grant_not_found"`) {
+		t.Fatalf("cross-user revoke = %d %s", w.Code, w.Body.String())
 	}
 
 	// Revoke own jti -> ok, ledger entry marked revoked, client refresh revoked.

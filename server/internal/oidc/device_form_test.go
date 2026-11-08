@@ -100,12 +100,12 @@ func TestDeviceErrorsCarryTranslatableCodes(t *testing.T) {
 		{"device.code_expired", "user code expired"},
 		{"device.approve_failed", "approval failed"},
 	} {
-		got := deviceErr(tc.code, tc.msg)
+		got := errEnvelope(tc.code, tc.msg)
 		if got["code"] != tc.code || got["error"] != tc.code {
-			t.Errorf("deviceErr(%q) = %v, want code and error both set to the code", tc.code, got)
+			t.Errorf("errEnvelope(%q) = %v, want code and error both set to the code", tc.code, got)
 		}
 		if got["message"] != tc.msg {
-			t.Errorf("deviceErr(%q) message = %v, want an English fallback %q", tc.code, got["message"], tc.msg)
+			t.Errorf("errEnvelope(%q) message = %v, want an English fallback %q", tc.code, got["message"], tc.msg)
 		}
 	}
 }

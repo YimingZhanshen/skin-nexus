@@ -162,8 +162,10 @@ const (
 	MsgJobNotFound     = "job.not_found"
 	MsgJobNotResumable = "job.not_resumable" // cancelled past its replay window
 
-	// OIDC client registry
-	MsgOIDCSharedClient = "oidc.shared_client" // launcher-wide client, not deletable
+	// OIDC client registry + authorized-apps self-service
+	MsgOIDCSharedClient   = "oidc.shared_client"   // launcher-wide client, not deletable
+	MsgOIDCGrantNotFound  = "oidc.grant_not_found" // no such jti, or it belongs to someone else
+	MsgOIDCRevokePartial  = "oidc.revoke_partial"  // some tokens revoked, some survived — never report success
 
 	// setup / install
 	MsgSetupDone      = "setup.already_done"
