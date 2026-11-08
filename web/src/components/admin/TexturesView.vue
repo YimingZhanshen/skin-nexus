@@ -198,10 +198,11 @@ onMounted(load)
     <div class="success" role="status" v-if="ok">{{ ok }}</div>
     <div class="table-scroll" tabindex="0" :aria-label="t('admin.texTitle')" v-if="rows.length">
       <table class="tex-table">
+        <caption class="sr-only">{{ t('admin.texTitle') }}</caption>
         <tr>
-          <th>#</th><th></th><th>{{ t('admin.colTime') }}</th><th>{{ t('admin.colName') }}</th>
-          <th>{{ t('admin.colType') }}</th><th>{{ t('admin.colUploader') }}</th>
-          <th>{{ t('admin.colVisibility') }}</th><th>{{ t('dashboard.colHash') }}</th><th>{{ t('admin.colActions') }}</th>
+          <th scope="col">#</th><th scope="col"></th><th scope="col">{{ t('admin.colTime') }}</th><th scope="col">{{ t('admin.colName') }}</th>
+          <th scope="col">{{ t('admin.colType') }}</th><th scope="col">{{ t('admin.colUploader') }}</th>
+          <th scope="col">{{ t('admin.colVisibility') }}</th><th scope="col">{{ t('dashboard.colHash') }}</th><th scope="col">{{ t('admin.colActions') }}</th>
         </tr>
         <tr v-for="row in rows" :key="row.id">
           <td class="muted">{{ row.id }}</td>

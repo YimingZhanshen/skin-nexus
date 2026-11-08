@@ -229,13 +229,14 @@ onMounted(async () => {
     <EmptyState v-else-if="!filtered.length" :text="t('admin.marketEmpty')" />
     <div class="table-scroll" v-else>
     <table>
+      <caption class="sr-only">{{ t('admin.marketTitle') }}</caption>
       <thead>
         <tr>
-          <th>{{ t('admin.colPluginName') }}</th>
-          <th>{{ t('admin.marketDescription') }}</th>
-          <th>{{ t('admin.colVersion') }}</th>
-          <th>{{ t('admin.marketInstalled') }}</th>
-          <th>{{ t('admin.colActions') }}</th>
+          <th scope="col">{{ t('admin.colPluginName') }}</th>
+          <th scope="col">{{ t('admin.marketDescription') }}</th>
+          <th scope="col">{{ t('admin.colVersion') }}</th>
+          <th scope="col">{{ t('admin.marketInstalled') }}</th>
+          <th scope="col">{{ t('admin.colActions') }}</th>
         </tr>
       </thead>
       <tbody>

@@ -370,7 +370,8 @@ onMounted(load)
       <div class="error" role="alert" v-if="oidcError">{{ oidcError }}</div>
       <div class="table-scroll" v-if="oidcClients.length" style="margin-top: 12px;">
       <table>
-        <tr><th>{{ t('admin.oidcClientId') }}</th><th>{{ t('admin.oidcClientName') }}</th><th>{{ t('admin.oidcClientType') }}</th><th>{{ t('admin.oidcClientGrants') }}</th><th>{{ t('admin.oidcClientRedirects') }}</th><th></th></tr>
+        <caption class="sr-only">{{ t('admin.oidcClientsTitle', { count: oidcClients.length }) }}</caption>
+        <tr><th scope="col">{{ t('admin.oidcClientId') }}</th><th scope="col">{{ t('admin.oidcClientName') }}</th><th scope="col">{{ t('admin.oidcClientType') }}</th><th scope="col">{{ t('admin.oidcClientGrants') }}</th><th scope="col">{{ t('admin.oidcClientRedirects') }}</th><th scope="col"></th></tr>
         <tr v-for="c in oidcClients" :key="c.client_id">
           <td><code>{{ c.client_id }}</code></td>
           <td>{{ c.name }}</td>

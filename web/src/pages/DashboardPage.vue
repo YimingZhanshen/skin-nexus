@@ -469,7 +469,8 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
     </div>
     <div class="table-scroll" v-if="textures.length">
     <table>
-      <tr><th>{{ t('dashboard.materialName') }}</th><th>{{ t('dashboard.colType') }}</th><th>{{ t('dashboard.colModel') }}</th><th>{{ t('dashboard.colPreview') }}</th><th>{{ t('dashboard.colHash') }}</th><th></th></tr>
+      <caption class="sr-only">{{ t('dashboard.texturesTitle', { count: texTotal }) }}</caption>
+      <tr><th scope="col">{{ t('dashboard.materialName') }}</th><th scope="col">{{ t('dashboard.colType') }}</th><th scope="col">{{ t('dashboard.colModel') }}</th><th scope="col">{{ t('dashboard.colPreview') }}</th><th scope="col">{{ t('dashboard.colHash') }}</th><th scope="col"></th></tr>
       <tr v-for="tx in textures" :key="tx.id" :class="{ 'row-new': tx.id === newTexId }">
         <td class="tx-name" :title="tx.description || tx.hash">{{ textureLabel(tx) }}</td>
         <td>{{ tx.type }}</td>

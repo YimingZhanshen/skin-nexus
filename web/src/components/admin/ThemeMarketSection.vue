@@ -162,12 +162,13 @@ onMounted(async () => {
     <p class="muted" v-else-if="!packages.length">{{ t('admin.themeMarketEmpty') }}</p>
     <div class="table-scroll" v-else>
       <table>
+        <caption class="sr-only">{{ t('admin.themeMarketTitle') }}</caption>
         <thead>
           <tr>
-            <th>{{ t('admin.themeColTheme') }}</th>
-            <th>{{ t('admin.themeColVersion') }}</th>
-            <th>{{ t('admin.themeColInstalled') }}</th>
-            <th>{{ t('admin.colActions') }}</th>
+            <th scope="col">{{ t('admin.themeColTheme') }}</th>
+            <th scope="col">{{ t('admin.themeColVersion') }}</th>
+            <th scope="col">{{ t('admin.themeColInstalled') }}</th>
+            <th scope="col">{{ t('admin.colActions') }}</th>
           </tr>
         </thead>
         <tbody>

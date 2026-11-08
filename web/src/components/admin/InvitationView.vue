@@ -62,7 +62,8 @@ onMounted(load)
     <h3>{{ t('admin.invitationAvailable') }}</h3>
     <div class="table-scroll" v-if="invFree.length">
     <table>
-      <tr><th>ID</th><th>{{ t('admin.invitationColCode') }}</th><th>{{ t('admin.invitationColDesc') }}</th><th>{{ t('admin.invitationColGenerated') }}</th><th></th></tr>
+      <caption class="sr-only">{{ t('admin.invitationAvailable') }}</caption>
+      <tr><th scope="col">ID</th><th scope="col">{{ t('admin.invitationColCode') }}</th><th scope="col">{{ t('admin.invitationColDesc') }}</th><th scope="col">{{ t('admin.invitationColGenerated') }}</th><th scope="col"></th></tr>
       <tr v-for="ic in invFree" :key="ic.id">
         <td>{{ ic.id }}</td>
         <td><code>{{ ic.code }}</code></td>
@@ -76,7 +77,8 @@ onMounted(load)
     <h3>{{ t('admin.invitationUsedList') }}</h3>
     <div class="table-scroll" v-if="invUsed.length">
     <table>
-      <tr><th>ID</th><th>{{ t('admin.invitationColCode') }}</th><th>{{ t('admin.invitationColDesc') }}</th><th>{{ t('admin.invitationColUsedBy') }}</th><th>{{ t('admin.invitationColUsedAt') }}</th></tr>
+      <caption class="sr-only">{{ t('admin.invitationUsedList') }}</caption>
+      <tr><th scope="col">ID</th><th scope="col">{{ t('admin.invitationColCode') }}</th><th scope="col">{{ t('admin.invitationColDesc') }}</th><th scope="col">{{ t('admin.invitationColUsedBy') }}</th><th scope="col">{{ t('admin.invitationColUsedAt') }}</th></tr>
       <tr v-for="ic in invUsed" :key="ic.id">
         <td>{{ ic.id }}</td>
         <td><code>{{ ic.code }}</code></td>

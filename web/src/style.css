@@ -38,6 +38,14 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
   border-radius: var(--r-m); padding: 8px 16px;
 }
 .skip-link:focus { left: 12px; }
+/* Read by assistive tech, invisible to eyes. Table captions repeat the heading
+   already printed above them, so the caption has to be hidden to avoid the
+   title appearing twice in the a11y tree. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%);
+  white-space: nowrap; border: 0;
+}
 #main-content:focus { outline: none; }
 
 /* ── 顶栏：sticky 玻璃带（大改新增组件） ── */

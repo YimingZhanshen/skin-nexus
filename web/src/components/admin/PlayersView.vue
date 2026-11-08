@@ -112,10 +112,11 @@ onMounted(load)
     <div class="error" role="alert" v-if="error">{{ error }}</div>
     <div class="table-scroll" v-if="players.length">
     <table class="players-table" style="margin-top: 10px;">
+      <caption class="sr-only">{{ t('admin.playersTitle') }}</caption>
       <tr>
-        <th>PID</th><th>{{ t('admin.colPreview') }}</th><th>{{ t('admin.colPlayerName') }}</th>
-        <th>UUID</th><th>{{ t('admin.colOwner') }}</th><th>{{ t('admin.colSkin') }}</th>
-        <th>{{ t('admin.colCape') }}</th><th>{{ t('admin.colUpdated') }}</th><th></th>
+        <th scope="col">PID</th><th scope="col">{{ t('admin.colPreview') }}</th><th scope="col">{{ t('admin.colPlayerName') }}</th>
+        <th scope="col">UUID</th><th scope="col">{{ t('admin.colOwner') }}</th><th scope="col">{{ t('admin.colSkin') }}</th>
+        <th scope="col">{{ t('admin.colCape') }}</th><th scope="col">{{ t('admin.colUpdated') }}</th><th scope="col"></th>
       </tr>
       <tr v-for="p in players" :key="p.id">
         <td class="muted">{{ p.id }}</td>

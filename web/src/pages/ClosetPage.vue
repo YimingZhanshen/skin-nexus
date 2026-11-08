@@ -148,13 +148,14 @@ onMounted(load)
     </div>
     <div class="table-scroll" v-else-if="closet.length">
     <table style="margin-top: 10px;">
+      <caption class="sr-only">{{ t('closet.title', { count: total }) }}</caption>
       <tr>
-        <th>{{ t('dashboard.colPreview') }}</th>
-        <th>{{ t('dashboard.colType') }}</th>
-        <th>{{ t('closet.colName') }}</th>
-        <th>{{ t('dashboard.materialName') }}</th>
-        <th>{{ t('closet.colHash') }}</th>
-        <th></th>
+        <th scope="col">{{ t('dashboard.colPreview') }}</th>
+        <th scope="col">{{ t('dashboard.colType') }}</th>
+        <th scope="col">{{ t('closet.colName') }}</th>
+        <th scope="col">{{ t('dashboard.materialName') }}</th>
+        <th scope="col">{{ t('closet.colHash') }}</th>
+        <th scope="col"></th>
       </tr>
       <tr v-for="c in closet" :key="c.id">
         <td><img v-if="c.previewURL || c.url" :src="c.previewURL || c.url" class="thumb" alt="" loading="lazy" decoding="async" /><span v-else class="muted">—</span></td>

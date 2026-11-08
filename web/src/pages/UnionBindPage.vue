@@ -228,7 +228,8 @@ onMounted(load)
       <h2>{{ t('union.serversTitle', { count: servers.length }) }}</h2>
       <div class="table-scroll">
       <table>
-        <tr><th>{{ t('union.colCode') }}</th><th>{{ t('union.colName') }}</th></tr>
+        <caption class="sr-only">{{ t('union.serversTitle', { count: servers.length }) }}</caption>
+        <tr><th scope="col">{{ t('union.colCode') }}</th><th scope="col">{{ t('union.colName') }}</th></tr>
         <tr v-for="s in servers" :key="s.code">
           <td><code>{{ s.code }}</code></td>
           <td>{{ serverDisplayName(s) }}</td>

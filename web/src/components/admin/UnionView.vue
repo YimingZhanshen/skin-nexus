@@ -135,7 +135,7 @@ function exportDiagnose() {
       : r.v === 'ok' ? '<span style="color:#198754;font-weight:600;">✔ 成功</span>'
       : r.v === 'fail' ? '<span style="color:#dc3545;font-weight:600;">✘ 失败</span>'
       : String(r.v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    return `<tr><th style="text-align:left;vertical-align:top;width:20%;padding:6px 10px;">${r.k}</th><td style="padding:6px 10px;">${val}</td></tr>`
+    return `<tr><th scope="row" style="text-align:left;vertical-align:top;width:20%;padding:6px 10px;">${r.k}</th><td style="padding:6px 10px;">${val}</td></tr>`
   }).join('')
   const meta = diag.value
     ? `<p>key_fingerprint: ${diag.value.key_fingerprint || '—'} · private_key_version: ${diag.value.private_key_version || '—'} · server_list_version: ${diag.value.server_list_version || '—'}</p>`
@@ -262,10 +262,11 @@ onMounted(async () => {
       </div>
       <div class="table-scroll" v-if="blRows.length" style="margin-top: 12px;">
       <table class="bl-table">
+        <caption class="sr-only">{{ t('admin.unionBlTitle') }}</caption>
         <tr>
-          <th>ID</th><th>{{ t('admin.unionBlEmail') }}</th><th>{{ t('admin.unionBlSource') }}</th>
-          <th>{{ t('admin.unionBlReason') }}</th><th>{{ t('admin.unionBlCreated') }}</th>
-          <th>{{ t('admin.unionBlUntil') }}</th><th></th>
+          <th scope="col">ID</th><th scope="col">{{ t('admin.unionBlEmail') }}</th><th scope="col">{{ t('admin.unionBlSource') }}</th>
+          <th scope="col">{{ t('admin.unionBlReason') }}</th><th scope="col">{{ t('admin.unionBlCreated') }}</th>
+          <th scope="col">{{ t('admin.unionBlUntil') }}</th><th scope="col"></th>
         </tr>
         <tr v-for="row in blRows" :key="row.id">
           <td>{{ row.id }}</td>
@@ -316,8 +317,9 @@ onMounted(async () => {
               <button class="secondary" @click="exportDiagnose">⤓ {{ t('admin.diagExport') }}</button>
             </div>
             <table class="diag-table">
+              <caption class="sr-only">{{ t('admin.unionOpDiagnose') }}</caption>
               <tr v-for="(r, i) in diagRows" :key="i">
-                <th>{{ r.k }}</th>
+                <th scope="row">{{ r.k }}</th>
                 <td>
                   <span v-if="r.v === 'ok'" class="diag-badge ok">{{ t('admin.diagOk') }}</span>
                   <span v-else-if="r.v === 'fail'" class="diag-badge fail">{{ t('admin.diagFail') }}</span>

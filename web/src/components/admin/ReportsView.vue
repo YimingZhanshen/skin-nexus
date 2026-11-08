@@ -159,12 +159,13 @@ onMounted(load)
     <EmptyState v-else-if="!reports.length" :text="t('admin.reportsEmpty')" />
     <div class="table-scroll" v-else>
     <table>
+      <caption class="sr-only">{{ t('admin.reportsTitle') }}</caption>
       <thead>
         <tr>
-          <th>{{ t('admin.reportsTexture') }}</th>
-          <th>{{ t('admin.reportsReport') }}</th>
-          <th>{{ t('admin.reportsStatus') }}</th>
-          <th>{{ t('admin.reportsActions') }}</th>
+          <th scope="col">{{ t('admin.reportsTexture') }}</th>
+          <th scope="col">{{ t('admin.reportsReport') }}</th>
+          <th scope="col">{{ t('admin.reportsStatus') }}</th>
+          <th scope="col">{{ t('admin.reportsActions') }}</th>
         </tr>
       </thead>
       <tbody>

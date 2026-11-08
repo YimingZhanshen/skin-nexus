@@ -84,10 +84,11 @@ onMounted(load)
     <p class="muted">{{ t('notifications.hint') }}</p>
 
     <table v-if="rows.length">
+      <caption class="sr-only">{{ t('notifications.title') }}</caption>
       <tr>
-        <th>{{ t('notifications.colWhat') }}</th>
-        <th>{{ t('notifications.colWhen') }}</th>
-        <th></th>
+        <th scope="col">{{ t('notifications.colWhat') }}</th>
+        <th scope="col">{{ t('notifications.colWhen') }}</th>
+        <th scope="col"></th>
       </tr>
       <tr v-for="n in rows" :key="n.id" :class="{ unread: !n.read }">
         <td>

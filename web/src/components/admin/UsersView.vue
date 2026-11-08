@@ -156,10 +156,11 @@ onMounted(load)
     <p class="muted" v-if="!users.length && !error" style="margin-top: 12px;">{{ t('admin.usersEmpty') }}</p>
     <div class="table-scroll" v-if="users.length">
     <table class="users-table" style="margin-top: 12px;">
+      <caption class="sr-only">{{ t('admin.usersTitle') }}</caption>
       <tr>
-        <th>{{ t('admin.colId') }}</th><th>{{ t('admin.colNickname') }}</th><th>{{ t('admin.colEmail') }}</th>
-        <th>{{ t('admin.colPermission') }}</th><th>{{ t('admin.colVerified') }}</th>
-        <th>{{ t('admin.colAlgo') }}</th><th>{{ t('admin.colCreated') }}</th><th></th>
+        <th scope="col">{{ t('admin.colId') }}</th><th scope="col">{{ t('admin.colNickname') }}</th><th scope="col">{{ t('admin.colEmail') }}</th>
+        <th scope="col">{{ t('admin.colPermission') }}</th><th scope="col">{{ t('admin.colVerified') }}</th>
+        <th scope="col">{{ t('admin.colAlgo') }}</th><th scope="col">{{ t('admin.colCreated') }}</th><th scope="col"></th>
       </tr>
       <tr v-for="u in users" :key="u.id">
         <td class="muted">{{ u.id }}</td>

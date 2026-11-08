@@ -229,11 +229,12 @@ onMounted(() => { load(); loadDetail() })
     <div class="error" role="alert" v-if="error">{{ error }}</div>
     <div class="table-scroll" v-if="logs.length">
     <table class="logs-table" style="margin-top: 10px;">
+      <caption class="sr-only">{{ t('admin.accessTitle') }}</caption>
       <tr>
-        <th>{{ t('admin.colTime') }}</th><th>{{ t('admin.colKind') }}</th>
-        <th>{{ t('admin.colOutcome') }}</th><th>{{ t('admin.colWho') }}</th>
-        <th>IP</th><th>UA</th><th>{{ t('admin.colDetail') }}</th>
-        <th>{{ t('admin.colAccessDetail') }}</th>
+        <th scope="col">{{ t('admin.colTime') }}</th><th scope="col">{{ t('admin.colKind') }}</th>
+        <th scope="col">{{ t('admin.colOutcome') }}</th><th scope="col">{{ t('admin.colWho') }}</th>
+        <th scope="col">IP</th><th scope="col">UA</th><th scope="col">{{ t('admin.colDetail') }}</th>
+        <th scope="col">{{ t('admin.colAccessDetail') }}</th>
       </tr>
       <template v-for="row in logs" :key="row.id">
         <tr>

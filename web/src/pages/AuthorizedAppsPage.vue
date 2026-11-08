@@ -64,7 +64,8 @@ onMounted(load)
     <div class="success" role="status" v-if="success">{{ success }}</div>
     <div class="table-scroll" v-if="tokens.length">
     <table>
-      <tr><th>{{ t('apps.colApp') }}</th><th>{{ t('apps.colScopes') }}</th><th>{{ t('apps.colProfile') }}</th><th>{{ t('apps.colCreated') }}</th><th>{{ t('apps.colExpires') }}</th><th></th></tr>
+      <caption class="sr-only">{{ t('apps.title', { count: tokens.length }) }}</caption>
+      <tr><th scope="col">{{ t('apps.colApp') }}</th><th scope="col">{{ t('apps.colScopes') }}</th><th scope="col">{{ t('apps.colProfile') }}</th><th scope="col">{{ t('apps.colCreated') }}</th><th scope="col">{{ t('apps.colExpires') }}</th><th scope="col"></th></tr>
       <tr v-for="tk in tokens" :key="tk.jti">
         <td><code style="font-size: var(--fs-xs);">{{ tk.client_id }}</code></td>
         <td class="muted" style="font-size: var(--fs-xs);">{{ (tk.scopes || []).join(', ') }}</td>

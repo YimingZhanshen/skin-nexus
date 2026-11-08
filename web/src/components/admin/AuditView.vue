@@ -124,9 +124,10 @@ onMounted(load)
     <div class="error" role="alert" v-if="error">{{ error }}</div>
     <div class="table-scroll" v-if="rows.length">
       <table class="audit-table">
+        <caption class="sr-only">{{ t('admin.auditTitle') }}</caption>
         <tr>
-          <th>{{ t('admin.colTime') }}</th><th>{{ t('admin.colActor') }}</th>
-          <th>{{ t('admin.colAction') }}</th><th>{{ t('admin.colDetail') }}</th>
+          <th scope="col">{{ t('admin.colTime') }}</th><th scope="col">{{ t('admin.colActor') }}</th>
+          <th scope="col">{{ t('admin.colAction') }}</th><th scope="col">{{ t('admin.colDetail') }}</th>
         </tr>
         <tr v-for="row in rows" :key="row.id">
           <td class="nowrap muted">{{ fmtTime(row.createdAt) }}</td>

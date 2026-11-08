@@ -108,11 +108,12 @@ onMounted(load)
     <p class="muted" v-if="unavailable">{{ t('admin.jobsModuleOff') }}</p>
     <div class="table-scroll" v-else-if="rows.length">
       <table class="job-table">
+        <caption class="sr-only">{{ t('admin.jobsTitle') }}</caption>
         <tr>
-          <th>{{ t('admin.colTime') }}</th><th>{{ t('admin.colPlugin') }}</th>
-          <th>{{ t('admin.colState') }}</th><th>{{ t('admin.colProgress') }}</th>
-          <th>{{ t('admin.colAttempts') }}</th><th>{{ t('admin.colMessage') }}</th>
-          <th>{{ t('admin.colJob') }}</th><th>{{ t('admin.colActions') }}</th>
+          <th scope="col">{{ t('admin.colTime') }}</th><th scope="col">{{ t('admin.colPlugin') }}</th>
+          <th scope="col">{{ t('admin.colState') }}</th><th scope="col">{{ t('admin.colProgress') }}</th>
+          <th scope="col">{{ t('admin.colAttempts') }}</th><th scope="col">{{ t('admin.colMessage') }}</th>
+          <th scope="col">{{ t('admin.colJob') }}</th><th scope="col">{{ t('admin.colActions') }}</th>
         </tr>
         <tr v-for="row in rows" :key="row.id">
           <td class="nowrap muted">{{ row.updatedAt ? row.updatedAt.slice(0, 16).replace('T', ' ') : '—' }}</td>
