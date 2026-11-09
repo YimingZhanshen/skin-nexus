@@ -257,6 +257,11 @@ jobs:
         # animates transform — which is how the union diagnose modal ended up
         # below the fold on a long admin page.
         run: node scripts/check-modal-chrome.mjs
+      - name: Diagnose report model
+        # Which leg a field belongs to is the whole meaning of the union
+        # diagnose report, and web/ has no component test framework. node:test
+        # is built in, so the pure model that decides it is asserted anyway.
+        run: node --test scripts/diag-model.test.mjs
 
   # Workflow hygiene: this repo's actions push images with GITHUB_TOKEN and gate
   # market signing behind environments, so template injection into an action input

@@ -7,6 +7,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
+import { buildDiagModel, diagSummaryOf, diagMetaOf } from '../../diagModel.js'
 import { formatWhen } from '../../format.js'
 import Pager from '../Pager.vue'
 import EmptyState from '../EmptyState.vue'
@@ -133,54 +134,51 @@ async function triggerDiagnose() {
   }
 }
 
-function diagRow(k, v) { return { k, v } }
+// The report model lives in ../../diagModel.js: it is pure, it is where the
+// two-leg disambiguation happens, and it is asserted by scripts/diag-model.test.mjs
+// (node --test, no new dependency). Kept out of this component on purpose — the
+// flat-rows bug this replaces was invisible to every check that could see only
+// markup.
+const diagLegs = computed(() => (diag.value ? buildDiagModel(diag.value, t) : []))
+const diagSummary = computed(() => diagSummaryOf(diagLegs.value))
+const diagMeta = computed(() => diagMetaOf(diag.value, t))
 
-const diagRows = computed(() => {
-  const d = diag.value
-  if (!d) return []
-  const data = d.data || {}
-  const rows = []
-  // 1. 皮肤站→Union  2. Union→皮肤站 (legacy table order, verbatim)
-  rows.push(diagRow(t('admin.diagSiteToUnion'), d.status === 'ok' ? 'ok' : 'fail'))
-  if (d.status === 'ok') {
-    rows.push(diagRow(t('admin.diagUnionToSite'), data.healthy ? 'ok' : 'fail'))
-    if (data.healthy && typeof data.delay === 'number') {
-      rows.push(diagRow(t('admin.diagDelay'), `${(data.delay * 1000).toFixed(2)} ms`))
-    }
-    if (data.timestamp) rows.push(diagRow(t('admin.diagTimestamp'), String(data.timestamp)))
-  }
-  if (data.tls_handshake) rows.push({ k: t('admin.diagTLS'), area: String(data.tls_handshake) })
-  if (data.exception) rows.push({ k: t('admin.diagException'), area: String(data.exception) })
-  if (data.status_code) rows.push(diagRow(t('admin.diagStatusCode'), String(data.status_code)))
-  if (data.headers) rows.push({ k: t('admin.diagHeaders'), area: JSON.stringify(data.headers, null, 2) })
-  if (data.body) rows.push({ k: t('admin.diagBody'), area: String(data.body) })
-  return rows
-})
+// The report is opened on paper white, so the verdict colours are the dark
+// theme's hues taken down to what measures AA on #fff (--ok is 2.23:1 there,
+// --danger 3.90:1). They used to be Bootstrap's #198754 / #dc3545 — a passing
+// contrast, but another product's palette inside ours.
+const EXPORT_INK = { ok: '#2f7d4f', warn: '#8a6a2f', fail: '#a12b20', skip: '#6b6b6b' }
+
+function htmlEscape(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;') }
 
 function exportDiagnose() {
-  // The report is a standalone file the operator opens on paper white, so the
-  // two verdict colours are the dark theme's hues taken down to what measures
-  // AA on #fff (--ok is 2.23:1 there, --danger 3.90:1). They used to be
-  // Bootstrap's #198754 / #dc3545 — a passing contrast, but another product's
-  // palette inside ours.
-  const rows = diagRows.value.map((r) => {
-    const val = r.area
-      ? `<textarea readonly rows="8" style="width:100%;box-sizing:border-box;">${String(r.area).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</textarea>`
-      : r.v === 'ok' ? '<span style="color:#2f7d4f;font-weight:600;">✔ 成功</span>'
-      : r.v === 'fail' ? '<span style="color:#a12b20;font-weight:600;">✘ 失败</span>'
-      : String(r.v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    return `<tr><th scope="row" style="text-align:left;vertical-align:top;width:20%;padding:8px 12px;">${r.k}</th><td style="padding:8px 12px;">${val}</td></tr>`
+  // Same model as the screen, so a fix to what the operator sees cannot leave
+  // the exported file describing the old, wrong thing. The state words come
+  // from admin.diagState.*, the same four the deployment self-check uses.
+  const stateWord = (s) => t('admin.diagState.' + s)
+  const sections = diagLegs.value.map((leg) => {
+    const rows = leg.rows.map((r) => {
+      let cell = htmlEscape(r.v ?? '')
+      if (r.mono) cell += ` <code>${htmlEscape(r.mono)}</code>`
+      if (r.state) cell = `<span style="color:${EXPORT_INK[r.state]};font-weight:600;">${htmlEscape(stateWord(r.state))}</span> ${cell}`
+      if (r.pre) cell = `<pre style="white-space:pre-wrap;word-break:break-all;background:#f4f4f5;padding:8px;">${htmlEscape(r.pre)}</pre>`
+      return `<tr><th scope="row" style="text-align:left;vertical-align:top;width:22%;padding:8px 12px;">${htmlEscape(r.k)}</th><td style="padding:8px 12px;">${cell}</td></tr>`
+    }).join('')
+    return `<h3>${htmlEscape(leg.title)} — ${htmlEscape(stateWord(leg.state))}</h3><table style="border-collapse:collapse;width:100%;">${rows}</table>`
   }).join('')
-  const meta = diag.value
-    ? `<p>key_fingerprint: ${diag.value.key_fingerprint || '—'} · private_key_version: ${diag.value.private_key_version || '—'} · server_list_version: ${diag.value.server_list_version || '—'}</p>`
-    : ''
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${t('admin.diagExportTitle')}</title></head><body><h2>${t('admin.diagExportTitle')}</h2><p>${formatWhen(new Date())}</p>${meta}<table style="border-collapse:collapse;width:100%;">${rows}</table></body></html>`
-  const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
+  const meta = diagMeta.value.map((m) => `${htmlEscape(m.k)}: ${htmlEscape(m.v)}`).join(' · ')
+  const title = htmlEscape(t('admin.diagExportTitle'))
+  const html = `<!doctype html><html lang="${htmlEscape(document.documentElement.lang || 'zh-CN')}"><head><meta charset="utf-8"><title>${title}</title></head><body><h2>${title}</h2><p>${htmlEscape(formatWhen(new Date()))}</p><p>${meta}</p>${sections}</body></html>`
+  const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
   const a = document.createElement('a')
   a.href = url
-  a.download = `诊断报告-${Math.round(Date.now() / 1000)}.html`
+  a.download = `${t('admin.diagFileName')}-${Math.round(Date.now() / 1000)}.html`
+  // Chromium tolerates clicking a detached anchor; the spec does not promise
+  // it, and revoking in the same tick can beat the write on a slow disk.
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
 
 async function loadBlacklist() {
@@ -351,27 +349,39 @@ onMounted(async () => {
         </div>
         <div class="diag-result" v-if="diag && !diagLoading">
           <div class="diag-result-bar">
-            <span class="diag-badge" :class="diag.status === 'ok' ? 'ok' : 'fail'">
-              {{ diag.status === 'ok' ? t('admin.diagAllOk') : t('admin.diagHasFail') }}
+            <span class="diag-badge" :class="diagSummary">
+              {{ diagSummary === 'ok' ? t('admin.diagAllOk') : diagSummary === 'warn' ? t('admin.diagHasWarn') : t('admin.diagHasFail') }}
             </span>
-            <button class="secondary" @click="exportDiagnose">⤓ {{ t('admin.diagExport') }}</button>
+            <span class="diag-actions">
+              <button class="ghost" :disabled="diagLoading" @click="triggerDiagnose">{{ t('admin.diagRecheck') }}</button>
+              <button class="secondary" @click="exportDiagnose">⤓ {{ t('admin.diagExport') }}</button>
+            </span>
           </div>
-          <table class="diag-table">
-            <caption class="sr-only">{{ t('admin.unionOpDiagnose') }}</caption>
-            <tr v-for="(r, i) in diagRows" :key="i">
-              <th scope="row">{{ r.k }}</th>
-              <td>
-                <span v-if="r.v === 'ok'" class="diag-badge ok">{{ t('admin.diagOk') }}</span>
-                <span v-else-if="r.v === 'fail'" class="diag-badge fail">{{ t('admin.diagFail') }}</span>
-                <textarea v-else-if="r.area" readonly rows="8" :value="r.area"></textarea>
-                <span v-else class="diag-mono">{{ r.v }}</span>
-              </td>
-            </tr>
-          </table>
-          <p class="diag-meta" v-if="diag.key_fingerprint">
-            key_fingerprint: <span class="diag-mono">{{ diag.key_fingerprint }}</span>
-            · private_key_version: <span class="diag-mono">{{ diag.private_key_version || '—' }}</span>
-            · server_list_version: <span class="diag-mono">{{ diag.server_list_version || '—' }}</span>
+          <section class="diag-leg" v-for="leg in diagLegs" :key="leg.key">
+            <h4 class="diag-leg-head">
+              <span>{{ leg.title }}</span>
+              <span class="diag-badge" :class="leg.state">{{ t('admin.diagState.' + leg.state) }}</span>
+            </h4>
+            <table class="diag-table">
+              <caption class="sr-only">{{ leg.title }}</caption>
+              <tr v-for="(r, i) in leg.rows" :key="i">
+                <th scope="row">{{ r.k }}</th>
+                <td>
+                  <span v-if="r.state" class="diag-badge" :class="r.state">{{ t('admin.diagState.' + r.state) }}</span>
+                  <span v-if="r.v"> {{ r.v }}</span>
+                  <code v-if="r.mono" class="diag-mono">{{ r.mono }}</code>
+                  <details v-if="r.pre" class="diag-raw">
+                    <summary>{{ t('admin.diagRaw') }}</summary>
+                    <pre class="diag-pre">{{ r.pre }}</pre>
+                  </details>
+                </td>
+              </tr>
+            </table>
+          </section>
+          <p class="diag-meta" v-if="diagMeta.length">
+            <span v-for="m in diagMeta" :key="m.k" class="diag-meta-item">
+              {{ m.k }}: <span class="diag-mono">{{ m.v }}</span>
+            </span>
           </p>
         </div>
       </div>
@@ -412,11 +422,17 @@ onMounted(async () => {
 }
 .diag-modal::backdrop { background: rgba(0, 0, 0, 0.55); }
 .diag-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border);
+  /* Sticky over a scrolling report needs an opaque backing, or the first row
+     shows through the title. */
+  background: var(--panel);
 }
 .diag-head h3 { margin: 0; font-size: var(--fs-m); }
 .diag-body { padding: 20px; }
@@ -432,11 +448,26 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
+}
+.diag-actions { display: flex; gap: 8px; }
+.diag-leg { margin-bottom: 20px; }
+.diag-leg:last-of-type { margin-bottom: 0; }
+.diag-leg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 8px;
+  font-size: var(--fs-s);
+  font-weight: 500;
+  color: var(--text);
 }
 .diag-badge {
   --ok-wash: color-mix(in srgb, var(--ok) 16%, transparent);
   --bad-wash: color-mix(in srgb, var(--danger) 14%, transparent);
+  --warn-wash: color-mix(in srgb, var(--gold) 16%, transparent);
   display: inline-block;
   padding: 4px 12px;
   border-radius: 24px;
@@ -445,9 +476,16 @@ onMounted(async () => {
 }
 .diag-badge.ok { background: var(--ok-wash); color: var(--ok); border: 1px solid var(--ok); }
 .diag-badge.fail { background: var(--bad-wash); color: var(--danger); border: 1px solid var(--danger); }
-.diag-table { width: 100%; border-collapse: collapse; }
+/* 注意 is not a soft fail: an expiring certificate or a clock outside the
+   signature window is actionable and neither means the hub is unreachable.
+   The legacy modal only had success/danger, so every warning was a red pill. */
+.diag-badge.warn { background: var(--warn-wash); color: var(--gold); border: 1px solid var(--gold); }
+.diag-badge.skip { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+/* Fixed layout: the raw dumps are long single tokens, and with auto layout
+   they push the label column off the card (same lesson as .bl-table above). */
+.diag-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .diag-table th {
-  width: 20%;
+  width: 24%;
   text-align: right;
   padding: 8px 12px;
   color: var(--muted);
@@ -459,18 +497,42 @@ onMounted(async () => {
   padding: 8px 12px;
   vertical-align: top;
   border-bottom: 1px solid var(--border);
+  word-break: break-word;
 }
-.diag-table textarea {
-  width: 100%;
-  min-height: 120px;
-  resize: vertical;
-  font-family: ui-monospace, Consolas, monospace;
+.diag-raw { margin-top: 8px; }
+.diag-raw summary { cursor: pointer; color: var(--muted); font-size: var(--fs-xs); }
+/* A read-only dump is not an input: the legacy textarea looked editable,
+   could be typed into, and clipped to eight rows. */
+.diag-pre {
+  margin: 8px 0 0;
+  padding: 12px;
+  max-height: 260px;
+  overflow: auto;
+  background: var(--panel-2, var(--panel));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--mono, ui-monospace, Consolas, monospace);
   font-size: var(--fs-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
-.diag-mono { font-family: ui-monospace, Consolas, monospace; font-size: var(--fs-xs); word-break: break-all; }
+.diag-mono { font-family: var(--mono, ui-monospace, Consolas, monospace); font-size: var(--fs-xs); word-break: break-all; }
 .diag-meta {
-  margin: 12px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 16px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
   color: var(--muted);
   font-size: var(--fs-xs);
+}
+/* Phones: the label column would otherwise eat a quarter of a 375px screen
+   and every value wraps to one word per line. Stack them instead. */
+@media (max-width: 720px) {
+  .diag-body { padding: 16px; }
+  .diag-result-bar { flex-direction: column; align-items: flex-start; }
+  .diag-table th { width: auto; text-align: left; padding-bottom: 0; border-bottom: none; }
+  .diag-table td { padding-top: 4px; }
 }
 </style>
