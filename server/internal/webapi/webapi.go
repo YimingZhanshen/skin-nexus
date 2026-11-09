@@ -179,16 +179,42 @@ func writeAccountErr(w http.ResponseWriter, err *account.Error) {
 // SyncProfileCreate announces a new profile to the Union hub, async and
 // best-effort (shared by the web handler and the account service).
 func (b *Backend) SyncProfileCreate(ctx context.Context, uuid, name string) {
+	b.announceUnionProfile(ctx, "create", uuid, name, func(ctx context.Context) error {
+		return b.union.SyncProfileCreate(ctx, uuid, name)
+	})
+}
+
+// SyncProfileRename announces a rename under the uuid that did not move.
+func (b *Backend) SyncProfileRename(ctx context.Context, uuid, name string) {
+	b.announceUnionProfile(ctx, "rename", uuid, name, func(ctx context.Context) error {
+		return b.union.SyncProfileRename(ctx, uuid, name)
+	})
+}
+
+// SyncProfileDelete retires a profile the hub is still publishing for us.
+func (b *Backend) SyncProfileDelete(ctx context.Context, uuid, name string) {
+	b.announceUnionProfile(ctx, "delete", uuid, name, func(ctx context.Context) error {
+		return b.union.SyncProfileDelete(ctx, uuid)
+	})
+}
+
+// announceUnionProfile is the one shape all three legs share: never block the
+// user's request, 5s bound on a context that is not the caller's (the request
+// is already answered when this runs), and a failed announcement leaves an
+// audit row a station owner can act on with 同步角色数据 rather than a silent
+// divergence between this site and the hub. The incoming context is ignored on
+// purpose — it is the request's, and it is cancelled the moment we return.
+func (b *Backend) announceUnionProfile(_ context.Context, leg, uuid, name string, call func(context.Context) error) {
 	if b.union == nil || !b.union.Enabled() {
 		return
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := b.union.SyncProfileCreate(ctx, uuid, name); err != nil {
-			b.Store.InsertAudit(context.Background(), 0, "union_sync_create_failed",
+		if err := call(ctx); err != nil {
+			b.Store.InsertAudit(context.Background(), 0, "union_sync_"+leg+"_failed",
 				map[string]interface{}{"uuid": uuid, "name": name, "error": err.Error()})
-			log.Printf("union sync create failed uuid=%s name=%s: %v", uuid, name, err)
+			log.Printf("union sync %s failed uuid=%s name=%s: %v", leg, uuid, name, err)
 		}
 	}()
 }

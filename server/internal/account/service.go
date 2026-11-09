@@ -236,7 +236,13 @@ type Service struct {
 	EmitEvent         func(ctx context.Context, kind string, p plugin.EventPayload)
 	OnTextureUploaded func(ctx context.Context, e plugin.TextureUploadedEvent)
 	Audit             func(ctx context.Context, uid int64, action string, detail map[string]any)
-	UnionSync         func(ctx context.Context, uuid, name string)
+	// The three Union announcements. The hub publishes profiles by name, so a
+	// member that renames or retires a character silently keeps advertising it
+	// there; the reference implementation fires all three legs from core player
+	// events (yggdrasil-connect bootstrap.php:84-119). nil = Union off.
+	UnionCreate func(ctx context.Context, uuid, name string)
+	UnionRename func(ctx context.Context, uuid, name string)
+	UnionRetire func(ctx context.Context, uuid, name string)
 }
 
 func (s *Service) ensure() *Error {

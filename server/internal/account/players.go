@@ -159,8 +159,8 @@ func (s *Service) CreatePlayer(ctx context.Context, uid int64, name string, meta
 			UserID: uid, PlayerID: pid, PlayerName: name, UUID: uuid, IP: meta.IP,
 		})
 	}
-	if s.UnionSync != nil {
-		s.UnionSync(ctx, uuid, name)
+	if s.UnionCreate != nil {
+		s.UnionCreate(ctx, uuid, name)
 	}
 	v, e := s.PlayerView(ctx, uid, pid)
 	return v, true, e
@@ -206,6 +206,11 @@ func (s *Service) RenamePlayer(ctx context.Context, uid, pid int64, name string,
 			Data: map[string]any{"oldName": p.Name},
 		})
 	}
+	// The hub keyed this profile by its uuid, and that uuid did not move
+	// (iron rule 2), so the rename travels as an update on the same record.
+	if s.UnionRename != nil {
+		s.UnionRename(ctx, p.UUID, name)
+	}
 	v, e := s.PlayerView(ctx, uid, pid)
 	return v, true, e
 }
@@ -231,6 +236,14 @@ func (s *Service) DeletePlayer(ctx context.Context, uid, pid int64, meta CallMet
 		s.EmitEvent(ctx, "player.deleted", plugin.EventPayload{
 			UserID: uid, PlayerID: pid, PlayerName: name, UUID: uuid, IP: meta.IP,
 		})
+	}
+	// Retirement travels too, and from here rather than only from the admin
+	// panel: the reference announces on PlayerWillBeDeleted, which fires for a
+	// player its owner deletes. Nothing reaps the hub's copy later — no
+	// scheduled reconciliation exists on either side — so skipping this leg
+	// leaves a name published under our backend code forever.
+	if s.UnionRetire != nil {
+		s.UnionRetire(ctx, uuid, name)
 	}
 	return nil
 }

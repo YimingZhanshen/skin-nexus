@@ -269,8 +269,10 @@ func (b *Backend) handlePlayerRename(w http.ResponseWriter, r *http.Request) {
 
 // handlePlayerDeleteSelf: DELETE /api/v1/me/players/{id}
 // Double-confirm lives client-side; the uuid_map row goes with the player
-// (AdminDeletePlayer cascade). No hub announce here — union syncs on its own
-// schedule (B3 admin path announces; user-side delete is local-first).
+// (AdminDeletePlayer cascade). The retirement also travels to the Union hub —
+// account.Service.DeletePlayer announces it, because a profile a player deleted
+// here stays published under our backend code until somebody says otherwise,
+// and there is no reconciliation pass on either side that ever will.
 func (b *Backend) handlePlayerDeleteSelf(w http.ResponseWriter, r *http.Request) {
 	uid, err := b.currentUser(r)
 	if err != nil {

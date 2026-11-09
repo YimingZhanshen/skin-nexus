@@ -57,6 +57,11 @@ type Backend struct {
 	// (uuid, name) captured before the delete — main wires the same
 	// best-effort union hub announcement as OnUserDeleted (B3).
 	OnPlayerDeleted OnPlayerDeletedHook
+	// OnPlayerRenamed fires after a successful admin rename with the uuid that
+	// did not move and the new name. This path writes through the store rather
+	// than account.Service, so it needs its own hook for the hub announcement
+	// the reference makes on PlayerProfileUpdated (bootstrap.php:97-108).
+	OnPlayerRenamed func(uuid, name string)
 	// OnSettingChanged fires after a successful settings PUT with the key
 	// and stored value — main wires the union hot-apply (union_enabled /
 	// union_api_root / union_member_key take effect without a restart,

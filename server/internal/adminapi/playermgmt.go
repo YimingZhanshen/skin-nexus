@@ -97,6 +97,9 @@ func (b *Backend) handleAdminPlayerRename(w http.ResponseWriter, r *http.Request
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_player_rename",
 		map[string]any{"pid": pid, "from": before.Name, "to": req.Name, "uuid": after.UUID})
+	if b.OnPlayerRenamed != nil && after.UUID != "" {
+		b.OnPlayerRenamed(after.UUID, req.Name)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "uuid": after.UUID})
 }
 

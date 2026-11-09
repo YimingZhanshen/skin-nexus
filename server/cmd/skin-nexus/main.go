@@ -522,7 +522,9 @@ func main() {
 		Audit: func(ctx context.Context, uid int64, action string, detail map[string]any) {
 			st.InsertAudit(ctx, uid, action, detail)
 		},
-		UnionSync: backend.SyncProfileCreate,
+		UnionCreate: backend.SyncProfileCreate,
+		UnionRename: backend.SyncProfileRename,
+		UnionRetire: backend.SyncProfileDelete,
 	}
 	pluginHost.SetAccountService(pluginAccount{svc: backend.Account, signer: pluginHost.PluginSigner})
 	yggSvc.JoinGuard = pluginHost.CheckGuard
@@ -772,6 +774,13 @@ func main() {
 				log.Printf("union sync delete failed (admin player) uuid=%s name=%s: %v", uuid, name, err)
 			}
 		}()
+	}
+	// Admin player rename: this path writes through the store, so it does not
+	// pass the account service where the other rename announcement lives — the
+	// hub needs to hear about it either way (the reference listens to the core
+	// event, which fires for both actors).
+	admin.OnPlayerRenamed = func(uuid, name string) {
+		backend.SyncProfileRename(context.Background(), uuid, name)
 	}
 	admin.MountAppearance(adminapi.AppearanceDeps{SEO: seoEng, Appear: appearEng, Themes: themeReg, ThemeMarket: themeMarketSvc})
 	admin.MountPlugins(adminapi.PluginsDeps{Host: pluginHost})
