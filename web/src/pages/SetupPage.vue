@@ -36,19 +36,19 @@ onMounted(async () => {
 function next() {
   error.value = ''
   if (step.value === 1 && !siteName.value.trim()) {
-    error.value = '站点名必填'; return
+    error.value = t('setup.siteNameRequired'); return
   }
   // Same rule the API enforces (and the panel's site_url setting uses), so a
   // typo like skin.example.com does not cost a submit round trip.
   if (step.value === 1 && baseURL.value.trim() && !/^https?:\/\//i.test(baseURL.value.trim())) {
-    error.value = '站点地址要以 http:// 或 https:// 开头'; return
+    error.value = t('setup.baseUrlScheme'); return
   }
   if (step.value === 2) {
     if (!nickname.value.trim() || password.value.length < 8) {
-      error.value = '昵称必填、密码至少 8 位'; return
+      error.value = t('setup.adminFieldsRequired'); return
     }
     if (password.value !== password2.value) {
-      error.value = '两次密码不一致'; return
+      error.value = t('setup.passwordMismatch'); return
     }
   }
   step.value++

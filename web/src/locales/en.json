@@ -405,7 +405,13 @@
     "current": "Currently worn",
     "empty": "Nothing wearable in your closet yet",
     "emptyFiltered": "Nothing matches that search",
-    "hint": "You can only wear what is in your closet: collect it with ♥ in the library, or upload your own."
+    "hint": "You can only wear what is in your closet: collect it with ♥ in the library, or upload your own.",
+    "unnamedSkin": "Unnamed skin",
+    "unnamedCape": "Unnamed cape",
+    "rename": "Rename",
+    "renameTitle": "Rename this entry",
+    "renamePrompt": "Give it a name (clearing it leaves only the fingerprint)",
+    "renameUnavailable": "This row is not a closet entry, so it has no name to change"
   },
   "players": {
     "title": "Profiles ({count})",
@@ -538,7 +544,8 @@
     "remapDone": "UUID fix request submitted",
     "serversTitle": "Alliance servers ({count})",
     "colCode": "Code",
-    "colName": "Name",
+    "colAddress": "Site address",
+    "serversNote": "The hub's list carries only a code and a site address for each member — the name field is empty for every entry. Identify a station by its code or address.",
     "disabled": "Union module is not enabled",
     "needProfile": "Create a profile on your dashboard first."
   },
@@ -562,6 +569,10 @@
     "envFallback": "(left blank, SKIN_BASE_URL keeps applying)",
     "mismatch": "It differs from SKIN_BASE_URL ({url}): the site now uses the address you just entered for texture links, page links and the sitemap. If that was a throwaway LAN address, change it under “Admin → Settings → Site address” and restart the container.",
     "prev": "Back",
+    "siteNameRequired": "Site name is required",
+    "baseUrlScheme": "The site address must start with http:// or https://",
+    "adminFieldsRequired": "A nickname is required, and the password must be at least 8 characters",
+    "passwordMismatch": "The two passwords do not match",
     "next": "Next",
     "submitting": "Submitting…",
     "finish": "Finish setup",

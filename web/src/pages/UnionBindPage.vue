@@ -46,7 +46,6 @@ async function load() {
     const d = await union.servers()
     servers.value = d.servers || []
     serverVersion.value = d.version || ''
-    fillServerNames(servers.value) // async, best-effort (old plugin servers.twig:20-31)
   } catch (e) {
     // disabled module -> friendly notice, not an error storm
     servers.value = []
@@ -55,26 +54,27 @@ async function load() {
   loadRemapSuggestions() // the remap card is open now (review P0-1)
 }
 
-// The hub ships `name` empty on member entries; the old plugin fills each
-// row's display name client-side by fetching that member's
-// {bs_root}/api/yggdrasil and reading meta.serverName (servers.twig:20-31).
-// Mirrored here — failures just leave the fallback chain in place.
-const serverNames = ref({})
-function fillServerNames(list) {
-  list.forEach(async (s) => {
-    const root = String(s.bs_root || '').replace(/\/+$/, '')
-    if (!root) return
-    try {
-      const r = await fetch(root + '/api/yggdrasil')
-      const d = await r.json()
-      const n = d && d.meta && d.meta.serverName
-      if (n) serverNames.value = { ...serverNames.value, [s.code]: n }
-    } catch { /* keep fallback */ }
-  })
+// The hub list carries {code,bs_root} and nothing else: `name` is empty on all
+// 53 entries, so the address is what identifies a station and the table says
+// exactly that.
+//
+// This page used to mirror the old plugin's client-side name backfill
+// (servers.twig:20-31) — fetch each member's {bs_root}/api/yggdrasil and read
+// meta.serverName. It can never work here: our own CSP sets
+// connect-src 'self', so every cross-origin one of those fetches is blocked by
+// the browser before it leaves (verified live: "Refused to connect because it
+// violates the document's Content Security Policy"). That left ~53 blocked
+// requests and 100+ console errors per visit, a name only for our own row
+// (same-origin), and every other row silently falling back to its address under
+// a header that said "Name". Names need a server-side read of the member list
+// instead, which is an outbound surface and needs the SSRF guards with it —
+// tracked outside the repo, not shipped half-done.
+function serverAddress(s) {
+  return String(s.bs_root || '').replace(/^https?:\/\//, '') || '—'
 }
-function serverDisplayName(s) {
-  return serverNames.value[s.code] || s.name || String(s.bs_root || '').replace(/^https?:\/\//, '') || '—'
-}
+// The hub list can repeat a code with a different address (live: YITUEM ships
+// twice), so a code is not a row identity — keying on it collides.
+function serverKey(s) { return s.code + '|' + s.bs_root }
 
 function playerUUID(p) { return p.UUID || p.uuid || '' }
 function playerName(p) { return p.Name || p.name || '' }
@@ -226,13 +226,14 @@ onMounted(load)
 
     <div class="card" v-if="servers.length">
       <h2>{{ t('union.serversTitle', { count: servers.length }) }}</h2>
+      <p class="muted">{{ t('union.serversNote') }}</p>
       <div class="table-scroll">
       <table>
         <caption class="sr-only">{{ t('union.serversTitle', { count: servers.length }) }}</caption>
-        <tr><th scope="col">{{ t('union.colCode') }}</th><th scope="col">{{ t('union.colName') }}</th></tr>
-        <tr v-for="s in servers" :key="s.code">
+        <tr><th scope="col">{{ t('union.colCode') }}</th><th scope="col">{{ t('union.colAddress') }}</th></tr>
+        <tr v-for="s in servers" :key="serverKey(s)">
           <td><code>{{ s.code }}</code></td>
-          <td>{{ serverDisplayName(s) }}</td>
+          <td><code>{{ serverAddress(s) }}</code></td>
         </tr>
       </table>
       </div>

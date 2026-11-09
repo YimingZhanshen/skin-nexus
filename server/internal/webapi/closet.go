@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/store"
@@ -15,9 +16,37 @@ import (
 // closetAlias is the one policy for a closet label: strip what a renderer cannot
 // undo, then bound it. item_name is a TEXT column, so the database imposes no
 // ceiling of its own. Empty stays legal — it means "no alias".
-func closetAlias(raw string) (string, bool) {
+//
+// The reason comes back because the two failures are different conversations: a
+// long alias is someone typing past the limit, an unreadable one is their client
+// sending bytes the JSON decoder could not keep. Go replaces invalid UTF-8 with
+// U+FFFD rather than erroring, so the handler only ever sees valid UTF-8 — the
+// replacement character is the only trace left, and keeping it would store a
+// label that renders as black diamonds everywhere.
+const (
+	aliasOK = iota
+	aliasTooLong
+	aliasUnreadable
+)
+
+func closetAlias(raw string) (string, int) {
+	if strings.ContainsRune(raw, utf8.RuneError) {
+		return "", aliasUnreadable
+	}
 	name := ugctext.Visible(strings.TrimSpace(raw))
-	return name, len([]rune(name)) <= 50
+	if len([]rune(name)) > 50 {
+		return "", aliasTooLong
+	}
+	return name, aliasOK
+}
+
+func writeClosetAliasError(w http.ResponseWriter, reason int) {
+	if reason == aliasUnreadable {
+		writeErrCode(w, http.StatusBadRequest,
+			"closet alias did not arrive as readable text", i18n.MsgInvalidValue)
+		return
+	}
+	writeErrCode(w, http.StatusBadRequest, "closet alias is limited to 50 characters", i18n.MsgTooLong)
 }
 
 // GET /api/v1/me/closet — the user's closet entries with texture metadata.
@@ -92,6 +121,11 @@ func (b *Backend) handleMyWearable(w http.ResponseWriter, r *http.Request) {
 		}
 		item := map[string]any{
 			"id": x.ID, "hash": x.Hash, "model": x.Model, "label": label,
+			// closetId is the entry this row stands for — the rename endpoint
+			// takes an entry id, and a texture can sit in the closet twice.
+			"closetId": x.ClosetID,
+			// named distinguishes "this has a title" from "label is a hash".
+			"named": x.Alias != "" || x.Name != "",
 		}
 		if typ == "skin" {
 			item["previewURL"] = previewThumbURL(x.ID)
@@ -125,9 +159,9 @@ func (b *Backend) handleClosetAdd(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusBadRequest, "textureId required", i18n.MsgMissingField)
 		return
 	}
-	itemName, ok := closetAlias(req.ItemName)
-	if !ok {
-		writeErrCode(w, http.StatusBadRequest, "closet alias is limited to 50 characters", i18n.MsgTooLong)
+	itemName, reason := closetAlias(req.ItemName)
+	if reason != aliasOK {
+		writeClosetAliasError(w, reason)
 		return
 	}
 	created, err := b.Store.AddClosetEntry(r.Context(), uid, req.TextureID, itemName)
@@ -162,9 +196,9 @@ func (b *Backend) handleClosetRename(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusBadRequest, "invalid JSON", i18n.MsgBadBody)
 		return
 	}
-	itemName, ok := closetAlias(req.ItemName)
-	if !ok {
-		writeErrCode(w, http.StatusBadRequest, "closet alias is limited to 50 characters", i18n.MsgTooLong)
+	itemName, reason := closetAlias(req.ItemName)
+	if reason != aliasOK {
+		writeClosetAliasError(w, reason)
 		return
 	}
 	if err := b.Store.SetClosetItemName(r.Context(), uid, id, itemName); errors.Is(err, store.ErrNotFound) {

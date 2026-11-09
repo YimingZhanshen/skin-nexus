@@ -405,7 +405,13 @@
     "current": "当前穿着",
     "empty": "衣柜里还没有可穿的材质",
     "emptyFiltered": "没有匹配的材质",
-    "hint": "只能穿衣柜里的材质：在皮肤库点 ♥ 收进衣柜，或自己上传一张。"
+    "hint": "只能穿衣柜里的材质：在皮肤库点 ♥ 收进衣柜，或自己上传一张。",
+    "unnamedSkin": "未命名皮肤",
+    "unnamedCape": "未命名披风",
+    "rename": "改名",
+    "renameTitle": "重命名这一条",
+    "renamePrompt": "给它起个名字（清空则去掉别名，只留指纹）",
+    "renameUnavailable": "这一条不是衣柜条目，改不了名"
   },
   "players": {
     "title": "角色管理（{count}）",
@@ -538,7 +544,8 @@
     "remapDone": "UUID 修正请求已提交",
     "serversTitle": "联盟服务器列表（{count}）",
     "colCode": "代码",
-    "colName": "名称",
+    "colAddress": "站点地址",
+    "serversNote": "联盟下发的清单里，每个成员站只有代码与站点地址两项，名称字段一律为空——认站请以代码或地址为准。",
     "disabled": "联盟功能未启用",
     "needProfile": "先在个人页创建角色。"
   },
@@ -562,6 +569,10 @@
     "envFallback": "（未填，沿用环境变量 SKIN_BASE_URL）",
     "mismatch": "它与环境变量 SKIN_BASE_URL（{url}）不一致：站点以你刚填的地址为准，材质链接、页面链接与 sitemap 都会用它。如果这是安装时随手用的局域网地址，请现在去「管理 → 设置 → 站点地址」改成玩家能访问的域名，改完重启容器。",
     "prev": "上一步",
+    "siteNameRequired": "站点名称必填",
+    "baseUrlScheme": "站点地址要以 http:// 或 https:// 开头",
+    "adminFieldsRequired": "昵称必填，密码至少 8 位",
+    "passwordMismatch": "两次输入的密码不一致",
     "next": "下一步",
     "submitting": "提交中…",
     "finish": "完成初始化",

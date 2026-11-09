@@ -83,11 +83,12 @@ func (m *Mysql) queryCloset(ctx context.Context, query string, args ...any) ([]C
 
 // WearableRow is one entry of what a user may put on a player.
 type WearableRow struct {
-	ID    int64
-	Hash  string
-	Model string
-	Alias string // the user's own closet name for it, may be empty
-	Name  string // the texture's own description
+	ClosetID int64 // the entry this row IS; PUT /me/closet/{id} addresses it
+	ID       int64
+	Hash     string
+	Model    string
+	Alias    string // the user's own closet name for it, may be empty
+	Name     string // the texture's own description
 }
 
 // WearableTextures is the set a player may wear: exactly the user's closet.
@@ -96,34 +97,43 @@ type WearableRow struct {
 // upload collects it (and migration 0022 collected the history), not because
 // the picker also unions the uploads table.
 //
-// GROUP BY, not a unique key: user_closet keeps the legacy shape with no unique
-// constraint, so a direct import can carry the same pair twice. MAX() over the
-// closet alias picks the entry's own name over the texture's, as in blessing.
+// One row per texture, and that row is ONE closet entry: the newest one holding
+// the texture. user_closet keeps the legacy shape with no unique constraint
+// (data-compat rule 7), and AddClosetEntry is a check-then-insert, so a
+// double-click or a direct import can leave the same pair twice. Grouping with
+// MAX(item_name) used to resolve such a texture to the alphabetically largest
+// alias while ordering by MAX(id) — so the label shown and the entry a rename
+// would address were different rows. A derived table over (texture_tid, MAX(id))
+// pins both to the same entry; the join is plain SQL, so all three engines read
+// it the same way, and because each texture now appears once the total is a
+// COUNT(*) over the join rather than a COUNT(DISTINCT …).
 //
-// The picker pages and searches now — an account can have collected hundreds of
-// these — so the group count comes back as total. COUNT(DISTINCT …) is exactly
-// that count without a derived table the three engines would each spell
-// differently.
+// The picker pages and searches, so it gets the count back as total. Search
+// matches the row that is displayed — the newest entry's alias, the texture's
+// own description, or its hash.
 func (m *Mysql) WearableTextures(ctx context.Context, uid int64, typ, q string, limit, offset int) ([]WearableRow, int64, error) {
 	d := m.db.Dialect()
 	where := "c.user_uid = ? AND t.type = ?"
-	args := []any{uid, typ}
+	// The subquery's own uid placeholder comes first in the statement text.
+	args := []any{uid, uid, typ}
 	if s := strings.TrimSpace(q); s != "" {
 		where += ` AND (` + d.CIContains("COALESCE(c.item_name, '')") + ` OR ` +
 			d.CIContains("COALESCE(t.description, '')") + ` OR ` + d.CIContains("COALESCE(t.hash, '')") + `)`
 		like := dialect.LikeContains(s)
 		args = append(args, like, like, like)
 	}
-	from := ` FROM user_closet c JOIN textures t ON t.id = c.texture_tid WHERE ` + where
+	newest := `(SELECT texture_tid, MAX(id) AS id FROM user_closet WHERE user_uid = ? GROUP BY texture_tid) n`
+	from := ` FROM user_closet c JOIN textures t ON t.id = c.texture_tid JOIN ` + newest +
+		` ON n.id = c.id WHERE ` + where
 	var total int64
-	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(DISTINCT c.texture_tid)`+from, args...).Scan(&total); err != nil {
+	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*)`+from, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	page := append(append([]any{}, args...), limit, offset)
 	rows, err := m.db.QueryContext(ctx, `
-		SELECT c.texture_tid, MAX(t.hash), MAX(COALESCE(t.model, '')),
-		       MAX(COALESCE(c.item_name, '')), MAX(COALESCE(t.description, ''))`+from+`
-		GROUP BY c.texture_tid ORDER BY MAX(c.id) DESC LIMIT ? OFFSET ?`, page...)
+		SELECT c.id, c.texture_tid, t.hash, COALESCE(t.model, ''),
+		       COALESCE(c.item_name, ''), COALESCE(t.description, '')`+from+`
+		ORDER BY c.id DESC LIMIT ? OFFSET ?`, page...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -131,7 +141,7 @@ func (m *Mysql) WearableTextures(ctx context.Context, uid int64, typ, q string, 
 	out := make([]WearableRow, 0)
 	for rows.Next() {
 		var w WearableRow
-		if err := rows.Scan(&w.ID, &w.Hash, &w.Model, &w.Alias, &w.Name); err != nil {
+		if err := rows.Scan(&w.ClosetID, &w.ID, &w.Hash, &w.Model, &w.Alias, &w.Name); err != nil {
 			return nil, 0, err
 		}
 		out = append(out, w)
