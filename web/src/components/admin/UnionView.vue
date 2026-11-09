@@ -104,13 +104,27 @@ function openDiagnose() {
   })
 }
 
-// One exit for every path — button, backdrop, Esc — so the reset happens in
-// exactly one place: close() always fires `close`.
+// One exit for every path — button, backdrop, Esc. The `close` event is NOT
+// what resets the state: measured in a real Chrome against this very dialog,
+// close() flips `open` to false and the queued close event never reaches the
+// listener, so relying on it left a closed dialog node sitting in the DOM with
+// diagOpen still true. Setting the flag here is the honest source of truth;
+// @close stays as a safety net for any other way the element can close.
 function closeDiagnose() {
-  if (diagDlg.value && diagDlg.value.open) diagDlg.value.close()
+  diagOpen.value = false
+  diag.value = null
+  const el = diagDlg.value
+  if (el && el.open) el.close()
 }
 
 function onDiagClosed() {
+  diagOpen.value = false
+  diag.value = null
+}
+
+// Esc: `cancel` fires before the browser closes the dialog, so resetting the
+// state here is enough — calling close() as well would only race the default.
+function onDiagCancel() {
   diagOpen.value = false
   diag.value = null
 }
@@ -347,6 +361,7 @@ onMounted(async () => {
       class="diag-modal"
       :aria-label="t('admin.unionOpDiagnose')"
       @click="onDiagClick"
+      @cancel="onDiagCancel"
       @close="onDiagClosed"
     >
       <div class="diag-head">
