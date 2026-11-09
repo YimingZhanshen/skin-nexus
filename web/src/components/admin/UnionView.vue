@@ -3,7 +3,7 @@
 // + union blacklist proxy (B5.4). The module-disabled case shows an empty
 // state. Release/Delete are irreversible-ish — both double-confirm, delete
 // is permanent (hub erases the record).
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
@@ -73,21 +73,50 @@ async function runOp(name, path, confirmMsg) {
   }
 }
 
-// ---- 自助诊断 (1:1 with legacy yggdrasil-connect triggerDiagnose) ----
-// Three states (idle → running → result) and the same nine result rows the
-// legacy modal renders, plus an exported standalone HTML report.
+// ---- 自助诊断 ----
+// Three states (idle → running → result). The shell is the panel's own
+// convention: a native <dialog> opened with showModal(). That is not a style
+// preference, it is the fix for two measured problems with the hand-rolled
+// fixed overlay this replaces:
+//
+//   1. An ancestor that animates transform captures position:fixed.
+//      web/src/style.css applies `animation: view-rise … both` to
+//      `.user-main > *`, which is exactly .admin-shell here; once the
+//      animation has run, Chrome reports the computed transform as
+//      matrix(1,0,0,1,0,0) rather than the keyword none, and a non-none
+//      transform makes that ancestor the containing block. Measured on a
+//      synthetic copy of this tree: the overlay then spans the panel's
+//      1800px height instead of the 1145px viewport, so the modal is centred
+//      ~400px below the fold and slides away when the operator scrolls.
+//   2. The top layer is immune to all of that, and buys the focus trap, Esc
+//      and the accessible name instead of re-implementing them badly.
 const diagOpen = ref(false)
 const diagLoading = ref(false)
 const diag = ref(null) // {status, data, key_fingerprint, ...}
+const diagDlg = ref(null)
 
 function openDiagnose() {
+  diag.value = null
   diagOpen.value = true
+  nextTick(() => {
+    if (diagDlg.value && !diagDlg.value.open) diagDlg.value.showModal()
+  })
+}
+
+// One exit for every path — button, backdrop, Esc — so the reset happens in
+// exactly one place: close() always fires `close`.
+function closeDiagnose() {
+  if (diagDlg.value && diagDlg.value.open) diagDlg.value.close()
+}
+
+function onDiagClosed() {
+  diagOpen.value = false
   diag.value = null
 }
 
-function closeDiagnose() {
-  diagOpen.value = false
-  diag.value = null
+// A click that lands on the dialog element itself came from the backdrop.
+function onDiagClick(e) {
+  if (e.target === diagDlg.value) closeDiagnose()
 }
 
 async function triggerDiagnose() {
@@ -299,49 +328,54 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 自助诊断 modal (1:1 with legacy yggdrasil-connect diagnoseModal) -->
-    <div v-if="diagOpen" class="diag-overlay" @click.self="closeDiagnose">
-      <div class="diag-modal">
-        <div class="diag-head">
-          <h3>{{ t('admin.unionOpDiagnose') }}</h3>
-          <button class="ghost diag-close" @click="closeDiagnose" :aria-label="t('common.close')">×</button>
+    <!-- 自助诊断: native <dialog> in the top layer (see openDiagnose) -->
+    <dialog
+      v-if="diagOpen"
+      ref="diagDlg"
+      class="diag-modal"
+      :aria-label="t('admin.unionOpDiagnose')"
+      @click="onDiagClick"
+      @close="onDiagClosed"
+    >
+      <div class="diag-head">
+        <h3>{{ t('admin.unionOpDiagnose') }}</h3>
+        <button class="ghost diag-close" @click="closeDiagnose" :aria-label="t('common.close')">×</button>
+      </div>
+      <div class="diag-body">
+        <div class="diag-idle" v-if="!diag && !diagLoading">
+          <button @click="triggerDiagnose">{{ t('admin.diagStart') }}</button>
         </div>
-        <div class="diag-body">
-          <div class="diag-idle" v-if="!diag && !diagLoading">
-            <button @click="triggerDiagnose">{{ t('admin.diagStart') }}</button>
+        <div class="diag-loading" v-if="diagLoading">
+          <span class="spinner" aria-hidden="true"></span>
+          <span>{{ t('admin.diagRunning') }}</span>
+        </div>
+        <div class="diag-result" v-if="diag && !diagLoading">
+          <div class="diag-result-bar">
+            <span class="diag-badge" :class="diag.status === 'ok' ? 'ok' : 'fail'">
+              {{ diag.status === 'ok' ? t('admin.diagAllOk') : t('admin.diagHasFail') }}
+            </span>
+            <button class="secondary" @click="exportDiagnose">⤓ {{ t('admin.diagExport') }}</button>
           </div>
-          <div class="diag-loading" v-if="diagLoading">
-            <span class="spinner" aria-hidden="true"></span>
-            <span>{{ t('admin.diagRunning') }}</span>
-          </div>
-          <div class="diag-result" v-if="diag && !diagLoading">
-            <div class="diag-result-bar">
-              <span class="diag-badge" :class="diag.status === 'ok' ? 'ok' : 'fail'">
-                {{ diag.status === 'ok' ? t('admin.diagAllOk') : t('admin.diagHasFail') }}
-              </span>
-              <button class="secondary" @click="exportDiagnose">⤓ {{ t('admin.diagExport') }}</button>
-            </div>
-            <table class="diag-table">
-              <caption class="sr-only">{{ t('admin.unionOpDiagnose') }}</caption>
-              <tr v-for="(r, i) in diagRows" :key="i">
-                <th scope="row">{{ r.k }}</th>
-                <td>
-                  <span v-if="r.v === 'ok'" class="diag-badge ok">{{ t('admin.diagOk') }}</span>
-                  <span v-else-if="r.v === 'fail'" class="diag-badge fail">{{ t('admin.diagFail') }}</span>
-                  <textarea v-else-if="r.area" readonly rows="8" :value="r.area"></textarea>
-                  <span v-else class="diag-mono">{{ r.v }}</span>
-                </td>
-              </tr>
-            </table>
-            <p class="diag-meta" v-if="diag.key_fingerprint">
-              key_fingerprint: <span class="diag-mono">{{ diag.key_fingerprint }}</span>
-              · private_key_version: <span class="diag-mono">{{ diag.private_key_version || '—' }}</span>
-              · server_list_version: <span class="diag-mono">{{ diag.server_list_version || '—' }}</span>
-            </p>
-          </div>
+          <table class="diag-table">
+            <caption class="sr-only">{{ t('admin.unionOpDiagnose') }}</caption>
+            <tr v-for="(r, i) in diagRows" :key="i">
+              <th scope="row">{{ r.k }}</th>
+              <td>
+                <span v-if="r.v === 'ok'" class="diag-badge ok">{{ t('admin.diagOk') }}</span>
+                <span v-else-if="r.v === 'fail'" class="diag-badge fail">{{ t('admin.diagFail') }}</span>
+                <textarea v-else-if="r.area" readonly rows="8" :value="r.area"></textarea>
+                <span v-else class="diag-mono">{{ r.v }}</span>
+              </td>
+            </tr>
+          </table>
+          <p class="diag-meta" v-if="diag.key_fingerprint">
+            key_fingerprint: <span class="diag-mono">{{ diag.key_fingerprint }}</span>
+            · private_key_version: <span class="diag-mono">{{ diag.private_key_version || '—' }}</span>
+            · server_list_version: <span class="diag-mono">{{ diag.server_list_version || '—' }}</span>
+          </p>
         </div>
       </div>
-    </div>
+    </dialog>
   </div>
 </template>
 
@@ -362,25 +396,21 @@ onMounted(async () => {
   vertical-align: top;
 }
 
-/* ---- 自助诊断 modal (1:1 legacy diagnoseModal, dark theme) ---- */
-.diag-overlay {
-  --scrim: rgba(0, 0, 0, 0.55);
-  position: fixed;
-  inset: 0;
-  background: var(--scrim);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-modal, 80);
-}
+/* ---- 自助诊断: the native dialog itself is the panel, so there is no
+   overlay element to position. Same scrim value as DialogPanel's ::backdrop.
+   max-height is dvh, not vh: on a phone vh is the large viewport, and the
+   bottom of the report would sit behind the browser bar. ---- */
 .diag-modal {
-  width: min(860px, 92vw);
-  max-height: 86vh;
+  width: min(860px, calc(100% - 32px));
+  max-height: 86dvh;
   overflow: auto;
+  padding: 0;
   background: var(--panel);
+  color: var(--text);
   border: 1px solid var(--border);
   border-radius: 12px;
 }
+.diag-modal::backdrop { background: rgba(0, 0, 0, 0.55); }
 .diag-head {
   display: flex;
   align-items: center;
