@@ -486,6 +486,72 @@ CSS/JS 这类子资源**不带**这个头——浏览器对「子资源的 sandb
 反代/CDN 若也加同名头，值是**追加**而不是替换，同一份响应出现两条 CSP 时浏览器取交集，
 容易把自己锁死。要么只在服务端配，要么只在最外层配一处。
 
+### CORS 头（服务端只在需要时加，反代不要整块加）
+
+本站只有三类响应需要被**别的站点在浏览器里**读到，服务端自己已经带了
+`Access-Control-Allow-Origin`：
+
+| 路径 | 跨源读它的是谁 |
+|---|---|
+| `GET /api/yggdrasil`（含带斜杠形式） | 联盟 hub 的页面，读 `meta.serverName` 回填成员站名 |
+| `GET /api/union/member` | 同上，读 `enabledFeatures` 决定「加入联盟」按钮能否用 |
+| `GET /api/union/member/oauth2/` | hub 的授权页，取签名公钥（这条还要求 Origin 是具体值） |
+| `GET /{player}.json` | 第三方页面的公共档案接口 |
+
+其余全是同源使用：页面、`/textures/`、`/preview/`、`/api/v1/*` 都不需要 CORS，
+`<img>` 取图片也不受它约束。
+
+反代若照常见教程给整个站点加一整块——
+
+```nginx
+add_header Access-Control-Allow-Origin *;
+add_header Access-Control-Allow-Methods 'GET, POST, OPTIONS, PUT, DELETE';
+add_header Access-Control-Allow-Headers 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization';
+add_header Access-Control-Expose-Headers 'Content-Length,Content-Range';
+```
+
+那么上表四条路径会得到**两个** `Access-Control-Allow-Origin`（nginx 一个 + 服务端一个）。
+CORS 的这些头只允许单值，浏览器把整条响应丢掉——**网络面板看到的是 200，页面拿到的却是失败**，
+控制台原文：
+
+```
+The 'Access-Control-Allow-Origin' header contains multiple values '*, *',
+but only one is allowed.
+```
+
+后果不止站名显示不出来：`/api/union/member/oauth2/` 服务端按要求回具体 Origin 并带
+`Access-Control-Allow-Credentials: true`，nginx 又叠一个 `*`——重复值和「带凭据时不许用 `*`」
+两条同时踩中，从 hub 发起的本站登录也一起坏掉。这块 blanket 头帮不到任何同源页面，
+只把真正需要 CORS 的路径全打断，所以修法是**删掉它**，不在服务端将错就错。
+
+验收（跨源请求必带 `Origin`，数头出现几次）：
+
+```bash
+for p in /api/yggdrasil /api/union/member /api/union/member/oauth2/ /healthz; do
+  printf '%s ' "$p"
+  curl -sS -o /dev/null -D - -H 'Origin: https://example.org' "https://你的域名$p" |
+    grep -ci '^access-control-allow-origin:'
+done
+```
+
+前三行应为 `1`。`/healthz` 没有跨源消费者，服务端不加 CORS 头：它若也数出 `1`，
+说明那块 blanket 头还在原地。
+
+确实需要给某条由 nginx 直接服务的路径（例如直读数据卷的 `/textures/`）开 CORS 时，
+只在那条 `location` 里加。`location` 内一旦有了自己的 `add_header`，就不再继承外层那一组，
+作用域天然收窄：
+
+```nginx
+location /textures/ {
+    alias /var/lib/docker/volumes/<项目>_skin-data/_data/textures/;
+    add_header Access-Control-Allow-Origin * always;
+}
+```
+
+同一道理适用于 CDN 层：Cloudflare 的「Transform Rules / Headers」里给
+`Access-Control-Allow-Origin` 赋值，效果与 nginx 这块 `add_header` 一样。CORS 头只配一处，
+且优先配在服务端——因为只有服务端知道哪条路径的语义需要跨源。
+
 ### CDN 场景（Cloudflare / 阿里云 CDN 等）
 
 CDN → Nginx → 容器时，XFF 最后一跳通常是 CDN 节点，不是玩家。后台

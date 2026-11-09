@@ -204,6 +204,29 @@ SQLite rig 验收，**生产站与演示站零操作**；不发版（tag 仍 v0.
 - **安装向导的报错以前是硬编码中文**：四条 `error.value = '…'` 在英文界面下整页中文。闸只查模板里的
   中文、不查 script 里的赋值，所以它一直漏网；四条全部进词典。全站同类残留扫过，现为 0。
 
+### 同日第六轮 · 站名还是不显示：第二个 ACAO 来自反代，不是我们
+
+第五轮把裸 `/api/yggdrasil` 的 307 修成 200 并带上 CORS，站长部署新镜像后回查：307 确实没了，
+hub 侧站名**仍然空**，控制台换了一条新失败——`Access-Control-Allow-Origin` 出现**两个** `*`
+（`multiple values '*, *', but only one is allowed`），请求 `net::ERR_FAILED 200 (OK)`。
+这正是上一轮在私有登记里预警过的分支：症状一模一样，根因完全不同。
+
+- **只读取证定位来源**。逐路径 `curl -D -` 数头：`/api/yggdrasil` 与 `/api/union/member` 各两条
+  ACAO，`/api/union/member/oauth2/` 也是两条，而 `/`、`/healthz`、`/api/v1/setup/status` 各一条。
+  多出来的那一组（`Origin: *` + `Methods: GET,POST,OPTIONS,PUT,DELETE` + `Headers: DNT,...` +
+  `Expose`）在**每个**响应上都出现，且排在应用自己的头之前——是 nginx blanket `add_header`，
+  即网上流传的那段 CORS 复制粘贴片段。应用侧的注册是对的，问题在反代多此一举。
+- **应用侧无法自愈**：nginx 在应用响应**之后**才追加头，Go 代码看不到也删不掉；把 CORS 交给
+  反代又会让没有 blanket 头的部署（Docker 直连、宝塔裸端口）失去这层。所以本轮**不改代码**，
+  只把修法与验收写进公开文档，避免下一个部署的人再踩：`deploy.md` 新增「CORS 头」小节
+  （逐路径计数命令 + 删 blanket 的理由 + 确实需要窄加时按 `location` 窄写的正确姿势），
+  `compat-matrix.md` 联盟取名那行补记后半症状与根因。
+- **连带症状**：`/api/union/member/oauth2/` 应用侧按要求返回具体 Origin（非 `*`）并带
+  `Access-Control-Allow-Credentials: true`，与 blanket 的 `*` 同时存在时既重复又违规，
+  从 hub 发起的本站登录也一起坏——同一个根因的第二处表现，改完 nginx 一并恢复。
+- **not-run**：nginx 改动在站长面板侧，本轮无法代跑；改完必须复测前三行应为 1、`/healthz` 应为 0，
+  hub 侧站名才会真正显示。
+
 ## 2026-11-07
 
 - **真机把诊断模式走通时抓到三件测试看不见的事，都已修（这是本轮最值钱的读数）**：
