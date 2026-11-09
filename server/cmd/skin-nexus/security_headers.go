@@ -40,6 +40,20 @@ const framedAssetPrefix = "/plugin-assets/"
 
 func isFramedAssetPath(p string) bool { return strings.HasPrefix(p, framedAssetPrefix) }
 
+// hstsPolicy is one year, no subdomains: this site's certificate covers a host,
+// not a domain, and includeSubDomains would commit hosts the operator does not
+// control here.
+const hstsPolicy = "max-age=31536000"
+
+// servedOverTLS is the scheme read the Secure-cookie and ALI-header paths
+// already make (langswitch.go, internal/ygg/http.go): TLS on this connection,
+// or X-Forwarded-Proto: https from the TLS-terminating proxy deploy.md requires.
+// It is deliberately not a config flag — an operator who turns out to be plain
+// http must not have told the browser otherwise in advance.
+func servedOverTLS(r *http.Request) bool {
+	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
 // securityHeaders wraps the whole mux. It sets before any handler writes, so a
 // handler that forgets — or a template that gets it wrong — still inherits the
 // baseline.
@@ -57,6 +71,11 @@ func securityHeaders(next http.Handler) http.Handler {
 			h.Set("Content-Security-Policy", pageCSP)
 		}
 		h.Set("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=()")
+		// Only over https: a station on plain http that is told to require https
+		// for a year cannot be reached again by its own visitors.
+		if servedOverTLS(r) {
+			h.Set("Strict-Transport-Security", hstsPolicy)
+		}
 		next.ServeHTTP(w, r)
 	})
 }

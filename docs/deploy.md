@@ -472,6 +472,12 @@ location / {
 `frame-ancestors 'none'`（禁被嵌套，与 `X-Frame-Options` 同义）、`object-src 'none'`、
 `base-uri 'self'`、`form-action 'self'`。
 
+`Strict-Transport-Security: max-age=31536000` 也在这里下发，但**只在方案是 https 时**——
+判据是这条连接本身是 TLS，或反代传来 `X-Forwarded-Proto: https`。纯 http 的站（内网、
+直连容器端口、证书掉了）要是收到这条，浏览器就会强行 https 回访，站长等于把自己锁在门外，
+所以它不能是无条件的。**反代不要再自己加这一条**：两处都加就是两个值，浏览器只认一个，
+而哪一个生效没人看得出来。
+
 **CSP 有意允许 `'unsafe-inline'` 的 script/style**：「自定义 CSS/JS」「主题包」「插件 bundle」
 是站长主动安装的功能，都靠内联。所以这条策略不是「装了恶意插件包也能挡住」的防线，
 而是其余一切的边界。要上严格 CSP（nonce/hash）就得同时放弃内联自定义 JS，
@@ -583,15 +589,20 @@ nginx 的 `add_header` 只在**当前层级一条都没写**时才继承上一�
 `add_header X-Cache $upstream_cache_status;`，于是 `server` 层那批 `add_header` **全部不再下发**——
 最常见的受害者是 `Strict-Transport-Security`：写在 `server` 层、看着配好了，实测每个响应都没有。
 
+本站现在把 HSTS 也收进了服务端（只在方案是 https 时下发，见上一节），所以**这条不需要你在
+反代里补**；反代里那句 `add_header Strict-Transport-Security ...` 可以删掉，留着也不生效——
+但请删掉，否则哪天有人顺手去掉了 `X-Cache` 那行，两处就会同时下发两个同名头，而浏览器只认一个。
+
+验收（服务端下发后，走 https 域名应数出 1）：
+
 ```bash
-curl -sS -o /dev/null -D - https://你的域名/ | grep -ci '^strict-transport'   # 0 = 没生效
+curl -sS -o /dev/null -D - https://你的域名/ | grep -ci '^strict-transport'
 ```
 
-要它生效就得把这条也写进那个 `location`（并且注意：该 `location` 里若还有 `if` 块，
-`if` 内一旦写了 `add_header`，连本 `location` 的这一组也不继承，得逐处补）。
-更省事的做法是**别在反代层加响应头**——本站的安全响应头（CSP、`X-Content-Type-Options`、
-`Referrer-Policy`、`X-Frame-Options`、`Permissions-Policy`）全部由服务端下发，
+同理，**别在反代层加响应头**：本站的安全响应头（CSP、`X-Content-Type-Options`、
+`Referrer-Policy`、`X-Frame-Options`、`Permissions-Policy`、https 下的 HSTS）全部由服务端下发，
 反代只需要传 `Host` / `X-Forwarded-Proto` / `X-Forwarded-For` 三样请求头。
+`X-Forwarded-Proto` 尤其不能省——没有它，服务端看到的全是 http，HSTS 就一条都不会发。
 
 ### CDN 场景（Cloudflare / 阿里云 CDN 等）
 
