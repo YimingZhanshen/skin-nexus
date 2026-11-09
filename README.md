@@ -51,7 +51,7 @@ docker compose -f docker-compose.quickstart.yml up -d
 
 **站长**：管理面板（概览、用户/角色/材质、邀请码、站点设置、运行状态、自助诊断）、公告与自定义 CSS/JS、主题包与主题市场（Ed25519 验签，安装卸载热生效）、本地主题包上传、自定义页脚、封禁（登录 / 认证 / `hasJoined` 三层）、认证限流与失败锁定、SMTP 找回密码与邮箱验证（单次链接令牌 + 可设宽限期的进服门禁）、站内通知（举报处置、材质下架与解禁、封禁与解禁）、登录与服务器通信日志（保留 90 天；超管可临时开 ≤24h 的诊断窗口，把同一次请求的状态码/耗时/白名单请求头/正文节选与令牌原文多写一行明细）、操作审计；会话与启动器令牌在库内只存摘要，读到库不等于读到还能用的登录态——诊断明细里的令牌原文是这条的唯一例外，且按固定的 24h 短时钟抹掉，不跟 90 天的日志保留期走。
 
-**协议与集成**：Yggdrasil 全端点（authlib-injector 零改配置）、OIDC 免密登录（设备码 + refresh 轮换，不需要外挂 Janus）、MUA Union 成员站模块（默认关闭 = 零暴露面）、CustomSkinAPI / USM / legacy 裸 PNG / 公开只读 API、Mojang 正版兜底（本地未命中时回源官方，出站地址防护 + 面板热开关）、服务端头像与预览渲染、启动器 Bearer API（`launcher-api` 插件）、皮肤导入（`skin-importer` 插件，支持 Mojang 与老站单条/批量导入）。
+**协议与集成**：Yggdrasil 全端点（authlib-injector 零改配置）、OIDC 免密登录（设备码 + refresh 轮换，不需要外挂 Janus）、MUA Union 成员站模块（三头验签入站、角色生命周期同步、跨站绑定与 UUID 修正、成员站名与安全级别徽章；默认关闭 = 零暴露面）、CustomSkinAPI / USM / legacy 裸 PNG / 公开只读 API、Mojang 正版兜底（本地未命中时回源官方，出站地址防护 + 面板热开关）、服务端头像与预览渲染、启动器 Bearer API（`launcher-api` 插件）、皮肤导入（`skin-importer` 插件，支持 Mojang 与老站单条/批量导入）。
 
 **内容与扩展**：中英双语（语言包可扩展）、主题包体系（零构建：`theme.json` + CSS + 可选 JS）、签名插件平台（goja 宿主：配置/密钥、命名空间数据、三档路由、事件与 guard、iframe UI）、SEO（落地页与皮肤详情页服务端渲染、`sitemap.xml`、`robots.txt`、`llms.txt`、逐页 meta/OG 与 JSON-LD）。
 
