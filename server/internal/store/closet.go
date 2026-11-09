@@ -97,34 +97,47 @@ type WearableRow struct {
 // upload collects it (and migration 0022 collected the history), not because
 // the picker also unions the uploads table.
 //
-// One row per texture, and that row is ONE closet entry: the newest one holding
-// the texture. user_closet keeps the legacy shape with no unique constraint
-// (data-compat rule 7), and AddClosetEntry is a check-then-insert, so a
-// double-click or a direct import can leave the same pair twice. Grouping with
+// One row per texture, and that row is ONE closet entry: the newest entry that
+// actually carries an alias, else the newest unnamed one. user_closet keeps the
+// legacy shape with no unique constraint (data-compat rule 7) and
+// AddClosetEntry is a check-then-insert, so the same pair can appear twice — a
+// direct import puts the alias on one row and NULL on the other. Grouping with
 // MAX(item_name) used to resolve such a texture to the alphabetically largest
-// alias while ordering by MAX(id) — so the label shown and the entry a rename
-// would address were different rows. A derived table over (texture_tid, MAX(id))
-// pins both to the same entry; the join is plain SQL, so all three engines read
-// it the same way, and because each texture now appears once the total is a
-// COUNT(*) over the join rather than a COUNT(DISTINCT …).
+// alias while ordering by MAX(id), the newest entry: the label shown and the
+// entry a rename would address were different rows, and searching by the alias
+// the list itself displayed could miss it — the integration suite caught that
+// the moment it shipped. Ranking to a single row makes id, alias, description
+// and search agree, and preferring the named entry keeps the alias visible,
+// which is the whole point of a closet name.
+//
+// NOT EXISTS rather than a window function: MySQL 5.7 has no ROW_NUMBER(), and
+// GROUP_CONCAT tricks are not portable. Ordering stays on the newest activity
+// per texture, exactly as the old MAX(c.id) DESC did.
 //
 // The picker pages and searches, so it gets the count back as total. Search
-// matches the row that is displayed — the newest entry's alias, the texture's
-// own description, or its hash.
+// reaches all three things a player might type: the alias they gave the entry,
+// the texture's own name, and the content address.
 func (m *Mysql) WearableTextures(ctx context.Context, uid int64, typ, q string, limit, offset int) ([]WearableRow, int64, error) {
 	d := m.db.Dialect()
-	where := "c.user_uid = ? AND t.type = ?"
-	// The subquery's own uid placeholder comes first in the statement text.
-	args := []any{uid, uid, typ}
+	named := func(col string) string {
+		return `CASE WHEN COALESCE(` + col + `, '') <> '' THEN 0 ELSE 1 END`
+	}
+	// b is better than c when it has an alias and c has none, or both agree on
+	// that and b is newer. Exactly one row per texture survives NOT EXISTS,
+	// because ids are unique.
+	better := `(` + named("b.item_name") + ` < ` + named("c.item_name") + ` OR (` +
+		named("b.item_name") + ` = ` + named("c.item_name") + ` AND b.id > c.id))`
+	where := `c.user_uid = ? AND t.type = ? AND NOT EXISTS (` +
+		`SELECT 1 FROM user_closet b WHERE b.user_uid = c.user_uid AND b.texture_tid = c.texture_tid AND ` +
+		better + `)`
+	args := []any{uid, typ}
 	if s := strings.TrimSpace(q); s != "" {
 		where += ` AND (` + d.CIContains("COALESCE(c.item_name, '')") + ` OR ` +
 			d.CIContains("COALESCE(t.description, '')") + ` OR ` + d.CIContains("COALESCE(t.hash, '')") + `)`
 		like := dialect.LikeContains(s)
 		args = append(args, like, like, like)
 	}
-	newest := `(SELECT texture_tid, MAX(id) AS id FROM user_closet WHERE user_uid = ? GROUP BY texture_tid) n`
-	from := ` FROM user_closet c JOIN textures t ON t.id = c.texture_tid JOIN ` + newest +
-		` ON n.id = c.id WHERE ` + where
+	from := ` FROM user_closet c JOIN textures t ON t.id = c.texture_tid WHERE ` + where
 	var total int64
 	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*)`+from, args...).Scan(&total); err != nil {
 		return nil, 0, err
@@ -133,7 +146,9 @@ func (m *Mysql) WearableTextures(ctx context.Context, uid int64, typ, q string, 
 	rows, err := m.db.QueryContext(ctx, `
 		SELECT c.id, c.texture_tid, t.hash, COALESCE(t.model, ''),
 		       COALESCE(c.item_name, ''), COALESCE(t.description, '')`+from+`
-		ORDER BY c.id DESC LIMIT ? OFFSET ?`, page...)
+		ORDER BY (SELECT MAX(x.id) FROM user_closet x
+		          WHERE x.user_uid = c.user_uid AND x.texture_tid = c.texture_tid) DESC
+		LIMIT ? OFFSET ?`, page...)
 	if err != nil {
 		return nil, 0, err
 	}
