@@ -81,6 +81,55 @@ func TestUnionDiagnoseOmitsCauseOnSuccess(t *testing.T) {
 	}
 }
 
+// The probe is the same kind of seam as the cause: computed inside union,
+// useless if this handler forgets to hand it over.
+func TestUnionDiagnoseRelaysProbe(t *testing.T) {
+	b := diagnoseBackend(&union.DiagnoseReport{
+		Status: "ok",
+		Data:   json.RawMessage(`{"healthy":true}`),
+		Probe: &union.DiagnoseProbe{
+			TLS: &union.TLSSnapshot{Version: "TLS 1.3", Cipher: "TLS_AES_256_GCM_SHA384", CertDaysLeft: 41},
+			Clock: &union.ClockEvidence{
+				HubClock: "Tue, 10 Nov 2026 00:00:00 GMT", OffsetSeconds: 120, WithinWindow: false,
+			},
+		},
+	}, nil)
+	_, out := callDiagnose(t, b)
+	probe, ok := out["probe"].(map[string]any)
+	if !ok {
+		t.Fatalf("probe = %T, want object — the panel's TLS and clock rows come only from here", out["probe"])
+	}
+	tlsSnap, ok := probe["tls"].(map[string]any)
+	if !ok {
+		t.Fatalf("probe.tls = %T, want object", probe["tls"])
+	}
+	if tlsSnap["version"] != "TLS 1.3" || tlsSnap["cert_days_left"] != float64(41) {
+		t.Errorf("probe.tls = %v, want the version and days-left the union package reported", tlsSnap)
+	}
+	clock, ok := probe["clock"].(map[string]any)
+	if !ok {
+		t.Fatalf("probe.clock = %T, want object", probe["clock"])
+	}
+	if clock["within_window"] != false {
+		t.Error("probe.clock.within_window lost — a hub outside the signature window would read as in step")
+	}
+}
+
+// An absent probe must stay absent rather than become an empty object: the
+// panel distinguishes "no connection, nothing to say" from "a connection with
+// no TLS".
+func TestUnionDiagnoseOmitsAbsentProbe(t *testing.T) {
+	b := diagnoseBackend(&union.DiagnoseReport{
+		Status: "error",
+		Data:   json.RawMessage(`{"exception":"dial tcp: no route to host"}`),
+		Cause:  "tcp",
+	}, nil)
+	_, out := callDiagnose(t, b)
+	if p, present := out["probe"]; present && p != nil {
+		t.Errorf("probe = %v on a leg that never connected, want null", p)
+	}
+}
+
 // When the module itself refuses (union disabled), the handler still has to
 // answer in the report shape — the frontend renders one table for every
 // outcome, and a bare 502 with prose would read as a broken panel.

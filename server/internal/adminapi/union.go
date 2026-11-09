@@ -136,6 +136,7 @@ func (b *Backend) handleUnionDiagnose(w http.ResponseWriter, r *http.Request) {
 		"status":              rep.Status,
 		"data":                json.RawMessage(rep.Data),
 		"cause":               rep.Cause,
+		"probe":               rep.Probe,
 		"key_fingerprint":     st["key_fingerprint"],
 		"private_key_version": st["private_key_version"],
 		"server_list_version": st["server_list_version"],

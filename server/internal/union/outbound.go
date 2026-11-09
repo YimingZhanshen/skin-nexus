@@ -106,11 +106,14 @@ func (e *APIError) Error() string {
 // Cause is our addition and sits beside that shape, never inside it: `data`
 // stays the legacy payload so anything already reading it keeps working, while
 // the panel gets one token naming why leg one failed. See classifyError for
-// the vocabulary.
+// the vocabulary. Probe is the same idea for this site's own side of the call
+// (see diagnose_probe.go): what TLS we negotiated and how the hub clock compares
+// to ours, neither of which the hub can report about itself.
 type DiagnoseReport struct {
 	Status string          `json:"status"` // "ok" | "error"
 	Data   json.RawMessage `json:"data"`
 	Cause  string          `json:"cause,omitempty"`
+	Probe  *DiagnoseProbe  `json:"probe,omitempty"`
 }
 
 // Hub wire documents (§4.2). JSON tags are the hub field names, verbatim.
@@ -399,9 +402,28 @@ func (o *Outbound) Diagnose(ctx context.Context) (*DiagnoseReport, error) {
 	if !o.Enabled() {
 		return nil, ErrDisabled
 	}
-	ctx, cancel := context.WithTimeout(ctx, diagnoseTimeout)
-	defer cancel()
-	_, body, err := o.doJSON(ctx, http.MethodPost, "/diagnose", map[string]any{}, nil)
+	payload, err := json.Marshal(map[string]any{})
+	if err != nil {
+		return nil, fmt.Errorf("union: encode diagnose body: %w", err)
+	}
+	start := time.Now()
+	resp, raw, err := o.roundTrip(ctx, http.MethodPost, "/diagnose", payload, diagnoseTimeout)
+	st := 0
+	if resp != nil {
+		st = resp.StatusCode
+	}
+	o.logOut(http.MethodPost, "/diagnose", st, time.Since(start), err)
+	// roundTrip reports transport outcomes only; a hub that answered 401 did
+	// not error at the socket level. Turning a non-2xx into *APIError is what
+	// doJSONInner normally does, and Diagnose needs the same rule or a rejected
+	// member key would be filed as a successful leg.
+	if err == nil && (st < 200 || st > 299) {
+		err = &APIError{Method: http.MethodPost, Path: "/diagnose", StatusCode: st, Headers: resp.Header, Body: raw}
+	}
+	// The observation is of the connection that just happened, so it is
+	// reported even when the hub answered 403 — a rejected key on a healthy
+	// handshake is exactly the distinction the panel is for.
+	probe := buildProbe(resp, time.Now())
 	if err != nil {
 		var apiErr *APIError
 		if errors.As(err, &apiErr) {
@@ -411,12 +433,12 @@ func (o *Outbound) Diagnose(ctx context.Context) (*DiagnoseReport, error) {
 				"headers":     apiErr.Headers,
 				"body":        string(apiErr.Body),
 			})
-			return &DiagnoseReport{Status: "error", Data: data, Cause: classifyError(err)}, nil
+			return &DiagnoseReport{Status: "error", Data: data, Cause: classifyError(err), Probe: probe}, nil
 		}
 		data, _ := json.Marshal(map[string]any{"exception": err.Error()})
-		return &DiagnoseReport{Status: "error", Data: data, Cause: classifyError(err)}, nil
+		return &DiagnoseReport{Status: "error", Data: data, Cause: classifyError(err), Probe: probe}, nil
 	}
-	return &DiagnoseReport{Status: "ok", Data: body}, nil
+	return &DiagnoseReport{Status: "ok", Data: raw, Probe: probe}, nil
 }
 
 // ServerCode exchanges the member key for the public server code:
@@ -637,7 +659,40 @@ func (o *Outbound) doJSONInner(ctx context.Context, method, path string, body an
 		payload = enc
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, o.to)
+	resp, raw, err := o.roundTrip(ctx, method, path, payload, o.to)
+	st := 0
+	if resp != nil {
+		st = resp.StatusCode
+	}
+	if err != nil {
+		return st, nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return st, raw, &APIError{Method: method, Path: path, StatusCode: resp.StatusCode, Headers: resp.Header, Body: raw}
+	}
+	if out != nil && len(raw) > 0 {
+		if err := json.Unmarshal(raw, out); err != nil {
+			return st, raw, fmt.Errorf("union: %s %s: decode response: %w", method, path, err)
+		}
+	}
+	return st, raw, nil
+}
+
+// roundTrip is the single place the hub wire shape is built: method, URL,
+// member-key header, content type, deadline, capped read. Every caller goes
+// through it — the JSON calls, the relay and the diagnose observation — so an
+// instrumented path can never drift from the request path.
+//
+// The timeout is a parameter, not a constant of this function, because the
+// legacy client gives diagnose ten seconds while everything else gets five.
+// Nesting a second WithTimeout inside here would silently clamp that ten to
+// five; the deadline is set once, here.
+//
+// The response body is always consumed and closed before returning; what
+// callers get back is the status, headers and TLS state, which stay readable
+// after the body is gone.
+func (o *Outbound) roundTrip(ctx context.Context, method, path string, payload []byte, timeout time.Duration) (*http.Response, []byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	var reader io.Reader
@@ -646,7 +701,7 @@ func (o *Outbound) doJSONInner(ctx context.Context, method, path string, body an
 	}
 	req, err := http.NewRequestWithContext(ctx, method, o.apiRoot()+path, reader)
 	if err != nil {
-		return 0, nil, fmt.Errorf("union: build %s %s: %w", method, path, err)
+		return nil, nil, fmt.Errorf("union: build %s %s: %w", method, path, err)
 	}
 	req.Header.Set(HeaderMemberKey, o.MemberKey())
 	if payload != nil {
@@ -655,22 +710,14 @@ func (o *Outbound) doJSONInner(ctx context.Context, method, path string, body an
 
 	resp, err := o.client.Do(req)
 	if err != nil {
-		return 0, nil, fmt.Errorf("union: %s %s: %w", method, path, err)
+		return nil, nil, fmt.Errorf("union: %s %s: %w", method, path, err)
 	}
 	defer resp.Body.Close()
 	raw, err := readCapped(resp)
 	if err != nil {
-		return resp.StatusCode, nil, fmt.Errorf("union: %s %s: read response: %w", method, path, err)
+		return resp, nil, fmt.Errorf("union: %s %s: read response: %w", method, path, err)
 	}
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return resp.StatusCode, raw, &APIError{Method: method, Path: path, StatusCode: resp.StatusCode, Headers: resp.Header, Body: raw}
-	}
-	if out != nil && len(raw) > 0 {
-		if err := json.Unmarshal(raw, out); err != nil {
-			return resp.StatusCode, raw, fmt.Errorf("union: %s %s: decode response: %w", method, path, err)
-		}
-	}
-	return resp.StatusCode, raw, nil
+	return resp, raw, nil
 }
 
 // doProxy is the instrumented wrapper (see doJSON).
