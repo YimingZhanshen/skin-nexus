@@ -1167,6 +1167,7 @@
       "union_roster_sync": "同步联盟名册",
       "union_serverlist_refresh": "刷新联盟服务器列表",
       "union_sync_create_failed": "联盟同步建档失败",
+      "union_sync_rename_failed": "联盟同步改名失败",
       "union_sync_delete_failed": "联盟同步销档失败",
       "ygg_tokens_pruned": "清理过期的启动器令牌"
     }

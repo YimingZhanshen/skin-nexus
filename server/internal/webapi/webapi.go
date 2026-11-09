@@ -176,45 +176,66 @@ func writeAccountErr(w http.ResponseWriter, err *account.Error) {
 	writeJSON(w, err.Status(), err.Body())
 }
 
-// SyncProfileCreate announces a new profile to the Union hub, async and
-// best-effort (shared by the web handler and the account service).
+// The three Union announcements share one shape and are written out three
+// times on purpose. Each leg is async and best-effort: it must never block or
+// fail the player's own request, it bounds itself at 5s on a fresh context
+// (the caller's dies with the request, and the announcement has to outlive it),
+// and a failed call leaves an audit row the station owner can act on with the
+// roster-sync button instead of discovering a silent divergence from the hub.
+//
+// What is NOT shared is the InsertAudit call. Folding these three into one
+// helper that assembles its action name — as a parameter, or worse from a leg
+// word — takes the literal out of the emitter call, and the bilingual-audit gate
+// in scripts/check-locales.mjs collects actions by reading the depth-one string
+// arguments of every emitter call. It went red on exactly that refactor: the new
+// action looked untranslated, and the dictionary entry it was aiming at looked
+// like dead copy.
+
+// SyncProfileCreate announces a new profile to the Union hub (shared by the web
+// handler and the account service).
 func (b *Backend) SyncProfileCreate(ctx context.Context, uuid, name string) {
-	b.announceUnionProfile(ctx, "create", uuid, name, func(ctx context.Context) error {
-		return b.union.SyncProfileCreate(ctx, uuid, name)
-	})
-}
-
-// SyncProfileRename announces a rename under the uuid that did not move.
-func (b *Backend) SyncProfileRename(ctx context.Context, uuid, name string) {
-	b.announceUnionProfile(ctx, "rename", uuid, name, func(ctx context.Context) error {
-		return b.union.SyncProfileRename(ctx, uuid, name)
-	})
-}
-
-// SyncProfileDelete retires a profile the hub is still publishing for us.
-func (b *Backend) SyncProfileDelete(ctx context.Context, uuid, name string) {
-	b.announceUnionProfile(ctx, "delete", uuid, name, func(ctx context.Context) error {
-		return b.union.SyncProfileDelete(ctx, uuid)
-	})
-}
-
-// announceUnionProfile is the one shape all three legs share: never block the
-// user's request, 5s bound on a context that is not the caller's (the request
-// is already answered when this runs), and a failed announcement leaves an
-// audit row a station owner can act on with 同步角色数据 rather than a silent
-// divergence between this site and the hub. The incoming context is ignored on
-// purpose — it is the request's, and it is cancelled the moment we return.
-func (b *Backend) announceUnionProfile(_ context.Context, leg, uuid, name string, call func(context.Context) error) {
 	if b.union == nil || !b.union.Enabled() {
 		return
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := call(ctx); err != nil {
-			b.Store.InsertAudit(context.Background(), 0, "union_sync_"+leg+"_failed",
+		if err := b.union.SyncProfileCreate(ctx, uuid, name); err != nil {
+			b.Store.InsertAudit(context.Background(), 0, "union_sync_create_failed",
 				map[string]interface{}{"uuid": uuid, "name": name, "error": err.Error()})
-			log.Printf("union sync %s failed uuid=%s name=%s: %v", leg, uuid, name, err)
+			log.Printf("union sync create failed uuid=%s name=%s: %v", uuid, name, err)
+		}
+	}()
+}
+
+// SyncProfileRename announces a rename under the uuid that did not move.
+func (b *Backend) SyncProfileRename(ctx context.Context, uuid, name string) {
+	if b.union == nil || !b.union.Enabled() {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := b.union.SyncProfileRename(ctx, uuid, name); err != nil {
+			b.Store.InsertAudit(context.Background(), 0, "union_sync_rename_failed",
+				map[string]interface{}{"uuid": uuid, "name": name, "error": err.Error()})
+			log.Printf("union sync rename failed uuid=%s name=%s: %v", uuid, name, err)
+		}
+	}()
+}
+
+// SyncProfileDelete retires a profile the hub is still publishing for us.
+func (b *Backend) SyncProfileDelete(ctx context.Context, uuid, name string) {
+	if b.union == nil || !b.union.Enabled() {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := b.union.SyncProfileDelete(ctx, uuid); err != nil {
+			b.Store.InsertAudit(context.Background(), 0, "union_sync_delete_failed",
+				map[string]interface{}{"uuid": uuid, "name": name, "error": err.Error()})
+			log.Printf("union sync delete failed uuid=%s name=%s: %v", uuid, name, err)
 		}
 	}()
 }

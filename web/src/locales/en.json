@@ -1167,6 +1167,7 @@
       "union_roster_sync": "Union roster synced",
       "union_serverlist_refresh": "Union server list refreshed",
       "union_sync_create_failed": "Union sync could not create the record",
+      "union_sync_rename_failed": "Union sync could not update the name",
       "union_sync_delete_failed": "Union sync could not delete the record",
       "ygg_tokens_pruned": "Expired launcher tokens pruned"
     }
