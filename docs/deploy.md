@@ -524,6 +524,23 @@ but only one is allowed.
 两条同时踩中，从 hub 发起的本站登录也一起坏掉。这块 blanket 头帮不到任何同源页面，
 只把真正需要 CORS 的路径全打断，所以修法是**删掉它**，不在服务端将错就错。
 
+**先定位再动手**，这块头常常不在你第一眼看到的那段反代配置里。两条实测线索：
+
+- 它**只在请求带 `Origin` 时出现**（不带 `Origin` 的 `curl` 一条也没有），而且不管 Origin 是谁都回
+  固定的 `*`——所以写法是 `if ($http_origin) { add_header Access-Control-* … }`，不是裸的四行。
+- 宝塔生成的 `#PROXY-START/` 那段里通常**没有**它（那段自己有 `add_header X-Cache`，按 nginx 规则
+  不再继承 `server` 层的 `add_header`），所以要去整棵配置树里找：
+
+```bash
+nginx -T 2>/dev/null | grep -n -i 'access-control'
+# 或直接搜文件
+grep -rn --include=*.conf -i 'Access-Control' /www/server/panel/vhost/nginx/ /www/server/nginx/conf/
+```
+
+搜到的那几行删掉（或把整条 `if ($http_origin)` 块删掉），`nginx -t` 通过后重载，再跑下面的验收。
+若两处都搜不到，说明这块头是更外层加的（CDN 的 Transform Rules / WAF / 另一跳 nginx），
+把 `nginx -T` 的输出留档再排查。
+
 验收（跨源请求必带 `Origin`，数头出现几次）：
 
 ```bash
