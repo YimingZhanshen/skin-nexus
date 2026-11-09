@@ -97,6 +97,14 @@ func (a *API) accessLog(r *http.Request, e accesslog.Entry) {
 func (a *API) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/yggdrasil/{$}", a.handleMetadata)
+	// Same surface at the canonical, no-slash URL — the form advertised in
+	// X-Authlib-Injector-API-Location and the form the MUA hub fetches
+	// cross-origin to fill in a member's display name. ServeMux answers a bare
+	// 307 for the no-slash form of a "{$}" pattern, and a redirect it writes
+	// itself carries no handler headers, so the CORS surface in handleMetadata
+	// never reached that request and the hub rendered "✕ <code>".
+	// internal/ygg/canonical_metadata_cors_test.go pins both halves.
+	mux.HandleFunc("GET /api/yggdrasil", a.handleMetadata)
 	mux.HandleFunc("POST /api/yggdrasil/authserver/authenticate", a.handleAuthenticate)
 	mux.HandleFunc("POST /api/yggdrasil/authserver/refresh", a.handleRefresh)
 	mux.HandleFunc("POST /api/yggdrasil/authserver/validate", a.handleValidate)

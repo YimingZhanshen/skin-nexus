@@ -114,6 +114,13 @@ func (a *API) Handler() http.Handler {
 
 	// Public, no signature (legacy routes are outside UnionHostVerify).
 	mux.HandleFunc("GET /api/union/member/{$}", a.handleSelfDescription)
+	// The no-slash form is what a cross-origin caller actually uses: the MUA
+	// hub reads this document right after the metadata to decide whether to
+	// enable its OAuth button. "{$}" alone made ServeMux answer a bare 307
+	// there, and a redirect it writes itself carries no CORS headers, so that
+	// chain failed and the hub showed "✕ <code>" with a disabled button.
+	// See canonical_member_cors_test.go.
+	mux.HandleFunc("GET /api/union/member", a.handleSelfDescription)
 	if a.grant != nil {
 		mux.Handle("GET /api/union/member/oauth2/{$}", a.grant.SigKeyHandler())
 	}

@@ -846,7 +846,7 @@ func main() {
 	}
 
 	root := http.NewServeMux()
-	root.Handle("/api/yggdrasil/", yggAPI.Handler())
+	mountCompatSurfaces(root, yggAPI.Handler())
 	if oidcProvider != nil {
 		root.Handle("GET /api/yggdrasil/.well-known/openid-configuration", oidcProvider.DiscoveryHandler())
 		// /api/v1/oidc/* must be claimed at the root mux: the webapi
