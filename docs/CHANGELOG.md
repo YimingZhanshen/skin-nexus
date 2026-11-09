@@ -214,18 +214,30 @@ hub 侧站名**仍然空**，控制台换了一条新失败——`Access-Control
 - **只读取证定位来源**。逐路径 `curl -D -` 数头：`/api/yggdrasil` 与 `/api/union/member` 各两条
   ACAO，`/api/union/member/oauth2/` 也是两条，而 `/`、`/healthz`、`/api/v1/setup/status` 各一条。
   多出来的那一组（`Origin: *` + `Methods: GET,POST,OPTIONS,PUT,DELETE` + `Headers: DNT,...` +
-  `Expose`）在**每个**响应上都出现，且排在应用自己的头之前——是 nginx blanket `add_header`，
-  即网上流传的那段 CORS 复制粘贴片段。应用侧的注册是对的，问题在反代多此一举。
+  `Expose`）在**每个**响应上都出现，且排在应用自己的头之前——是反代 blanket 加的。
+- **真凶不在站点配置里，这是第二轮取证才坐实的**。站长把 `#PROXY-START/` 段和整个 `server` 段
+  都贴出来，两处都没有那四行。两条线索指向别处：那组头**只在请求带 `Origin` 时才出现**（裸
+  `add_header` 是无条件的），而且它连 nginx 自己拦下来的响应也加得上——打 `/.git/config` 拿到一张
+  `<title>网站防火墙</title>` 的 403、`Cache-Control: no-store`，那四行 CORS 头照样在。结论：
+  **宝塔 Nginx 防火墙（网站防火墙）的「跨域设置」在响应阶段统一注入**，那串值就是它面板里的默认值；
+  `nginx -T` 搜不到，删站点配置也没用。关掉之后闭环。
 - **应用侧无法自愈**：nginx 在应用响应**之后**才追加头，Go 代码看不到也删不掉；把 CORS 交给
   反代又会让没有 blanket 头的部署（Docker 直连、宝塔裸端口）失去这层。所以本轮**不改代码**，
-  只把修法与验收写进公开文档，避免下一个部署的人再踩：`deploy.md` 新增「CORS 头」小节
-  （逐路径计数命令 + 删 blanket 的理由 + 确实需要窄加时按 `location` 窄写的正确姿势），
-  `compat-matrix.md` 联盟取名那行补记后半症状与根因。
+  只把定位方法与验收写进公开文档，避免下一个部署的人再踩：`deploy.md` 新增「CORS 头」小节
+  （三条按顺序排查的实测线索 + 逐路径计数命令 + 确实需要窄加时按 `location` 窄写的正确姿势），
+  `compat-matrix.md` 联盟取名那行补记后半症状、真凶与修法。
 - **连带症状**：`/api/union/member/oauth2/` 应用侧按要求返回具体 Origin（非 `*`）并带
   `Access-Control-Allow-Credentials: true`，与 blanket 的 `*` 同时存在时既重复又违规，
-  从 hub 发起的本站登录也一起坏——同一个根因的第二处表现，改完 nginx 一并恢复。
-- **not-run**：nginx 改动在站长面板侧，本轮无法代跑；改完必须复测前三行应为 1、`/healthz` 应为 0，
-  hub 侧站名才会真正显示。
+  从 hub 发起的本站登录也一起坏——同一个根因的第二处表现，关掉后一并恢复。
+- **顺手量出第二条静默失效**：`server` 层的 `add_header Strict-Transport-Security` 在**所有**
+  反代响应上都不下发（实测计数 0）。原因是 nginx 的继承规则——`location` 只要自己写了任何一条
+  `add_header`（宝塔反代段自带 `X-Cache`），就不再继承上一层那一组。已写进 `deploy.md`
+  「反代自己写的 add_header 会吞掉上一层那批头」小节。
+- **端到端读数（真浏览器，hub 页面）**：四条路径计数 `1 / 1 / 1 / 0`；`/api/yggdrasil` 的
+  `meta.serverName` 读到「温州商学院皮肤站」；hub `/union` 的成员行与服务器行都显示站名，
+  按钮 `disabled=false`；hub 控制台 17 条报错**没有一条**指向本站，其中 ECNU 与 nekoplay
+  正是我们上周那个坏法（`multiple values '*, *'`），它们至今还坏着。
+- **not-run**：nginx 防火墙的开关在站长面板侧，本轮无法代跑；上面的读数是站长关掉之后测的。
 
 ## 2026-11-07
 

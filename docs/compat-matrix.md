@@ -37,7 +37,7 @@ JWT access token 实测形状：`aud="2"（shared_client_id）、sub=uid、scope
 |---|---|---|---|
 | `GET /{player}.json`（CustomSkinAPI R1） | 200 | 同形 | ✅ |
 | `GET /usm/{player}.json`、`/skin\|cape/{player}.png` | 旧站 404（插件未装） | 已实现（超集） | ✅ |
-| 联盟 hub 的浏览器端成员站取名 | hub 页面用访客的浏览器跨源读 `bs_root + /api/yggdrasil` 的 `meta.serverName`，再读 `/api/union/member` 的 `enabledFeatures` 决定按钮能否用；两条 fetch 共用一个 catch，任一条挂掉成员站就显示成「✕ 代号」且禁用 | 两个端点都要在**不带斜杠**的规范地址上直接返回 200 并带**恰好一个** `Access-Control-Allow-Origin`。hub 侧的成员清单里 53 个站都**不存** `name` 字段，名称全靠这条跨源读取回填，所以它坏了等于站名在联盟里消失。2026-11-09 修前半（`{$}` 的裸 307 不带 CORS）。后半同日实测：反代若整块 `add_header Access-Control-Allow-Origin *`，同一个响应就出现两个值，浏览器连 200 一起丢弃（控制台 `multiple values '*, *'` + `net::ERR_FAILED`），站名同样是空——`/api/union/member/oauth2/` 那条带凭据的更是重复值与 `*` 双踩。修法在反代侧，见 [`deploy.md`](deploy.md) 的「CORS 头」小节 | 🔧 |
+| 联盟 hub 的浏览器端成员站取名 | hub 页面用访客的浏览器跨源读 `bs_root + /api/yggdrasil` 的 `meta.serverName`，再读 `/api/union/member` 的 `enabledFeatures` 决定按钮能否用；两条 fetch 共用一个 catch，任一条挂掉成员站就显示成「✕ 代号」且禁用 | 两个端点都要在**不带斜杠**的规范地址上直接返回 200 并带**恰好一个** `Access-Control-Allow-Origin`。hub 侧的成员清单里 53 个站都**不存** `name` 字段，名称全靠这条跨源读取回填，所以它坏了等于站名在联盟里消失。2026-11-09 修前半（`{$}` 的裸 307 不带 CORS）。后半同日实测：反代若整块 `add_header Access-Control-Allow-Origin *`，同一个响应就出现两个值，浏览器连 200 一起丢弃（控制台 `multiple values '*, *'` + `net::ERR_FAILED`），站名同样是空——`/api/union/member/oauth2/` 那条带凭据的更是重复值与 `*` 双踩。真凶是**宝塔网站防火墙的「跨域设置」**（它只在请求带 `Origin` 时注入，`nginx -T` 里搜不到），关掉后计数变成 `1/1/1/0`、hub 当场回填站名。修法与验收见 [`deploy.md`](deploy.md) 的「CORS 头」小节。hub 上 ECNU 与 nekoplay 至今仍是这个坏法 | ✅ |
 
 ## 4. 取舍与偏差（blessing 1:1 口径）
 

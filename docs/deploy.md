@@ -524,22 +524,30 @@ but only one is allowed.
 两条同时踩中，从 hub 发起的本站登录也一起坏掉。这块 blanket 头帮不到任何同源页面，
 只把真正需要 CORS 的路径全打断，所以修法是**删掉它**，不在服务端将错就错。
 
-**先定位再动手**，这块头常常不在你第一眼看到的那段反代配置里。两条实测线索：
+**先定位再动手**——这块头通常**不在站点配置里**。三条实测线索，按顺序排查：
 
-- 它**只在请求带 `Origin` 时出现**（不带 `Origin` 的 `curl` 一条也没有），而且不管 Origin 是谁都回
-  固定的 `*`——所以写法是 `if ($http_origin) { add_header Access-Control-* … }`，不是裸的四行。
-- 宝塔生成的 `#PROXY-START/` 那段里通常**没有**它（那段自己有 `add_header X-Cache`，按 nginx 规则
-  不再继承 `server` 层的 `add_header`），所以要去整棵配置树里找：
+1. **它只在请求带 `Origin` 时出现**（不带 `Origin` 一条也没有），且不管 Origin 是谁都回固定的 `*`。
+   裸的 `add_header Access-Control-Allow-Origin *;` 是无条件的，所以它一定是包在
+   `if ($http_origin)` 里、或由某个模块在响应阶段注入。
+2. **它出现在连 nginx 都没有代理的响应上**。打一个会被拦掉的敏感路径，看那张拦截页：
+   ```bash
+   curl -sS -D - -H 'Origin: https://example.org' 'https://你的域名/.git/config' | head -20
+   ```
+   这张页若是宝塔「网站防火墙」的 403（`<title>网站防火墙</title>`、`Cache-Control: no-store`）
+   却也带着那四行 CORS 头，就说明头是 **WAF 模块注入的**，站点配置里根本搜不到。
+3. 前两条不排除，再去整棵配置树里找：
+   ```bash
+   nginx -T 2>/dev/null | awk '/^# configuration file /{f=$3} tolower($0) ~ /access-control/{print f": "$0}'
+   ```
+   `-T` 会把所有 include 展开并标出归属文件，这是唯一不会漏的查法。
 
-```bash
-nginx -T 2>/dev/null | grep -n -i 'access-control'
-# 或直接搜文件
-grep -rn --include=*.conf -i 'Access-Control' /www/server/panel/vhost/nginx/ /www/server/nginx/conf/
-```
-
-搜到的那几行删掉（或把整条 `if ($http_origin)` 块删掉），`nginx -t` 通过后重载，再跑下面的验收。
-若两处都搜不到，说明这块头是更外层加的（CDN 的 Transform Rules / WAF / 另一跳 nginx），
-把 `nginx -T` 的输出留档再排查。
+**宝塔实测结论**：那四行（`*` / `GET,POST,OPTIONS,PUT,DELETE` /
+`DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization` /
+`Content-Length,Content-Range`）就是**宝塔 Nginx 防火墙（网站防火墙）里「跨域设置」的默认值**，
+由它在响应阶段统一注入，`nginx -T` 搜不到、删站点配置也没用。
+关闭位置：面板 → 网站防火墙 → 对应站点 → 跨域/CORS 设置关掉。
+本站不需要它——服务端已经按路径带好了正确的那一份（见上表）。
+2026-11-09 就是这么修的：关掉之后四条路径的计数变成 `1 / 1 / 1 / 0`，hub 侧站名当场回填。
 
 验收（跨源请求必带 `Origin`，数头出现几次）：
 
@@ -568,6 +576,22 @@ location /textures/ {
 同一道理适用于 CDN 层：Cloudflare 的「Transform Rules / Headers」里给
 `Access-Control-Allow-Origin` 赋值，效果与 nginx 这块 `add_header` 一样。CORS 头只配一处，
 且优先配在服务端——因为只有服务端知道哪条路径的语义需要跨源。
+
+### 反代自己写的 `add_header` 会吞掉上一层那批头
+
+nginx 的 `add_header` 只在**当前层级一条都没写**时才继承上一层那一组。宝塔生成的反代段里带了
+`add_header X-Cache $upstream_cache_status;`，于是 `server` 层那批 `add_header` **全部不再下发**——
+最常见的受害者是 `Strict-Transport-Security`：写在 `server` 层、看着配好了，实测每个响应都没有。
+
+```bash
+curl -sS -o /dev/null -D - https://你的域名/ | grep -ci '^strict-transport'   # 0 = 没生效
+```
+
+要它生效就得把这条也写进那个 `location`（并且注意：该 `location` 里若还有 `if` 块，
+`if` 内一旦写了 `add_header`，连本 `location` 的这一组也不继承，得逐处补）。
+更省事的做法是**别在反代层加响应头**——本站的安全响应头（CSP、`X-Content-Type-Options`、
+`Referrer-Policy`、`X-Frame-Options`、`Permissions-Policy`）全部由服务端下发，
+反代只需要传 `Host` / `X-Forwarded-Proto` / `X-Forwarded-For` 三样请求头。
 
 ### CDN 场景（Cloudflare / 阿里云 CDN 等）
 
