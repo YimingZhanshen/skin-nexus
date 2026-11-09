@@ -257,7 +257,7 @@ Union 八键），但生效优先级按键区分：
 ```bash
 docker compose up -d
 docker compose ps            # 等两个服务 healthy（镜像内置 HEALTHCHECK 探 /healthz，DB 探活）
-curl -s http://127.0.0.1:8080/api/yggdrasil/ | head -c 300   # 元数据 JSON
+curl -s http://127.0.0.1:8080/api/yggdrasil | head -c 300    # 元数据 JSON（用不带斜杠的规范地址，和启动器里填的那串一致）
 # 浏览器打开 /setup（或任一 SPA 路由）→ 空库自动进安装向导
 ```
 

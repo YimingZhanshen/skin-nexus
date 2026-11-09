@@ -7,7 +7,7 @@
 
 | 端点 | legacy 实测行为 | SkinNexus | 状态 |
 |---|---|---|---|
-| `GET /api/yggdrasil/` | meta + `feature.non_email_login` + `feature.openid_configuration_url` + skinDomains + PEM 公钥 | 同形；skinDomains 按旧站公式（配置 ∪ Union 成员站 ∪ site_url host ∪ 请求 host，2026-10-23 对齐） | 🔧 |
+| `GET /api/yggdrasil` 与 `/api/yggdrasil/` | meta + `feature.non_email_login` + `feature.openid_configuration_url` + skinDomains + PEM 公钥 | 同形；skinDomains 按旧站公式（配置 ∪ Union 成员站 ∪ site_url host ∪ 请求 host，2026-10-23 对齐）。**两种拼写各自注册**：不带斜杠才是规范地址（`X-Authlib-Injector-API-Location` 广告的就是它，启动器配置框里粘贴的也是它），而 Go 的 ServeMux 对 `{$}` 模式的不带斜杠形式会自己回一个 307——那条重定向上没有任何处理器头，跨源读它的浏览器直接按 CORS 失败处理。2026-11-09 补 | 🔧 |
 | `authserver/authenticate` | 单角色自动绑定 `selectedProfile`；token 为 JWT | 同形 | 🔧 |
 | `authserver/validate` / `invalidate` / `signout` | 恒 204 | 同 | ✅ |
 | `authserver/refresh` | 旧 token 立废；支持 `selectedProfile` 选角 | 同（选角解析修复于 2026-10-23） | 🔧 |
@@ -37,6 +37,7 @@ JWT access token 实测形状：`aud="2"（shared_client_id）、sub=uid、scope
 |---|---|---|---|
 | `GET /{player}.json`（CustomSkinAPI R1） | 200 | 同形 | ✅ |
 | `GET /usm/{player}.json`、`/skin\|cape/{player}.png` | 旧站 404（插件未装） | 已实现（超集） | ✅ |
+| 联盟 hub 的浏览器端成员站取名 | hub 页面用访客的浏览器跨源读 `bs_root + /api/yggdrasil` 的 `meta.serverName`，再读 `/api/union/member` 的 `enabledFeatures` 决定按钮能否用；两条 fetch 共用一个 catch，任一条挂掉成员站就显示成「✕ 代号」且禁用 | 两个端点都要在**不带斜杠**的规范地址上直接返回 200 并带**恰好一个** `Access-Control-Allow-Origin`。hub 侧的成员清单里 53 个站都**不存** `name` 字段，名称全靠这条跨源读取回填，所以它坏了等于站名在联盟里消失。2026-11-09 修 | 🔧 |
 
 ## 4. 取舍与偏差（blessing 1:1 口径）
 

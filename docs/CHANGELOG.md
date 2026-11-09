@@ -147,6 +147,32 @@ SQLite rig 验收，**生产站与演示站零操作**；不发版（tag 仍 v0.
   这类展示位允许写死字面量字号但要注明依据；连续 clamp(min,Nvw,max) 做不到，应改断点分档。
   同时写明：cmap 覆盖中文的像素字体不会自动回落黑体，别照字体名猜。
 
+### 同日第四轮 · 联盟 hub 里本站站名消失、授权按钮被禁用
+
+- **根因不在数据，在路径拼写**。hub 侧成员站清单里 53 个站**没有一个带 `name` 字段**——站名是 hub
+  页面用访客的浏览器跨源读 `bs_root + /api/yggdrasil` 的 `meta.serverName` 回填的，再读
+  `/api/union/member` 的 `enabledFeatures` 决定按钮能否用，两条 fetch 共用一个 catch，任一条挂掉
+  成员站就渲染成「✕ 代号」并禁用。我们这两个端点只注册了**带斜杠**的形式，而 Go 的 ServeMux 对
+  `{$}` 模式的不带斜杠请求由 mux 自己回 307——那条重定向上没有任何处理器头，浏览器整条按 CORS
+  拦掉（控制台原文 `No 'Access-Control-Allow-Origin' header is present on the requested resource`）。
+  数据侧当时实测正常：`meta.serverName` 非空、`enabledFeatures` 含 `unionOAuth2`。
+- **修法不对称，且这个不对称是实测出来的**：yggdrasil 要在 root 与包内两层各补一条规范地址注册
+  （root 的 `/api/yggdrasil/` 子树根本不匹配不带斜杠的路径），union 只需包内补一条（`/api/union/`
+  子树会把请求透传到内层）。参照实现取自同联盟随机 10 个成员站：9 个在无斜杠地址上是
+  `200 + 恰好一个 ACAO`，第 10 个返回 200 但 ACAO 出现两次、以另一种方式失败——所以断言里同时
+  钉住「只出现一次」。
+- **测试分三层，逐层带变异**。包内两层各加规范地址断言（含「body 与带斜杠形式逐字节相同」「POST
+  不得被放宽成 200」）；组装层新增 `mountCompatSurfaces`，把 root 挂载从 `main()` 里抽出来才第一次
+  可测——本缺陷正活在两层之间：2026-10-24 那次把 CORS 头加在处理器上，包级测试从此全绿而生产一直是
+  坏的，所以只在处理器层补测试等于用同一套盲区再赌一次。
+- **真机 A/B**：本地 rig（含修复）与未更新的生产，用同一台一次性跨源仪器跑 hub 那段取名逻辑——
+  rig 两条腿 `200 / type:cors / redirected:false`（307 是彻底没了，不是给重定向补头绕过去），
+  生产两条腿 `TypeError: Failed to fetch`。另验 `union_enabled=0` 时新路由仍被 gate 挡成 404，
+  没把能力文档在关模块时漏出去。
+- **文档跟着实测改**：`compat-matrix.md` §1 那行原本把兼容面写成 `GET /api/yggdrasil/`（带斜杠），
+  现改为两种拼写并写明原因；§3 新增 hub 浏览器端取名一行；`deploy.md` 验收 curl 换成不带斜杠的
+  规范地址——那串正是同一篇文档告诉玩家在启动器里填的形式。全部本地 rig 取证，生产站零操作，不发版。
+
 ## 2026-11-07
 
 - **真机把诊断模式走通时抓到三件测试看不见的事，都已修（这是本轮最值钱的读数）**：
