@@ -329,10 +329,10 @@ type selfDescription struct {
 // handleSelfDescription serves the member capability document (no auth).
 func (a *API) handleSelfDescription(w http.ResponseWriter, r *http.Request) {
 	features := []string{"unionBlacklist"} // always listed, legacy parity
-	if a.cfg.EmailVerification {
+	if on := a.cfg.EmailVerification; on != nil && on(r.Context()) {
 		features = append(features, "emailVerification")
 	}
-	if a.cfg.InvitationCodesForUnion {
+	if on := a.cfg.InvitationCodesForUnion; on != nil && on(r.Context()) {
 		features = append(features, "invitationCodesForUnion")
 	}
 	if a.cfg.UnionOAuth2 {

@@ -17,6 +17,7 @@
 package union
 
 import (
+	"context"
 	"errors"
 	"net/url"
 	"strings"
@@ -119,8 +120,17 @@ type Config struct {
 	// Optional enabledFeatures toggles for the self-description
 	// (analysis/yggdrasil-connect.md §4.4). "unionBlacklist" is always listed,
 	// matching the legacy plugin.
-	EmailVerification       bool
-	InvitationCodesForUnion bool
+	//
+	// These two are live reads, not boot-time booleans: the reference asks
+	// option() on every hello (UnionController.php:19-20), and the hub uses the
+	// list to decide what it may ask this member site to do. nil = not
+	// advertised. EmailVerification mirrors the site's require_verification join
+	// gate; InvitationCodesForUnion mirrors the invite-code gate — the legacy
+	// option it reads is written true when the invitation-codes plugin is
+	// enabled and false when it is disabled (MUAlliance/invitation-codes
+	// callbacks.php:23-28), so "registration here needs a code" is its meaning.
+	EmailVerification       func(ctx context.Context) bool
+	InvitationCodesForUnion func(ctx context.Context) bool
 	UnionOAuth2             bool
 
 	// RequestTimeout bounds a single outbound hub call (legacy: 5s; diagnose

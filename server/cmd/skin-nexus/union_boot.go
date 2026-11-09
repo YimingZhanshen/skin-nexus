@@ -240,6 +240,16 @@ func newUnionStack(ctx context.Context, st *store.Mysql, cfg *config.Config, ver
 		SigPublicKeyPEM:       sigPub,
 		YggdrasilApiVersion:   version,
 		UnionOAuth2:           enableOAuth2,
+		// The two optional enabledFeatures are read per hello, the way the
+		// reference reads them per hello (option() in UnionController.php:19-20):
+		// the hub picks this list up from outside, so a snapshot taken at boot
+		// would keep advertising a gate the owner switched off hours ago.
+		EmailVerification: func(ctx context.Context) bool {
+			return optOrEnvBool(ctx, st, "require_verification", cfg.RequireVerification)
+		},
+		InvitationCodesForUnion: func(ctx context.Context) bool {
+			return optOrEnvBool(ctx, st, "invite_required", cfg.RequireInvite)
+		},
 	}
 	if err := ucfg.Validate(); err != nil {
 		log.Printf("union: config invalid, module inert: %v", err)

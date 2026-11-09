@@ -1,6 +1,7 @@
 package union
 
 import (
+	"context"
 	"crypto/rsa"
 	"encoding/json"
 	"errors"
@@ -345,6 +346,50 @@ func TestInboundQueryEmailMatrix(t *testing.T) {
 
 var errTest = errors.New("boom")
 
+// The two optional capability flags are read at request time, because the
+// reference reads them at request time too (UnionController.php:19-20 goes
+// through option() on every hello): the hub decides what it can ask this member
+// site to do from this list. A boot-time snapshot would keep advertising
+// "emailVerification" after the owner switched the gate off, and the hub has no
+// way to tell that the answer is stale.
+func TestInboundFeaturesAreLiveReads(t *testing.T) {
+	on := false
+	f := newInboundFixture(t, func(cfg *Config, hooks *Hooks) {
+		cfg.EmailVerification = func(context.Context) bool { return on }
+		cfg.InvitationCodesForUnion = func(context.Context) bool { return on }
+	}, nil)
+
+	feat := func() string {
+		rec := f.call(t, http.MethodGet, "/api/union/member/", "")
+		var doc struct {
+			EnabledFeatures []string `json:"enabledFeatures"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
+			t.Fatalf("decode: %v (%s)", err, rec.Body)
+		}
+		return strings.Join(doc.EnabledFeatures, ",")
+	}
+
+	if got := feat(); got != "unionBlacklist" {
+		t.Fatalf("features with both gates off = %s, want unionBlacklist only", got)
+	}
+	on = true
+	want := "unionBlacklist,emailVerification,invitationCodesForUnion"
+	if got := feat(); got != want {
+		t.Fatalf("features after both gates opened = %s, want %s", got, want)
+	}
+}
+
+// A station that has no reader for these options (nil resolvers) still answers
+// the hello document — it just advertises the one feature it always has.
+func TestInboundFeaturesWithoutResolvers(t *testing.T) {
+	f := newInboundFixture(t, nil, nil)
+	rec := f.call(t, http.MethodGet, "/api/union/member/", "")
+	if !strings.Contains(rec.Body.String(), `"enabledFeatures":["unionBlacklist"]`) {
+		t.Fatalf("body = %s, want unionBlacklist only", rec.Body.String())
+	}
+}
+
 func TestInboundUpdatePluginNeverImplemented(t *testing.T) {
 	f := newInboundFixture(t, nil, nil)
 	rec := f.call(t, http.MethodPost, "/api/union/member/updateplugin", `{"url":"https://evil.example/p.zip"}`)
@@ -363,7 +408,7 @@ func TestInboundUpdatePluginNeverImplemented(t *testing.T) {
 func TestInboundSelfDescriptionShape(t *testing.T) {
 	f := newInboundFixture(t, func(cfg *Config, hooks *Hooks) {
 		cfg.YggdrasilApiVersion = "1.2.3"
-		cfg.InvitationCodesForUnion = true
+		cfg.InvitationCodesForUnion = func(context.Context) bool { return true }
 		cfg.UnionOAuth2 = true
 	}, nil)
 	f.api.SetServerListVersion("9")
