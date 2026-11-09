@@ -100,8 +100,12 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
   `.container`、`.container.wide`、`.row`、`.crumb`、
   `.site-footer`、`.site-footer-links`、`.site-footer-text`、`.site-footer-credit`
 - 组件类（注意下方特异性说明）：`.nav-item`、`.nav-title`、`.nav-group`、`.user-shell`、`.user-side`、
-  `.user-main`、`.admin-nav-item`、`.tab`、`.md`（公告 Markdown，内含 `:deep(a)` / `:deep(code)` 风格）、
+  `.user-main`、`.admin-nav`、`.tab`、`.md`（公告 Markdown，内含 `:deep(a)` / `:deep(code)` 风格）、
   `.ali`、`.avatar-box`、`.avatar-empty`、`.danger-text`、`.cell-input`、`.uploader`、`.stat-card`、`.stat-label`、`.like-btn`
+
+> 管理后台侧栏的条目本身就是全局 `.nav-item`（`web/src/components/AdminPanel.vue` 渲染
+> `class="nav-item"`，容器才是 `.admin-nav`）。这里曾经列过一个 `.admin-nav-item`——宿主代码里
+> 没有这个类，照它写的规则是死块，2026-11-09 已移除。
 
 ❌ **禁止**：依赖 Vite 构建生成的 hash class（如 `index-BlotKZVo`）——它们随构建变化，主题会碎。
 
@@ -111,6 +115,12 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 **特异性说明**：带 `data-v-…` 的组件内类（scoped 样式）特异性是 (0,2,0)，主题同名类选择器 (0,1,0)
 打不过——覆盖 `.nav-item`、`.tab`、`button.ghost` 等组件类时需提高特异性（如 `.card .tab`、`html .tab`）
 或在属性冲突时用 `!important`；变量覆盖（§3）不受此限。
+
+**SSR 皮肤库列表（`/skinlib`）要额外提特异性**：`server/cmd/skin-nexus/skinlib_ssr.go` 的
+`ssrListStyle` 是随 SSR 区块注在 **`<body>` 里**的，排在 `<head>` 中的主题 `<link>` **之后**。
+所以 `.ssr-grid a`、`.ssr-list h1` 这类同特异性选择器由宿主胜出，主题必须写成
+`html .ssr-grid a`、`html .ssr-list h1`（多一个元素选择器）才压得住。只消费令牌（颜色/字号/圆角）
+不受影响——那部分宿主本来就写的是 `var()`。落地页与详情页的内联样式在 `<head>` 里，没有这个问题。
 
 ## 5. 插槽协议（预留）
 
@@ -298,6 +308,15 @@ azure-glass 3.3.0，默认亮色、一条中性阶加一个蓝主色、实面卡
 
 **可以改（全放开）**：布局方向与栅格（行/列/sticky/宽度/不对称偏移）、排版（字体栈/字阶/字距/渐变字）、色板（契约键 + v3 派生键全量覆盖）、组件形态（圆角/胶囊/玻璃/阴影/边框/斑马纹/发丝线）、背景与装饰、动效时长与曲线、明暗模式策略（如 html.azg-dark 双态）。
 这一句是**能力清单，不是推荐做法**：渐变字与满屏玻璃拟态是 2026-11-09 那轮从官方 azure-glass 里撤掉的写法（撤的理由见包内文件头）；宿主不会拦，因为主题包的意义就是敢把站点改样。
+
+**自托管像素字体的字号纪律**：如果你随包带一款像素/点阵字体并把它放到 `--font-serif` 这类展示位，
+字号必须是**该字体栅格的整数倍**，否则笔画落在半设备像素上，整片标题发虚。栅格可以从字体文件反推：
+用 fontTools 读 `unitsPerEm` 与 `glyf` 轮廓坐标的最大公约数——例如 `unitsPerEm=1024`、拉丁坐标 GCD=128
+就是 8×8/em，中文坐标 GCD=64 就是 16×16/em；中英混排要同时满足两者，取最小公倍数（该例为 **16px 的倍数**）。
+因此这类展示位**允许写死字面量字号**（`--fs-*` 刻度不一定落在栅格上），但要在包内注释里写明栅格依据；
+连续 `clamp(min, Nvw, max)` 做不到这一点（中间宽度必然落在非整数倍上），请改成断点分档。
+标签、徽章、代码与正文仍走阅读面字体并消费 `--fs-*`——展示字体不上小字号标签。
+另注意：cmap 覆盖中文的像素字体**不会**自动回落黑体，「中文不吃像素」这种假设要按 cmap 实测，别照字体名猜。
 
 **不可改（底线四条）**：
 1. **logo 品牌资产**：N 字牌配色不动（变色须全品牌资产统一并由站主终审）；
