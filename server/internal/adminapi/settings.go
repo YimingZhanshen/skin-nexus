@@ -88,6 +88,7 @@ var settingsWhitelist = []settingSpec{
 	{"union_enable_update", true, "union", false},
 	{"union_enable_oauth2", true, "union", false},
 	{"union_queryemail_mode", true, "union", false},
+	{"union_resolve_names", false, "union", false},
 	{"union_oauth2_sig_private_key", true, "union", true},
 	{"union_oauth2_sig_public_key", true, "union", false},
 }
@@ -140,7 +141,7 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch req.Key {
-	case "invite_required", "require_verification", "union_enabled", "union_enable_update", "union_enable_oauth2", "ygg_mojang_fallback", "cdn_enabled":
+	case "invite_required", "require_verification", "union_enabled", "union_enable_update", "union_enable_oauth2", "union_resolve_names", "ygg_mojang_fallback", "cdn_enabled":
 		normalized, ok := normalizeBool(val)
 		if !ok {
 			writeErrCode(w, http.StatusBadRequest, "boolean must be 1/0/true/false/on/off/yes/no", i18n.MsgInvalidValue)

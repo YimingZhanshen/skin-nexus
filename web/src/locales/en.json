@@ -544,8 +544,8 @@
     "remapDone": "UUID fix request submitted",
     "serversTitle": "Alliance servers ({count})",
     "colCode": "Code",
-    "colAddress": "Site address",
-    "serversNote": "The hub's list carries only a code and a site address for each member — the name field is empty for every entry. Identify a station by its code or address.",
+    "colSite": "Site",
+    "serversNote": "The hub publishes only a code and an address per member. The name is read from that member's own site in the background, so a row shows just its address until the read lands.",
     "levelLabel": "Union security level",
     "levelLoading": "reading",
     "levelUnknown": "not available right now",
@@ -1329,6 +1329,9 @@
     },
     "union_queryemail_mode": {
       "desc": "Union email query mode: full / off (applies on restart)"
+    },
+    "union_resolve_names": {
+      "desc": "Read each member site's name from its own discovery endpoint, in the background and through the guarded outbound client (the hub stores no names; off also hides names already read)"
     },
     "union_oauth2_sig_private_key": {
       "desc": "Private key that signs Union OAuth2 user info (PEM; never echoed back, empty keeps the stored value, generated on first boot, applies on restart)"

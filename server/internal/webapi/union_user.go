@@ -23,10 +23,13 @@ import (
 )
 
 // MountUnion registers /api/v1/union/* on the web mux when outbound is live.
-func (b *Backend) MountUnion(out *union.Outbound) {
+// names is the peer-name resolver (nil = never fill a name, the list shows
+// addresses exactly as before).
+func (b *Backend) MountUnion(out *union.Outbound, names *union.MemberNames) {
 	b.union = out
 	b.unionSrv = &unionServerCache{}
 	b.unionLevel = &unionLevelCache{}
+	b.memberNames = names
 }
 
 // unionServerCache caches the hub server list for 60s (the list changes on
@@ -119,7 +122,11 @@ func (b *Backend) handleUnionServers(w http.ResponseWriter, r *http.Request) {
 		writeUnionUpstreamErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"servers": doc.Servers, "version": doc.Version})
+	// Names come from the peers themselves — the hub stores none (measured:
+	// 53/53 entries arrive with name empty). Fill serves what is already known
+	// and schedules reads for the rest; it never waits on them here.
+	servers := b.memberNames.Fill(doc.Servers)
+	writeJSON(w, http.StatusOK, map[string]any{"servers": servers, "version": doc.Version})
 }
 
 // unionLevelCache holds the hub's security level for this station.

@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"skin-nexus/server/internal/config"
+	"skin-nexus/server/internal/outbound"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/union"
 	"skin-nexus/server/internal/ygg"
@@ -48,7 +49,8 @@ type unionStack struct {
 	signer *union.UnionSigner
 	api    *union.API
 	grant  *union.Grantor
-	cfg    union.Config // resolved config, admin status card reporting
+	names  *union.MemberNames // peer site names, read through guarded egress
+	cfg    union.Config       // resolved config, admin status card reporting
 }
 
 // Enabled reports the live module state (nil-safe).
@@ -364,6 +366,21 @@ func newUnionStack(ctx context.Context, st *store.Mysql, cfg *config.Config, ver
 
 	u.out, u.signer, u.api, u.grant = out, usigner, unionAPI, grant
 	u.cfg = ucfg
+	// Peer site names. The hub stores none (measured: 53/53 entries arrive with
+	// name empty), so each name is read from the peer's own discovery document —
+	// the same source the legacy plugin reached for, from the visitor's browser
+	// (servers.twig:22-33), which our own CSP forbids here. Guarded egress only,
+	// always in the background, and the operator can switch it off from the panel
+	// (union_resolve_names), which also stops serving names already learned.
+	u.names = union.NewMemberNames(outbound.NewScoped(outbound.Policy{
+		AllowUserHosts: true,
+		UserHostPaths:  []string{"/api/yggdrasil"},
+		MaxBytes:       128 << 10,
+		Timeout:        4 * time.Second,
+		UserAgent:      "SkinNexus/" + version + " (union member)",
+	}), func() bool {
+		return optOrEnvBool(context.Background(), st, "union_resolve_names", cfg.UnionResolveNames)
+	}, union.MemberNamesOptions{})
 	u.setEnabled(ctx, enabled)
 	log.Printf("union: stack ready (enabled=%v, hub %s, queryemail %s)", enabled, apiRoot, queryEmail)
 	return u

@@ -108,6 +108,9 @@ type Backend struct {
 	// unionLevel caches the hub's security-level verdict for this station so one
 	// page open is not two hub calls (see unionLevelCache in union_user.go).
 	unionLevel *unionLevelCache
+	// memberNames fills peer display names into the hub server list from this
+	// station, in the background, through the guarded outbound client (nil = off).
+	memberNames *union.MemberNames
 }
 
 func (b *Backend) checkGuard(ctx context.Context, kind string, p plugin.EventPayload) error {

@@ -73,6 +73,10 @@ type Config struct {
 	UnionQueryEmailMode    string // "full" | "off"
 	UnionSigPrivateKey     string // Union OAuth2 sig private key PEM path
 	UnionHubOrigin         string
+	// UnionResolveNames lets the station read each peer's own discovery
+	// document to display its site name (the hub stores none). On by default:
+	// the alliance list is unreadable otherwise. Off = zero outbound for names.
+	UnionResolveNames bool // SKIN_UNION_RESOLVE_NAMES
 
 	// Phase 3 (docker-first): unified data root + schema bootstrap.
 	DataDir         string // SKIN_DATA_DIR — textures/keys/themes live under it
@@ -183,6 +187,7 @@ func Load() (*Config, error) {
 		UnionQueryEmailMode:    getenv("SKIN_UNION_QUERYEMAIL_MODE", "full"),
 		UnionSigPrivateKey:     resolveDataPath("SKIN_UNION_OAUTH2_SIG_KEY", dataDir, "union-oauth2-sig.pem"),
 		UnionHubOrigin:         getenv("SKIN_UNION_HUB_ORIGIN", "https://skin.mualliance.ltd"),
+		UnionResolveNames:      getenv("SKIN_UNION_RESOLVE_NAMES", "true") == "true",
 
 		DataDir:         dataDir,
 		ThemesDir:       getenv("SKIN_THEMES_DIR", filepath.Join(dataDir, "themes")),

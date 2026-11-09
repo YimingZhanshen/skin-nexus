@@ -20,6 +20,11 @@ type Policy struct {
 	UserHostPaths  []string
 	MaxBytes       int64
 	Timeout        time.Duration
+	// UserAgent overrides the identifying header. Empty keeps the historical
+	// plugin-host value. A caller that represents the station rather than a
+	// plugin (the union peer-name read) says so instead of arriving dressed as
+	// a plugin runtime.
+	UserAgent string
 	// AllowLoopback is test-only. Production hosts must never set it.
 	AllowLoopback bool
 }
@@ -87,6 +92,16 @@ func (s *Scoped) dialContext(ctx context.Context, network, addr string) (net.Con
 	return publicDialContext(ctx, network, addr)
 }
 
+// userAgent is the identifying header. Plugin traffic keeps the historical
+// value; a caller acting for the station itself declares that instead, because
+// the peer has a right to know which software is knocking.
+func (s *Scoped) userAgent() string {
+	if ua := strings.TrimSpace(s.policy.UserAgent); ua != "" {
+		return ua
+	}
+	return "SkinNexus-Plugin/1.0"
+}
+
 // Fetch performs a GET after validating host/path policy and rate limits.
 func (s *Scoped) Fetch(ctx context.Context, raw string) (FetchResult, error) {
 	u, err := url.Parse(raw)
@@ -122,7 +137,7 @@ func (s *Scoped) Fetch(ctx context.Context, raw string) (FetchResult, error) {
 	if err != nil {
 		return FetchResult{}, &PolicyError{Code: "net.invalid_url", Message: err.Error()}
 	}
-	req.Header.Set("User-Agent", "SkinNexus-Plugin/1.0")
+	req.Header.Set("User-Agent", s.userAgent())
 	req.Header.Set("Accept", "*/*")
 	resp, err := s.http.Do(req)
 	if err != nil {

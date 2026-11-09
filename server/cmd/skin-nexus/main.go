@@ -620,7 +620,7 @@ func main() {
 	yggSvc.Limiter = rateLimiter
 	backend.Limiter = rateLimiter
 	if unionOut != nil {
-		backend.MountUnion(unionOut) // registers /api/v1/union/* (zero surface when disabled)
+		backend.MountUnion(unionOut, ustack.names) // registers /api/v1/union/* (zero surface when disabled)
 	}
 	pub := publicapi.New(st, ts)
 	pub.TextureURL = pluginHost.TextureURL
@@ -714,6 +714,7 @@ func main() {
 		"union_enable_update":          boolStr(cfg.UnionAllowUpdateBkKey),
 		"union_enable_oauth2":          "1",
 		"union_queryemail_mode":        cfg.UnionQueryEmailMode,
+		"union_resolve_names":          boolStr(cfg.UnionResolveNames),
 		"union_oauth2_sig_private_key": "",
 		"union_oauth2_sig_public_key":  "",
 		// A1 找回密码: SMTP env fallbacks shown as panel placeholders. Same map as

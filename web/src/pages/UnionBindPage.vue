@@ -98,20 +98,18 @@ async function load() {
 }
 
 // The hub list carries {code,bs_root} and nothing else: `name` is empty on all
-// 53 entries, so the address is what identifies a station and the table says
-// exactly that.
+// 53 entries, so the address is the only identifier the hub gives us, and it is
+// shown on every row.
 //
-// This page used to mirror the old plugin's client-side name backfill
-// (servers.twig:20-31) — fetch each member's {bs_root}/api/yggdrasil and read
-// meta.serverName. It can never work here: our own CSP sets
-// connect-src 'self', so every cross-origin one of those fetches is blocked by
-// the browser before it leaves (verified live: "Refused to connect because it
-// violates the document's Content Security Policy"). That left ~53 blocked
-// requests and 100+ console errors per visit, a name only for our own row
-// (same-origin), and every other row silently falling back to its address under
-// a header that said "Name". Names need a server-side read of the member list
-// instead, which is an outbound surface and needs the SSRF guards with it —
-// tracked outside the repo, not shipped half-done.
+// The name on top of it comes from the peer itself, read by this station:
+// GET {bs_root}/api/yggdrasil -> meta.serverName, which is what the old plugin
+// asked the visitor's browser to do (servers.twig:22-33). A browser cannot do
+// that here — our CSP sets connect-src 'self', so every cross-origin read died
+// before it left, which is why this page used to show addresses under a header
+// that said "Name". Server-side it works, and it goes through the guarded
+// outbound client in the background (union.MemberNames): the request that opens
+// this page never waits on fifty peers, so a first visit after a restart may
+// still show bare addresses and the next one shows names.
 function serverAddress(s) {
   return String(s.bs_root || '').replace(/^https?:\/\//, '') || '—'
 }
@@ -281,10 +279,13 @@ onMounted(load)
       <div class="table-scroll">
       <table>
         <caption class="sr-only">{{ t('union.serversTitle', { count: servers.length }) }}</caption>
-        <tr><th scope="col">{{ t('union.colCode') }}</th><th scope="col">{{ t('union.colAddress') }}</th></tr>
+        <tr><th scope="col">{{ t('union.colCode') }}</th><th scope="col">{{ t('union.colSite') }}</th></tr>
         <tr v-for="s in servers" :key="serverKey(s)">
           <td><code>{{ s.code }}</code></td>
-          <td><code>{{ serverAddress(s) }}</code></td>
+          <td>
+            <div v-if="s.name">{{ s.name }}</div>
+            <code class="muted">{{ serverAddress(s) }}</code>
+          </td>
         </tr>
       </table>
       </div>

@@ -544,8 +544,8 @@
     "remapDone": "UUID 修正请求已提交",
     "serversTitle": "联盟服务器列表（{count}）",
     "colCode": "代码",
-    "colAddress": "站点地址",
-    "serversNote": "联盟下发的清单里，每个成员站只有代码与站点地址两项，名称字段一律为空——认站请以代码或地址为准。",
+    "colSite": "站点",
+    "serversNote": "联盟清单里每个成员只带代码与地址；站名由本站在后台向该成员站自己读取，读到之前这一行只显示地址。",
     "levelLabel": "联盟安全级别",
     "levelLoading": "正在读取",
     "levelUnknown": "暂时读不到",
@@ -1329,6 +1329,9 @@
     },
     "union_queryemail_mode": {
       "desc": "Union 查询邮箱模式：full/off（重启后生效）"
+    },
+    "union_resolve_names": {
+      "desc": "向各成员站自己的发现接口读取站名，后台进行且只走受控出站（hub 不存站名；关掉后已读到的名字也不再显示）"
     },
     "union_oauth2_sig_private_key": {
       "desc": "Union OAuth2 用户信息签名私钥（PEM；不回显，留空=保持原值，首启自动生成，重启后生效）"

@@ -179,7 +179,7 @@ environment:
 
 | 变量 | 默认（源码 / 镜像内） | 说明 |
 |---|---|---|
-| `SKIN_UNION_ENABLED` | `false` | 联盟总开关；关 = 零路由零表面。面板另有 `union_enabled` 开关（这就是「env 七键 / 面板八键」的差） |
+| `SKIN_UNION_ENABLED` | `false` | 联盟总开关；关 = 零路由零表面。面板另有 `union_enabled` 开关（面板与 env 的键集不是一一对应，面板多了两项签名密钥的公开侧，env 多了两个公钥/来源文件路径） |
 | `SKIN_UNION_API_ROOT` | `https://skin.mualliance.ltd/api/union` | 联盟 hub API 根 |
 | `SKIN_UNION_HUB_ORIGIN` | `https://skin.mualliance.ltd` | hub 站点源（跨域/回调用） |
 | `SKIN_UNION_MEMBER_KEY` | 无 | 成员站凭据（联盟发放，凭据只走 env/面板） |
@@ -187,6 +187,7 @@ environment:
 | `SKIN_UNION_OAUTH2_SIG_KEY` | `<data>/union-oauth2-sig.pem` | OAuth2 grant 签名私钥，**需备份** |
 | `SKIN_UNION_ALLOW_UPDATEBACKENDKEY` | `false` | 是否允许 hub 下发更新成员 key |
 | `SKIN_UNION_QUERYEMAIL_MODE` | `full` | 联盟邮箱查询应答：`full` = 返回邮箱、`off` = 403 拒绝；其他值按 `off` 处理（fail-closed） |
+| `SKIN_UNION_RESOLVE_NAMES` | `true` | 是否由本站后台向各成员站的 `/api/yggdrasil` 读取站名（hub 不存站名）。读取只走受控出站（公网地址、禁重定向、固定单一路径、限响应体），且不在请求路径上等待；设为 `false` 后连已读到的名字也不再显示。面板项 `union_resolve_names` 热生效 |
 
 **数据路径与密钥**（`<data>` = `SKIN_DATA_DIR`；镜像内 `/data`，源码默认 `./data`）
 
