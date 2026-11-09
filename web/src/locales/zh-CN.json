@@ -1119,7 +1119,7 @@
     "themeInspect": "检查包",
     "themeCommit": "确认安装",
     "themeRiskAck": "我已确认：该包未签名，将按管理员信任面安装",
-    "themeUploadDone": "主题 {name}@{version} 已安装",
+    "themeUploadDone": "主题 {name}{'@'}{version} 已安装",
     "themeTrustVerified": "已验签",
     "themeTrustUnsigned": "未签名",
     "themeTrustUnknownKey": "未知签名密钥",

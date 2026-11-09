@@ -42,6 +42,16 @@ function leafPaths(obj, prefix = '') {
   return out
 }
 
+function leafValues(obj, prefix = '') {
+  const out = []
+  for (const [key, value] of Object.entries(obj)) {
+    const path = prefix ? `${prefix}.${key}` : key
+    if (value && typeof value === 'object') out.push(...leafValues(value, path))
+    else out.push([path, value])
+  }
+  return out
+}
+
 const loaded = {}
 for (const locale of LOCALES) {
   const path = resolve(root, `web/src/locales/${locale}.json`)
@@ -61,6 +71,24 @@ for (let i = 1; i < LOCALES.length; i++) {
   }
   for (const key of sets[i]) {
     if (!sets[0].has(key)) errors.push(`${LOCALES[i]} has '${key}', ${LOCALES[0]} does not`)
+  }
+}
+
+// 1b. Messages that cannot compile. vue-i18n reads @ as the start of a linked
+// message ("@:other.key", "@.lower:key"). A bare @ — including inside an
+// address like a@b.com — throws "Invalid linked format" the first time the key
+// renders, so the symptom is a blank panel rather than a wrong word. The escape
+// this repo already uses is {'@'} (settings.smtp_from.desc). Every shape above
+// was checked against the installed @intlify/message-compiler, not from memory:
+// parse() accepts a bare @, baseCompile() is the one that throws, so a
+// parse-only check would have passed the very string this rule catches.
+const LINKED_OK = /@(?!(?:\.[a-zA-Z]+)?:)/
+for (const locale of LOCALES) {
+  for (const [path, value] of leafValues(loaded[locale])) {
+    if (typeof value !== 'string') continue
+    if (LINKED_OK.test(value.replaceAll("{'@'}", ''))) {
+      errors.push(`${locale}: ${path} has a bare @ — vue-i18n treats it as a linked message and throws when the key renders. Write {'@'} to keep the character.`)
+    }
   }
 }
 

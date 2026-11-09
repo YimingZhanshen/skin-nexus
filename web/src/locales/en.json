@@ -1119,7 +1119,7 @@
     "themeInspect": "Inspect pack",
     "themeCommit": "Install",
     "themeRiskAck": "I understand: this pack is unsigned and will install on the admin trust surface",
-    "themeUploadDone": "Theme {name}@{version} installed",
+    "themeUploadDone": "Theme {name}{'@'}{version} installed",
     "themeTrustVerified": "Verified",
     "themeTrustUnsigned": "Unsigned",
     "themeTrustUnknownKey": "Unknown signing key",
