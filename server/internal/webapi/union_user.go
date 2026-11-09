@@ -26,6 +26,7 @@ import (
 func (b *Backend) MountUnion(out *union.Outbound) {
 	b.union = out
 	b.unionSrv = &unionServerCache{}
+	b.unionLevel = &unionLevelCache{}
 }
 
 // unionServerCache caches the hub server list for 60s (the list changes on
@@ -119,6 +120,72 @@ func (b *Backend) handleUnionServers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"servers": doc.Servers, "version": doc.Version})
+}
+
+// unionLevelCache holds the hub's security level for this station.
+//
+// The reference re-reads both hops on every page view (UnionController.php:30).
+// That is two hub calls per player per visit, forever, for a number that moves
+// when an operator joins the union blacklist — so this caches the good answer
+// for ten minutes and a refused read for one, which keeps a hub outage from
+// turning every page open into a fresh timeout while still picking up a real
+// change inside one session.
+type unionLevelCache struct {
+	mu     sync.Mutex
+	level  int
+	err    error
+	loaded bool
+	at     time.Time
+}
+
+const (
+	unionLevelTTL       = 10 * time.Minute
+	unionLevelRetryTTL  = time.Minute
+	unionLevelFetchTime = 12 * time.Second // both hops, plus margin over the 5s bound
+)
+
+func (c *unionLevelCache) get(ctx context.Context, out *union.Outbound) (int, error) {
+	c.mu.Lock()
+	if c.loaded {
+		ttl := unionLevelTTL
+		if c.err != nil {
+			ttl = unionLevelRetryTTL
+		}
+		if time.Since(c.at) < ttl {
+			level, err := c.level, c.err
+			c.mu.Unlock()
+			return level, err
+		}
+	}
+	c.mu.Unlock()
+
+	// Detached from the request: the answer is the same for everyone who asks in
+	// the next ten minutes, and a browser closing its tab must not leave the
+	// cache holding a cancelled-read error that every other player then inherits.
+	fctx, cancel := context.WithTimeout(context.Background(), unionLevelFetchTime)
+	defer cancel()
+	level, err := out.SecurityLevelNow(fctx)
+
+	c.mu.Lock()
+	c.level, c.err, c.loaded, c.at = level, err, true, time.Now()
+	c.mu.Unlock()
+	return level, err
+}
+
+// GET /api/v1/union/security-level — the hub's rating of this station (SL3/1/0).
+// A level is only ever a number the hub actually gave: unreadable upstream is a
+// 502 here, never a zero, because zero means "this station is not on the union
+// blacklist" and would be an accusation.
+func (b *Backend) handleUnionSecurityLevel(w http.ResponseWriter, r *http.Request) {
+	if _, ok := b.unionUser(w, r); !ok {
+		return
+	}
+	level, err := b.unionLevel.get(r.Context(), b.union)
+	if err != nil {
+		writeUnionUpstreamErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"level": level})
 }
 
 // GET /api/v1/union/detail?uuid= — hub-side profile detail (raw fields kept).

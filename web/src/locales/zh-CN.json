@@ -546,6 +546,13 @@
     "colCode": "代码",
     "colAddress": "站点地址",
     "serversNote": "联盟下发的清单里，每个成员站只有代码与站点地址两项，名称字段一律为空——认站请以代码或地址为准。",
+    "levelLabel": "联盟安全级别",
+    "levelLoading": "正在读取",
+    "levelUnknown": "暂时读不到",
+    "level0": "未接入联合黑名单",
+    "level1": "已接入联合黑名单",
+    "level3": "已接入联合黑名单，且为经认证的高信任评级",
+    "levelOther": "评级 {level}，以联盟 hub 的发布为准",
     "disabled": "联盟功能未启用",
     "needProfile": "先在个人页创建角色。"
   },

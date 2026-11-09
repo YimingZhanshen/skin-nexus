@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -416,6 +417,67 @@ func (o *Outbound) ServerCode(ctx context.Context, token string) (*ServerCode, e
 		return nil, err
 	}
 	return &doc, nil
+}
+
+// SecurityLevelNow reads the hub's rating for this backend. It walks the same
+// two hops the reference does on every page view (UnionController.php:30-42):
+// the member key buys the short code that names us at the hub, and the code
+// addresses the level.
+//
+// Every failure returns an error rather than a number. Zero is a real rating
+// ("not on the union blacklist"), so answering 0 for "the hub would not say"
+// would accuse the station of the worst level it can have.
+func (o *Outbound) SecurityLevelNow(ctx context.Context) (int, error) {
+	doc, err := o.ServerCode(ctx, o.MemberKey())
+	if err != nil {
+		return 0, err
+	}
+	code := strings.TrimSpace(doc.Code)
+	if code == "" {
+		return 0, fmt.Errorf("union: hub returned no backend code for this member key")
+	}
+	return o.SecurityLevel(ctx, code)
+}
+
+// SecurityLevel reads GET /backend/{code}/security/level — the response body is
+// the number itself, not an envelope.
+func (o *Outbound) SecurityLevel(ctx context.Context, code string) (int, error) {
+	_, raw, err := o.doJSON(ctx, http.MethodGet,
+		"/backend/"+url.PathEscape(code)+"/security/level", nil, nil)
+	if err != nil {
+		return 0, err
+	}
+	return parseSecurityLevel(raw)
+}
+
+// parseSecurityLevel accepts the bare number and its quoted twin. The hub has
+// answered version-bearing fields both ways elsewhere (ServerList.UnmarshalJSON
+// tolerates a numeric `version`), and a level we cannot read is an error, never
+// a default.
+func parseSecurityLevel(raw []byte) (int, error) {
+	text := strings.TrimSpace(string(raw))
+	if text == "" {
+		return 0, errors.New("union: security level: hub sent an empty body")
+	}
+	var v any
+	if err := json.Unmarshal([]byte(text), &v); err != nil {
+		return 0, fmt.Errorf("union: security level: hub sent %q, not a number", text)
+	}
+	switch t := v.(type) {
+	case float64:
+		if t != float64(int(t)) || t < 0 {
+			return 0, fmt.Errorf("union: security level: hub sent %q, not a level", text)
+		}
+		return int(t), nil
+	case string:
+		n, err := strconv.Atoi(strings.TrimSpace(t))
+		if err != nil || n < 0 {
+			return 0, fmt.Errorf("union: security level: hub sent %q, not a level", text)
+		}
+		return n, nil
+	default:
+		return 0, fmt.Errorf("union: security level: hub sent %q, not a level", text)
+	}
 }
 
 // OAuth2BackendKey pulls the hub RSA encryption public key:

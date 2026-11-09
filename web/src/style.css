@@ -283,6 +283,8 @@ tbody tr:hover, table tr:hover { background: var(--hover-wash); }
 .badge.jade { color: var(--jade); border-color: color-mix(in srgb, var(--jade) 55%, transparent); }
 .badge.gold { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 55%, transparent); }
 .badge.dim { opacity: .55; }
+/* 联盟评级行：标签、徽章、说明各占一段。占位从首屏就有，读到值不跳版。 */
+.union-level { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
 
 /* ── 用户中心外壳 ── */
 .user-shell { display: flex; gap: 24px; align-items: flex-start; }

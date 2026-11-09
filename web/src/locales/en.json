@@ -546,6 +546,13 @@
     "colCode": "Code",
     "colAddress": "Site address",
     "serversNote": "The hub's list carries only a code and a site address for each member — the name field is empty for every entry. Identify a station by its code or address.",
+    "levelLabel": "Union security level",
+    "levelLoading": "reading",
+    "levelUnknown": "not available right now",
+    "level0": "not enrolled in the union blacklist",
+    "level1": "enrolled in the union blacklist",
+    "level3": "enrolled in the union blacklist and verified as high trust",
+    "levelOther": "level {level}, as published by the union hub",
     "disabled": "Union module is not enabled",
     "needProfile": "Create a profile on your dashboard first."
   },

@@ -98,6 +98,7 @@ export const oidc = {
 // MUA Union member surface (routes exist only when the module is enabled).
 export const union = {
   servers: () => req('GET', '/api/v1/union/servers'),
+  securityLevel: () => req('GET', '/api/v1/union/security-level'),
   detail: (uuid) => req('GET', `/api/v1/union/detail?uuid=${encodeURIComponent(uuid)}`),
   unmapped: (name) => req('GET', `/api/v1/union/unmapped?name=${encodeURIComponent(name)}`),
   bind: (uuid) => req('POST', '/api/v1/union/bind', { uuid }),

@@ -105,6 +105,9 @@ type Backend struct {
 	// routes exist at all: zero surface for non-alliance deployments).
 	union    *union.Outbound
 	unionSrv *unionServerCache
+	// unionLevel caches the hub's security-level verdict for this station so one
+	// page open is not two hub calls (see unionLevelCache in union_user.go).
+	unionLevel *unionLevelCache
 }
 
 func (b *Backend) checkGuard(ctx context.Context, kind string, p plugin.EventPayload) error {
@@ -370,6 +373,7 @@ func (b *Backend) Handler() http.Handler {
 		}
 	}
 	mux.HandleFunc("GET /api/v1/union/servers", requireUnion(b.handleUnionServers))
+	mux.HandleFunc("GET /api/v1/union/security-level", requireUnion(b.handleUnionSecurityLevel))
 	mux.HandleFunc("GET /api/v1/union/detail", requireUnion(b.handleUnionDetail))
 	mux.HandleFunc("GET /api/v1/union/unmapped", requireUnion(b.handleUnionUnmapped))
 	mux.HandleFunc("POST /api/v1/union/bind", requireUnion(b.handleUnionBind))

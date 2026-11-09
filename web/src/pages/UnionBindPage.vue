@@ -37,6 +37,48 @@ const bindTokenAlive = computed(() =>
 const selectedPlayer = computed(() =>
   players.value.find(p => playerUUID(p) === selectedPID.value) || null)
 
+// The hub's rating of this station. `null` means "the hub did not say" and is
+// rendered as such: SL0 is a real verdict (this station is not on the union
+// blacklist), so a read that failed must never fall through to it.
+const level = ref(null)
+const levelState = ref('loading') // loading | ok | unknown — the badge has three looks
+
+async function loadLevel() {
+  try {
+    const d = await union.securityLevel()
+    const n = Number(d && d.level)
+    if (Number.isInteger(n) && n >= 0) {
+      level.value = n
+      levelState.value = 'ok'
+    } else {
+      level.value = null
+      levelState.value = 'unknown'
+    }
+  } catch (e) {
+    // A station that is not in the union at all, and a hub that is down, both
+    // land here. Neither is the player's mistake, so it stays a quiet fact
+    // instead of an error banner: the bind cards below still work.
+    level.value = null
+    levelState.value = 'unknown'
+  }
+}
+
+const levelClass = computed(() => {
+  if (levelState.value !== 'ok') return ''
+  return level.value === 3 ? 'ok' : 'gold'
+})
+
+const levelText = computed(() => {
+  if (levelState.value === 'loading') return t('union.levelLoading')
+  if (levelState.value !== 'ok') return t('union.levelUnknown')
+  if (level.value === 3) return t('union.level3')
+  if (level.value === 1) return t('union.level1')
+  if (level.value === 0) return t('union.level0')
+  return t('union.levelOther', { level: level.value })
+})
+
+const levelBadge = computed(() => (levelState.value === 'ok' ? 'SL' + level.value : 'SL —'))
+
 async function load() {
   error.value = ''; success.value = ''
   try {
@@ -51,6 +93,7 @@ async function load() {
     servers.value = []
     error.value = e.message.includes('404') ? t('union.disabled') : e.message
   }
+  loadLevel() // the rating line fills itself in; it must not delay the cards
   loadRemapSuggestions() // the remap card is open now (review P0-1)
 }
 
@@ -184,6 +227,14 @@ onMounted(load)
       </p>
       <div class="error" role="alert" v-if="error">{{ error }}</div>
       <div class="success" role="status" v-if="success">{{ success }}</div>
+
+      <!-- The hub's rating of this station (yggdrasil-connect union.twig:26-43).
+           Occupied from the first paint, so the card does not jump when it lands. -->
+      <p class="union-level">
+        <span class="muted">{{ t('union.levelLabel') }}</span>
+        <span class="badge" :class="levelClass">{{ levelBadge }}</span>
+        <span>{{ levelText }}</span>
+      </p>
 
       <template v-if="players.length">
         <label>{{ t('union.selectProfile') }}</label>
