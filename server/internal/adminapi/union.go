@@ -118,14 +118,16 @@ func (b *Backend) handleUnionRosterSync(w http.ResponseWriter, r *http.Request) 
 
 // POST /api/admin/v1/union/ops/diagnose — connectivity + versions probe.
 // Response is the legacy yggdrasil-connect triggerDiagnose shape ({status,
-// data}) so the admin UI renders 1:1 rows; site key metadata is appended
-// for the exported report header.
+// data}) so the admin UI renders 1:1 rows; cause names why leg one failed in
+// one stable token (see union.classifyError), and site key metadata is
+// appended for the exported report header.
 func (b *Backend) handleUnionDiagnose(w http.ResponseWriter, r *http.Request) {
 	rep, err := b.union.Diagnose(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]any{
 			"status": "error",
 			"data":   map[string]any{"exception": err.Error()},
+			"cause":  union.CauseOf(err),
 		})
 		return
 	}
@@ -133,6 +135,7 @@ func (b *Backend) handleUnionDiagnose(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":              rep.Status,
 		"data":                json.RawMessage(rep.Data),
+		"cause":               rep.Cause,
 		"key_fingerprint":     st["key_fingerprint"],
 		"private_key_version": st["private_key_version"],
 		"server_list_version": st["server_list_version"],

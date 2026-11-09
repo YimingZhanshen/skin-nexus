@@ -102,9 +102,15 @@ func (e *APIError) Error() string {
 //	{status:'ok',    data:<hub json>}                     — hub 2xx
 //	{status:'error', data:{status_code,headers,body}}     — hub non-2xx
 //	{status:'error', data:{exception}}                    — transport failure
+//
+// Cause is our addition and sits beside that shape, never inside it: `data`
+// stays the legacy payload so anything already reading it keeps working, while
+// the panel gets one token naming why leg one failed. See classifyError for
+// the vocabulary.
 type DiagnoseReport struct {
 	Status string          `json:"status"` // "ok" | "error"
 	Data   json.RawMessage `json:"data"`
+	Cause  string          `json:"cause,omitempty"`
 }
 
 // Hub wire documents (§4.2). JSON tags are the hub field names, verbatim.
@@ -384,6 +390,11 @@ func (o *Outbound) HostPublicKey(ctx context.Context) (string, error) {
 // export the report. Every outcome IS a result: hub non-2xx and transport
 // failures come back as {status:"error", data:{...evidence}}; the error
 // return is reserved for the module-disabled gate.
+//
+// Timeout pairing is a contract, not a detail: this 10s budget must stay
+// under the panel's own 15s fetch (web/src/api.js) and well under the server's
+// 300s WriteTimeout. If the frontend gave up first, the operator would read a
+// transport cause for a hub that answered fine.
 func (o *Outbound) Diagnose(ctx context.Context) (*DiagnoseReport, error) {
 	if !o.Enabled() {
 		return nil, ErrDisabled
@@ -400,10 +411,10 @@ func (o *Outbound) Diagnose(ctx context.Context) (*DiagnoseReport, error) {
 				"headers":     apiErr.Headers,
 				"body":        string(apiErr.Body),
 			})
-			return &DiagnoseReport{Status: "error", Data: data}, nil
+			return &DiagnoseReport{Status: "error", Data: data, Cause: classifyError(err)}, nil
 		}
 		data, _ := json.Marshal(map[string]any{"exception": err.Error()})
-		return &DiagnoseReport{Status: "error", Data: data}, nil
+		return &DiagnoseReport{Status: "error", Data: data, Cause: classifyError(err)}, nil
 	}
 	return &DiagnoseReport{Status: "ok", Data: body}, nil
 }
