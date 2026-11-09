@@ -851,6 +851,7 @@
     "diagStart": "Start diagnose",
     "diagRunning": "Diagnosing…",
     "diagExport": "Export report",
+    "diagExportJSON": "Export JSON",
     "diagExportTitle": "SkinNexus self-diagnosis report",
     "diagAllOk": "Both directions OK",
     "diagHasWarn": "Some items need attention",

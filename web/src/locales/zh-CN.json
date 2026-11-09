@@ -851,6 +851,7 @@
     "diagStart": "开始诊断",
     "diagRunning": "正在进行诊断…",
     "diagExport": "导出诊断报告",
+    "diagExportJSON": "导出 JSON",
     "diagExportTitle": "SkinNexus 自助诊断报告",
     "diagAllOk": "双向连通正常",
     "diagHasWarn": "有需要注意的项",

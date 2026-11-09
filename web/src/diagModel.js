@@ -175,3 +175,17 @@ export function diagMetaOf(d, t) {
     { k: t('admin.diagServerListVersion'), v: d.server_list_version || '—' },
   ]
 }
+
+// The machine-readable report keeps BOTH views: the interpreted legs (what the
+// operator sees) and the untouched hub payload (what the hub actually said).
+// Dropping the raw half is what makes a report impossible to argue with, and
+// dropping the interpreted half is what makes it impossible to read.
+export function diagJSONOf(d, legs, generatedAt) {
+  return {
+    tool: 'SkinNexus union self-diagnose',
+    version: 1,
+    generated_at: generatedAt,
+    legs,
+    report: d,
+  }
+}

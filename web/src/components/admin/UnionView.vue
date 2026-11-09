@@ -7,7 +7,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
-import { buildDiagModel, diagSummaryOf, diagMetaOf } from '../../diagModel.js'
+import { buildDiagModel, diagSummaryOf, diagMetaOf, diagJSONOf } from '../../diagModel.js'
 import { formatWhen } from '../../format.js'
 import Pager from '../Pager.vue'
 import EmptyState from '../EmptyState.vue'
@@ -169,16 +169,30 @@ function exportDiagnose() {
   const meta = diagMeta.value.map((m) => `${htmlEscape(m.k)}: ${htmlEscape(m.v)}`).join(' · ')
   const title = htmlEscape(t('admin.diagExportTitle'))
   const html = `<!doctype html><html lang="${htmlEscape(document.documentElement.lang || 'zh-CN')}"><head><meta charset="utf-8"><title>${title}</title></head><body><h2>${title}</h2><p>${htmlEscape(formatWhen(new Date()))}</p><p>${meta}</p>${sections}</body></html>`
-  const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
+  downloadFile(`${t('admin.diagFileName')}-${diagStamp()}.html`, 'text/html;charset=utf-8', html)
+}
+
+// Both exports share one download path. Chromium tolerates clicking a detached
+// anchor; the spec does not promise it, and revoking in the same tick can beat
+// the write on a slow disk — so the anchor is attached and the URL outlives it.
+function downloadFile(name, mime, content) {
+  const url = URL.createObjectURL(new Blob([content], { type: mime }))
   const a = document.createElement('a')
   a.href = url
-  a.download = `${t('admin.diagFileName')}-${Math.round(Date.now() / 1000)}.html`
-  // Chromium tolerates clicking a detached anchor; the spec does not promise
-  // it, and revoking in the same tick can beat the write on a slow disk.
+  a.download = name
   document.body.appendChild(a)
   a.click()
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 60000)
+}
+
+function diagStamp() { return Math.round(Date.now() / 1000) }
+
+// Machine-readable, for attaching to a hub bug report: the interpreted legs and
+// the hub's untouched payload in one file.
+function exportDiagnoseJSON() {
+  const payload = diagJSONOf(diag.value, diagLegs.value, new Date().toISOString())
+  downloadFile(`${t('admin.diagFileName')}-${diagStamp()}.json`, 'application/json;charset=utf-8', JSON.stringify(payload, null, 2))
 }
 
 async function loadBlacklist() {
@@ -354,6 +368,7 @@ onMounted(async () => {
             </span>
             <span class="diag-actions">
               <button class="ghost" :disabled="diagLoading" @click="triggerDiagnose">{{ t('admin.diagRecheck') }}</button>
+              <button class="secondary" @click="exportDiagnoseJSON">{{ t('admin.diagExportJSON') }}</button>
               <button class="secondary" @click="exportDiagnose">⤓ {{ t('admin.diagExport') }}</button>
             </span>
           </div>

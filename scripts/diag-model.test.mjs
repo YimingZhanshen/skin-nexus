@@ -12,7 +12,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildDiagModel, diagSummaryOf, diagMetaOf, certState, summarizeTrace } from '../web/src/diagModel.js'
+import { buildDiagModel, diagSummaryOf, diagMetaOf, diagJSONOf, certState, summarizeTrace } from '../web/src/diagModel.js'
 
 // t() stands in for vue-i18n: it returns the key (plus params), so an
 // assertion can name exactly which label a row chose.
@@ -141,6 +141,15 @@ test('a zero-valued hub field is not silently dropped', () => {
   // The legacy rows used truthiness, so delay 0 and status_code 0 vanished.
   const { inn } = legsOf({ status: 'ok', data: { healthy: true, delay: 0 }, probe })
   assert.ok(inn.rows.some((r) => r.k === 'admin.diagDelay'), 'a 0 ms delay is a measurement, not an absence')
+})
+
+test('the JSON export carries both the interpretation and the raw payload', () => {
+  const report = { status: 'ok', data: hubPayload, probe, key_fingerprint: 'SHA256:6000acb2' }
+  const out = diagJSONOf(report, buildDiagModel(report, t), '2026-11-10T00:00:00.000Z')
+  assert.equal(out.generated_at, '2026-11-10T00:00:00.000Z')
+  assert.deepEqual(out.report, report, 'the untouched hub payload is what makes the report arguable')
+  assert.equal(out.legs.length, 2)
+  assert.equal(out.legs[1].rows.find((r) => r.k === 'admin.diagStatusCode').v, '200')
 })
 
 test('the meta line is labelled and empty-safe', () => {
