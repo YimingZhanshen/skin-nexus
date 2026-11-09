@@ -172,6 +172,12 @@ watch(() => props.open, (on) => { if (on) { page.value = 1; load() } })
 .picker-pick {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   border: 1px solid var(--border); border-radius: var(--r-m); background: var(--panel);
+  /* The global `button` rule pairs a solid background with light text
+     (`--on-cinnabar`). This cell overrides the background to a light surface but
+     is still a <button>, so without its own color the label renders light-on-
+     light and vanishes — which is exactly how "the picker is all hashes" looked:
+     the fingerprint line survives because `.muted` sets a color explicitly. */
+  color: var(--text);
   padding: 6px; cursor: pointer; min-height: 88px; font-size: var(--fs-xs);
 }
 .picker-pick img { height: 56px; image-rendering: pixelated; border-radius: var(--r-s); }
