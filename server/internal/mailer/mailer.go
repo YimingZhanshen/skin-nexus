@@ -7,9 +7,7 @@ package mailer
 
 import (
 	"crypto/tls"
-	"encoding/base64"
 	"fmt"
-	"mime"
 	"net"
 	"net/smtp"
 	"strings"
@@ -80,44 +78,33 @@ func envelopeFrom(from string) (string, error) {
 // (SMTPS, 465) instead of upgrading via STARTTLS.
 func implicitTLS(port int) bool { return port == 465 }
 
-// buildMessage assembles the wire message: RFC5322 headers (subject
-// RFC2047-encoded so Chinese survives), base64 body (line-wrapped at 76 —
-// 8-bit UTF-8 would depend on the server announcing SMTPUTF8).
+// buildMessage assembles the historical plain-text wire message. Kept as a
+// thin shell over compose so the encoding tests keep pinning the same bytes.
 func buildMessage(from, to, subject, body string) string {
-	var b strings.Builder
-	b.WriteString("From: " + from + "\r\n")
-	b.WriteString("To: " + to + "\r\n")
-	b.WriteString("Subject: " + mime.QEncoding.Encode("utf-8", subject) + "\r\n")
-	b.WriteString("Date: " + time.Now().Format(time.RFC1123Z) + "\r\n")
-	b.WriteString("MIME-Version: 1.0\r\n")
-	b.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
-	b.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
-	enc := base64.StdEncoding.EncodeToString([]byte(body))
-	for len(enc) > 76 {
-		b.WriteString(enc[:76] + "\r\n")
-		enc = enc[76:]
+	header, _, err := composeFromHeader(&Config{From: from})
+	if err != nil {
+		header = from
 	}
-	b.WriteString(enc + "\r\n")
-	return b.String()
+	return compose(header, Message{To: to, Subject: subject, Text: body}, "", newMessageID(from, ""), time.Now())
 }
 
 // Send delivers one plain-text message. Its clock is sessionBudget: a 10s dial and
 // a 30s session by default, or the caller's Budget when a browser is waiting.
 func (c *Config) Send(to, subject, body string) error {
+	return c.SendPart(Message{To: to, Subject: subject, Text: body})
+}
+
+// SendPart delivers a Message, plain or multipart/alternative. The transport
+// rules are unchanged: opportunistic STARTTLS, PLAIN auth that refuses clear
+// channels, and a single session deadline for the whole exchange.
+func (c *Config) SendPart(m Message) error {
 	if !c.Enabled() {
 		return fmt.Errorf("mailer: disabled (smtp_host empty)")
 	}
-	if err := checkAddr(to); err != nil {
+	if err := checkAddr(m.To); err != nil {
 		return err
 	}
-	from := c.From
-	if from == "" {
-		from = c.User
-	}
-	if err := checkAddr(from); err != nil {
-		return err
-	}
-	envFrom, err := envelopeFrom(from)
+	header, envFrom, err := composeFromHeader(c)
 	if err != nil {
 		return err
 	}
@@ -167,14 +154,15 @@ func (c *Config) Send(to, subject, body string) error {
 	if err := client.Mail(envFrom); err != nil {
 		return fmt.Errorf("mailer: mail from: %w", err)
 	}
-	if err := client.Rcpt(to); err != nil {
+	if err := client.Rcpt(m.To); err != nil {
 		return fmt.Errorf("mailer: rcpt to: %w", err)
 	}
 	w, err := client.Data()
 	if err != nil {
 		return fmt.Errorf("mailer: data: %w", err)
 	}
-	if _, err := w.Write([]byte(buildMessage(from, to, subject, body))); err != nil {
+	msg := compose(header, m, newBoundary(m.Text, m.HTML), newMessageID(envFrom, c.Host), time.Now())
+	if _, err := w.Write([]byte(msg)); err != nil {
 		return fmt.Errorf("mailer: write: %w", err)
 	}
 	if err := w.Close(); err != nil {

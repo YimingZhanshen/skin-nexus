@@ -255,11 +255,7 @@ func newestMigrationFile(root, engine string) (string, error) {
 // cleanly in the panel and then delivers nothing.
 func (b *Backend) checkMail(ctx context.Context) diagItem {
 	if cfg := b.mailConfig(ctx); cfg != nil {
-		sender := cfg.From
-		if sender == "" {
-			sender = cfg.User
-		}
-		return diagItem{ID: "mail", State: diagOK, Value: cfg.Host + ":" + itoa(cfg.Port) + " → " + sender}
+		return diagItem{ID: "mail", State: diagOK, Value: cfg.Host + ":" + itoa(cfg.Port) + " → " + senderOf(cfg)}
 	}
 	host, _, _ := b.Store.GetOption(ctx, "smtp_host")
 	if strings.TrimSpace(host) != "" {

@@ -257,6 +257,27 @@ func main() {
 		log.Printf("themes: %d packs loaded from %s", n, cfg.ThemesDir)
 	}
 	appearEng := appearance.NewEngine(st, themeReg)
+	// Mail palette: closures over the appearance engine, same shape as the
+	// IsActive closure below. Any failure returns nil so a letter falls back to
+	// the constant palette — reading a theme must never block a send.
+	mailPalette := func() map[string]string {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		id := appearEng.Settings(ctx).ActiveTheme
+		if id == "" {
+			return nil
+		}
+		th, terr := themeReg.Get(id)
+		if terr != nil {
+			return nil
+		}
+		return th.TokenMap()
+	}
+	mailThemeID := func() string {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		return appearEng.Settings(ctx).ActiveTheme
+	}
 	// Theme market: independent keyring (SKIN_THEME_TRUST_KEYS) — uploads run
 	// on the admin trust surface even with the market disabled (2026-11-01).
 	var themeTrustKeys signedpkg.Keyring
@@ -506,6 +527,8 @@ func main() {
 		}
 	}
 	backend.Appearance = appearEng
+	backend.ThemePalette = mailPalette
+	backend.ThemeID = mailThemeID
 	backend.TextureURL = pluginHost.TextureURL
 	backend.ProfileFilter = pluginHost.ProfileFilter
 	backend.OnTextureUploaded = pluginHost.EmitTextureUploaded
@@ -783,6 +806,8 @@ func main() {
 	admin.OnPlayerRenamed = func(uuid, name string) {
 		backend.SyncProfileRename(context.Background(), uuid, name)
 	}
+	admin.ThemePalette = mailPalette
+	admin.ThemeID = mailThemeID
 	admin.MountAppearance(adminapi.AppearanceDeps{SEO: seoEng, Appear: appearEng, Themes: themeReg, ThemeMarket: themeMarketSvc})
 	admin.MountPlugins(adminapi.PluginsDeps{Host: pluginHost})
 	if unionSigner != nil {

@@ -60,6 +60,10 @@ type Theme struct {
 	// rescan replaces the *Theme, so a pack edit is picked up with the rescan.
 	tokensOnce sync.Once
 	tokensCSS  string
+
+	// Concrete-value token view for consumers that cannot evaluate CSS (mail).
+	tokensMapOnce sync.Once
+	tokensMap     map[string]string
 }
 
 var (

@@ -35,6 +35,7 @@ import (
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/texture"
 	"skin-nexus/server/internal/union"
+	"skin-nexus/server/internal/webi18n"
 	"skin-nexus/server/internal/ygg"
 )
 
@@ -79,6 +80,11 @@ type Backend struct {
 	VerificationEnabled func(ctx context.Context) bool
 	// Appearance supplies the public footer config (nil = default credit).
 	Appearance *appearance.Engine
+	// ThemePalette / ThemeID bake the active theme into outgoing mail (nil =
+	// default palette / no theme). main wires closures over the appearance
+	// engine so mail never depends on the theme registry directly.
+	ThemePalette func() map[string]string
+	ThemeID      func() string
 
 	// Access is the observability sidecar (nil = off): web login/register
 	// and inbound Union traffic lines for the admin panel. Best-effort —
@@ -707,7 +713,7 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// cannot join: send the verification link now. Best-effort — registration
 	// succeeded and the profile page can resend.
 	if req.Email != "" && b.verificationEnabled(r.Context()) {
-		b.sendVerificationMailDetached(uid, req.Email)
+		b.sendVerificationMailDetached(uid, req.Email, webi18n.ResolveLang(r))
 	}
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"id": uid, "nickname": req.Nickname, "permission": 0})
 }

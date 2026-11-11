@@ -28,6 +28,7 @@ import (
 	"skin-nexus/server/internal/mailer"
 	"skin-nexus/server/internal/redact"
 	"skin-nexus/server/internal/store"
+	"skin-nexus/server/internal/webi18n"
 	"skin-nexus/server/internal/ygg"
 )
 
@@ -62,7 +63,7 @@ var mailReplyBudget = 8 * time.Second
 // tells the owner (only they can see it), registration only logs it — a broken
 // SMTP host must never change a protocol response shape. A zero budget keeps
 // the mailer's own window, which is right when nobody is waiting on the answer.
-func (b *Backend) sendVerificationMail(ctx context.Context, uid int64, address string, budget time.Duration) error {
+func (b *Backend) sendVerificationMail(ctx context.Context, uid int64, address string, budget time.Duration, lang string) error {
 	cfg := b.smtpConfig(ctx)
 	if cfg == nil {
 		return errors.New("mail is not configured")
@@ -83,11 +84,8 @@ func (b *Backend) sendVerificationMail(ctx context.Context, uid int64, address s
 		return err
 	}
 	link := strings.TrimRight(b.BaseURL, "/") + "/email-verify?token=" + token
-	subject := fmt.Sprintf("%s 邮箱验证", cfg.SiteName)
-	body := fmt.Sprintf(
-		"你正在验证 %s 账号的邮箱。\n\n请在 24 小时内打开以下链接完成验证：\n%s\n\n若非本人操作，请忽略本邮件——你的账号不会发生任何变化。",
-		cfg.SiteName, link)
-	if err := cfg.Send(address, subject, body); err != nil {
+	subject, text, html := webi18n.VerifyMail(lang, cfg.SiteName, link, 24*60, b.mailPalette())
+	if err := cfg.SendPart(mailer.Message{To: address, Subject: subject, Text: text, HTML: html, Lang: lang}); err != nil {
 		// The link never left the server, so the credential must not stay
 		// behind: an unread token is still a live one for whoever dumps the DB.
 		if delErr := b.Store.DeleteEmailVerifyToken(ctx, hex.EncodeToString(digest[:])); delErr != nil {
@@ -104,11 +102,11 @@ func (b *Backend) sendVerificationMail(ctx context.Context, uid int64, address s
 // that is down (the SPA gives up at 15s and would show a network error for an
 // account that was in fact created). The context outlives the request on
 // purpose.
-func (b *Backend) sendVerificationMailDetached(uid int64, address string) {
+func (b *Backend) sendVerificationMailDetached(uid int64, address string, lang string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), verifyMailTimeout)
 		defer cancel()
-		if err := b.sendVerificationMail(ctx, uid, address, 0); err != nil {
+		if err := b.sendVerificationMail(ctx, uid, address, 0, lang); err != nil {
 			log.Printf("register %d: verification mail: %v", uid, err)
 		}
 	}()
@@ -147,7 +145,7 @@ func (b *Backend) handleEmailVerifyRequest(w http.ResponseWriter, r *http.Reques
 	}
 	// The owner of this mailbox is the only party that can be told about a
 	// failure, so the honest answer is safe here (unlike the reset flow).
-	if err := b.sendVerificationMail(r.Context(), uid, brief.Email, mailReplyBudget); err != nil {
+	if err := b.sendVerificationMail(r.Context(), uid, brief.Email, mailReplyBudget, webi18n.ResolveLang(r)); err != nil {
 		if errors.Is(err, errPlaceholderRecipient) {
 			writeErrCode(w, http.StatusBadRequest, "the account address is a placeholder mailbox", i18n.MsgMailRecipientPlaceholder)
 			return

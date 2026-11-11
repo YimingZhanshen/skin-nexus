@@ -14,7 +14,6 @@ package adminapi
 // to" then becomes a phishing question rather than a configuration one.
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -23,6 +22,7 @@ import (
 	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/mailer"
 	"skin-nexus/server/internal/redact"
+	"skin-nexus/server/internal/webi18n"
 )
 
 // handleMailTest: POST /api/admin/v1/mail-test — sends one message to the
@@ -65,13 +65,20 @@ func (b *Backend) handleMailTest(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusBadRequest, "the account address is a placeholder mailbox", i18n.MsgMailRecipientPlaceholder)
 		return
 	}
-	subject := fmt.Sprintf("%s 邮件发送测试", cfg.SiteName)
-	body := fmt.Sprintf(
-		"这是 %s 管理面板「部署自检 → 发送测试邮件」发出的一封测试信。\n\n"+
-			"收到它就说明站点真的能把邮件送出去——找回密码、邮箱验证、站内通知走的是同一条路。\n"+
-			"发信账号：%s:%d（信封发件人 %s）\n\n若在本机的收件箱里找不到它，请检查垃圾箱与域名解析。",
-		cfg.SiteName, cfg.Host, cfg.Port, senderOf(cfg))
-	if err := cfg.Send(to, subject, body); err != nil {
+	lang := webi18n.ResolveLang(r)
+	palette := webi18n.DefaultMailPalette()
+	if b.ThemePalette != nil {
+		palette = webi18n.PaletteFromTokens(b.ThemePalette())
+	}
+	themeID := ""
+	if b.ThemeID != nil {
+		themeID = b.ThemeID()
+	}
+	subject, text, html := webi18n.TestMail(lang, webi18n.TestMailConfig{
+		SiteName: cfg.SiteName, Host: cfg.Host, Port: cfg.Port,
+		Sender: cfg.SenderAddress(), Lang: lang, ThemeID: themeID,
+	}, palette)
+	if err := cfg.SendPart(mailer.Message{To: to, Subject: subject, Text: text, HTML: html, Lang: lang}); err != nil {
 		// The raw transport error names the operator's own host and reason, so
 		// it goes to the log and the audit row; the player-facing dictionary
 		// entry stays generic.
@@ -94,14 +101,9 @@ func (b *Backend) handleMailTest(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// senderOf mirrors mailer.Config.Send's fallback so the test letter states the
-// address actually used on the envelope.
-func senderOf(cfg *mailer.Config) string {
-	if cfg.From != "" {
-		return cfg.From
-	}
-	return cfg.User
-}
+// senderOf mirrors the envelope the transport really uses, so the test letter
+// and the diagnostics row name the same mailbox.
+func senderOf(cfg *mailer.Config) string { return cfg.SenderAddress() }
 
 // maskEmail keeps the local part's first character and the whole domain.
 func maskEmail(email string) string { return redact.Email(email) }

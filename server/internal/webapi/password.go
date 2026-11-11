@@ -19,8 +19,26 @@ import (
 	"skin-nexus/server/internal/mailer"
 	"skin-nexus/server/internal/redact"
 	"skin-nexus/server/internal/store"
+	"skin-nexus/server/internal/webi18n"
 	"skin-nexus/server/internal/ygg"
 )
+
+// mailPalette bakes the active theme's accent into a letter palette. A nil
+// injector (tests, or a build without appearance wired) keeps the default.
+func (b *Backend) mailPalette() webi18n.MailPalette {
+	if b.ThemePalette == nil {
+		return webi18n.DefaultMailPalette()
+	}
+	return webi18n.PaletteFromTokens(b.ThemePalette())
+}
+
+// mailThemeID names the active theme for the test letter's summary ("" = none).
+func (b *Backend) mailThemeID() string {
+	if b.ThemeID == nil {
+		return ""
+	}
+	return b.ThemeID()
+}
 
 // sessionCookieValue returns the caller's raw session token ("" if none).
 func sessionCookieValue(r *http.Request) string {
@@ -188,10 +206,11 @@ func (b *Backend) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	link := strings.TrimRight(b.BaseURL, "/") + "/reset-password?token=" + url.QueryEscape(token)
-	subject := fmt.Sprintf("%s 密码重置", cfg.SiteName)
-	body := fmt.Sprintf(
-		"你正在重置 %s 的账号密码。\n\n请在 30 分钟内打开以下链接完成重置：\n%s\n\n若非本人操作，请忽略本邮件——你的密码不会发生任何变化。",
-		cfg.SiteName, link)
+	// Language and palette are resolved on the request, before the goroutine:
+	// reading r inside it would race the handler's return and see a cancelled
+	// context. The letter itself is built off the request path.
+	lang := webi18n.ResolveLang(r)
+	palette := b.mailPalette()
 	// A send failure must NOT change the response shape (it would turn SMTP
 	// hiccups into an existence oracle), so nothing about this answer depends
 	// on the mail — and waiting for it costs the player up to 40s on a wedged
@@ -199,7 +218,8 @@ func (b *Backend) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	// registration already does; the log carries the diagnostic for the
 	// operator, who is the only party that can act on it.
 	go func() {
-		if err := cfg.Send(req.Email, subject, body); err != nil {
+		subject, text, html := webi18n.ResetMail(lang, cfg.SiteName, link, 30, palette)
+		if err := cfg.SendPart(mailer.Message{To: req.Email, Subject: subject, Text: text, HTML: html, Lang: lang}); err != nil {
 			log.Printf("password-reset mail to %s: %v", redact.Email(req.Email), err)
 		}
 	}()

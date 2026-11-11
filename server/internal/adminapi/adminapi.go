@@ -42,6 +42,10 @@ type Backend struct {
 	// SettingsDefaults carries env-derived fallbacks for the settings panel
 	// (injected by main from config).
 	SettingsDefaults map[string]string
+	// ThemePalette / ThemeID bake the active theme into the panel test letter
+	// (nil = default palette / no theme); main wires closures, same as webapi.
+	ThemePalette func() map[string]string
+	ThemeID      func() string
 	// OnUserCredentialChange fires on admin password reset (main wires OIDC
 	// grant revocation — same semantics as the self-service change).
 	OnUserCredentialChange func(uid int64)

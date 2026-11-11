@@ -147,7 +147,7 @@ const SSR_CATALOG = ['zh-CN', 'en'].map((l) => [`server/internal/webi18n/catalog
 // `errors.*` must never appear here (that namespace belongs to the envelope
 // gate above), and page labels sit under `ui.` rather than `common.` because
 // `common.*` is already an error-code namespace the backend declares.
-const SSR_NS = new Set(['page', 'ui', 'detail', 'lib', 'edit', 'report', 'notfound', 'seo', 'viewer', 'landing', 'device'])
+const SSR_NS = new Set(['page', 'ui', 'detail', 'lib', 'edit', 'report', 'notfound', 'seo', 'viewer', 'landing', 'device', 'mail'])
 // Dotted literals that sit in page-rendering code but are not copy keys. Each is
 // a name some other layer owns; the gate cannot tell them from a typo'd key, so
 // the list is where the judgement is recorded — add to it deliberately, the same
