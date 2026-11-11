@@ -35,6 +35,11 @@ services:
       SKIN_AUTO_MIGRATE: 'true'
       SKIN_ADMIN_TOKEN: '${SKIN_ADMIN_TOKEN:?set SKIN_ADMIN_TOKEN in .env}'
       SKIN_SETUP_TOKEN: '${SKIN_SETUP_TOKEN:-}'
+      # Third-party analytics hosts the CSP must let through. Empty keeps the
+      # shipped policy byte for byte. .env only interpolates: a variable that
+      # is not listed here never reaches the container.
+      SKIN_CSP_SCRIPT_EXTRA_SOURCES: '${SKIN_CSP_SCRIPT_EXTRA_SOURCES:-}'
+      SKIN_CSP_CONNECT_EXTRA_SOURCES: '${SKIN_CSP_CONNECT_EXTRA_SOURCES:-}'
       SKIN_PLUGIN_MARKET_URL: '${SKIN_PLUGIN_MARKET_URL:-https://yimingzhanshen.github.io/skin-nexus-plugins/v1/registry.json}'
       SKIN_PLUGIN_TRUST_KEYS: '${SKIN_PLUGIN_TRUST_KEYS:-market-2026-10:ID2EWgcfs1E4UbGCCX9WjD0aCgTof3oeuHV03IpdGNY=}'
       SKIN_THEME_MARKET_URL: '${SKIN_THEME_MARKET_URL:-https://yimingzhanshen.github.io/skin-nexus-plugins/themes/v1/registry.json}'

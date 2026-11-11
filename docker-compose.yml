@@ -40,6 +40,12 @@ services:
       SKIN_AUTO_MIGRATE: 'true'                     # empty DB -> apply migrations/
       SKIN_ADMIN_TOKEN: CHANGE_ME                   # openssl rand -hex 32 (machine/API fallback)
       SKIN_SETUP_TOKEN: ''                          # install-wizard token /setup asks for; '' = a fresh random value printed on the boot log line each start
+      # Third-party analytics hosts the CSP must let through (docs/deploy.md §2.3).
+      # Both default to empty = the shipped policy, byte for byte. Note that .env
+      # only interpolates: a variable not listed in this environment block never
+      # reaches the container, so setting it in .env alone changes nothing.
+      SKIN_CSP_SCRIPT_EXTRA_SOURCES: '${SKIN_CSP_SCRIPT_EXTRA_SOURCES:-}'
+      SKIN_CSP_CONNECT_EXTRA_SOURCES: '${SKIN_CSP_CONNECT_EXTRA_SOURCES:-}'
       # optional modules (default off):
       # SKIN_OIDC_ENABLED: 'true'                   # launcher passwordless login (yggc/OIDC)
       # Signed plugin market defaults to the upstream registry; override both
