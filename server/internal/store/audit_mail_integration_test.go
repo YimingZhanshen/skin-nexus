@@ -24,7 +24,8 @@ func TestAuditMailClockIntegration(t *testing.T) {
 	m.now = frozenClock(base)
 
 	var got time.Time
-	if err := m.DB().QueryRow(`SELECT created_at FROM audit_log WHERE action = ? AND actor_uid = 1`, "mail_test_sent").Scan(&got); err != nil {
+	// m.db (the dbx wrapper) rebinds ? to $n on Postgres; raw m.DB() would not.
+	if err := m.db.QueryRowContext(ctx, `SELECT created_at FROM audit_log WHERE action = ? AND actor_uid = 1`, "mail_test_sent").Scan(&got); err != nil {
 		t.Fatal(err)
 	}
 	if !got.Equal(base) {
