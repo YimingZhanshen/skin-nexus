@@ -263,6 +263,8 @@
     "verifySubmitting": "发送中…",
     "verifySent": "验证邮件已发送——请查收收件箱（含垃圾邮件）。链接 24 小时内有效。",
     "verifyDone": "邮箱已验证，这个页面可以关闭了。",
+    "verifyConfirm": "确认验证此邮箱",
+    "verifyConfirmHint": "邮箱客户端有时会预取链接、提前用掉一次性令牌，所以请点下面的按钮完成验证。链接 24 小时内有效。",
     "verifyInvalid": "验证链接无效或已过期——请登录后重新申请。",
     "verifyBackToProfile": "前往个人资料",
     "pwTitle": "修改密码",

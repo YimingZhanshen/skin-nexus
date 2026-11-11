@@ -282,6 +282,8 @@
     "verifySubmitting": "Sending…",
     "verifySent": "Verification mail sent — check your inbox (and spam). The link expires in 24 hours.",
     "verifyDone": "Email verified. You can close this page.",
+    "verifyConfirm": "Confirm this email address",
+    "verifyConfirmHint": "Mail clients sometimes prefetch links and spend the single-use token early, so click below to verify. The link is valid for 24 hours.",
     "verifyInvalid": "This verification link is invalid or expired — sign in and request a new one.",
     "verifyBackToProfile": "Open profile",
     "nicknameRule": "2–24 characters: letters, digits, underscore or Chinese"

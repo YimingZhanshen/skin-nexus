@@ -90,8 +90,11 @@ const resetToken = ref('')
 const resetPw1 = ref('')
 const resetPw2 = ref('')
 const resetDone = ref(false)
-// 邮箱验证 (2026-11-02): /email-verify?token=… 由邮件带入，进页面即消费令牌。
-const verifyState = ref('')      // '' | 'working' | 'done' | 'invalid' | 'login'
+// 邮箱验证 (2026-11-02): /email-verify?token=… 由邮件带入。落地只展示按钮、
+// 点击才消费：邮件网关与微信/QQ 内置浏览器会预取链接，进页面即兑换会把
+// 一次性令牌烧在玩家点击之前。
+const verifyToken = ref('')
+const verifyState = ref('')      // '' | 'ready' | 'working' | 'done' | 'invalid'
 // Public site capabilities (GET /api/v1/site-config): the auth forms follow
 // the deployment's real configuration — invite field required-or-absent,
 // email field + forgot flow available-or-hidden. Until the fetch resolves
@@ -232,7 +235,7 @@ function onPopState() {
     else { pendingExt.value = location.pathname; view.value = 'login' }
   } else if (location.pathname === '/email-verify') {
     view.value = 'verify'
-    doEmailVerify()
+    prepareEmailVerify()
   } else {
     const v = legacyRoutes[location.pathname]
     if (v) view.value = v
@@ -293,10 +296,10 @@ function applyInitialRoute() {
     view.value = 'reset'
   }
   else if (location.pathname === '/forgot-password') view.value = 'forgot'
-  // 邮箱验证: 邮件里的链接是单次令牌，进来就兑换，不让用户再点一次。
+  // 邮箱验证: 落地只读 URL 展示按钮，预取不会烧掉一次性令牌（见 doEmailVerify）。
   else if (location.pathname === '/email-verify') {
     view.value = 'verify'
-    doEmailVerify()
+    prepareEmailVerify()
   }
   else if (!user.value && location.pathname === '/register') view.value = 'register'
   else if (legacyRoutes[location.pathname]) {
@@ -446,15 +449,22 @@ async function doReset() {
   } catch (e) { authErr.value = e.message } finally { authBusy.value = false }
 }
 
-// 邮箱验证 (2026-11-02): the link is single-use, so the landing page consumes
-// it immediately. The server never says which check failed (unknown / expired
-// / already used), so the UI has one failure state and it says exactly that.
+// 邮箱验证 (2026-11-02): the link is single-use. Landing only reads the URL;
+// the POST happens on click, because mail gateways and in-app browsers prefetch
+// links and would spend the token before the player arrives. The server never
+// says which check failed (unknown / expired / already used), so the UI has one
+// failure state and it says exactly that.
+function prepareEmailVerify() {
+  verifyToken.value = new URLSearchParams(location.search).get('token') || ''
+  verifyState.value = verifyToken.value ? 'ready' : 'invalid'
+}
+
 async function doEmailVerify() {
+  if (verifyState.value === 'working' || verifyState.value === 'done') return
+  if (!verifyToken.value) { verifyState.value = 'invalid'; return }
   verifyState.value = 'working'
-  const token = new URLSearchParams(location.search).get('token') || ''
-  if (!token) { verifyState.value = 'invalid'; return }
   try {
-    await api.confirmEmailVerification(token)
+    await api.confirmEmailVerification(verifyToken.value)
     verifyState.value = 'done'
   } catch (e) {
     verifyState.value = 'invalid'
@@ -662,6 +672,13 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
         <p class="success" role="status">{{ t('auth.verifyDone') }}</p>
         <div class="row" style="margin-top: 16px;">
           <button @click="view = user ? 'profile' : 'login'">{{ user ? t('nav.userCenter') : t('common.login') }}</button>
+        </div>
+      </template>
+      <template v-else-if="verifyState === 'ready'">
+        <p class="muted">{{ t('auth.verifyConfirmHint') }}</p>
+        <div class="row" style="margin-top: 16px;">
+          <button @click="doEmailVerify">{{ t('auth.verifyConfirm') }}</button>
+          <button class="secondary" @click="view = user ? 'profile' : 'login'">{{ user ? t('nav.userCenter') : t('common.login') }}</button>
         </div>
       </template>
       <template v-else>
