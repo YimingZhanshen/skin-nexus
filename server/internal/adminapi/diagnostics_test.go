@@ -304,13 +304,13 @@ func TestDiagnosticsRollupAndHandler(t *testing.T) {
 			t.Errorf("fix %q has no dictionary key", it.Fix)
 		}
 	}
-	for _, want := range []string{"site", "migrations", "mail", "preview", "assets", "keyring"} {
+	for _, want := range []string{"site", "migrations", "mail", "mail_dns", "preview", "assets", "keyring"} {
 		if !ids[want] {
 			t.Errorf("the closed set must always carry %q, got %v", want, ids)
 		}
 	}
-	if len(ids) != 6 {
-		t.Errorf("the set is closed at 6, got %d: %v", len(ids), ids)
+	if len(ids) != 7 {
+		t.Errorf("the set is closed at 7, got %d: %v", len(ids), ids)
 	}
 
 	w := httptest.NewRecorder()
@@ -343,6 +343,7 @@ var diagFixKeys = []string{
 	"siteEmpty", "siteLan", "siteNeedsRestart", "siteLegacyBase",
 	"migrationsUnreadable", "migrationsNoDir", "migrationsNoTree", "migrationsPending",
 	"mailNoSender", "mailOff",
+	"mailDnsOff", "mailDnsNoDomain", "mailDnsUnresolved", "mailDnsSpf", "mailDnsDmarc", "mailDnsBoth",
 	"previewNoProbe", "previewNothing", "previewBroken",
 	"assetsNoDir", "assetsMissing",
 	"keyringNoProbe", "keyringLocalOnly", "keyringNoKeys",

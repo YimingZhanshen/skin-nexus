@@ -9,7 +9,7 @@ package adminapi
 // carry these: it is a cacheable facts snapshot, while these checks read
 // mutable configuration, the filesystem and the renderer.
 //
-// The set is deliberately CLOSED (six items). A self-check surface grows into a
+// The set is deliberately CLOSED (seven items). A self-check surface grows into a
 // wishlist otherwise, and every added item has to be something an operator can
 // act on in the panel.
 //
@@ -21,6 +21,7 @@ package adminapi
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -61,14 +62,19 @@ type DiagnosticsDeps struct {
 	Preview func(ctx context.Context) (bool, error)
 	// KeyringStatus reports how many plugin-signing keys loaded and the market URL.
 	KeyringStatus func() (keys int, marketURL string)
+	// LookupTXT resolves one TXT name. Unlike the probes above, nil does NOT
+	// mean skip: DNS is always available in principle, so a missing injection
+	// still runs the real resolver (net.DefaultResolver) under a 3s bound.
+	LookupTXT func(ctx context.Context, name string) ([]string, error)
 }
 
-// diagnostics runs the six checks in a fixed order.
+// diagnostics runs the seven checks in a fixed order.
 func (b *Backend) diagnostics(ctx context.Context) []diagItem {
 	return []diagItem{
 		b.checkSiteURL(ctx),
 		b.checkMigrations(ctx),
 		b.checkMail(ctx),
+		b.checkMailDNS(ctx),
 		b.checkPreview(ctx),
 		b.checkWebAssets(),
 		b.checkKeyring(),
@@ -262,6 +268,84 @@ func (b *Backend) checkMail(ctx context.Context) diagItem {
 		return diagItem{ID: "mail", State: diagFail, Value: host, Fix: "mailNoSender"}
 	}
 	return diagItem{ID: "mail", State: diagSkip, Fix: "mailOff"}
+}
+
+// ---- 3b. sender-domain DNS --------------------------------------------------
+
+// checkMailDNS reads the sender domain's SPF and DMARC TXT records. Missing
+// records are the most common reason a perfectly sent letter lands in spam, and
+// until now nothing in the panel could see them.
+//
+// This is a read-only DNS query, the same family as checkSiteURL reading config:
+// it does not go through the plugin/union controlled-outbound surface and sends
+// no mail. DKIM is deliberately NOT checked: the selector is provider-specific
+// and guessing it would fabricate a verdict; the fix text points at the
+// provider console instead.
+//
+// A lookup error outranks a missing record: "could not read" must never be
+// reported as "does not exist". Nothing here ever returns fail — absent DNS
+// records affect deliverability, they do not break the site.
+func (b *Backend) checkMailDNS(ctx context.Context) diagItem {
+	cfg := b.mailConfig(ctx)
+	if cfg == nil {
+		return diagItem{ID: "mail_dns", State: diagSkip, Fix: "mailDnsOff"}
+	}
+	domain := domainOfSender(senderOf(cfg))
+	if domain == "" || !strings.Contains(domain, ".") || domain == "localhost" {
+		return diagItem{ID: "mail_dns", State: diagSkip, Value: domain, Fix: "mailDnsNoDomain"}
+	}
+	lookup := b.Diagnostics.LookupTXT
+	if lookup == nil {
+		lookup = net.DefaultResolver.LookupTXT
+	}
+	query := func(name string) ([]string, error) {
+		qctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		return lookup(qctx, name)
+	}
+	spfRecs, spfErr := query(domain)
+	dmarcRecs, dmarcErr := query("_dmarc." + domain)
+	if spfErr != nil || dmarcErr != nil {
+		return diagItem{ID: "mail_dns", State: diagWarn, Value: domain, Fix: "mailDnsUnresolved"}
+	}
+	spf, dmarc := hasRecordPrefix(spfRecs, "v=spf1"), hasRecordPrefix(dmarcRecs, "v=dmarc1")
+	value := domain + " | SPF: " + yesNo(spf) + " | DMARC: " + yesNo(dmarc)
+	switch {
+	case spf && dmarc:
+		return diagItem{ID: "mail_dns", State: diagOK, Value: value}
+	case spf:
+		return diagItem{ID: "mail_dns", State: diagWarn, Value: value, Fix: "mailDnsDmarc"}
+	case dmarc:
+		return diagItem{ID: "mail_dns", State: diagWarn, Value: value, Fix: "mailDnsSpf"}
+	default:
+		return diagItem{ID: "mail_dns", State: diagWarn, Value: value, Fix: "mailDnsBoth"}
+	}
+}
+
+func hasRecordPrefix(recs []string, prefix string) bool {
+	for _, r := range recs {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(r)), prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
+}
+
+// domainOfSender takes the mailbox domain, lowercased and without a trailing
+// dot (a DNS root dot is legal in a record name but not in a lookup here).
+func domainOfSender(addr string) string {
+	i := strings.LastIndex(addr, "@")
+	if i < 0 || i == len(addr)-1 {
+		return ""
+	}
+	return strings.TrimSuffix(strings.ToLower(addr[i+1:]), ".")
 }
 
 // mailConfig answers the same question the user-facing password reset does; the
