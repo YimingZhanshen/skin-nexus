@@ -171,7 +171,7 @@ app 进程能看到哪些变量，取决于 compose 文件里 `environment:` 段
 | `SKIN_SERVER_NAME` | 面板真源 | `SkinNexus` | Yggdrasil 元数据里的服务器显示名（面板可改） |
 | `SKIN_SKIN_DOMAINS` | 面板真源 | 空 | 皮肤域白名单，逗号分隔；不接联盟填本站域名，接入 MUA Union 以联盟公布清单为准（改动会破坏联盟互认） |
 | `SKIN_INVITE_REQUIRED` | 面板真源 | `false` | 注册强制邀请码（等价老站必填语义）；面板「站点设置」可改 |
-| `SKIN_REQUIRE_VERIFICATION` | 面板真源 | `false` | join 邮箱验证门（按 `email_verified` 判定）；面板可热切。开启后新注册账号会自动收到验证邮件，宽限期由面板 `email_verify_grace_days` 决定（默认 0=立即执行）——迁移站务必先设宽限或先核对存量标志位，否则老号一律进不了服 |
+| `SKIN_REQUIRE_VERIFICATION` | 面板真源 | `false` | **进服**邮箱验证门（按 `email_verified` 判定）；面板可热切。它只拦 Minecraft join，**不拦网页注册与登录**。开启后注册必须填邮箱（服务端与注册表单都要求），账号建好即自动发验证链接，注册成功后页面停在「邮箱验证」这一屏告诉玩家去点邮件里的链接（未配发信时这里直接说「发不出去、请联系站长」，不给假承诺）；宽限期由面板 `email_verify_grace_days` 决定，默认 0=立即执行（读不到或填非正数同样按 0）。两个前提要知道：一是**开了门却没配发信**，新号会被要求填邮箱却收不到链接，配好 SMTP 才是这道门能用的条件；二是迁移站务必先设宽限或先核对存量 `email_verified` 标志位，否则老号一律进不了服 |
 
 **认证、限流与正版兜底**
 

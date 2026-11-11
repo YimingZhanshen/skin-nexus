@@ -94,7 +94,12 @@ const resetDone = ref(false)
 // 点击才消费：邮件网关与微信/QQ 内置浏览器会预取链接，进页面即兑换会把
 // 一次性令牌烧在玩家点击之前。
 const verifyToken = ref('')
-const verifyState = ref('')      // '' | 'ready' | 'working' | 'done' | 'invalid'
+const verifyState = ref('')      // '' | 'ready' | 'working' | 'done' | 'invalid' | 'mailed'
+// 'mailed' is the landing after a gated signup: no token is involved, the
+// server already minted one and tried to mail it. These carry that screen.
+const verifyMailTo = ref('')
+const verifyMailBusy = ref(false)
+const verifyMailNote = ref('')
 // Public site capabilities (GET /api/v1/site-config): the auth forms follow
 // the deployment's real configuration — invite field required-or-absent,
 // email field + forgot flow available-or-hidden. Until the fetch resolves
@@ -106,7 +111,7 @@ function normalizeFooter(raw) {
   const f = raw && typeof raw === 'object' ? raw : {}
   return { ...defaultFooter(), ...f, links: Array.isArray(f.links) ? f.links : [] }
 }
-const siteConf = ref({ site_name: '', invite_required: false, mail_configured: false, union_enabled: false, max_upload_kb: 0, footer: defaultFooter() })
+const siteConf = ref({ site_name: '', invite_required: false, mail_configured: false, verify_gate_enabled: false, union_enabled: false, max_upload_kb: 0, footer: defaultFooter() })
 // Pages read the deployment's real limits off the same boot fetch instead of
 // hardcoding them (the upload form states the byte ceiling it will enforce).
 provide('siteConfig', siteConf)
@@ -128,6 +133,11 @@ const bootErr = ref('')
 const inviteFieldShown = computed(() => confLoaded.value && siteConf.value.invite_required)
 const inviteIsRequired = computed(() => confLoaded.value && siteConf.value.invite_required)
 const mailEnabled = computed(() => confLoaded.value && siteConf.value.mail_configured)
+// The join gate is enforced at the server door and needs an address to mail, so
+// with the gate on the email field must appear even when SMTP is not configured
+// yet, and it must be filled: an account without an address can never pass.
+const verifyGateEnabled = computed(() => confLoaded.value && siteConf.value.verify_gate_enabled === true)
+const emailFieldShown = computed(() => mailEnabled.value || verifyGateEnabled.value)
 const unionEnabled = computed(() => confLoaded.value && siteConf.value.union_enabled)
 
 // Sidebar nav (blessing parity: 用户中心/管理 两组). device/apps/union are
@@ -361,25 +371,37 @@ function onLocaleChange(e) {
   setLocale(e.target.value)
 }
 
+// Same-origin ?next target as an absolute href, or '' when absent or foreign.
+// Decided by the browser's own URL parser rather than a hand-written prefix
+// rule: `/\evil.com` starts with one "/" and is not "//", yet resolves to
+// another host. Origin equality also rejects javascript: URIs.
+function sameOriginNext() {
+  const next = new URLSearchParams(location.search).get('next')
+  if (!next) return ''
+  const target = new URL(next, location.origin)
+  return target.origin === location.origin ? target.href : ''
+}
+
 // 登录/注册共同收尾：?next= 回跳（详情页 viewer 401 引导来的）优先整页跳回；
 // 其次设备页流程、launcher 深链恢复；落地即清 pendingView（防"迟到恢复"跳页）。
 function finishAuth() {
-  const next = new URLSearchParams(location.search).get('next')
-  // Same-origin only, decided by the browser's own URL parser rather than a
-  // hand-written prefix rule: `/\evil.com` starts with one "/" and is not "//",
-  // yet resolves to another host. Origin equality also rejects javascript: URIs.
-  if (next) {
-    const target = new URL(next, location.origin)
-    if (target.origin === location.origin) {
-      pendingView.value = ''
-      location.href = target.href
-      return
-    }
+  const href = sameOriginNext()
+  if (href) {
+    pendingView.value = ''
+    location.href = href
+    return
   }
   if (location.pathname === '/device') view.value = 'device'
   else if (pendingExt.value) { const p = pendingExt.value; pendingExt.value = ''; openExt(p) }
   else if (pendingView.value) { view.value = pendingView.value; pendingView.value = '' }
   else view.value = 'dashboard'
+}
+
+// Is another flow about to take the screen? The gated-signup landing asks this
+// before stepping in, so an OAuth or device hand-off is never hijacked — it
+// reads exactly the conditions finishAuth acts on above.
+function authWaitingElsewhere() {
+  return !!sameOriginNext() || location.pathname === '/device' || !!pendingExt.value || !!pendingView.value
 }
 
 // 皮肤库访客点 ♥ 等需登录操作：登录后回到皮肤库（pendingView 闭环）
@@ -413,6 +435,12 @@ async function doLogin() {
 async function doRegister() {
   authErr.value = ''
   if (authBusy.value) return
+  // The verification gate is enforced server-side too (webapi.go), but the
+  // player learns it here, with the field named, rather than from a 400 after
+  // pressing the button.
+  if (verifyGateEnabled.value && !email.value.trim()) {
+    authErr.value = t('auth.emailRequiredErr'); return
+  }
   // Invite required → fail fast client-side with a clear message instead of
   // letting the server 400 the whole submission.
   if (inviteIsRequired.value && !invitationCode.value.trim()) {
@@ -423,6 +451,18 @@ async function doRegister() {
     user.value = await api.register(email.value, nickname.value, password.value, invitationCode.value.trim(), pluginFormData.value)
     if (user.value && user.value.permission === undefined) user.value = { ...user.value, permission: 0 }
   } catch (e) { authErr.value = e.message; return } finally { authBusy.value = false }
+  // The server mailed the verification link as it created the account, and the
+  // gate keeps the player off the server until that link is clicked. Dropping
+  // them on the dashboard, where the only trace is a muted 未验证 line on the
+  // profile page, loses the one instruction they need right now — so this
+  // screen carries it, unless another flow owns the landing.
+  if (verifyGateEnabled.value && !authWaitingElsewhere()) {
+    verifyMailTo.value = email.value.trim()
+    verifyMailNote.value = ''
+    view.value = 'verify'
+    verifyState.value = 'mailed'
+    return
+  }
   finishAuth()
 }
 
@@ -469,6 +509,19 @@ async function doEmailVerify() {
   } catch (e) {
     verifyState.value = 'invalid'
   }
+}
+
+// Resend from the gated-signup landing. Same endpoint and same wording as the
+// profile page's button; the server's own rate window answers, and its code
+// arrives already run through the error dictionary.
+async function resendVerificationMail() {
+  if (verifyMailBusy.value) return
+  verifyMailBusy.value = true
+  verifyMailNote.value = ''
+  try {
+    await api.requestEmailVerification()
+    verifyMailNote.value = t('auth.verifySent')
+  } catch (e) { verifyMailNote.value = e.message } finally { verifyMailBusy.value = false }
 }
 
 // The inbox clears its badge locally when the page marks rows read; the count
@@ -588,9 +641,10 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
       <label for="f-nickname">{{ t('auth.nickname') }}</label>
       <input id="f-nickname" v-model="nickname" />
       <span class="field-hint">{{ t('auth.nicknameRule') }}</span>
-      <template v-if="mailEnabled">
-        <label for="f-email">{{ t('auth.email') }}</label>
-        <input id="f-email" v-model="email" type="email" />
+      <template v-if="emailFieldShown">
+        <label :class="{ required: verifyGateEnabled }" for="f-email">{{ t(verifyGateEnabled ? 'auth.emailRequired' : 'auth.email') }}</label>
+        <input id="f-email" v-model="email" type="email" :required="verifyGateEnabled" />
+        <span v-if="verifyGateEnabled" class="field-hint">{{ t('auth.emailGateHint') }}</span>
       </template>
       <label for="f-register-password">{{ t('auth.passwordMin') }}</label>
       <input id="f-register-password" v-model="password" type="password" @keyup.enter="doRegister" />
@@ -679,6 +733,18 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
         <div class="row" style="margin-top: 16px;">
           <button @click="doEmailVerify">{{ t('auth.verifyConfirm') }}</button>
           <button class="secondary" @click="view = user ? 'profile' : 'login'">{{ user ? t('nav.userCenter') : t('common.login') }}</button>
+        </div>
+      </template>
+      <!-- Gated signup: the account exists, the link is in the mailbox (or the
+           site cannot mail at all — said plainly, because the gate is closed
+           either way and the player would otherwise guess at a missing email). -->
+      <template v-else-if="verifyState === 'mailed'">
+        <p class="success" role="status" v-if="mailEnabled">{{ t('auth.verifyMailed', { email: verifyMailTo }) }}</p>
+        <p class="error" role="alert" v-else>{{ t('auth.verifyMailedNoMail') }}</p>
+        <p class="muted" role="status" v-if="verifyMailNote">{{ verifyMailNote }}</p>
+        <div class="row" style="margin-top: 16px;">
+          <button class="secondary" v-if="mailEnabled" :disabled="verifyMailBusy" @click="resendVerificationMail">{{ verifyMailBusy ? t('auth.verifySubmitting') : t('auth.verifySubmit') }}</button>
+          <button @click="view = 'profile'">{{ t('nav.userCenter') }}</button>
         </div>
       </template>
       <template v-else>

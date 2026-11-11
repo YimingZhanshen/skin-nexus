@@ -57,9 +57,11 @@ const (
 	MsgDetailUntilTooFar = "access_log.detail_until_too_far" // the expiry is past the 24-hour cap
 
 	// auth / account
-	MsgCredentials      = "auth.credentials" // wrong identifier or password
-	MsgCurrentPassword  = "auth.current_password"
-	MsgEmailInvalid     = "auth.email_invalid"
+	MsgCredentials     = "auth.credentials" // wrong identifier or password
+	MsgCurrentPassword = "auth.current_password"
+	MsgEmailInvalid    = "auth.email_invalid"
+	// The join gate needs an address to mail; signup is where that is paid for.
+	MsgEmailRequired    = "auth.email_required"
 	MsgEmailTaken       = "auth.email_taken"
 	MsgNicknameTaken    = "auth.nickname_taken"
 	MsgNicknameInvalid  = "auth.nickname_invalid"

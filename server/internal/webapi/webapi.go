@@ -605,6 +605,16 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusBadRequest, "nickname must be 2-24 letters, digits, underscores or Chinese characters", i18n.MsgNicknameInvalid)
 		return
 	}
+	// The verification gate is enforced at the server door (ygg.Service.
+	// verificationBlocks), but an account with no address can never satisfy it:
+	// there is nothing to mail. Requiring the address here is what makes the
+	// switch honest — otherwise a player registers, browses the whole site, and
+	// only discovers the wall when joining. Runs with the other input rules,
+	// before any hashing, invitation consumption or row is written.
+	if req.Email == "" && b.verificationEnabled(r.Context()) {
+		writeErrCode(w, http.StatusBadRequest, "email address is required while this site verifies emails before joining", i18n.MsgEmailRequired)
+		return
+	}
 	if req.Email != "" && !mailRe.MatchString(req.Email) {
 		writeErrCode(w, http.StatusBadRequest, "email address is not valid", i18n.MsgEmailInvalid)
 		return
