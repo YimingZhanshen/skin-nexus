@@ -1016,6 +1016,24 @@ func main() {
 	root.Handle("/", spa)
 
 	addr := cfg.Listen
+	// The analytics origins an operator declares end up inside a response
+	// header, so a value that is not one CSP source fails the start rather than
+	// either splitting the header or silently widening nothing — same rule as
+	// SKIN_TRUSTED_PROXIES below. This one runs before the "listening" line,
+	// because a boot that announces a port and then exits is the worst kind of
+	// log to read at 3am.
+	cspScript, err := parseCSPSources("SKIN_CSP_SCRIPT_EXTRA_SOURCES", cfg.CSPScriptExtraSources)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	cspConnect, err := parseCSPSources("SKIN_CSP_CONNECT_EXTRA_SOURCES", cfg.CSPConnectExtraSources)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	if len(cspScript) > 0 || len(cspConnect) > 0 {
+		log.Printf("csp: script-src also allows [%s]; connect-src also allows [%s]",
+			strings.Join(cspScript, " "), strings.Join(cspConnect, " "))
+	}
 	log.Printf("skin-nexus %s listening on %s (base %s)", version, addr, cfg.BaseURL)
 
 	if len(cfg.TrustedProxies) > 0 {
@@ -1032,7 +1050,7 @@ func main() {
 	// inside it: it notes the status code and a bounded body prefix for the
 	// diagnostic detail rows and forwards every byte (see internal/accesslog/
 	// observe.go — it persists nothing by itself).
-	srv := newHTTPServer(addr, securityHeaders(accesslog.Observe(pub.WrapRoot(gzipHandler(root)))))
+	srv := newHTTPServer(addr, securityHeaders(accesslog.Observe(pub.WrapRoot(gzipHandler(root))), cspExtras{script: cspScript, connect: cspConnect}))
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.ListenAndServe() }()
 

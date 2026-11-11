@@ -350,6 +350,7 @@ onMounted(load)
       <div class="muted" style="font-size: var(--fs-xs); margin-top: 8px;">
         {{ t('admin.appearance.jsTrustHint') }}
         {{ t('admin.appearance.jsDomHint') }}
+        {{ t('admin.appearance.jsCspHint') }}
       </div>
       <div class="row" style="margin-top: 12px;">
         <button @click="appearSave">{{ t('admin.appearance.save') }}</button>

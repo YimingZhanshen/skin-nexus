@@ -629,6 +629,7 @@
       "js": "Custom JS (~64 KB limit)",
       "jsTrustHint": "Custom JS and theme JS are injected as-is on the admin’s side of trust (same as blessing) — paste only code you trust.",
       "jsDomHint": "JS runs before Vue mounts; wrap anything that touches the interface DOM in a DOMContentLoaded callback.",
+      "jsCspHint": "Third-party analytics tags (Google Tag Manager, Microsoft Clarity and the like) are blocked by this site's CSP: script-src allows this origin only. To run one, add its script host to SKIN_CSP_SCRIPT_EXTRA_SOURCES and its reporting host to SKIN_CSP_CONNECT_EXTRA_SOURCES in the deployment's .env, then restart — docs/deploy.md shows the accepted syntax.",
       "save": "Save appearance"
     },
     "title": "Admin panel",

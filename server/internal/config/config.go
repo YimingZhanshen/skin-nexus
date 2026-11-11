@@ -41,6 +41,14 @@ type Config struct {
 	// unaffected until it opts in.
 	TrustedProxies []string // SKIN_TRUSTED_PROXIES
 
+	// CSPScriptExtraSources / CSPConnectExtraSources are the operator's own
+	// third-party origins, appended to the Content-Security-Policy's script-src
+	// and connect-src. They stay raw here: what counts as a CSP source is the
+	// header layer's knowledge, and it refuses a value that is not one at boot.
+	// Empty means the shipped policy, byte for byte.
+	CSPScriptExtraSources  string // SKIN_CSP_SCRIPT_EXTRA_SOURCES
+	CSPConnectExtraSources string // SKIN_CSP_CONNECT_EXTRA_SOURCES
+
 	// Phase 2: yggc/OIDC passwordless login (internal OIDC provider).
 	OIDCEnabled    bool
 	OIDCIssuer     string // e.g. https://skin.example.com
@@ -169,6 +177,9 @@ func Load() (*Config, error) {
 		SiteName:       getenv("SKIN_SITE_NAME", "SkinNexus"),
 		SetupToken:     os.Getenv("SKIN_SETUP_TOKEN"),
 		TrustedProxies: splitCSV(getenv("SKIN_TRUSTED_PROXIES", "")),
+
+		CSPScriptExtraSources:  getenv("SKIN_CSP_SCRIPT_EXTRA_SOURCES", ""),
+		CSPConnectExtraSources: getenv("SKIN_CSP_CONNECT_EXTRA_SOURCES", ""),
 
 		OIDCEnabled:         getenv("SKIN_OIDC_ENABLED", "false") == "true",
 		RequireVerification: getenv("SKIN_REQUIRE_VERIFICATION", "false") == "true",

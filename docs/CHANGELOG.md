@@ -21,7 +21,22 @@
   `docs/theme-spec.md` 才是它们的真源。连带删掉双语目录里 22 个键与该块的专用测试，
   新增一条范围守卫：说明书不再回到首页，半删状态也不会把裸 catalog 键漏进可被抓取的页面。
 - 没跑的检查：整页截图观感（内置浏览器当时无可见 surface）；演示站要拉到本轮镜像才看得到
-  这两处变化。
+  这两处变化；CSP 放行项用本地第二个端口当「第三方源」验的，真实 googletagmanager.com /
+  clarity.ms 的联网投递本机未验（拦与放的行为与源无关）。
+
+- 面板「自定义 JS」粘贴的第三方统计脚本现在能声明放行。站长把 Google Tag Manager 与
+  Microsoft Clarity 合进自定义 JS 后没反应：本站 CSP 的 `script-src` 只有 `'self' 'unsafe-inline'`，
+  第三方 `<script>` 在浏览器里就被拦下（本地 rig 复现出与他控制台一字相同的违规）。新增两个
+  **默认留空**的部署变量 `SKIN_CSP_SCRIPT_EXTRA_SOURCES` / `SKIN_CSP_CONNECT_EXTRA_SOURCES`，
+  分别追加 `script-src` 与 `connect-src`；不设时响应头逐字不变。**只放脚本源不够**：Clarity
+  用 fetch 上报，`connect-src` 不放就是「脚本加载了但一条数据都没收到」。值在启动时严格校验，
+  只接受 `https://host`、`http://host`、`host`、`https://*.host`（可带端口）——分号正是 CSP 的
+  分隔符，一个不是「源」的值等于替我们往响应头里写别的指令，所以这类值直接启动失败而不是
+  静默忽略；校验也刻意排在 `listening` 那行之前，先宣布在听再退出的日志是凌晨三点最难读的一种。
+  真机三档读数：不设变量时探针「NOT RUN」加一条 CSP 违规；设了之后探针 `ran` 且控制台干净；
+  填非法值时进程没起来，日志最后一行就是那条配置错误。
+- 过程教训：`deploy.md` 的变量表与代码里的 env 清单是双向门禁，新变量必须同时进
+  `config.KnownEnv`，否则启动时会对一个其实生效的变量报「未知」——这条闸当场拦住了我。
 
 ## 2026-11-11
 

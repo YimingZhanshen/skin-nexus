@@ -629,6 +629,7 @@
       "js": "自定义 JS（约 64KB 上限）",
       "jsTrustHint": "自定义 JS 与主题 JS 以管理员信任面原样注入（与 blessing 行为一致）——请只粘贴自己信任的代码。",
       "jsDomHint": "JS 在 Vue 挂载前执行，操作界面 DOM 请包在 DOMContentLoaded 回调里。",
+      "jsCspHint": "第三方统计脚本（Google Tag Manager、Microsoft Clarity 等）会被本站 CSP 直接拦掉：script-src 只允许本站。要让它们跑起来，需在部署的 .env 里把脚本域名加进 SKIN_CSP_SCRIPT_EXTRA_SOURCES、上报域名加进 SKIN_CSP_CONNECT_EXTRA_SOURCES 并重启，写法见部署文档。",
       "save": "保存外观"
     },
     "title": "管理面板",
