@@ -333,6 +333,10 @@ func (b *Backend) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		migVer = "?"
 	}
+	mailFails := 0
+	if n, ferr := b.Store.CountMailFailuresSince(ctx, time.Now().UTC().Add(-24*time.Hour)); ferr == nil {
+		mailFails = n
+	}
 	hostname, _ := os.Hostname()
 	container := "host"
 	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
@@ -350,12 +354,17 @@ func (b *Backend) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if envName == "" {
 		envName = "production"
 	}
+	fingerprint := ""
+	if b.Ygg != nil {
+		fingerprint = b.Ygg.SignerFingerprint()
+	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"version":   b.Version,
-		"goVersion": runtime.Version(),
-		"dbVersion": dbVer,
-		"dbEngine":  string(b.Store.Engine()),
-		"migration": migVer,
+		"version":         b.Version,
+		"goVersion":       runtime.Version(),
+		"dbVersion":       dbVer,
+		"dbEngine":        string(b.Store.Engine()),
+		"migration":       migVer,
+		"mailFailures24h": mailFails,
 		"build": map[string]string{
 			"version": b.Version,
 			"commit":  b.BuildCommit,
@@ -385,7 +394,7 @@ func (b *Backend) handleStatus(w http.ResponseWriter, r *http.Request) {
 			"appearance": b.appearance != nil,
 			"oidc":       b.OIDCEnabled,
 		},
-		"signKeyFingerprint": b.Ygg.SignerFingerprint(),
+		"signKeyFingerprint": fingerprint,
 	})
 }
 

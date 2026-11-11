@@ -128,6 +128,7 @@ onMounted(async () => {
         <div class="status-grid">
           <div class="status-item"><span class="k">{{ t('admin.statusDatabase') }}</span><span class="v">{{ show(status.dbEngine) }} {{ show(status.dbVersion) }}</span></div>
           <div class="status-item"><span class="k">{{ t('admin.statusMigration') }}</span><span class="v">{{ show(status.migration) }}</span></div>
+          <div class="status-item"><span class="k">{{ t('admin.statusMailFailures') }}</span><span class="v">{{ show(status.mailFailures24h) }}</span></div>
         </div>
         <div class="status-badges">
           <span class="badge" :class="{ dim: !modules.union }">

@@ -92,6 +92,9 @@ func (b *Backend) sendVerificationMail(ctx context.Context, uid int64, address s
 			log.Printf("email-verification token cleanup uid=%d: %v", uid, delErr)
 		}
 		log.Printf("email-verification mail to %s (uid %d): %v", redact.Email(address), uid, err)
+		b.Store.InsertAudit(ctx, uid, "email_verify_mail_failed", map[string]any{
+			"to": redact.Email(address), "error": err.Error(),
+		})
 		return err
 	}
 	return nil

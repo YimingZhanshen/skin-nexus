@@ -221,6 +221,9 @@ func (b *Backend) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 		subject, text, html := webi18n.ResetMail(lang, cfg.SiteName, link, 30, palette)
 		if err := cfg.SendPart(mailer.Message{To: req.Email, Subject: subject, Text: text, HTML: html, Lang: lang}); err != nil {
 			log.Printf("password-reset mail to %s: %v", redact.Email(req.Email), err)
+			b.Store.InsertAudit(context.Background(), uid, "password_reset_mail_failed", map[string]any{
+				"to": redact.Email(req.Email), "error": err.Error(),
+			})
 		}
 	}()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
