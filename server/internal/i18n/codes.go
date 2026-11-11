@@ -61,16 +61,20 @@ const (
 	MsgCurrentPassword = "auth.current_password"
 	MsgEmailInvalid    = "auth.email_invalid"
 	// The join gate needs an address to mail; signup is where that is paid for.
-	MsgEmailRequired    = "auth.email_required"
-	MsgEmailTaken       = "auth.email_taken"
-	MsgNicknameTaken    = "auth.nickname_taken"
-	MsgNicknameInvalid  = "auth.nickname_invalid"
-	MsgPasswordTooShort = "auth.password_too_short"
-	MsgIPLimit          = "auth.ip_limit"
-	MsgSelfDeleteAdmin  = "auth.self_delete_forbidden"
-	MsgAccountBanned    = "auth.banned"             // permission = -1, refused at the web door
-	MsgPasswordSame     = "auth.password_unchanged" // new password equals the old one
-	MsgIdentifierTaken  = "auth.identifier_taken"   // which of the two is taken is unknown
+	MsgEmailRequired = "auth.email_required"
+	// The gate now also refuses to *use* an account that has not clicked the
+	// link: one code for the refusal, so the panel can render the state instead
+	// of a spinner, and so "blocked" is never confused with "bad credentials".
+	MsgEmailVerifyRequired = "auth.email_verify_required"
+	MsgEmailTaken          = "auth.email_taken"
+	MsgNicknameTaken       = "auth.nickname_taken"
+	MsgNicknameInvalid     = "auth.nickname_invalid"
+	MsgPasswordTooShort    = "auth.password_too_short"
+	MsgIPLimit             = "auth.ip_limit"
+	MsgSelfDeleteAdmin     = "auth.self_delete_forbidden"
+	MsgAccountBanned       = "auth.banned"             // permission = -1, refused at the web door
+	MsgPasswordSame        = "auth.password_unchanged" // new password equals the old one
+	MsgIdentifierTaken     = "auth.identifier_taken"   // which of the two is taken is unknown
 	// One code for every failed token check on /password/reset: the handler
 	// deliberately collapses them into one message so the endpoint never says
 	// which check failed, and the code must not leak it either.

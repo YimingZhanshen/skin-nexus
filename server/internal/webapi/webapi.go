@@ -78,6 +78,11 @@ type Backend struct {
 	// resolver the Yggdrasil gate uses, so the register flow mails a link
 	// exactly when a missing flag would lock the player out.
 	VerificationEnabled func(ctx context.Context) bool
+	// VerifyGrace reads option `email_verify_grace_days` at request time. main
+	// wires the same closure the Yggdrasil gate uses, so a grace period can
+	// never mean "graceful" in the launcher and "blocked" in the panel.
+	// Nil = enforce immediately.
+	VerifyGrace func(ctx context.Context) time.Duration
 	// Appearance supplies the public footer config (nil = default credit).
 	Appearance *appearance.Engine
 	// ThemePalette / ThemeID bake the active theme into outgoing mail (nil =
@@ -389,7 +394,10 @@ func (b *Backend) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/union/bindto", requireUnion(b.handleUnionBindTo))
 	mux.HandleFunc("POST /api/v1/union/unbind", requireUnion(b.handleUnionUnbind))
 	mux.HandleFunc("POST /api/v1/union/remapuuid", requireUnion(b.handleUnionRemapUUID))
-	return maxBody(mux)
+	// Outer-most is the body cap, then the verification gate: a pending
+	// account should read "verify first" rather than tripping over a size
+	// limit on a request that was never going to be served.
+	return maxBody(b.verifyWebGate(mux))
 }
 
 // maxBody caps request bodies at 1 MiB (review B P2: unbounded JSON fed
@@ -725,7 +733,13 @@ func (b *Backend) handleRegister(w http.ResponseWriter, r *http.Request) {
 	if req.Email != "" && b.verificationEnabled(r.Context()) {
 		b.sendVerificationMailDetached(uid, req.Email, webi18n.ResolveLang(r))
 	}
-	writeJSON(w, http.StatusCreated, map[string]interface{}{"id": uid, "nickname": req.Nickname, "permission": 0})
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"id": uid, "nickname": req.Nickname, "permission": 0,
+		// Same field as login: with a zero grace window the account is
+		// pending from the first second, and the shell has to know that
+		// before it draws anything else.
+		"verifyRequired": b.VerifyPending(r.Context(), uid),
+	})
 }
 
 func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -850,7 +864,14 @@ func (b *Backend) handleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 	// `permission` is additive: the SPA needs the admin-entry gate right away,
 	// and the read the ban check above already did carries it — no second query.
-	writeJSON(w, http.StatusOK, map[string]interface{}{"id": u.ID, "nickname": u.Nickname, "permission": perm})
+	// `verifyRequired` is additive for the same reason: a player who is
+	// actually locked out has to see the explanation on the first screen after
+	// 登录, not after clicking something that then 403s. The read behind it is
+	// skipped entirely when the gate is off.
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"id": u.ID, "nickname": u.Nickname, "permission": perm,
+		"verifyRequired": b.VerifyPending(r.Context(), u.ID),
+	})
 }
 
 // issueSession persists and hands out a session cookie. The store write is
@@ -926,11 +947,29 @@ func (b *Backend) handleMe(w http.ResponseWriter, r *http.Request) {
 	if h, err := b.Store.UserAvatarHash(r.Context(), uid); err == nil {
 		avatarHash = h
 	}
+	// One read answers both questions the shell asks: whether this account is
+	// blocked, and which mailbox the block is waiting on. Asking for the
+	// address separately would be a second read of a row the gate just read —
+	// and it would happen on every site, gate or no gate.
+	gatePending, gateRow := b.gateVerdict(r.Context(), uid)
+	gateEmail := ""
+	if gatePending {
+		// Sent only while the block is real: an ordinary deployment keeps the
+		// /me body it has always had.
+		gateEmail = gateRow.Email
+	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"id": u.ID, "nickname": u.Nickname,
+		"email":         gateEmail,
 		"emailVerified": u.EmailVerified, "playerLimit": limit,
-		"permission":  perm,
-		"playerCount": playerCount, "storageBytes": storageBytes,
+		"permission": perm,
+		// The shell needs the gate's *verdict*, not just the flag: a verified
+		// row inside a grace window is usable, an unverified row past it is
+		// not, and the two answers render different screens. Free when the
+		// gate is off, so the panel can never show a feature the same request
+		// would then refuse.
+		"verifyRequired": gatePending,
+		"playerCount":    playerCount, "storageBytes": storageBytes,
 		"avatarHash": avatarHash,
 		// Inbox badge rides along so the shell does not need a second round trip.
 		"unreadNotifications": b.unreadNotifications(r.Context(), uid),

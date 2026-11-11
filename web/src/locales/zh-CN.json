@@ -23,6 +23,7 @@
       "current_password": "当前密码不正确",
       "email_invalid": "邮箱格式不正确",
       "email_required": "本站要求邮箱验证，注册时必须填写邮箱",
+      "email_verify_required": "请先完成邮箱验证：未验证期间无法使用账号功能",
       "email_taken": "该邮箱已被占用",
       "identifier_taken": "昵称或邮箱已被占用",
       "ip_limit": "该 IP 的注册数量已达上限",
@@ -264,6 +265,15 @@
     "inviteRequiredErr": "请填写邀请码",
     "mailDisabled": "站点未配置邮件服务，找回密码暂不可用；如需找回请联系管理员。",
     "verifyTitle": "邮箱验证",
+    "pendingTitle": "请先验证邮箱",
+    "pendingBody": "本站要求先验证邮箱才能使用账号功能。验证链接会发往 {email}，也可能被投进垃圾箱；没收到的话可以在下面重新发送。",
+    "pendingNoMail": "本站还没配好邮件服务，验证邮件现在发不出去。请联系站长开通邮件服务；你也可以先换一个能收到的邮箱，等邮件通了再点「重新发送」。",
+    "pendingResend": "重新发送验证邮件",
+    "pendingChange": "换一个邮箱",
+    "pendingNewEmail": "新邮箱",
+    "pendingSaved": "邮箱已更新，新的验证链接已发出。",
+    "pendingSavedNoSend": "邮箱已更新，但验证邮件没有发出去：{message}。可以先修好邮件服务，或请站长在管理面板里人工确认。",
+    "pendingEmailMissing": "请先填一个新邮箱。",
     "verifySubmit": "发送验证邮件",
     "verifySubmitting": "发送中…",
     "verifySent": "验证邮件已发送——请查收收件箱（含垃圾邮件）。链接 24 小时内有效。",
@@ -728,6 +738,7 @@
     "kind": {
       "web_login": "网页登录",
       "web_register": "网页注册",
+      "web_verify_gate": "验证门拒绝",
       "ygg_authenticate": "启动器认证",
       "ygg_refresh": "令牌刷新",
       "ygg_validate": "令牌校验",
@@ -790,6 +801,7 @@
       "migrations": "数据库迁移",
       "mail": "邮件服务",
       "mail_dns": "邮件域名解析（SPF / DMARC）",
+      "verify_gate": "邮箱验证门（影响范围）",
       "preview": "预览渲染",
       "assets": "前端资源",
       "keyring": "插件签名密钥"
@@ -817,6 +829,9 @@
       "mailDnsSpf": "发件域没有 SPF 记录（TXT 里的 v=spf1）。收件方可能判为伪造。请到域名后台添加 SPF，把本站 SMTP 服务器包含进去。",
       "mailDnsDmarc": "发件域没有 DMARC 记录（_dmarc 子域的 TXT 里的 v=DMARC1）。建议先加 p=none 观察，再逐步收紧。DKIM 需要在服务商后台开启并拿到 selector，本站无法代查。",
       "mailDnsBoth": "SPF 与 DMARC 都缺。这是邮件进垃圾箱最常见的原因。请到域名后台补两条 TXT 记录；DKIM 需在服务商后台单独开启。",
+      "verifyGateOff": "验证门目前未开启。开启后，宽限期一过，没点验证链接的账号会被挡在用户中心与管理面板之外；这里的 unverified 就是会被拦住的人数，先看清再开。",
+      "verifyGateNoMail": "验证门已开启，但本站没有可用的发信配置：新账号会被拦在网页功能之外，又收不到验证链接，只能由超管在「用户管理」里手工标记已验证。请先配好 SMTP，或把宽限期设为足够天数。",
+      "verifyGateCount": "未验证账号数量没能读到（数据库错误），这不代表是 0。请查看服务日志里的数据库报错。",
       "previewNoProbe": "本次启动没有注入预览探针，无法自检渲染链路。",
       "previewNothing": "皮肤库里还没有公开皮肤，探针没有东西可渲染。上传一张公开皮肤后即可自检。",
       "previewBroken": "用真实材质渲染预览失败。多半是材质记录在库里、文件却不在磁盘上（数据目录搬迁或导入漏了文件）。",
@@ -1250,7 +1265,7 @@
     "notShownDomain": "材质地址要能从你这边访问",
     "notShownDomainBody": "皮肤图片由本站地址提供。地址若填成局域网 IP、证书不受信或域名被拦截，客户端会退回默认外观——这由管理端的站点地址决定。",
     "notShownVerify": "本站开启了邮箱验证门",
-    "notShownVerifyBody": "开启后，未验证邮箱的账号无法通过启动器登录（网页登录本身不受影响）。请到个人资料页填好邮箱并发送验证邮件；验证链接来自邮件，不是这个页面。",
+    "notShownVerifyBody": "开启后，未验证邮箱的账号既进不了服务器，也用不了网页：上传、衣柜、角色、通知和用户中心都会提示先验证。皮肤库这类公开页面仍可浏览，个人资料页照旧能打开，验证链接由邮件送达。一直没收到就让站长在管理面板里人工标记已验证。",
     "goPlayers": "去角色管理",
     "goProfile": "去个人资料",
     "goCloset": "去衣柜",
@@ -1286,7 +1301,7 @@
       "desc": "注册强制邀请码（立即生效）"
     },
     "require_verification": {
-      "desc": "进服前须邮箱验证（立即生效；开启后新注册账号会自动收到验证邮件，配合下方宽限期使用）"
+      "desc": "邮箱验证门（立即生效）：注册必须填邮箱，宽限期一过，未点验证链接的账号会被同时挡在 Minecraft 进服、网页用户中心与管理面板之外（超管不受限，以免发信坏了没人能修）"
     },
     "email_verify_grace_days": {
       "desc": "邮箱验证宽限期（天；注册后 N 天内即使未验证也放行，0=立即执行门禁；立即生效）"

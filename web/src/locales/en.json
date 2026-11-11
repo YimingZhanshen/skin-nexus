@@ -23,6 +23,7 @@
       "current_password": "Current password is incorrect",
       "email_invalid": "Email address is not valid",
       "email_required": "This site verifies email addresses, so one is required at signup",
+      "email_verify_required": "Verify this email address first: account features are closed until then",
       "email_taken": "This email is already taken",
       "identifier_taken": "Nickname or email is already taken",
       "ip_limit": "This IP reached the registration limit",
@@ -283,6 +284,15 @@
     "inviteRequiredErr": "Please enter the invitation code",
     "mailDisabled": "This site has no mail service configured, so password recovery is unavailable; contact the site owner.",
     "verifyTitle": "Email verification",
+    "pendingTitle": "Verify your email first",
+    "pendingBody": "This site requires a verified address before an account can be used. The link is on its way to {email}, and it can land in spam — if nothing arrived, resend it below.",
+    "pendingNoMail": "This site has no working mail service, so the verification message cannot be sent right now. Ask the site owner to configure it; you can also switch to an address you can read and resend once mail works.",
+    "pendingResend": "Resend verification email",
+    "pendingChange": "Use another address",
+    "pendingNewEmail": "New email",
+    "pendingSaved": "Address updated, and the new verification link was sent.",
+    "pendingSavedNoSend": "Address updated, but the verification mail could not be sent: {message}. Fix the mail service first, or ask the site owner to confirm the address in the admin panel.",
+    "pendingEmailMissing": "Enter a new address first.",
     "verifySubmit": "Send verification email",
     "verifySubmitting": "Sending…",
     "verifySent": "Verification mail sent — check your inbox (and spam). The link expires in 24 hours.",
@@ -728,6 +738,7 @@
     "kind": {
       "web_login": "Web login",
       "web_register": "Web register",
+      "web_verify_gate": "Verification gate refusal",
       "ygg_authenticate": "Launcher auth",
       "ygg_refresh": "Token refresh",
       "ygg_validate": "Token validate",
@@ -790,6 +801,7 @@
       "migrations": "Database migrations",
       "mail": "Mail service",
       "mail_dns": "Mail DNS (SPF / DMARC)",
+      "verify_gate": "Email verification gate (blast radius)",
       "preview": "Preview rendering",
       "assets": "Web bundle",
       "keyring": "Plugin signing keys"
@@ -817,6 +829,9 @@
       "mailDnsSpf": "The sender domain has no SPF record (v=spf1 in a TXT record). Receivers may treat mail as forged. Add an SPF record at your DNS provider that includes this site's SMTP server.",
       "mailDnsDmarc": "The sender domain has no DMARC record (v=DMARC1 in a TXT record under _dmarc). Start with p=none and tighten gradually. DKIM must be enabled in the provider console to obtain a selector; this site cannot check it for you.",
       "mailDnsBoth": "Both SPF and DMARC are missing — the most common reason mail lands in spam. Add the two TXT records at your DNS provider; DKIM is enabled separately in the provider console.",
+      "verifyGateOff": "The gate is off. Once it is on, every account that has not clicked its link is refused the user centre and the admin panel after the grace window; the unverified count below is how many that would hit. Read it before switching.",
+      "verifyGateNoMail": "The gate is on, but this site has no working mail transport: new accounts are refused the web and cannot receive the link. Only a super admin can mark them verified by hand. Configure SMTP first, or set a grace window long enough to matter.",
+      "verifyGateCount": "The unverified count could not be read (database error). That is not the same as zero — check the database errors in the service log.",
       "previewNoProbe": "No preview probe was injected at boot, so the render pipeline cannot be self-checked.",
       "previewNothing": "The library has no public skin yet, so the probe had nothing to render. Upload one and this line becomes a real test.",
       "previewBroken": "Rendering a real texture failed. Usually the database row exists but the file does not — a data volume that moved, or an import that skipped files.",
@@ -1250,7 +1265,7 @@
     "notShownDomain": "Texture URLs must be reachable from your machine",
     "notShownDomainBody": "Skins are served from this site address. If it is set to a LAN IP, has an untrusted certificate, or the domain is blocked, the client falls back to the default look — the site address is set in the admin panel.",
     "notShownVerify": "This site requires a verified email",
-    "notShownVerifyBody": "With it on, an account whose address is not verified cannot sign in through a launcher — the website itself still works. Fill in the address on the profile page and send the verification mail; the link arrives by email, not from this page.",
+    "notShownVerifyBody": "With it on, an unverified account is refused both the launcher and the website: uploads, closet, characters, notifications and the user centre all answer \"verify your email first\". Public pages such as the skin library stay browsable and the profile page still opens; the link arrives by email, not from this page. If nothing ever arrives, the site owner can mark the address verified by hand in the admin panel.",
     "goPlayers": "Go to profiles",
     "goProfile": "Go to the profile page",
     "goCloset": "Go to your closet",
@@ -1286,7 +1301,7 @@
       "desc": "Require an invite code to register (applies immediately)"
     },
     "require_verification": {
-      "desc": "Require email verification before joining a server (applies immediately; new accounts then receive a verification mail automatically — pair it with the grace period below)"
+      "desc": "Email verification gate (applies immediately): an address is required at signup, and once the grace window ends an unverified account is refused Minecraft join, the web user centre and the admin panel alike. Super admins are exempt, so a broken mail transport can still be repaired."
     },
     "email_verify_grace_days": {
       "desc": "Email-verification grace period in days: for N days after signup an unverified account still passes, 0 = enforce at once (applies immediately)"

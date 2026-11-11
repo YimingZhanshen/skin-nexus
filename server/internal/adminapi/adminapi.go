@@ -30,6 +30,12 @@ type Backend struct {
 	Store    *store.Mysql
 	Ygg      *ygg.Service
 	AdminTok string
+	// VerifyGate is the webapi gate's own verdict, handed over as a value by
+	// main. This package deliberately does not read the two options itself: a
+	// second implementation of "is this account pending?" is how the panel
+	// ends up answering a different question than the user centre did.
+	// nil = the panel does not ask (today's behaviour, byte for byte).
+	VerifyGate func(ctx context.Context, uid int64) bool
 	// Account is the shared business layer (same service the user-facing API
 	// uses) — texture deletion needs its guards, events and file access.
 	Account        *account.Service
@@ -273,6 +279,9 @@ func (b *Backend) auth(next http.HandlerFunc) http.HandlerFunc {
 			// session cookie rides along, the human wins.
 			if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
 				if uid, ok := sessionAdmin(r, b.Store); ok {
+					if b.pendingRefusal(w, r, uid) {
+						return
+					}
 					next(w, r.WithContext(context.WithValue(r.Context(), actorUIDKey{}, uid)))
 					return
 				}
@@ -281,6 +290,9 @@ func (b *Backend) auth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if uid, ok := sessionAdmin(r, b.Store); ok {
+			if b.pendingRefusal(w, r, uid) {
+				return
+			}
 			next(w, r.WithContext(context.WithValue(r.Context(), actorUIDKey{}, uid)))
 			return
 		}
@@ -288,6 +300,24 @@ func (b *Backend) auth(next http.HandlerFunc) http.HandlerFunc {
 		// w.Write is invisible to the envelope gate.
 		writeErrCode(w, http.StatusForbidden, "admin token invalid", i18n.MsgAdminTokenInvalid)
 	}
+}
+
+// pendingRefusal answers true when it already answered the request. A session
+// that resolves to an admin who still owes the verification click may not act
+// as that account — including through the hybrid path where the panel also
+// sent the admin token, because there the person is the actor. The machine
+// path with no session is not refused: that is the operator's own credential,
+// and an unverified mailbox must not become a way to lose the site.
+func (b *Backend) pendingRefusal(w http.ResponseWriter, r *http.Request, uid int64) bool {
+	if b.VerifyGate == nil || !b.VerifyGate(r.Context(), uid) {
+		return false
+	}
+	// Through the helper, not a hand-written body: a response built with
+	// w.Write is invisible to the envelope gate.
+	writeErrCode(w, http.StatusForbidden,
+		"email verification is required before this account can be used",
+		i18n.MsgEmailVerifyRequired)
+	return true
 }
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {

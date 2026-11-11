@@ -19,7 +19,7 @@ const query = ref('')
 const error = ref('')
 
 const KINDS = [
-  'web_login', 'web_register',
+  'web_login', 'web_register', 'web_verify_gate',
   'ygg_authenticate', 'ygg_refresh', 'ygg_validate',
   'ygg_join', 'ygg_hasjoined', 'ygg_profile',
   'union_in', 'union_out',

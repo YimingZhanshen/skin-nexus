@@ -17,8 +17,13 @@ import (
 
 // Kinds (column: kind VARCHAR(24)).
 const (
-	WebLogin        = "web_login"
-	WebRegister     = "web_register"
+	WebLogin    = "web_login"
+	WebRegister = "web_register"
+	// A pending account reaching for a feature it has not paid for yet. Not
+	// `web_login` with OutcomeFail: nobody failed to sign in, and an operator
+	// chasing "why can this player not upload" has to be able to filter for
+	// the refusals the gate itself issued.
+	WebVerifyGate   = "web_verify_gate"
 	YggAuthenticate = "ygg_authenticate"
 	YggRefresh      = "ygg_refresh"
 	YggValidate     = "ygg_validate"

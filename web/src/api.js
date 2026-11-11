@@ -17,10 +17,22 @@ async function req(method, path, body, timeoutMS = 15000) {
     const err = new Error(describe(data, res.status))
     err.status = res.status
     err.data = data
+    // The verification gate can close underneath an open page: a grace window
+    // expires, or the operator switches the option on mid-session. Components
+    // should not each learn that code, so the transport tells the shell and
+    // the shell re-reads /me — the one place the verdict lives.
+    if (data && data.code === 'auth.email_verify_required' && gateWatch.onVerifyRequired) {
+      gateWatch.onVerifyRequired()
+    }
     throw err
   }
   return data
 }
+
+// Shell hook for the verification gate (see req()). App.vue assigns it during
+// boot; unset means nobody is listening, which is correct for plugin frames and
+// for tests that drive the transport directly.
+export const gateWatch = { onVerifyRequired: null }
 
 export const api = {
   me: () => req('GET', '/api/v1/me'),

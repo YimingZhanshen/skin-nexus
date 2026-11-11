@@ -2,7 +2,7 @@
 // SkinNexus · Copyright (C) 2026 SkinNexus contributors · AGPL-3.0
 import { ref, computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { api } from './api.js'
+import { api, gateWatch } from './api.js'
 import { transportError } from './errors.js'
 import PageLoading from './components/PageLoading.vue'
 import ToastHub from './components/ToastHub.vue'
@@ -138,6 +138,16 @@ const mailEnabled = computed(() => confLoaded.value && siteConf.value.mail_confi
 // yet, and it must be filled: an account without an address can never pass.
 const verifyGateEnabled = computed(() => confLoaded.value && siteConf.value.verify_gate_enabled === true)
 const emailFieldShown = computed(() => mailEnabled.value || verifyGateEnabled.value)
+// The verdict, not the flag. /me, /login and /register all carry
+// `verifyRequired`, so the shell knows before it draws anything whether this
+// session is a member or a guest who happens to hold a cookie. The server is
+// the one refusing; this only decides what the player is shown while that is
+// true — a banner inside a usable panel would read as a suggestion.
+const verifyPending = computed(() => !!(user.value && user.value.verifyRequired === true))
+const pendingBusy = ref(false)
+const pendingNote = ref('')
+const pendingChangeOpen = ref(false)
+const pendingEmail = ref('')
 const unionEnabled = computed(() => confLoaded.value && siteConf.value.union_enabled)
 
 // Sidebar nav (blessing parity: 用户中心/管理 两组). device/apps/union are
@@ -324,6 +334,10 @@ function applyInitialRoute() {
   else view.value = user.value ? 'dashboard' : 'login'
 }
 
+// A gate that closes mid-session must not leave a page full of buttons that
+// 403: the transport reports the code, the shell re-reads its own state.
+gateWatch.onVerifyRequired = refreshMe
+
 async function boot() {
   booting.value = true
   bootErr.value = ''
@@ -414,8 +428,11 @@ async function doLogin() {
   try {
     user.value = await api.login(identifier.value, password.value)
     // New backends return `permission` on login; fall back to /me only for
-    // older servers (saves one RTT on every login).
-    if (user.value && user.value.permission === undefined) {
+    // older servers (saves one RTT on every login) — and for a blocked
+    // account, which needs the address the screen has to name. login answers
+    // with id/nickname/permission only, so without this the gate's own page
+    // would read "the link is on its way to" and then nothing.
+    if (user.value && (user.value.permission === undefined || user.value.verifyRequired)) {
       try { user.value = await api.me() } catch { /* keep login payload */ }
     }
   } catch (e) {
@@ -450,13 +467,21 @@ async function doRegister() {
   try {
     user.value = await api.register(email.value, nickname.value, password.value, invitationCode.value.trim(), pluginFormData.value)
     if (user.value && user.value.permission === undefined) user.value = { ...user.value, permission: 0 }
+    // Same reason as in doLogin: the pending screen quotes the address, and the
+    // signup response does not carry it.
+    if (user.value && user.value.verifyRequired) {
+      try { user.value = await api.me() } catch { /* the screen still renders */ }
+    }
   } catch (e) { authErr.value = e.message; return } finally { authBusy.value = false }
   // The server mailed the verification link as it created the account, and the
   // gate keeps the player off the server until that link is clicked. Dropping
   // them on the dashboard, where the only trace is a muted 未验证 line on the
   // profile page, loses the one instruction they need right now — so this
   // screen carries it, unless another flow owns the landing.
-  if (verifyGateEnabled.value && !authWaitingElsewhere()) {
+  // With a zero grace window the account is pending from the first second, and
+  // the blocking screen above already says everything this one would; the
+  // informational landing is for the site that gave the player a window.
+  if (verifyGateEnabled.value && !verifyPending.value && !authWaitingElsewhere()) {
     verifyMailTo.value = email.value.trim()
     verifyMailNote.value = ''
     view.value = 'verify'
@@ -514,6 +539,50 @@ async function doEmailVerify() {
 // Resend from the gated-signup landing. Same endpoint and same wording as the
 // profile page's button; the server's own rate window answers, and its code
 // arrives already run through the error dictionary.
+// The three things a pending account may still do. Each one re-reads /me,
+// because the verdict is the server's: after a resend, an address change or a
+// successful exchange, the shell has to stop treating the player as blocked
+// without a reload.
+async function refreshMe() {
+  try { user.value = await api.me() } catch { /* the 401 path owns sign-out */ }
+}
+
+async function pendingResend() {
+  if (pendingBusy.value) return
+  pendingBusy.value = true
+  pendingNote.value = ''
+  try {
+    await api.requestEmailVerification()
+    pendingNote.value = t('auth.verifySent')
+  } catch (e) { pendingNote.value = e.message } finally { pendingBusy.value = false }
+  await refreshMe()
+}
+
+async function pendingSaveEmail() {
+  if (pendingBusy.value) return
+  const next = pendingEmail.value.trim()
+  if (!next) { pendingNote.value = t('auth.pendingEmailMissing'); return }
+  pendingBusy.value = true
+  pendingNote.value = ''
+  try {
+    // The nickname rides along unchanged: the route takes both fields, and the
+    // address is the only thing a pending account is allowed to repair.
+    await api.updateProfile(user.value.nickname, next)
+    pendingChangeOpen.value = false
+    pendingEmail.value = ''
+    // Changing the address does not mail anything by itself (the server sends
+    // only when asked), so the client asks right here. The note below is then
+    // what the transport actually reported — not a promise that a link is on
+    // its way.
+    try {
+      await api.requestEmailVerification()
+      pendingNote.value = t('auth.pendingSaved')
+    } catch (e) { pendingNote.value = t('auth.pendingSavedNoSend', { message: e.message }) }
+''
+  } catch (e) { pendingNote.value = e.message } finally { pendingBusy.value = false }
+  await refreshMe()
+}
+
 async function resendVerificationMail() {
   if (verifyMailBusy.value) return
   verifyMailBusy.value = true
@@ -787,6 +856,32 @@ onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
     <!-- help is public too — see applyInitialRoute -->
     <template v-else-if="!user && view === 'help'">
       <HelpPage />
+    </template>
+
+    <!-- The gate on the web side. Past the grace window an unverified account
+         is not a member with a cookie — the server refuses everything that
+         acts as this account — so the panel is replaced rather than annotated.
+         Three ways out, all of them reachable: the link can be resent, the
+         address can be corrected (a typo at signup is otherwise permanent),
+         and the session can be ended. -->
+    <template v-else-if="user && verifyPending">
+      <div class="card verify-block">
+        <h2>{{ t('auth.pendingTitle') }}</h2>
+        <p class="muted" v-if="mailEnabled">{{ t('auth.pendingBody', { email: user.email || '' }) }}</p>
+        <p class="error" role="alert" v-else>{{ t('auth.pendingNoMail') }}</p>
+        <p class="muted" role="status" v-if="pendingNote">{{ pendingNote }}</p>
+        <div class="row" style="margin-top: 16px; flex-wrap: wrap;">
+          <button v-if="mailEnabled" :disabled="pendingBusy" @click="pendingResend">{{ t('auth.pendingResend') }}</button>
+          <button class="secondary" @click="pendingChangeOpen = !pendingChangeOpen">{{ t('auth.pendingChange') }}</button>
+          <button class="secondary" @click="doLogout">{{ t('common.logout') }}</button>
+        </div>
+        <div class="row" style="margin-top: 12px; flex-wrap: wrap;" v-if="pendingChangeOpen">
+          <label class="fld" for="f-pending-email">{{ t('auth.pendingNewEmail') }}
+            <input id="f-pending-email" v-model="pendingEmail" type="email" autocomplete="email" @keyup.enter="pendingSaveEmail" />
+          </label>
+          <button :disabled="pendingBusy" @click="pendingSaveEmail">{{ t('common.save') }}</button>
+        </div>
+      </div>
     </template>
 
     <!-- logged-in shell: sidebar + page (blessing 用户中心布局) -->

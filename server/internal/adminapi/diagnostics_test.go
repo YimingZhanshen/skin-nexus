@@ -304,13 +304,21 @@ func TestDiagnosticsRollupAndHandler(t *testing.T) {
 			t.Errorf("fix %q has no dictionary key", it.Fix)
 		}
 	}
-	for _, want := range []string{"site", "migrations", "mail", "mail_dns", "preview", "assets", "keyring"} {
+	wantIDs := []string{"site", "migrations", "mail", "mail_dns", "verify_gate", "preview", "assets", "keyring"}
+	for _, want := range wantIDs {
 		if !ids[want] {
 			t.Errorf("the closed set must always carry %q, got %v", want, ids)
 		}
 	}
-	if len(ids) != 7 {
-		t.Errorf("the set is closed at 7, got %d: %v", len(ids), ids)
+	// The set is deliberately closed. It went 7 -> 8 on 2026-11-12 when the
+	// verification gate acquired a second consequence (a pending account is
+	// refused the panel, not only the server): an operator flipping that
+	// switch on a migrated site needs the count before the click, which is
+	// something they can act on in this panel. Adding a row still has to be
+	// an argument, so the number is asserted against the list above rather
+	// than left open.
+	if len(ids) != len(wantIDs) {
+		t.Errorf("the set is closed at %d, got %d: %v", len(wantIDs), len(ids), ids)
 	}
 
 	w := httptest.NewRecorder()
@@ -343,6 +351,7 @@ var diagFixKeys = []string{
 	"siteEmpty", "siteLan", "siteNeedsRestart", "siteLegacyBase",
 	"migrationsUnreadable", "migrationsNoDir", "migrationsNoTree", "migrationsPending",
 	"mailNoSender", "mailOff",
+	"verifyGateOff", "verifyGateNoMail", "verifyGateCount",
 	"mailDnsOff", "mailDnsNoDomain", "mailDnsUnresolved", "mailDnsSpf", "mailDnsDmarc", "mailDnsBoth",
 	"previewNoProbe", "previewNothing", "previewBroken",
 	"assetsNoDir", "assetsMissing",

@@ -13,6 +13,7 @@ import (
 
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/ratelimit"
+	"skin-nexus/server/internal/verifygate"
 )
 
 // Errors map to the legacy response semantics (docs/phase1-dev-plan.md §1.3).
@@ -290,18 +291,20 @@ func (s *Service) verifyGrace(ctx context.Context) time.Duration {
 	return s.VerifyGrace
 }
 
-// verificationBlocks is the whole email gate: option on, address unverified,
-// grace window spent. Zero CreatedAt (a record built by a caller that never
-// looked at the column) counts as "no grace", so the gate fails closed.
+// verificationBlocks is the whole email gate, decided in verifygate so the
+// web panel reaches the same answer from the same two options. The semantics
+// are unchanged from when this function owned them alone: option on, address
+// unverified, grace window spent; a zero CreatedAt (a record built by a caller
+// that never looked at the column) counts as "no grace", so the gate fails
+// closed.
 func (s *Service) verificationBlocks(ctx context.Context, u User) bool {
-	if !s.requireVerification(ctx) || u.EmailVerified {
-		return false
-	}
-	g := s.verifyGrace(ctx)
-	if g > 0 && !u.CreatedAt.IsZero() && s.now().Sub(u.CreatedAt) < g {
-		return false
-	}
-	return true
+	return verifygate.Blocks(verifygate.Facts{
+		Enabled:   s.requireVerification(ctx),
+		Verified:  u.EmailVerified,
+		CreatedAt: u.CreatedAt,
+		Grace:     s.verifyGrace(ctx),
+		Now:       s.now(),
+	})
 }
 
 const (

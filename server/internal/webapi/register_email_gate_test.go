@@ -26,16 +26,25 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"skin-nexus/server/internal/dialect"
 	"skin-nexus/server/internal/migrate"
 	"skin-nexus/server/internal/store"
 )
 
-// registerGateFixture builds a backend with the gate in one state. SMTP points
-// at the blackhole listener so the registration send has a transport to try;
-// the tests below never wait on it.
+// registerGateFixture builds a backend with the gate in one state and no grace
+// window. SMTP points at the blackhole listener so the registration send has a
+// transport to try; the tests below never wait on it.
 func registerGateFixture(t *testing.T, gateOn bool) (http.Handler, *store.Mysql) {
+	t.Helper()
+	return gateFixture(t, gateOn, 0)
+}
+
+// gateFixture is the shared webapi gate fixture. grace is `email_verify_grace_
+// days` as the deployment sees it, so one file can prove both halves of the
+// window without waiting for a day to pass.
+func gateFixture(t *testing.T, gateOn bool, grace time.Duration) (http.Handler, *store.Mysql) {
 	t.Helper()
 	m, err := store.Open("sqlite", "sqlite:"+filepath.Join(t.TempDir(), "gate.db"), nil)
 	if err != nil {
@@ -61,7 +70,8 @@ func registerGateFixture(t *testing.T, gateOn bool) (http.Handler, *store.Mysql)
 		}
 	}
 	b := &Backend{Store: m, BaseURL: "http://rig.test",
-		VerificationEnabled: func(context.Context) bool { return gateOn }}
+		VerificationEnabled: func(context.Context) bool { return gateOn },
+		VerifyGrace:         func(context.Context) time.Duration { return grace }}
 	// The fixture proves its own transport is readable before a test blames
 	// the handler for a missing option.
 	if b.smtpConfig(ctx) == nil {

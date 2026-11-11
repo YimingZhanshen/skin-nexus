@@ -62,23 +62,65 @@ type DiagnosticsDeps struct {
 	Preview func(ctx context.Context) (bool, error)
 	// KeyringStatus reports how many plugin-signing keys loaded and the market URL.
 	KeyringStatus func() (keys int, marketURL string)
+	// VerifyGate is `require_verification` as the rest of the process reads it
+	// (option first, env fallback). nil = report the gate as off rather than
+	// guess from a second source.
+	VerifyGate func(ctx context.Context) bool
 	// LookupTXT resolves one TXT name. Unlike the probes above, nil does NOT
 	// mean skip: DNS is always available in principle, so a missing injection
 	// still runs the real resolver (net.DefaultResolver) under a 3s bound.
 	LookupTXT func(ctx context.Context, name string) ([]string, error)
 }
 
-// diagnostics runs the seven checks in a fixed order.
+// diagnostics runs the eight checks in a fixed order.
 func (b *Backend) diagnostics(ctx context.Context) []diagItem {
 	return []diagItem{
 		b.checkSiteURL(ctx),
 		b.checkMigrations(ctx),
 		b.checkMail(ctx),
 		b.checkMailDNS(ctx),
+		b.checkVerifyGate(ctx),
 		b.checkPreview(ctx),
 		b.checkWebAssets(),
 		b.checkKeyring(),
 	}
+}
+
+// ---- verification gate ----------------------------------------------------
+
+// checkVerifyGate reports what `require_verification` is actually going to do
+// to this deployment.
+//
+// It joined the closed set of seven because the gate got a second consequence
+// on 2026-11-12: past the grace window an unverified account is refused the
+// panel, not only the server. On a site that migrated blessing accounts the
+// flag is 0 for nearly everybody, so switching it on with no smoke test locks
+// the player base out of the website — an operator needs the count *before*
+// the click, and needs to see that a gate with no mail transport has no way
+// out except an admin marking accounts verified by hand.
+func (b *Backend) checkVerifyGate(ctx context.Context) diagItem {
+	// The same closure the launcher, the register form and the panel gate use.
+	// Reading the option again here would be a fifth opinion on one switch.
+	enabled := b.Diagnostics.VerifyGate != nil && b.Diagnostics.VerifyGate(ctx)
+	unverified, err := b.Store.UnverifiedAccounts(ctx)
+	if err != nil {
+		// The row is about a decision the operator is making right now; a
+		// count that failed to read must not look like a clean zero.
+		return diagItem{ID: "verify_gate", State: diagWarn, Value: "count=unknown", Fix: "verifyGateCount"}
+	}
+	if !enabled {
+		return diagItem{ID: "verify_gate", State: diagSkip,
+			Value: "unverified=" + strconv.FormatInt(unverified, 10), Fix: "verifyGateOff"}
+	}
+	grace := "0"
+	if v, ok, err := b.Store.GetOption(ctx, "email_verify_grace_days"); err == nil && ok && strings.TrimSpace(v) != "" {
+		grace = strings.TrimSpace(v)
+	}
+	value := "unverified=" + strconv.FormatInt(unverified, 10) + " grace_days=" + grace
+	if b.mailConfig(ctx) == nil {
+		return diagItem{ID: "verify_gate", State: diagFail, Value: value, Fix: "verifyGateNoMail"}
+	}
+	return diagItem{ID: "verify_gate", State: diagOK, Value: value}
 }
 
 func (b *Backend) handleDiagnostics(w http.ResponseWriter, r *http.Request) {

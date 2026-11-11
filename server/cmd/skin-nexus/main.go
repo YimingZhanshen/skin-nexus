@@ -584,6 +584,10 @@ func main() {
 		}
 		return 0
 	}
+	// The web gate decides with the same two numbers (verify_gate_web.go).
+	// Wiring a second reader here would be how "graceful in the launcher,
+	// blocked in the panel" gets written into a release by accident.
+	backend.VerifyGrace = yggSvc.VerifyGraceResolver
 	// B5.1 dual-TTL windows (blessing ygg_token_expire_1/2): live options
 	// override the defaults at request time (soft is fixed into expires_at
 	// at issue; hard is re-read here per refresh).
@@ -650,6 +654,11 @@ func main() {
 	admin := adminapi.New(st, yggSvc)
 	admin.Account = backend.Account // deletion runs through the same guards/events as the user path
 	admin.Jobs = jobs.New(st.DBX())
+	// The panel asks the *same* question the user centre asks, about the same
+	// account. Handing over webapi's method is deliberate: a second
+	// implementation of "still pending?" is how the panel ends up answering
+	// yes while the profile page answers no.
+	admin.VerifyGate = backend.VerifyPending
 	admin.OnUserLifecycle = func(ctx context.Context, e plugin.UserLifecycleEvent) {
 		pluginHost.EmitUserLifecycle(ctx, e)
 		if e.Kind == "deleted" {
@@ -926,6 +935,10 @@ func main() {
 		// VPC's internal DNS can serve a stale RRset while receivers already see
 		// the new record (measured on Aliyun 100.100.2.x).
 		LookupTXT: adminapi.PublicTXTLookup,
+		// One closure, four readers: the launcher, the register form, the panel
+		// gate and the self-check row that tells the operator how many accounts
+		// this switch is about to stop.
+		VerifyGate: verifyGate,
 		KeyringStatus: func() (int, string) {
 			return len(trustKeys), cfg.PluginMarketURL
 		},
