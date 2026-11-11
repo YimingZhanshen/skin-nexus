@@ -25,7 +25,7 @@ server/         Go 后端（模块 skin-nexus/server）
   internal/texturemd  材质描述 Markdown（更严格的 UGC 策略：禁图片/iframe）
   internal/seo        SEO 注入 / sitemap / robots
   internal/accesslog  访问/通信日志旁路记录器（C1）
-  internal/mailer     SMTP 发信（A1 找回密码）
+  internal/mailer     SMTP 发信（找回密码 / 邮箱验证 / 面板测试信；multipart、瞬断重试、DATA 接受后不重试）
   internal/theme      主题包注册与加载（docs/theme-spec.md）
   internal/i18n       服务端多语言资源
   internal/ratelimit  认证限流（滑动窗口 + 失败锁定）
