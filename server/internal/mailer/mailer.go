@@ -34,9 +34,17 @@ type Config struct {
 // Budget because its own HTTP client gives up at 20s: a 40s worst case means the
 // button reports a network error while the message is still being attempted, which
 // is the one answer an operator cannot act on.
+//
+// The defaults are package vars so tests can shrink the window without setting
+// Budget (Budget > 0 disables the retry, which is exactly what some tests exercise).
+var (
+	defaultDialWindow    = 10 * time.Second
+	defaultSessionWindow = 30 * time.Second
+)
+
 func (c *Config) sessionBudget() (dial, session time.Duration) {
 	if c.Budget <= 0 {
-		return 10 * time.Second, 30 * time.Second
+		return defaultDialWindow, defaultSessionWindow
 	}
 	return c.Budget / 3, c.Budget
 }
@@ -94,9 +102,12 @@ func (c *Config) Send(to, subject, body string) error {
 	return c.SendPart(Message{To: to, Subject: subject, Text: body})
 }
 
-// SendPart delivers a Message, plain or multipart/alternative. The transport
-// rules are unchanged: opportunistic STARTTLS, PLAIN auth that refuses clear
-// channels, and a single session deadline for the whole exchange.
+// SendPart delivers a Message, plain or multipart/alternative. One absolute
+// deadline covers the whole exchange including a single retry: a transient
+// failure (wedged dial, greylist, dropped connection) gets one more attempt
+// after a short backoff, but only when nobody is waiting on the answer
+// (Budget > 0 means a browser is) and only while time remains. A failure after
+// the server accepted DATA is never retried — that would deliver twice.
 func (c *Config) SendPart(m Message) error {
 	if !c.Enabled() {
 		return fmt.Errorf("mailer: disabled (smtp_host empty)")
@@ -114,32 +125,58 @@ func (c *Config) SendPart(m Message) error {
 	}
 	addr := net.JoinHostPort(c.Host, fmt.Sprint(port))
 	tlsCfg := &tls.Config{ServerName: c.Host}
-
-	var conn net.Conn
 	dialWindow, sessionWindow := c.sessionBudget()
+	deadline := time.Now().Add(sessionWindow)
+
+	err, committed := c.attempt(m, header, envFrom, addr, port, tlsCfg, dialWindow, deadline)
+	if err == nil || committed || c.Budget > 0 || !retryable(err) {
+		return err
+	}
+	const backoff = 500 * time.Millisecond
+	if time.Now().Add(backoff + 200*time.Millisecond).After(deadline) {
+		return err
+	}
+	time.Sleep(backoff)
+	dial2 := dialWindow
+	if remaining := time.Until(deadline); remaining < dial2 {
+		dial2 = remaining
+	}
+	err2, _ := c.attempt(m, header, envFrom, addr, port, tlsCfg, dial2, deadline)
+	if err2 == nil {
+		return nil
+	}
+	return fmt.Errorf("%w (first attempt: %v)", err2, err)
+}
+
+// attempt runs one SMTP exchange against the shared absolute deadline. The
+// second return value reports whether the server already queued the message,
+// which forbids any retry regardless of the error that follows.
+func (c *Config) attempt(m Message, header, envFrom, addr string, port int, tlsCfg *tls.Config, dialWindow time.Duration, deadline time.Time) (error, bool) {
+	var conn net.Conn
+	var err error
 	if implicitTLS(port) {
 		conn, err = tls.DialWithDialer(&net.Dialer{Timeout: dialWindow}, "tcp", addr, tlsCfg)
 	} else {
 		conn, err = net.DialTimeout("tcp", addr, dialWindow)
 	}
 	if err != nil {
-		return fmt.Errorf("mailer: dial %s: %w", addr, err)
+		return fmt.Errorf("mailer: dial %s: %w", addr, err), false
 	}
 	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(sessionWindow))
+	_ = conn.SetDeadline(deadline)
 
 	client, err := smtp.NewClient(conn, c.Host)
 	if err != nil {
-		return fmt.Errorf("mailer: greeting: %w", err)
+		return fmt.Errorf("mailer: greeting: %w", err), false
 	}
 	defer client.Close()
 
 	// STARTTLS on plain ports when the server offers it (opportunistic —
 	// a server that doesn't advertise it still works on a trusted LAN relay).
-	if !implicitTLS(port) {
+	if !implicitTLS(c.Port) {
 		if ok, _ := client.Extension("STARTTLS"); ok {
 			if err := client.StartTLS(tlsCfg); err != nil {
-				return fmt.Errorf("mailer: starttls: %w", err)
+				return fmt.Errorf("mailer: starttls: %w", err), false
 			}
 		}
 	}
@@ -148,25 +185,29 @@ func (c *Config) SendPart(m Message) error {
 	if c.User != "" {
 		auth := smtp.PlainAuth("", c.User, c.Pass, c.Host)
 		if err := client.Auth(auth); err != nil {
-			return fmt.Errorf("mailer: auth: %w", err)
+			return fmt.Errorf("mailer: auth: %w", err), false
 		}
 	}
 	if err := client.Mail(envFrom); err != nil {
-		return fmt.Errorf("mailer: mail from: %w", err)
+		return fmt.Errorf("mailer: mail from: %w", err), false
 	}
 	if err := client.Rcpt(m.To); err != nil {
-		return fmt.Errorf("mailer: rcpt to: %w", err)
+		return fmt.Errorf("mailer: rcpt to: %w", err), false
 	}
 	w, err := client.Data()
 	if err != nil {
-		return fmt.Errorf("mailer: data: %w", err)
+		return fmt.Errorf("mailer: data: %w", err), false
 	}
 	msg := compose(header, m, newBoundary(m.Text, m.HTML), newMessageID(envFrom, c.Host), time.Now())
 	if _, err := w.Write([]byte(msg)); err != nil {
-		return fmt.Errorf("mailer: write: %w", err)
+		return fmt.Errorf("mailer: write: %w", err), false
 	}
 	if err := w.Close(); err != nil {
-		return fmt.Errorf("mailer: finish: %w", err)
+		return fmt.Errorf("mailer: finish: %w", err), false
 	}
-	return client.Quit()
+	// DATA accepted: everything from here on is post-commit.
+	if err := client.Quit(); err != nil {
+		return &committedError{fmt.Errorf("mailer: quit: %w", err)}, true
+	}
+	return nil, true
 }
