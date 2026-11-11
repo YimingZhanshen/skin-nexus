@@ -100,9 +100,13 @@ func (b *Backend) handleSetup(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusBadRequest, "site_url must be an absolute http(s) URL", i18n.MsgInvalidValue)
 		return
 	}
-	if req.Email == "" {
-		req.Email = "admin@localhost"
+	if req.Email != "" && !mailRe.MatchString(req.Email) {
+		writeErrCode(w, http.StatusBadRequest, "email address is not valid", i18n.MsgEmailInvalid)
+		return
 	}
+	// Empty stays NULL (store.insertUser's nullableStr already does that). The
+	// old admin@localhost fallback was an inbox that can never receive mail yet
+	// made the panel believe the operator had one.
 	if req.PlayerLimit <= 0 || req.PlayerLimit > 16 {
 		req.PlayerLimit = 3
 	}

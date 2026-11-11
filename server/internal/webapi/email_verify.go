@@ -25,10 +25,16 @@ import (
 	"time"
 
 	"skin-nexus/server/internal/i18n"
+	"skin-nexus/server/internal/mailer"
 	"skin-nexus/server/internal/redact"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/ygg"
 )
+
+// errPlaceholderRecipient marks an address that can never receive mail. The
+// request endpoint translates it to a 400 the owner can act on; the detached
+// registration path only logs it, keeping the register response shape intact.
+var errPlaceholderRecipient = errors.New("recipient address is a placeholder mailbox")
 
 // verifyTokenTTL is longer than a reset link's: a verification mail may sit in
 // an inbox until the player opens Minecraft, and the token is single-use
@@ -60,6 +66,9 @@ func (b *Backend) sendVerificationMail(ctx context.Context, uid int64, address s
 	cfg := b.smtpConfig(ctx)
 	if cfg == nil {
 		return errors.New("mail is not configured")
+	}
+	if mailer.IsPlaceholderAddress(address) {
+		return errPlaceholderRecipient
 	}
 	if budget > 0 {
 		cfg.Budget = budget
@@ -139,6 +148,10 @@ func (b *Backend) handleEmailVerifyRequest(w http.ResponseWriter, r *http.Reques
 	// The owner of this mailbox is the only party that can be told about a
 	// failure, so the honest answer is safe here (unlike the reset flow).
 	if err := b.sendVerificationMail(r.Context(), uid, brief.Email, mailReplyBudget); err != nil {
+		if errors.Is(err, errPlaceholderRecipient) {
+			writeErrCode(w, http.StatusBadRequest, "the account address is a placeholder mailbox", i18n.MsgMailRecipientPlaceholder)
+			return
+		}
 		writeLogged(r, w, http.StatusBadGateway, i18n.MsgEmailSendFailed,
 			"could not send the verification mail, try again later", err)
 		return

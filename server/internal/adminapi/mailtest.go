@@ -59,6 +59,12 @@ func (b *Backend) handleMailTest(w http.ResponseWriter, r *http.Request) {
 		writeErrCode(w, http.StatusBadRequest, "this account has no email address to test with", i18n.MsgEmailNotSet)
 		return
 	}
+	// Refuse before dialing: a placeholder inbox is an address problem the
+	// operator fixes in the profile, not a transport failure to retry.
+	if mailer.IsPlaceholderAddress(to) {
+		writeErrCode(w, http.StatusBadRequest, "the account address is a placeholder mailbox", i18n.MsgMailRecipientPlaceholder)
+		return
+	}
 	subject := fmt.Sprintf("%s 邮件发送测试", cfg.SiteName)
 	body := fmt.Sprintf(
 		"这是 %s 管理面板「部署自检 → 发送测试邮件」发出的一封测试信。\n\n"+

@@ -156,6 +156,41 @@ func TestMailTestReportsTransportFailure(t *testing.T) {
 	}
 }
 
+// A placeholder inbox must be refused before any dial: the operator's fix is
+// "set a real address", not "read a transport error". Zero audit rows proves
+// the refusal happened ahead of the transport, not after a failed send.
+func TestMailTestRefusesPlaceholderRecipient(t *testing.T) {
+	ctx := context.Background()
+	b := newDiagBackend(t)
+	uid, err := b.Store.CreateUserAdmin(ctx, "admin@localhost", "ph_admin", "x", 3)
+	if err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+	for _, p := range [][2]string{
+		{"smtp_host", "127.0.0.1"},
+		{"smtp_port", "2525"},
+		{"smtp_from", "site@example.com"},
+	} {
+		if err := b.Store.SetOption(ctx, p[0], p[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w := httptest.NewRecorder()
+	b.handleMailTest(w, mailTestRequest(uid))
+	if w.Code != 400 || !strings.Contains(w.Body.String(), "mail.recipient_placeholder") {
+		t.Fatalf("placeholder recipient = %d %s, want 400 mail.recipient_placeholder", w.Code, w.Body.String())
+	}
+	entries, _, err := b.Store.AdminAudit(ctx, "", "", 1, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e["action"] == "mail_test_failed" || e["action"] == "mail_test_sent" {
+			t.Fatalf("placeholder refusal wrote audit %v — the check must run before cfg.Send", e["action"])
+		}
+	}
+}
+
 // ---- fixtures --------------------------------------------------------------
 
 // mailTestBackend is a store-backed admin backend with one super-admin account;

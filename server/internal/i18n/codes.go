@@ -126,6 +126,10 @@ const (
 	// deliver the verification link, which is not what an operator testing an
 	// SMTP account needs to hear.
 	MsgMailSendFailed = "mail.send_failed"
+	// The recipient is a mailbox that can never receive (admin@localhost and
+	// friends). Refused before any dial so the operator is told to set a real
+	// address instead of reading a transport error they cannot act on.
+	MsgMailRecipientPlaceholder = "mail.recipient_placeholder"
 	// Email verification (2026-11-02). link_invalid covers every failed token
 	// check for the same reason auth.reset_link_invalid does: the endpoint must
 	// not say which check failed.

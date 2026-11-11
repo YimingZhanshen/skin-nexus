@@ -75,7 +75,8 @@
     "mail": {
       "admin_not_configured": "This site has no sender account yet — set up SMTP in Settings first",
       "not_configured": "Mail is not configured, contact the site owner",
-      "send_failed": "The test mail could not be sent — check the SMTP settings and the server log"
+      "send_failed": "The test mail could not be sent — check the SMTP settings and the server log",
+      "recipient_placeholder": "This address cannot receive mail (for example admin{'@'}localhost). Set a real mailbox in your profile first."
     },
     "market": {
       "upstream_error": "The market is unavailable right now, try again later"
