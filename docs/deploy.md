@@ -114,22 +114,38 @@ environment:
 源码默认（`server/internal/config/config.go`）**。因此下表「默认」列同时给出两个数：源码默认只对
 源码构建 + systemd 生效，Docker 部署看到的是镜像内值。
 
+**新站最少四个值就能起来**：`SKIN_BASE_URL`、`SKIN_DB_PASSWORD`、`SKIN_DB_ROOT_PASSWORD`、
+`SKIN_ADMIN_TOKEN`——§2.1 的 quickstart 写的就是这四个，其余全部有默认。README 的快速开始
+还多写一行 `SKIN_SETUP_TOKEN`：那是给安装向导的窗口再加一把锁，不设也能起（启动时随机生成
+并打进日志）。下面每张表的「必填性」列按这五档标：
+
+| 必填性 | 含义 |
+|---|---|
+| 必填 | 照 §2.1 的 quickstart 部署时不设就拒绝启动（compose 的 `:?` 守卫拦下）。共四项：站点地址与两个库口令加管理令牌；站点地址这项在装好之后由面板 `site_url` 接管 |
+| 分模式必填 | 内置库保持默认即可，接外部库必须改 |
+| 面板真源 | 面板里已能设置；env 只在新站首次启动时当默认值，之后可以整行不写 |
+| 可选 | 有合理默认，不改也能跑（含只有 env 能设的目录、密钥、市场地址等） |
+
+**已经跑起来的站要改设置，去面板改，别改 `.env`**：面板保存的那份是真源，env 里同名变量
+只在新站首次启动时兜底，改它不会覆盖面板已存的值——SMTP 五项、站点名、皮肤域、限流阈值、
+联盟参数都属于这一类，老站的 `.env` 因此可以很短。
+
 **必改三项**
 
-| 变量 | 说明 |
-|---|---|
-| `SKIN_BASE_URL` | 站点公开地址，如 `https://skin.example.com`，也是面板 `site_url` 为空时的回退。**建议在首次 `up -d` 前定成最终访问地址**：签名密钥与已分发的材质地址不会随改地址而失效，但地址一变，新旧材质 URL 会同时存在。纹理 URL 与页面链接在**启动时**解析一次（option `site_url` → 本 env），改面板值要重启才全量生效；`SKIN_OIDC_ISSUER` 默认跟本 env、不跟 `site_url`。ALI 响应头与此无关（按请求 Host + `X-Forwarded-Proto` 现算）。安装向导写的就是面板 `site_url`（早于本版本的向导写的是 `base_url`，它仍夹在 `site_url` 与本 env 之间生效，见 migration.md） |
-| `SKIN_DATABASE_DSN` | 外部库模式必改；内置库模式保持默认。前缀决定引擎（见 §2.2），MySQL/MariaDB 形式**必须带 `parseTime=true`**（缺失直接启动失败） |
-| `SKIN_ADMIN_TOKEN` | `openssl rand -hex 32` 生成；机器/API 调用管理接口的回退凭据（管理面板本身用管理员账号登录即可，无需此 token；留空 = 机器 token 通道关闭） |
+| 变量 | 必填性 | 说明 |
+|---|---|---|
+| `SKIN_BASE_URL` | 必填 | 站点公开地址，如 `https://skin.example.com`，也是面板 `site_url` 为空时的回退。**建议在首次 `up -d` 前定成最终访问地址**：签名密钥与已分发的材质地址不会随改地址而失效，但地址一变，新旧材质 URL 会同时存在。纹理 URL 与页面链接在**启动时**解析一次（option `site_url` → 本 env），改面板值要重启才全量生效；`SKIN_OIDC_ISSUER` 默认跟本 env、不跟 `site_url`。ALI 响应头与此无关（按请求 Host + `X-Forwarded-Proto` 现算）。安装向导写的就是面板 `site_url`（早于本版本的向导写的是 `base_url`，它仍夹在 `site_url` 与本 env 之间生效，见 migration.md） |
+| `SKIN_DATABASE_DSN` | 分模式必填 | 外部库模式必改；内置库模式保持默认。前缀决定引擎（见 §2.2），MySQL/MariaDB 形式**必须带 `parseTime=true`**（缺失直接启动失败） |
+| `SKIN_ADMIN_TOKEN` | 必填 | `openssl rand -hex 32` 生成；机器/API 调用管理接口的回退凭据（管理面板本身用管理员账号登录即可，无需此 token）。**这一项「必填」是 quickstart 的 `:?` 守卫要求的**，程序本身允许留空 = 机器 token 通道关闭；用主 `docker-compose.yml` 的话它是 `CHANGE_ME` 占位，不改也能起 |
 
 其余变量**默认值即可跑通**，逐项列全（与代码逐条对齐；条数不写在这里，`check-docs` 会双向比对环境变量集合，写死的数字只会漂）：
 
 **监听与运行标签**
 
-| 变量 | 默认（源码 / 镜像内） | 说明 |
-|---|---|---|
-| `SKIN_LISTEN` | `:8080` / `:8080` | 进程监听地址，**保持 `:8080` 即可**，改值见表下注 |
-| `SKIN_ENV` | `production` / `production` | 部署环境标签（production/demo/staging…），仅用于管理面板「运行状态」展示，不改变行为 |
+| 变量 | 必填性 | 默认（源码 / 镜像内） | 说明 |
+|---|---|---|---|
+| `SKIN_LISTEN` | 可选 | `:8080` / `:8080` | 进程监听地址，**保持 `:8080` 即可**，改值见表下注 |
+| `SKIN_ENV` | 可选 | `production` / `production` | 部署环境标签（production/demo/staging…），仅用于管理面板「运行状态」展示，不改变行为 |
 
 > `SKIN_LISTEN` 改值注意：bridge 网络下不要改成 `127.0.0.1:8080`（进程只绑容器环回 → 端口映射
 > connection refused，而 healthcheck 仍报 healthy，极难排查）；反代场景想只对本机开放就改 ports
@@ -138,35 +154,35 @@ environment:
 
 **站点标识与注册门**（大多可在「管理 → 站点设置」改，优先级见 §2.3 末）
 
-| 变量 | 默认 | 说明 |
-|---|---|---|
-| `SKIN_SITE_NAME` | `SkinNexus` | 站点名（面板可改） |
-| `SKIN_TRUSTED_PROXIES` | 空（= loopback + RFC1918 全信任） | 逗号分隔的 CIDR 列表，指定**哪些对端可以声称** `X-Forwarded-For`。留空沿用历史行为（同机 nginx / docker bridge 场景不用改）；一旦配置，只有列出的网段被信任，其余对端来的 XFF 一律不信。写错（非 CIDR）直接启动失败，而不是悄悄放宽信任——认证限流与审计里的 IP 全靠这条。**这条是「替换」不是「追加」**：列了清单，loopback 就不再自动可信，所以同机 nginx 必须把 `127.0.0.1/32,::1/128` 一起列上。只按「我的反代是 Cloudflare」去列 CF 公网段而真实对端是本机，`clientIP()` 会退回对端地址、每个访客都塌成同一个 IP：注册的每 IP 上限第三个人就被挡，认证/找回密码/邮箱验证那几只 `ip:` 限流桶全站共用一个，审计与 `users.ip` 一律记成对端地址。CDN 场景的常规做法是**不设这个变量**，改开面板「安全与限流 → CDN 加速开关」（见 §3 末） |
-| `SKIN_CSP_SCRIPT_EXTRA_SOURCES` | 空（= 脚本只允许本站） | 逗号分隔的第三方脚本域名，追加到 CSP 的 `script-src`。在面板「自定义 JS」里粘贴 Google Tag Manager、Microsoft Clarity 这类统计代码时**必须**设它，否则脚本被浏览器当场拦下，控制台只留一条 CSP 违规。只接受 `https://host`、`http://host`、`host`、`https://*.host`（可带 `:端口`）；**不能有路径、空格、引号或分号**——分号正是 CSP 的分隔符，一个不是「源」的值等于替我们往响应头里写别的指令，这类值**直接启动失败**而不是静默忽略。例：`https://www.googletagmanager.com,https://www.clarity.ms` |
-| `SKIN_CSP_CONNECT_EXTRA_SOURCES` | 空 | 同上，追加到 `connect-src`（XHR/fetch 允许连哪些源）。**只放脚本源不够**：Clarity 用 fetch 往 `https://www.clarity.ms` 上报，不放这里就会出现「脚本加载成功了但一条数据都没收到」。GTM 的 `gcollect` 走图片请求，`img-src` 本来就允许 https，通常不用加。启动日志会打印实际放行了哪些源，改完先 grep `csp:` 这一行确认生效 |
-| `SKIN_SETUP_TOKEN` | 空（每次启动临时生成并打进日志） | 安装向导的一次性令牌。空库时 `/api/v1/setup` 谁先提交谁当超管，所以这一步要一个只有运维者拿得到的值：留空则本次启动随机生成并在日志里打印 `setup: ... install token "xxxxxxxxxx"`，`docker compose logs skin-nexus` 可见；自己定一个则跨重启不变。填错只回 403，不写任何数据；站点初始化后本变量不再起作用。**另一面也要知道**：随机源不可用时（`crypto/rand` 失败）既没有你的令牌也没有随机令牌，向导就是**裸开的**，此时唯一的提示是启动日志里那条 `setup: WARNING the install wizard is unguarded`——把站点暴露出去之前先 grep 这一行；自己设 `SKIN_SETUP_TOKEN` 就不依赖随机源 |
-| `SKIN_SERVER_NAME` | `SkinNexus` | Yggdrasil 元数据里的服务器显示名（面板可改） |
-| `SKIN_SKIN_DOMAINS` | 空 | 皮肤域白名单，逗号分隔；不接联盟填本站域名，接入 MUA Union 以联盟公布清单为准（改动会破坏联盟互认） |
-| `SKIN_INVITE_REQUIRED` | `false` | 注册强制邀请码（等价老站必填语义）；面板「站点设置」可改 |
-| `SKIN_REQUIRE_VERIFICATION` | `false` | join 邮箱验证门（按 `email_verified` 判定）；面板可热切。开启后新注册账号会自动收到验证邮件，宽限期由面板 `email_verify_grace_days` 决定（默认 0=立即执行）——迁移站务必先设宽限或先核对存量标志位，否则老号一律进不了服 |
+| 变量 | 必填性 | 默认 | 说明 |
+|---|---|---|---|
+| `SKIN_SITE_NAME` | 面板真源 | `SkinNexus` | 站点名（面板可改） |
+| `SKIN_TRUSTED_PROXIES` | 可选 | 空（= loopback + RFC1918 全信任） | 逗号分隔的 CIDR 列表，指定**哪些对端可以声称** `X-Forwarded-For`。留空沿用历史行为（同机 nginx / docker bridge 场景不用改）；一旦配置，只有列出的网段被信任，其余对端来的 XFF 一律不信。写错（非 CIDR）直接启动失败，而不是悄悄放宽信任——认证限流与审计里的 IP 全靠这条。**这条是「替换」不是「追加」**：列了清单，loopback 就不再自动可信，所以同机 nginx 必须把 `127.0.0.1/32,::1/128` 一起列上。只按「我的反代是 Cloudflare」去列 CF 公网段而真实对端是本机，`clientIP()` 会退回对端地址、每个访客都塌成同一个 IP：注册的每 IP 上限第三个人就被挡，认证/找回密码/邮箱验证那几只 `ip:` 限流桶全站共用一个，审计与 `users.ip` 一律记成对端地址。CDN 场景的常规做法是**不设这个变量**，改开面板「安全与限流 → CDN 加速开关」（见 §3 末） |
+| `SKIN_CSP_SCRIPT_EXTRA_SOURCES` | 可选 | 空（= 脚本只允许本站） | 逗号分隔的第三方脚本域名，追加到 CSP 的 `script-src`。在面板「自定义 JS」里粘贴 Google Tag Manager、Microsoft Clarity 这类统计代码时**必须**设它，否则脚本被浏览器当场拦下，控制台只留一条 CSP 违规。只接受 `https://host`、`http://host`、`host`、`https://*.host`（可带 `:端口`）；**不能有路径、空格、引号或分号**——分号正是 CSP 的分隔符，一个不是「源」的值等于替我们往响应头里写别的指令，这类值**直接启动失败**而不是静默忽略。例：`https://www.googletagmanager.com,https://www.clarity.ms` |
+| `SKIN_CSP_CONNECT_EXTRA_SOURCES` | 可选 | 空 | 同上，追加到 `connect-src`（XHR/fetch 允许连哪些源）。**只放脚本源不够**：Clarity 用 fetch 往 `https://www.clarity.ms` 上报，不放这里就会出现「脚本加载成功了但一条数据都没收到」。GTM 的 `gcollect` 走图片请求，`img-src` 本来就允许 https，通常不用加。启动日志会打印实际放行了哪些源，改完先 grep `csp:` 这一行确认生效 |
+| `SKIN_SETUP_TOKEN` | 可选 | 空（每次启动临时生成并打进日志） | 安装向导的一次性令牌。空库时 `/api/v1/setup` 谁先提交谁当超管，所以这一步要一个只有运维者拿得到的值：留空则本次启动随机生成并在日志里打印 `setup: ... install token "xxxxxxxxxx"`，`docker compose logs skin-nexus` 可见；自己定一个则跨重启不变。填错只回 403，不写任何数据；站点初始化后本变量不再起作用。**另一面也要知道**：随机源不可用时（`crypto/rand` 失败）既没有你的令牌也没有随机令牌，向导就是**裸开的**，此时唯一的提示是启动日志里那条 `setup: WARNING the install wizard is unguarded`——把站点暴露出去之前先 grep 这一行；自己设 `SKIN_SETUP_TOKEN` 就不依赖随机源 |
+| `SKIN_SERVER_NAME` | 面板真源 | `SkinNexus` | Yggdrasil 元数据里的服务器显示名（面板可改） |
+| `SKIN_SKIN_DOMAINS` | 面板真源 | 空 | 皮肤域白名单，逗号分隔；不接联盟填本站域名，接入 MUA Union 以联盟公布清单为准（改动会破坏联盟互认） |
+| `SKIN_INVITE_REQUIRED` | 面板真源 | `false` | 注册强制邀请码（等价老站必填语义）；面板「站点设置」可改 |
+| `SKIN_REQUIRE_VERIFICATION` | 面板真源 | `false` | join 邮箱验证门（按 `email_verified` 判定）；面板可热切。开启后新注册账号会自动收到验证邮件，宽限期由面板 `email_verify_grace_days` 决定（默认 0=立即执行）——迁移站务必先设宽限或先核对存量标志位，否则老号一律进不了服 |
 
 **认证、限流与正版兜底**
 
-| 变量 | 默认 | 说明 |
-|---|---|---|
-| `SKIN_RATE_LIMIT_AUTH` | `120` | 认证接口限流：每 IP 10 分钟滑动窗口内的请求数 |
-| `SKIN_LOGIN_FAIL_LIMIT` | `5` | 连续登录失败锁定次数 |
-| `SKIN_MOJANG_FALLBACK` | `1`（开） | profile/hasJoined 本地未命中时向 Mojang 官方 sessionserver 发站外查询兜底；不希望站外请求就设 `0`（面板可热切） |
+| 变量 | 必填性 | 默认 | 说明 |
+|---|---|---|---|
+| `SKIN_RATE_LIMIT_AUTH` | 面板真源 | `120` | 认证接口限流：每 IP 10 分钟滑动窗口内的请求数 |
+| `SKIN_LOGIN_FAIL_LIMIT` | 面板真源 | `5` | 连续登录失败锁定次数 |
+| `SKIN_MOJANG_FALLBACK` | 面板真源 | `1`（开） | profile/hasJoined 本地未命中时向 Mojang 官方 sessionserver 发站外查询兜底；不希望站外请求就设 `0`（面板可热切） |
 
 **SMTP 找回密码邮件流**（未配置时注册/找回不提供邮箱通道；面板「站点设置」同样可配）
 
-| 变量 | 默认 | 说明 |
-|---|---|---|
-| `SKIN_SMTP_HOST` | 无 | SMTP 服务器地址 |
-| `SKIN_SMTP_PORT` | `465` | SMTP 端口（465 = TLS） |
-| `SKIN_SMTP_USER` | 无 | SMTP 账号 |
-| `SKIN_SMTP_PASS` | 无 | SMTP 口令（凭据，只走 env） |
-| `SKIN_SMTP_FROM` | 无 | 发件地址；可写 `Name <a@b.c>`。留空时信封用 SMTP 账号、显示名缺省站点名 |
+| 变量 | 必填性 | 默认 | 说明 |
+|---|---|---|---|
+| `SKIN_SMTP_HOST` | 面板真源 | 无 | SMTP 服务器地址 |
+| `SKIN_SMTP_PORT` | 面板真源 | `465` | SMTP 端口（465 = TLS） |
+| `SKIN_SMTP_USER` | 面板真源 | 无 | SMTP 账号 |
+| `SKIN_SMTP_PASS` | 面板真源 | 无 | SMTP 口令（凭据，只走 env） |
+| `SKIN_SMTP_FROM` | 面板真源 | 无 | 发件地址；可写 `Name <a@b.c>`。留空时信封用 SMTP 账号、显示名缺省站点名 |
 
 **邮件投递（SPF / DMARC / DKIM）**
 
@@ -184,26 +200,26 @@ environment:
 
 **启动器免密登录（yggc / OIDC）**
 
-| 变量 | 默认（源码 / 镜像内） | 说明 |
-|---|---|---|
-| `SKIN_OIDC_ENABLED` | `false` | 打开 OIDC 端点与发现文档 |
-| `SKIN_OIDC_ISSUER` | 跟 `SKIN_BASE_URL` | issuer；只对显式值生效 |
-| `SKIN_OIDC_SIGN_KEY` | `<data>/oidc-key.pem` / `/data/oidc-key.pem` | OIDC JWT 签名私钥，**需备份** |
-| `SKIN_OIDC_SHARED_CLIENT_ID` | `2` | 站内共享 OAuth client id，一般不动 |
+| 变量 | 必填性 | 默认（源码 / 镜像内） | 说明 |
+|---|---|---|---|
+| `SKIN_OIDC_ENABLED` | 可选 | `false` | 打开 OIDC 端点与发现文档 |
+| `SKIN_OIDC_ISSUER` | 可选 | 跟 `SKIN_BASE_URL` | issuer；只对显式值生效 |
+| `SKIN_OIDC_SIGN_KEY` | 可选 | `<data>/oidc-key.pem` / `/data/oidc-key.pem` | OIDC JWT 签名私钥，**需备份** |
+| `SKIN_OIDC_SHARED_CLIENT_ID` | 可选 | `2` | 站内共享 OAuth client id，一般不动 |
 
 **MUA Union 联盟模块**（真源在「管理 → 站点设置」；env 仅作首次初始值 / 面板为空时回退）
 
-| 变量 | 默认（源码 / 镜像内） | 说明 |
-|---|---|---|
-| `SKIN_UNION_ENABLED` | `false` | 联盟总开关；关 = 零路由零表面。面板另有 `union_enabled` 开关（面板与 env 的键集不是一一对应，面板多了两项签名密钥的公开侧，env 多了两个公钥/来源文件路径） |
-| `SKIN_UNION_API_ROOT` | `https://skin.mualliance.ltd/api/union` | 联盟 hub API 根 |
-| `SKIN_UNION_HUB_ORIGIN` | `https://skin.mualliance.ltd` | hub 站点源（跨域/回调用） |
-| `SKIN_UNION_MEMBER_KEY` | 无 | 成员站凭据（联盟发放，凭据只走 env/面板） |
-| `SKIN_UNION_HOST_PUBKEY` | `<data>/union-host-pubkey.pem` | 联盟验签用的 hub 公钥文件 |
-| `SKIN_UNION_OAUTH2_SIG_KEY` | `<data>/union-oauth2-sig.pem` | OAuth2 grant 签名私钥，**需备份** |
-| `SKIN_UNION_ALLOW_UPDATEBACKENDKEY` | `false` | 是否允许 hub 下发更新成员 key |
-| `SKIN_UNION_QUERYEMAIL_MODE` | `full` | 联盟邮箱查询应答：`full` = 返回邮箱、`off` = 403 拒绝；其他值按 `off` 处理（fail-closed） |
-| `SKIN_UNION_RESOLVE_NAMES` | `true` | 是否由本站后台向各成员站的 `/api/yggdrasil` 读取站名（hub 不存站名）。读取只走受控出站（公网地址、禁重定向、固定单一路径、限响应体），且不在请求路径上等待；设为 `false` 后连已读到的名字也不再显示。面板项 `union_resolve_names` 热生效 |
+| 变量 | 必填性 | 默认（源码 / 镜像内） | 说明 |
+|---|---|---|---|
+| `SKIN_UNION_ENABLED` | 面板真源 | `false` | 联盟总开关；关 = 零路由零表面。面板另有 `union_enabled` 开关（面板与 env 的键集不是一一对应，面板多了两项签名密钥的公开侧，env 多了两个公钥/来源文件路径） |
+| `SKIN_UNION_API_ROOT` | 面板真源 | `https://skin.mualliance.ltd/api/union` | 联盟 hub API 根 |
+| `SKIN_UNION_HUB_ORIGIN` | 可选 | `https://skin.mualliance.ltd` | hub 站点源（跨域/回调用） |
+| `SKIN_UNION_MEMBER_KEY` | 面板真源 | 无 | 成员站凭据（联盟发放，凭据只走 env/面板） |
+| `SKIN_UNION_HOST_PUBKEY` | 可选 | `<data>/union-host-pubkey.pem` | 联盟验签用的 hub 公钥文件 |
+| `SKIN_UNION_OAUTH2_SIG_KEY` | 可选 | `<data>/union-oauth2-sig.pem` | OAuth2 grant 签名私钥，**需备份** |
+| `SKIN_UNION_ALLOW_UPDATEBACKENDKEY` | 面板真源 | `false` | 是否允许 hub 下发更新成员 key |
+| `SKIN_UNION_QUERYEMAIL_MODE` | 面板真源 | `full` | 联盟邮箱查询应答：`full` = 返回邮箱、`off` = 403 拒绝；其他值按 `off` 处理（fail-closed） |
+| `SKIN_UNION_RESOLVE_NAMES` | 面板真源 | `true` | 是否由本站后台向各成员站的 `/api/yggdrasil` 读取站名（hub 不存站名）。读取只走受控出站（公网地址、禁重定向、固定单一路径、限响应体），且不在请求路径上等待；设为 `false` 后连已读到的名字也不再显示。面板项 `union_resolve_names` 热生效 |
 
 **联盟入站的部署形状（不是待办，是约束）**
 
@@ -225,33 +241,33 @@ hub 会主动回调本站 `api/union/member/*`，每次请求带三头签名，�
 
 **数据路径与密钥**（`<data>` = `SKIN_DATA_DIR`；镜像内 `/data`，源码默认 `./data`）
 
-| 变量 | 默认（源码 / 镜像内） | 说明 |
-|---|---|---|
-| `SKIN_DATA_DIR` | `./data` / `/data` | 统一数据根，textures/、themes/、各类密钥都在它下面 |
-| `SKIN_TEXTURES_DIR` | `<data>/textures` | 材质存储目录 |
-| `SKIN_THEMES_DIR` | `<data>/themes` | 主题包目录（市场安装与本地上传都落这里） |
-| `SKIN_PLUGINS_DIR` | `<data>/plugins` | 插件包目录 |
-| `SKIN_SIGN_KEY` | `<data>/sign-key.pem` | Yggdrasil 纹理签名私钥，**丢失 = 全网皮肤失效，务必纳入定期备份** |
-| `SKIN_PLUGIN_STATE_DIR` | `<data>/plugins/.state` | 安装/回滚缓存，**需备份** |
-| `SKIN_PLUGIN_SECRET_KEY` | 无 → 自动生成 `<data>/plugin-secrets.key` | 插件配置密钥的主密钥（AES-256-GCM），**需一并备份** |
-| `SKIN_LEGACY_ENV` | 无 | **从老站迁移且用户密码非 bcrypt/argon2 PHC 格式时必设**：指向挂载进容器的老站 `.env`（盐链来源），否则这些存量用户无法登录（见 [migration.md](migration.md)） |
+| 变量 | 必填性 | 默认（源码 / 镜像内） | 说明 |
+|---|---|---|---|
+| `SKIN_DATA_DIR` | 可选 | `./data` / `/data` | 统一数据根，textures/、themes/、各类密钥都在它下面 |
+| `SKIN_TEXTURES_DIR` | 可选 | `<data>/textures` | 材质存储目录 |
+| `SKIN_THEMES_DIR` | 可选 | `<data>/themes` | 主题包目录（市场安装与本地上传都落这里） |
+| `SKIN_PLUGINS_DIR` | 可选 | `<data>/plugins` | 插件包目录 |
+| `SKIN_SIGN_KEY` | 可选 | `<data>/sign-key.pem` | Yggdrasil 纹理签名私钥，**丢失 = 全网皮肤失效，务必纳入定期备份** |
+| `SKIN_PLUGIN_STATE_DIR` | 可选 | `<data>/plugins/.state` | 安装/回滚缓存，**需备份** |
+| `SKIN_PLUGIN_SECRET_KEY` | 可选 | 无 → 自动生成 `<data>/plugin-secrets.key` | 插件配置密钥的主密钥（AES-256-GCM），**需一并备份** |
+| `SKIN_LEGACY_ENV` | 可选 | 无 | **从老站迁移且用户密码非 bcrypt/argon2 PHC 格式时必设**：指向挂载进容器的老站 `.env`（盐链来源），否则这些存量用户无法登录（见 [migration.md](migration.md)） |
 
 **建表与迁移**
 
-| 变量 | 默认（源码 / 镜像内） | 说明 |
-|---|---|---|
-| `SKIN_AUTO_MIGRATE` | `false` / `true` | 追踪式建表/补表：`schema_migrations` 逐文件记标，空库全量、既有库自动补新文件（树里最新一号见 `migrations/<引擎>/`，三套引擎同号对齐） |
-| `SKIN_MIGRATIONS_DIR` | `./migrations` / `/app/migrations` | 迁移树根目录，启动时按连接引擎取 `<目录>/<mysql\|sqlite\|postgres>/` |
+| 变量 | 必填性 | 默认（源码 / 镜像内） | 说明 |
+|---|---|---|---|
+| `SKIN_AUTO_MIGRATE` | 可选 | `false` / `true` | 追踪式建表/补表：`schema_migrations` 逐文件记标，空库全量、既有库自动补新文件（树里最新一号见 `migrations/<引擎>/`，三套引擎同号对齐） |
+| `SKIN_MIGRATIONS_DIR` | 可选 | `./migrations` / `/app/migrations` | 迁移树根目录，启动时按连接引擎取 `<目录>/<mysql\|sqlite\|postgres>/` |
 
 **插件市场与主题市场**（语义一致：默认值编译内置，零配置即可用）
 
-| 变量 | 默认 | 说明 |
-|---|---|---|
-| `SKIN_PLUGIN_MARKET_URL` | 官方 `…/skin-nexus-plugins/v1/registry.json` | 签名 registry；**显式置空 = 关闭插件市场**；下游 fork 改成自己的 registry |
-| `SKIN_PLUGIN_TRUST_KEYS` | 官方公钥（编译内置，`market-2026-10:<pub>`） | `keyId:base64pub,...`；**显式置空 = 拒绝一切市场/签名安装**；换源时填自己的公钥 |
-| `SKIN_PLUGIN_UPLOAD_MAX` | `67108864`（64 MiB） | 插件包上传上限（也是 multipart 的 body 预算） |
-| `SKIN_THEME_MARKET_URL` | 官方 `…/skin-nexus-plugins/themes/v1/registry.json` | 主题签名 registry；**显式置空 = 关闭主题市场浏览** |
-| `SKIN_THEME_TRUST_KEYS` | 官方公钥（编译内置，`theme-market-2026-11:<pub>`） | 与插件市场**独立密钥**；**显式置空 = 市场安装关闭**，后台本地上传仍可用。官方公钥另见分发仓库 `v1/keys.json` |
+| 变量 | 必填性 | 默认 | 说明 |
+|---|---|---|---|
+| `SKIN_PLUGIN_MARKET_URL` | 可选 | 官方 `…/skin-nexus-plugins/v1/registry.json` | 签名 registry；**显式置空 = 关闭插件市场**；下游 fork 改成自己的 registry |
+| `SKIN_PLUGIN_TRUST_KEYS` | 可选 | 官方公钥（编译内置，`market-2026-10:<pub>`） | `keyId:base64pub,...`；**显式置空 = 拒绝一切市场/签名安装**；换源时填自己的公钥 |
+| `SKIN_PLUGIN_UPLOAD_MAX` | 可选 | `67108864`（64 MiB） | 插件包上传上限（也是 multipart 的 body 预算） |
+| `SKIN_THEME_MARKET_URL` | 可选 | 官方 `…/skin-nexus-plugins/themes/v1/registry.json` | 主题签名 registry；**显式置空 = 关闭主题市场浏览** |
+| `SKIN_THEME_TRUST_KEYS` | 可选 | 官方公钥（编译内置，`theme-market-2026-11:<pub>`） | 与插件市场**独立密钥**；**显式置空 = 市场安装关闭**，后台本地上传仍可用。官方公钥另见分发仓库 `v1/keys.json` |
 
 > - 「未设置」与「设为空串」在两个市场 URL/TRUST_KEYS 上是**不同**语义（`os.LookupEnv`）：未设置 → 官方默认；空串 → 关闭。
 >   其余布尔/路径类变量走 `getenv`，空串等同于未设置。
@@ -261,12 +277,12 @@ hub 会主动回调本站 `api/union/member/*`，每次请求带三头签名，�
 
 **compose 文件专用**（不是进程变量，由 `docker-compose*.yml` 展开）
 
-| 变量 | 默认 | 说明 |
-|---|---|---|
-| `SKIN_IMAGE_TAG` | `latest` | 镜像标签；固定版本用 `sha-<commit>`，回滚 = 改回旧 sha 再 `up -d` |
-| `SKIN_PORT` | `8080` | 宿主机发布端口（quickstart 文件用） |
-| `SKIN_DB_PASSWORD` | 必填（`:?` 守卫） | 内置库业务账号口令 |
-| `SKIN_DB_ROOT_PASSWORD` | 必填（`:?` 守卫） | 内置库 root 口令 |
+| 变量 | 必填性 | 默认 | 说明 |
+|---|---|---|---|
+| `SKIN_IMAGE_TAG` | 可选 | `latest` | 镜像标签；固定版本用 `sha-<commit>`，回滚 = 改回旧 sha 再 `up -d` |
+| `SKIN_PORT` | 可选 | `8080` | 宿主机发布端口（quickstart 文件用） |
+| `SKIN_DB_PASSWORD` | 必填 | 必填（`:?` 守卫） | 内置库业务账号口令 |
+| `SKIN_DB_ROOT_PASSWORD` | 必填 | 必填（`:?` 守卫） | 内置库 root 口令 |
 
 集成测试专用的 `SKIN_TEST_DSN` 见 [build.md](build.md)，不属部署面。
 
