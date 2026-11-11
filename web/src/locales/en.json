@@ -285,7 +285,7 @@
     "mailDisabled": "This site has no mail service configured, so password recovery is unavailable; contact the site owner.",
     "verifyTitle": "Email verification",
     "pendingTitle": "Verify your email first",
-    "pendingBody": "This site requires a verified address before an account can be used. The link is on its way to {email}, and it can land in spam — if nothing arrived, resend it below.",
+    "pendingBody": "This site requires a verified address before an account can be used. The link goes to {email} and can land in spam — if nothing has arrived, resend it below.",
     "pendingNoMail": "This site has no working mail service, so the verification message cannot be sent right now. Ask the site owner to configure it; you can also switch to an address you can read and resend once mail works.",
     "pendingResend": "Resend verification email",
     "pendingChange": "Use another address",
