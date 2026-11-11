@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -180,5 +181,85 @@ func TestDomainOfSender(t *testing.T) {
 	}
 	if !strings.Contains(domainOfSender("x@y.z"), ".") {
 		t.Error("sanity")
+	}
+}
+
+// startFakeDNS is a minimal UDP DNS peer so the public-resolver path is tested
+// over the real wire, not mocked: it answers TXT queries with the given records
+// (or stays silent, to exercise the fallback).
+func startFakeDNS(t *testing.T, records []string, silent bool) string {
+	t.Helper()
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = pc.Close() })
+	go func() {
+		buf := make([]byte, 512)
+		for {
+			n, addr, err := pc.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			if silent || n < 12 {
+				continue
+			}
+			q := buf[:n]
+			// question: labels until root, then qtype/qclass
+			i := 12
+			for i < len(q) && q[i] != 0 {
+				i += int(q[i]) + 1
+			}
+			i += 5
+			var ans strings.Builder
+			for _, r := range records {
+				ans.WriteByte(0xc0)
+				ans.WriteByte(0x0c)
+				ans.WriteString("\x00\x10\x00\x01\x00\x00\x00\x3c")
+				ans.WriteByte(0) // rdlength high byte
+				ans.WriteByte(byte(len(r) + 1))
+				ans.WriteByte(byte(len(r)))
+				ans.WriteString(r)
+			}
+			resp := make([]byte, 0, 512)
+			resp = append(resp, q[0], q[1], 0x85, 0x80, 0, 1, 0, byte(len(records)), 0, 0, 0, 0)
+			resp = append(resp, q[12:i]...)
+			resp = append(resp, ans.String()...)
+			_, _ = pc.WriteTo(resp, addr)
+		}
+	}()
+	return pc.LocalAddr().String()
+}
+
+func TestPublicTXTLookupReadsFromConfiguredServer(t *testing.T) {
+	old := publicDNSAddrs
+	t.Cleanup(func() { publicDNSAddrs = old })
+	publicDNSAddrs = []string{startFakeDNS(t, []string{"v=spf1 include:spf.mail.qq.com ~all"}, false)}
+	recs, err := PublicTXTLookup(context.Background(), "rig.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recs) != 1 || recs[0] != "v=spf1 include:spf.mail.qq.com ~all" {
+		t.Fatalf("records = %v", recs)
+	}
+}
+
+func TestPublicTXTLookupFallsBackWhenFirstSilent(t *testing.T) {
+	old := publicDNSAddrs
+	t.Cleanup(func() { publicDNSAddrs = old })
+	publicDNSAddrs = []string{
+		startFakeDNS(t, nil, true),
+		startFakeDNS(t, []string{"v=DMARC1; p=none"}, false),
+	}
+	start := time.Now()
+	recs, err := PublicTXTLookup(context.Background(), "rig.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recs) != 1 || recs[0] != "v=DMARC1; p=none" {
+		t.Fatalf("records = %v", recs)
+	}
+	if time.Since(start) > 3*time.Second {
+		t.Fatal("a silent first server must not eat the whole budget")
 	}
 }

@@ -922,6 +922,10 @@ func main() {
 		WebDist: spaDistDir,
 		EnvBase: os.Getenv("SKIN_BASE_URL"),
 		Preview: av.smokePreview,
+		// The mail-DNS check asks public resolvers, not the system one: a cloud
+		// VPC's internal DNS can serve a stale RRset while receivers already see
+		// the new record (measured on Aliyun 100.100.2.x).
+		LookupTXT: adminapi.PublicTXTLookup,
 		KeyringStatus: func() (int, string) {
 			return len(trustKeys), cfg.PluginMarketURL
 		},

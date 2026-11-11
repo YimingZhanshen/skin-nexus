@@ -296,7 +296,7 @@ func (b *Backend) checkMailDNS(ctx context.Context) diagItem {
 	}
 	lookup := b.Diagnostics.LookupTXT
 	if lookup == nil {
-		lookup = net.DefaultResolver.LookupTXT
+		lookup = PublicTXTLookup
 	}
 	query := func(name string) ([]string, error) {
 		qctx, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -320,6 +320,37 @@ func (b *Backend) checkMailDNS(ctx context.Context) diagItem {
 	default:
 		return diagItem{ID: "mail_dns", State: diagWarn, Value: value, Fix: "mailDnsBoth"}
 	}
+}
+
+// publicDNSAddrs are the resolvers the mail-DNS check asks, in order. The
+// question this check answers is "what will receivers see", and a cloud VPC's
+// internal resolver can serve a stale RRset long after the public DNS changed
+// (measured on Aliyun 100.100.2.x: TTL clamped to 10s while the content never
+// refreshed). The system resolver stays out of this check on purpose.
+var publicDNSAddrs = []string{"223.5.5.5:53", "1.1.1.1:53"}
+
+// PublicTXTLookup asks the public resolvers directly, falling back to the next
+// one when a server does not answer. Each attempt gets its own short bound so a
+// silent first server cannot eat the caller's whole budget.
+func PublicTXTLookup(ctx context.Context, name string) ([]string, error) {
+	var lastErr error
+	for _, addr := range publicDNSAddrs {
+		r := &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, "udp", addr)
+			},
+		}
+		actx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+		recs, err := r.LookupTXT(actx, name)
+		cancel()
+		if err == nil {
+			return recs, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
 }
 
 func hasRecordPrefix(recs []string, prefix string) bool {
