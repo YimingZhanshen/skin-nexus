@@ -64,18 +64,14 @@ type landingTexture struct {
 
 // landingData feeds the landing template.
 type landingData struct {
-	Lang     string // resolved per request: "zh-CN" | "en"
-	SiteName string
-	SiteURL  string
-	Intro    string
-	Users    int
-	Players  int
-	Textures int
-	Featured []landingTexture
-	// Facts: the answer-first fact block (AEO). Computed by renderLanding from
-	// the resolved language — a call site cannot ship a landing page whose block
-	// silently stayed empty, which is what landing_facts_test.go then catches.
-	Facts      []landingFact
+	Lang       string // resolved per request: "zh-CN" | "en"
+	SiteName   string
+	SiteURL    string
+	Intro      string
+	Users      int
+	Players    int
+	Textures   int
+	Featured   []landingTexture
 	Year       int
 	FooterHTML template.HTML
 	ThemeBase  template.CSS
@@ -86,50 +82,6 @@ type landingData struct {
 	// LangSwitch: 可见的中·EN 对照链接，由 renderLanding 从请求算出，
 	// 调用点无法漏填（2026-11-07 D7/S2）
 	LangSwitch template.HTML
-}
-
-// landingFact is one question of the fact block plus its one-sentence answer.
-type landingFact struct {
-	Q string
-	A string
-}
-
-// factKeys are the block's catalog key pairs, in display order. Content policy
-// (2026-11-08): answer-first plain text only — no FAQPage, no new JSON-LD
-// @type. Google states AI search needs no special schema and ignores llms.txt,
-// so this is a copy ticket, not a markup ticket.
-//
-// Every entry is traceable in-repo, and a fact that could not be traced stayed
-// off the page:
-//   - auth surfaces: docs/compat-matrix.md §1-3 (Yggdrasil full surface,
-//     OIDC/yggc device flow, CustomSkinAPI R1 + USM)
-//   - engines: internal/dialect (MySQL covers MariaDB, SQLite, Postgres) and
-//     the three trees under server/migrations/
-//   - migration: internal/migrate/import.go (1:1 PKs, UUID kept, legacy
-//     password rows carried as-is, idempotent INSERT IGNORE)
-//   - marketplace: internal/signedpkg (Ed25519) on the plugin market
-//     (internal/plugin/market.go) and theme market (internal/thememkt) paths
-//   - anonymous reading: texturepage.go / skinlib_ssr.go render the full page
-//     server-side, download link is not login-gated
-var factKeys = []struct{ qKey, aKey string }{
-	{"landing.factAuthQ", "landing.factAuthA"},
-	{"landing.factDbQ", "landing.factDbA"},
-	{"landing.factMigrateQ", "landing.factMigrateA"},
-	{"landing.factExtQ", "landing.factExtA"},
-	{"landing.factPublicQ", "landing.factPublicA"},
-}
-
-// landingFacts resolves the block for one language. Missing copy would come
-// back as the key itself, which the page test fails on rather than shipping.
-func landingFacts(lang string) []landingFact {
-	out := make([]landingFact, 0, len(factKeys))
-	for _, k := range factKeys {
-		out = append(out, landingFact{
-			Q: webi18n.T(lang, k.qKey),
-			A: webi18n.T(lang, k.aKey),
-		})
-	}
-	return out
 }
 
 var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`<!DOCTYPE html>
@@ -217,17 +169,6 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
                   color: var(--moon); text-decoration: none; }
   /* 固定一句话简介：行宽放宽到容器内单行放得下，避免 46em 把「服务器」劈成孤行 */
   .intro { line-height: 1.85; color: var(--moon); margin: 28px 0; max-width: 62em; font-size: var(--fs-m); }
-  /* 事实块（AEO，2026-11-08）：一问一答，正文即答案。卡片皮肤与 .stats 同一套
-     （--panel / --line / --r-l / --shadow），单列自上而下，不加栅格框架。 */
-  .facts { margin: 4px 0 0; padding: 20px 20px 8px; border-radius: var(--r-l);
-           background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); }
-  .facts h2 { font-family: var(--font-serif); font-size: var(--fs-l); margin: 0 0 8px; font-weight: 600;
-              letter-spacing: .04em; }
-  .facts dl { margin: 0; }
-  .facts .fact { padding: 12px 0; border-top: 1px solid var(--line); }
-  .facts .fact:first-child { border-top: none; }
-  .facts dt { font-size: var(--fs-m); font-weight: 600; color: var(--moon); line-height: 1.6; }
-  .facts dd { margin: 4px 0 0; font-size: var(--fs-s); color: var(--moon-2); line-height: 1.75; }
   .feat h2 { font-family: var(--font-serif); font-size: var(--fs-xl); margin: 40px 0 16px; font-weight: 600;
              letter-spacing: .04em; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 16px; }
@@ -236,7 +177,11 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
                  transition: border-color var(--t-fast) var(--ease); }
   .grid figure:hover { border-color: var(--ochre); }
   .grid img { max-width: 112px; max-height: 112px; image-rendering: pixelated; }
-  .grid figcaption { font-size: var(--fs-s); color: var(--moon-2); margin-top: 8px;
+  /* 精选卡标题：单行截断。ellipsis 只在元素自身宽度受限时才生效——主题包把
+     .grid figure 改成居中 flex 列后，nowrap 标题的 min-content 就是整行宽度，
+     实测 379px 压在 222px 卡片上、左右各盖住邻卡（azure-glass，2026-11-12 站方截图）。
+     max-width: 100% 把标题限回卡片内容宽，截断才成立，全名交给 title。 */
+  .grid figcaption { max-width: 100%; font-size: var(--fs-s); color: var(--moon-2); margin-top: 8px;
                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   footer.site-footer { position: relative; z-index: 1; flex: none; margin-top: 32px; padding: 16px 24px 24px;
            text-align: center; font-size: var(--fs-xs); color: var(--muted); border-top: 1px solid var(--line); }
@@ -314,7 +259,6 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
     .hero h1 { font-size: 32px; }
     .stats { flex-wrap: wrap; gap: 8px; margin: 24px 0; }
     .stats div { min-width: calc(50% - 4px); padding: 16px 8px; }
-    .facts { padding: 16px 14px 4px; }
     .brandmark { width: 88px; height: 88px; margin-bottom: 14px; }
   }
 </style>
@@ -391,17 +335,12 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
     </section>
     <div class="divider" aria-hidden="true"></div>
     <section class="intro"><p>{{.Intro}}</p></section>
-    <!-- Answer-first fact block (AEO): the questions an AI answer engine gets
-         asked about a skin server, answered in crawlable server-rendered text.
-         Copy only — no schema, no FAQPage, nothing injected by JavaScript. -->
-    <section class="facts">
-      <h2>{{t .Lang "landing.factsTitle"}}</h2>
-      <dl>
-        {{range .Facts}}
-        <div class="fact"><dt>{{.Q}}</dt><dd>{{.A}}</dd></div>
-        {{end}}
-      </dl>
-    </section>
+    <!-- The software datasheet that used to sit here (auth surfaces, database
+         engines, the blessing importer, signature-checked packs, anonymous
+         reading) was taken off the front door on 2026-11-12: players picking a
+         skin and owners scanning for a register button do not read it. It is
+         documented in docs/compat-matrix.md, docs/deploy.md, docs/migration.md
+         and docs/theme-spec.md instead. landing_scope_test.go keeps it out. -->
     <!-- The most common first question is "why is my skin not showing"; the
          answer page is public, so the way to it is on the public front door. -->
     <p class="more"><a href="/help">{{t .Lang "landing.help"}}</a></p>
@@ -410,7 +349,7 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
       <h2>{{t .Lang "landing.featured"}}</h2>
       <div class="grid">
         {{range .Featured}}
-        <figure><img src="{{.URL}}" alt="{{.Name}}" loading="lazy" /><figcaption>{{.Name}}</figcaption></figure>
+        <figure><img src="{{.URL}}" alt="{{.Name}}" loading="lazy" /><figcaption title="{{.Name}}">{{.Name}}</figcaption></figure>
         {{end}}
       </div>
       <p class="more"><a href="/skinlib">{{t .Lang "landing.enterSkinlib"}}</a></p>
@@ -461,7 +400,6 @@ func renderLanding(r *http.Request, seoEng *seo.Engine, appearEng *appearance.En
 	d.FooterHTML = appearEng.FooterData(ctx, d.SiteName, d.SiteURL, d.Year).HTML()
 	intro := webi18n.T(d.Lang, "landing.intro")
 	d.Intro = intro
-	d.Facts = landingFacts(d.Lang)
 	if d.ThemeBase == "" {
 		d.ThemeBase = themeBaseCSS
 	}
