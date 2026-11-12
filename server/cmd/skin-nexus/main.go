@@ -377,7 +377,9 @@ func main() {
 	// admin panel without a restart (blessing parity: 插件启停即改即生效).
 	// When off: every union route 404s and texture signing reverts to the
 	// local key live (zero-surface semantics preserved).
-	ustack := newUnionStack(context.Background(), st, cfg, version, signer)
+	unionCtx, unionCancel := context.WithCancel(context.Background())
+	defer unionCancel()
+	ustack := newUnionStack(unionCtx, st, cfg, version, signer)
 	unionAPI, unionGrant := ustack.api, ustack.grant
 	unionOut, unionSigner := ustack.out, ustack.signer
 	var activeSigner ygg.Signer = signer
@@ -1092,6 +1094,7 @@ func main() {
 		// of dropping uploads and texture downloads mid-response. 8s stays
 		// inside Docker's default 10s stop timeout before SIGKILL.
 		log.Printf("received %s, shutting down", sig)
+		unionCancel()
 		_ = pluginHost.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()

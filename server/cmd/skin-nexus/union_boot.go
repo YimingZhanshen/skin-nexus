@@ -330,6 +330,11 @@ func newUnionStack(ctx context.Context, st *store.Mysql, cfg *config.Config, ver
 		return out.HostPublicKey(cctx)
 	})
 
+	// The nonce replay cache is process-local; without a janitor it only shrinks
+	// lazily on writes, so a quiet member site would hold expired nonces forever.
+	// Sweep on a timer until the boot context is cancelled at shutdown.
+	unionAPI.Verifier().StartJanitor(ctx.Done(), 30*time.Second)
+
 	// Signing-key restart continuity (2026-10-23 hardening): every landed hub
 	// key is persisted to union_kv (the 0004 escape hatch built for exactly
 	// this) and the self-description version follows live rotations too.

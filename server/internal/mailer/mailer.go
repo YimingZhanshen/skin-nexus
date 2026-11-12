@@ -53,7 +53,8 @@ func (c *Config) sessionBudget() (dial, session time.Duration) {
 func (c *Config) Enabled() bool { return c != nil && c.Host != "" }
 
 // checkAddr rejects header-injection payloads before anything dials out:
-// a bare mailbox may not contain CR/LF or whitespace.
+// a bare mailbox may not contain CR/LF (the only bytes that can start a new
+// header line). Whitespace is left to the caller's address validation.
 func checkAddr(addr string) error {
 	if addr == "" {
 		return fmt.Errorf("mailer: empty address")
