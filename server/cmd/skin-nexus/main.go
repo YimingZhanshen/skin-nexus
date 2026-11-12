@@ -998,16 +998,22 @@ func main() {
 				}
 			}
 		}
-		if n, err := st.CountUsers(ctx); err == nil {
-			d.Users = n
-		}
-		if n, err := st.CountPlayers(ctx); err == nil {
-			d.Players = n
-		}
-		if n, err := st.CountTextures(ctx); err == nil {
-			d.Textures = n
-		}
-		if rows, _, err := st.SkinlibList(ctx, store.SkinlibOpts{Sort: "likes", Page: 1, PerPage: 8}); err == nil {
+		stats, _ := landingCache.get(ctx, func(ctx context.Context) (landingStats, error) {
+			var s landingStats
+			var err error
+			if s.Users, err = st.CountUsers(ctx); err != nil {
+				return s, err
+			}
+			if s.Players, err = st.CountPlayers(ctx); err != nil {
+				return s, err
+			}
+			if s.Textures, err = st.CountTextures(ctx); err != nil {
+				return s, err
+			}
+			rows, _, err := st.SkinlibList(ctx, store.SkinlibOpts{Sort: "likes", Page: 1, PerPage: 8})
+			if err != nil {
+				return s, err
+			}
 			for _, r := range rows {
 				if !r.Public {
 					continue
@@ -1018,9 +1024,12 @@ func main() {
 				if r.Type == "cape" {
 					u = "/textures/" + r.Hash
 				}
-				d.Featured = append(d.Featured, landingTexture{TID: r.TID, Name: r.Name, URL: u})
+				s.Featured = append(s.Featured, landingTexture{TID: r.TID, Name: r.Name, URL: u})
 			}
-		}
+			return s, nil
+		})
+		d.Users, d.Players, d.Textures = stats.Users, stats.Players, stats.Textures
+		d.Featured = stats.Featured
 		return d
 	}
 	spa := spaHandler(spaDistDir, seoEng, appearEng, cfg.SiteName, landingFn, st, pluginHost.HasUIPath)
