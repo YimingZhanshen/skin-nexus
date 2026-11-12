@@ -1217,6 +1217,13 @@ func isKnownSPAPath(p string, uiPath func(string) bool) bool {
 	if strings.HasPrefix(p, "ext/") {
 		return uiPath != nil && uiPath(p)
 	}
+	// The admin panel owns real URLs (/admin, /admin/<tab>, /admin/plugin/<id>):
+	// operators bookmark and share panel views, so the shell must load for them
+	// instead of 404ing before the SPA can resolve the tab. Boundary-checked so
+	// /administrator stays a true 404. The shell is noindex like every SPA path.
+	if p == "admin" || strings.HasPrefix(p, "admin/") {
+		return true
+	}
 	switch p {
 	case "index.html", "login", "register", "forgot-password", "reset-password", "email-verify", "device",
 		"setup", "skinlib", "help", "user/skinlib", "user/closet", "user/profile",

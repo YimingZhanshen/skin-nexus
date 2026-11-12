@@ -2,7 +2,7 @@
 // AdminPanel shell (B1 refactor, 2026-10-24): sidebar + per-domain views.
 // The old single-file card flow moved to components/admin/*; App.vue still
 // mounts this at view === 'admin' (routing untouched).
-import { ref, shallowRef, computed, onMounted } from 'vue'
+import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { token, needToken, persistToken } from '../adminApi.js'
@@ -110,6 +110,47 @@ function openPlugin(path) {
   currentPlugin.value = path
   current.value = ''
 }
+
+// Deep-link: the active tab / plugin page lives in the URL (/admin/<tab>,
+// /admin/plugin/<id>) so refresh, share and back/forward keep the view instead
+// of dropping to the panel dashboard. App.vue owns the /admin surface; this
+// component owns the segment below it and mirrors it into history.
+let syncingURL = false
+function adminURL() {
+  if (currentPlugin.value) return '/admin/plugin/' + currentPlugin.value
+  if (current.value && current.value !== 'dashboard') return '/admin/' + current.value
+  return '/admin'
+}
+function applyAdminPath(p) {
+  if (p !== '/admin' && !p.startsWith('/admin/')) return
+  const rest = p.slice('/admin'.length).replace(/^\//, '')
+  if (rest.startsWith('plugin/')) {
+    currentPlugin.value = rest.slice('plugin/'.length)
+    current.value = ''
+    return
+  }
+  const item = nav.find((n) => n.id === rest)
+  currentPlugin.value = ''
+  current.value = item ? item.id : 'dashboard'
+  currentComp.value = item ? item.comp : DashboardView
+}
+function onAdminPop() {
+  syncingURL = true
+  applyAdminPath(location.pathname)
+  syncingURL = false
+}
+watch([current, currentPlugin], () => {
+  if (syncingURL) return
+  const u = adminURL()
+  if (location.pathname !== u) history.pushState({ admin: u }, '', u)
+})
+onMounted(() => {
+  syncingURL = true
+  applyAdminPath(location.pathname)
+  syncingURL = false
+  window.addEventListener('popstate', onAdminPop)
+})
+onBeforeUnmount(() => window.removeEventListener('popstate', onAdminPop))
 
 // The load button re-runs the current view's data fetch: views fetch their
 // own data on mount, so remounting via a key bump is the reload contract.

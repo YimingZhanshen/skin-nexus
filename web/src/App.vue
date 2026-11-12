@@ -236,11 +236,16 @@ const viewURLs = {
   notifications: '/user/notifications',
   apps: '/user/apps',
   union: '/user/union',
+  admin: '/admin',
 }
 let syncingURL = false
 watch(view, (v) => {
   menuOpen.value = false
-  const u = viewURLs[v]
+  let u = viewURLs[v]
+  // The panel owns the segment below /admin (tab / plugin page). Entering the
+  // panel surface must not clobber a deep link like /admin/users back to /admin
+  // before AdminPanel mounts and reads it.
+  if (v === 'admin' && (location.pathname === '/admin' || location.pathname.startsWith('/admin/'))) u = location.pathname
   if (u && location.pathname !== u && !syncingURL) history.pushState({ view: v }, '', u)
 })
 // Union is a hot module: if it is disabled while the bind page is open,
@@ -256,6 +261,11 @@ function onPopState() {
   } else if (location.pathname === '/email-verify') {
     view.value = 'verify'
     prepareEmailVerify()
+  } else if (location.pathname === '/admin' || location.pathname.startsWith('/admin/')) {
+    // AdminPanel's own popstate listener resolves the tab; here we only make
+    // sure the shell is on the panel surface (or the login card when signed out).
+    if (user.value) view.value = 'admin'
+    else { pendingView.value = 'admin'; view.value = 'login' }
   } else {
     const v = legacyRoutes[location.pathname]
     if (v) view.value = v
@@ -285,6 +295,7 @@ const legacyRoutes = {
   '/user/apps': 'apps',
   '/user/notifications': 'notifications',
   '/user/union': 'union',
+  '/admin': 'admin',
 }
 // Deep-linked view held for after login (open /user/closet logged-out → login
 // card first, then drop straight into the closet).
@@ -322,6 +333,12 @@ function applyInitialRoute() {
     prepareEmailVerify()
   }
   else if (!user.value && location.pathname === '/register') view.value = 'register'
+  else if (location.pathname === '/admin' || location.pathname.startsWith('/admin/')) {
+    // Panel deep link: logged in → straight to the panel (AdminPanel resolves
+    // the tab/plugin from the URL); logged out → login card, resume after auth.
+    if (user.value) view.value = 'admin'
+    else pendingView.value = 'admin'
+  }
   else if (legacyRoutes[location.pathname]) {
     // launcher deep link: logged in → straight there; logged out → login card,
     // resume into the target view after authentication. /skinlib and /help are
@@ -407,6 +424,10 @@ function finishAuth() {
   }
   if (location.pathname === '/device') view.value = 'device'
   else if (pendingExt.value) { const p = pendingExt.value; pendingExt.value = ''; openExt(p) }
+  // A panel deep link survives the login card unchanged in the address bar, so
+  // the URL itself is the resume target — more robust than remembering a view
+  // name, and it keeps the tab/plugin segment AdminPanel is about to read.
+  else if (location.pathname === '/admin' || location.pathname.startsWith('/admin/')) view.value = 'admin'
   else if (pendingView.value) { view.value = pendingView.value; pendingView.value = '' }
   else view.value = 'dashboard'
 }
