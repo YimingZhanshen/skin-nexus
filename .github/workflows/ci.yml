@@ -338,7 +338,7 @@ jobs:
           # only the local-build default.
           build-args: |
             GOPROXY=https://proxy.golang.org,direct
-            BUILD_VERSION=0.5.0
+            BUILD_VERSION=0.6.0
             BUILD_COMMIT=${{ github.sha }}
             BUILD_TIME=${{ github.run_started_at }}
             BUILD_BRANCH=${{ github.ref_name }}

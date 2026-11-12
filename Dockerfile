@@ -23,7 +23,7 @@ FROM golang:1.27-alpine AS server
 # goproxy.cn is fast from mainland China but slow/unreliable from GitHub's
 # US runners; CI overrides this build arg with proxy.golang.org.
 ARG GOPROXY=https://goproxy.cn,direct
-ARG BUILD_VERSION=0.5.0
+ARG BUILD_VERSION=0.6.0
 ARG BUILD_COMMIT=
 ARG BUILD_TIME=
 ARG BUILD_BRANCH=
