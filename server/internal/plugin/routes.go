@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"skin-nexus/server/internal/i18n"
 )
 
 // maxRouteResponse caps a plugin route payload so a runaway plugin cannot
@@ -95,6 +97,14 @@ func (m *Manager) Handler() http.Handler {
 				}
 				if r.Method != http.MethodGet && r.Method != http.MethodHead && !csrfOK(r) {
 					m.writePluginError(w, r, http.StatusForbidden, "plugin.csrf_failed", "csrf validation failed", name, string(entry.tier), start)
+					return
+				}
+				// The account bridge is tier-agnostic, so a session-tier plugin
+				// route can read/write players and textures just like /api/v1/.
+				// Apply the same verdict here, before the VM runs; public and
+				// bearer never reach this branch.
+				if vg := m.verifyGate(); vg != nil && vg(r.Context(), identity.ID) {
+					m.writePluginError(w, r, http.StatusForbidden, i18n.MsgEmailVerifyRequired, "email verification required", name, string(entry.tier), start)
 					return
 				}
 			}

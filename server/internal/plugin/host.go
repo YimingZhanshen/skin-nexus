@@ -41,6 +41,11 @@ type RuntimeConfig struct {
 	SecretBox       *SecretBox
 	ClientIP        func(*http.Request) string
 	AccessLog       func(ctx context.Context, pluginName, method, path, ip string, status, ms int64, tier string, uid int64)
+	// VerifyPending reports whether the signed-in account is still blocked by
+	// the email-verification gate. It is the SAME verdict webapi/adminapi
+	// consume (nil = gate off). Only session-tier routes consult it; public
+	// content and bearer machine clients stay open.
+	VerifyPending func(ctx context.Context, uid int64) bool
 
 	StateDir  string            // default <Dir>/.state
 	Keyring   signedpkg.Keyring // required for signed bundle install
@@ -190,6 +195,21 @@ func (m *Manager) accountService() AccountService {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.cfg.Account
+}
+
+// SetVerifyGate wires the email-verification verdict after the web backend
+// exists (main constructs it later than the plugin host). Must be called before
+// the HTTP server starts serving requests.
+func (m *Manager) SetVerifyGate(f func(ctx context.Context, uid int64) bool) {
+	m.mu.Lock()
+	m.cfg.VerifyPending = f
+	m.mu.Unlock()
+}
+
+func (m *Manager) verifyGate() func(ctx context.Context, uid int64) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.cfg.VerifyPending
 }
 
 // PluginSigner returns the bundle signer id recorded for a plugin, when known.

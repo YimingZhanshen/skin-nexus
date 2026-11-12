@@ -659,6 +659,10 @@ func main() {
 	// implementation of "still pending?" is how the panel ends up answering
 	// yes while the profile page answers no.
 	admin.VerifyGate = backend.VerifyPending
+	// Plugin session-tier routes act as the signed-in player too (the account
+	// bridge is tier-agnostic), so they consume the same verdict; public and
+	// bearer plugin routes stay open.
+	pluginHost.SetVerifyGate(backend.VerifyPending)
 	admin.OnUserLifecycle = func(ctx context.Context, e plugin.UserLifecycleEvent) {
 		pluginHost.EmitUserLifecycle(ctx, e)
 		if e.Kind == "deleted" {
