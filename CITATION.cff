@@ -8,8 +8,8 @@ authors:
     website: "https://github.com/YimingZhanshen"
 repository-code: "https://github.com/YimingZhanshen/skin-nexus"
 license: AGPL-3.0
-version: "0.4.0"
-date-released: "2026-10-28"
+version: "0.6.0"
+date-released: "2026-11-12"
 keywords:
   - minecraft
   - skin-server
