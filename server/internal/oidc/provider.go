@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 
 	"skin-nexus/server/internal/i18n"
@@ -474,6 +475,10 @@ var sessionCookie = func(r *http.Request) string {
 // passes through untouched.
 func (p *Provider) tokenWrapper(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Let the storage layer flag genuine store faults on this request; see
+		// storeFaultKey in storage.go for why the flag is needed here.
+		fault := &storeFault{}
+		r = r.WithContext(context.WithValue(r.Context(), storeFaultKey{}, fault))
 		rec := httptest.NewRecorder()
 		next.ServeHTTP(rec, r)
 		body := rec.Body.Bytes()
@@ -487,12 +492,22 @@ func (p *Provider) tokenWrapper(next http.Handler) http.Handler {
 				"expired_token", "authorization_declined":
 				status = http.StatusBadRequest
 			}
+			// zitadel wraps every refresh-lookup error in ErrInvalidGrant, so
+			// a store fault surfaces here as 400 invalid_grant — which tells
+			// the launcher to discard a perfectly good refresh token. The
+			// storage layer recorded the fault; restore the real answer.
+			if fault.hit && oe.Error == "invalid_grant" {
+				status = http.StatusInternalServerError
+				body, _ = json.Marshal(oidc.ErrServerError())
+			}
 		}
 		for k, vs := range rec.Header() {
 			for _, v := range vs {
 				w.Header().Add(k, v)
 			}
 		}
+		// body length may have changed in the rewrite above
+		w.Header().Del("Content-Length")
 		w.WriteHeader(status)
 		_, _ = w.Write(body)
 	})

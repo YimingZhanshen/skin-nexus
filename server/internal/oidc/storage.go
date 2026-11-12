@@ -171,10 +171,44 @@ func (s *Storage) Health(ctx context.Context) error { return s.backend.Health(ct
 
 // ---- clients ----
 
+// storeFaultKey carries a per-request marker from the storage layer up to
+// tokenWrapper. zitadel's RefreshTokenRequestByRefreshToken re-wraps every
+// storage error in ErrInvalidGrant, and RequestError keys off the outermost
+// error type only — so a ServerError classified here would still be answered
+// 400 invalid_grant, telling the launcher to discard a live refresh token
+// over a database blip. The marker lets our wrapper restore the500.
+type storeFaultKey struct{}
+
+type storeFault struct{ hit bool }
+
+// serverFault records the fault on the request (when a marker is present)
+// and classifies err as oidc.ServerError so zitadel answers 500 wherever the
+// error type survives (client auth via clientAuthError, token endpoint via
+// RequestError's ServerError branch).
+func serverFault(ctx context.Context, err error) error {
+	if f, ok := ctx.Value(storeFaultKey{}).(*storeFault); ok {
+		f.hit = true
+	}
+	return oidc.ErrServerError().WithParent(err)
+}
+
+// classifyClientLookupErr separates a genuine store fault (→ server_error 500)
+// from an unknown client (→ invalid_client 401). zitadel's RequestError routes
+// on the first *oidc.Error in the chain; a plain error falls into
+// DefaultToServerError's default branch and would be misreported as a 500 for
+// what is really a client mistake, while a plain store fault must not be
+// answered as unauthorized_client (the client would blame its own secret).
+func classifyClientLookupErr(ctx context.Context, err error) error {
+	if errors.Is(err, ErrNotFound) {
+		return oidc.ErrInvalidClient().WithParent(err)
+	}
+	return serverFault(ctx, err)
+}
+
 func (s *Storage) GetClientByClientID(ctx context.Context, clientID string) (op.Client, error) {
 	rec, err := s.backend.GetClient(ctx, clientID)
 	if err != nil {
-		return nil, err
+		return nil, classifyClientLookupErr(ctx, err)
 	}
 	return newClient(rec, s.issuer+"/login"), nil
 }
@@ -182,7 +216,11 @@ func (s *Storage) GetClientByClientID(ctx context.Context, clientID string) (op.
 func (s *Storage) AuthorizeClientIDSecret(ctx context.Context, clientID, clientSecret string) error {
 	rec, err := s.backend.GetClient(ctx, clientID)
 	if err != nil {
-		return err
+		if errors.Is(err, ErrNotFound) {
+			// plain: zitadel's clientAuthError answers401 invalid_client
+			return err
+		}
+		return serverFault(ctx, err)
 	}
 	if rec.SecretHash == "" {
 		return errors.New("oidc: public client takes no secret")
@@ -318,8 +356,12 @@ func (s *Storage) CreateAccessAndRefreshTokens(ctx context.Context, request op.T
 		if gerr != nil {
 			// Unknown refresh token must NOT mint a fresh 30-day pair
 			// (review P2: silent fall-through turned stale/rogue tokens
-			// into brand-new grants).
-			return "", "", time.Time{}, op.ErrInvalidRefreshToken
+			// into brand-new grants). A store fault likewise must not mint,
+			// but it has to surface as server_error, not as "token invalid".
+			if errors.Is(gerr, ErrNotFound) {
+				return "", "", time.Time{}, op.ErrInvalidRefreshToken
+			}
+			return "", "", time.Time{}, serverFault(ctx, gerr)
 		}
 		if err := s.backend.RotateRefreshToken(ctx, old, rt); err != nil {
 			if errors.Is(err, ErrNotFound) {
@@ -338,7 +380,12 @@ func (s *Storage) CreateAccessAndRefreshTokens(ctx context.Context, request op.T
 func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, token string) (op.RefreshTokenRequest, error) {
 	rec, err := s.backend.GetRefreshToken(ctx, token)
 	if err != nil {
-		return nil, op.ErrInvalidRefreshToken
+		if errors.Is(err, ErrNotFound) {
+			return nil, op.ErrInvalidRefreshToken
+		}
+		// Store fault: server_error, so the client retries instead of
+		// discarding a perfectly good refresh token over a DB blip.
+		return nil, serverFault(ctx, err)
 	}
 	if rec.Revoked || time.Now().After(rec.ExpiresAt) {
 		return nil, op.ErrInvalidRefreshToken
@@ -374,7 +421,13 @@ func (s *Storage) RevokeToken(ctx context.Context, tokenOrTokenID, userID, _ str
 func (s *Storage) GetRefreshTokenInfo(ctx context.Context, _ string, token string) (string, string, error) {
 	rec, err := s.backend.GetRefreshToken(ctx, token)
 	if err != nil {
-		return "", "", op.ErrInvalidRefreshToken
+		if errors.Is(err, ErrNotFound) {
+			return "", "", op.ErrInvalidRefreshToken
+		}
+		// zitadel's revocation handler treats any non-ErrInvalidRefreshToken
+		// error as a server fault and answers 500 — which is what a store
+		// outage is, as opposed to "try the other token type".
+		return "", "", serverFault(ctx, err)
 	}
 	return strconv.FormatInt(rec.UserID, 10), token, nil
 }
