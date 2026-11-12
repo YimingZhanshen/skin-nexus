@@ -658,6 +658,31 @@ for (const rel of goSources('server')) {
   }
 }
 
+// 10. cross-language claim parity. A sentence that promises a detached action
+//     already happened ("已发送 / sent / on its way") must make the SAME promise
+//     in both languages. The 2026-11-12 leak was one language keeping an
+//     overclaim the other had already been corrected to remove; rule 1 cannot
+//     see it because both keys exist. Only the claim's presence is compared, so
+//     an earned synchronous confirmation ("已发出 / was sent") stays legal in
+//     both languages at once.
+const CLAIM_ZH = /已发送|已发出|已经发送|已在路上|已送达|自动发出|发送到|发信测试成功/
+const CLAIM_EN = /\b(was|were|has been|have been|is|are) sent\b|on its way|sent automatically|automatically sent|(email|mail|message|link) sent\b/i
+const claimSources = [
+  ['web/src/locales', new Map(leafValues(loaded[LOCALES[0]])), new Map(leafValues(loaded[LOCALES[1]]))],
+  [SSR_CATALOG[0][0], catalogs[0], catalogs[1]],
+]
+for (const [label, a, b] of claimSources) {
+  for (const [key, zh] of a) {
+    const en = b.get(key)
+    if (typeof zh !== 'string' || typeof en !== 'string') continue
+    const zhClaims = CLAIM_ZH.test(zh)
+    const enClaims = CLAIM_EN.test(en)
+    if (zhClaims !== enClaims) {
+      errors.push(`${label}: ${key} promises a completed send in one language only (zh=${zhClaims}, en=${enClaims}) — align the claim in both, do not delete the key`)
+    }
+  }
+}
+
 if (errors.length) {
 
   console.error('check-locales: FAILED')
