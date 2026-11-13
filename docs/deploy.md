@@ -308,8 +308,9 @@ Union 八键），但生效优先级按键区分：
 | `union_enabled` / `union_api_root` / `union_member_key` | 面板，且热切换立即生效 | 其余站点设置重启生效 |
 | DSN、`SKIN_ADMIN_TOKEN`、插件密钥加密键 | 只走 env | 面板不落库；SMTP 口令在面板可写但**只写不读**（见下） |
 
-散点变量说明：`SKIN_ADMIN_TOKEN`、`SKIN_SMTP_*`、`SKIN_MOJANG_FALLBACK`、`SKIN_LEGACY_ENV`、
-`SKIN_PLUGIN_SECRET_KEY` **不在 `config.go`**（分别在 `adminapi`、`main.go` 里直接 `os.Getenv`）——
+散点变量说明：`SKIN_ADMIN_TOKEN`、`SKIN_MOJANG_FALLBACK`、`SKIN_LEGACY_ENV`、
+`SKIN_PLUGIN_SECRET_KEY` **不在 `config.go`**（分别在 `adminapi`、`main.go` 里直接 `os.Getenv`；
+`SKIN_SMTP_*` 则在 `config.go` 读入）——
 `config.go` 是主入口但不是唯一清单，完整真源以本节表为准（与代码逐条对齐；集合由 `check-docs` 双向比对，
 所以这里不写「共几个」这种一改就漂的数字）。
 
