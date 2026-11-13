@@ -19,7 +19,7 @@
 package config
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"sort"
 	"strings"
@@ -99,6 +99,5 @@ func WarnUnknownEnv() {
 	if len(unknown) == 0 {
 		return
 	}
-	log.Printf("WARNING: %d SKIN_* variable(s) are set but nothing reads them: %s "+
-		"(check the spelling against docs/deploy.md §2.3)", len(unknown), strings.Join(unknown, ", "))
+	slog.Warn("SKIN_* variables are set but nothing reads them (check the spelling against docs/deploy.md §2.3)", "count", len(unknown), "names", strings.Join(unknown, ", "))
 }

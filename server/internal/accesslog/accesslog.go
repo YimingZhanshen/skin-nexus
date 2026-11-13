@@ -11,7 +11,7 @@ package accesslog
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"unicode/utf8"
 )
 
@@ -115,7 +115,7 @@ func (l *Logger) Log(ctx context.Context, e Entry) {
 	if err := l.sink(context.WithoutCancel(ctx), e); err != nil {
 		// Best effort, never a retry: the response is already on its way and a
 		// logging failure must not turn into a request failure.
-		log.Printf("accesslog: record %s/%s: %v", e.Kind, e.Outcome, err)
+		slog.Warn("accesslog: record failed", "kind", e.Kind, "outcome", e.Outcome, "error", err)
 	}
 }
 

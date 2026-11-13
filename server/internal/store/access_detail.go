@@ -29,7 +29,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"skin-nexus/server/internal/accesslog"
@@ -226,8 +226,8 @@ func (m *Mysql) AccessDetailRows(ctx context.Context, ids []int64) ([]AccessDeta
 // request path.
 func logAccessDetailFailure(id int64, err error) {
 	if errors.Is(err, ErrAccessDetailDuplicate) {
-		log.Printf("accesslog: detail row for access_logs.id=%d already present (1:1 primary key held): %v", id, err)
+		slog.Warn("accesslog: detail row already present (1:1 primary key held)", "access_log_id", id, "error", err)
 		return
 	}
-	log.Printf("accesslog: detail row for access_logs.id=%d not written: %v", id, err)
+	slog.Warn("accesslog: detail row not written", "access_log_id", id, "error", err)
 }

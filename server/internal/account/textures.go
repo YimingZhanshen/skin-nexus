@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/url"
 	"os"
 	"regexp"
@@ -204,7 +204,7 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 	// One line per disagreement: the only way to notice that a launcher keeps
 	// declaring the wrong model is that the log says so.
 	if model != "" && model != res.Model {
-		log.Printf("texture model override: uid=%d declared=%s detected=%s", uid, model, res.Model)
+		slog.Info("texture model override", "uid", uid, "declared", model, "detected", res.Model)
 	}
 	// The file is written before its row exists, and deletion unlinks it only
 	// when no row refers to it — so both paths must hold the same content lock,
@@ -288,13 +288,13 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 		if errors.Is(lockErr, errStruckContent) {
 			// A refusal, not a fault: it gets its own log line because the moderator
 			// who struck this content is the only person who can undo it.
-			log.Printf("texture upload refused: uid=%d type=%s hash=%s (content was struck)", uid, typ, res.Hash[:12])
+			slog.Warn("texture upload refused: content was struck", "uid", uid, "type", typ, "hash", res.Hash[:12])
 			return TextureView{}, false, errf(CodeViolationReupload, "this texture content was ruled a violation and may not be uploaded again", nil)
 		}
 		if failMsg == "" {
 			failMsg = "could not write the texture"
 		}
-		log.Printf("texture upload failed: %v", lockErr)
+		slog.Warn("texture upload failed", "error", lockErr)
 		if errors.Is(lockErr, store.ErrBusy) {
 			return TextureView{}, false, errf(CodeBusy, "this texture is locked by another operation, try again shortly", lockErr)
 		}
@@ -333,7 +333,7 @@ func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model strin
 // not fail the upload — the texture row is the thing the user asked for.
 func (s *Service) autoCloset(ctx context.Context, uid, tid int64) {
 	if _, err := s.Store.AddClosetEntry(ctx, uid, tid, ""); err != nil {
-		log.Printf("closet auto-add: uid=%d tid=%d: %v", uid, tid, err)
+		slog.Warn("closet auto-add", "uid", uid, "tid", tid, "error", err)
 	}
 }
 

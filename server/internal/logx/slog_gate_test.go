@@ -29,17 +29,9 @@ import (
 // pending lists files that still call the standard library logger. It starts
 // as every offender and shrinks to nothing; see the package comment.
 var pending = []string{
-	"internal/accesslog/accesslog.go",
-	"internal/account/delete.go",
-	"internal/account/textures.go",
-	"internal/config/env.go",
-	"internal/dbx/dbx.go",
-	"internal/outbound/scoped.go",
 	"internal/plugin/host.go",
 	"internal/plugin/runtime_goja.go",
-	"internal/store/access_detail.go",
 	"internal/theme/theme.go",
-	"internal/ygg/service.go",
 }
 
 // bareLog reports whether n is a call to the standard library's logger

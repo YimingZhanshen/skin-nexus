@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -151,7 +151,7 @@ func (s *Scoped) Fetch(ctx context.Context, raw string) (FetchResult, error) {
 		}
 		// The transport error text carries the resolved address and the upstream
 		// host; the plugin only needs to know the request failed.
-		log.Printf("outbound: %s: %v", u.Host, err)
+		slog.Warn("outbound request failed", "host", u.Host, "error", err)
 		return FetchResult{}, &PolicyError{Code: code, Message: "the upstream request failed"}
 	}
 	defer resp.Body.Close()
@@ -160,7 +160,7 @@ func (s *Scoped) Fetch(ctx context.Context, raw string) (FetchResult, error) {
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, s.policy.MaxBytes+1))
 	if err != nil {
-		log.Printf("outbound: %s read: %v", u.Host, err)
+		slog.Warn("outbound read failed", "host", u.Host, "error", err)
 		return FetchResult{}, &PolicyError{Code: "net.unavailable", Message: "the upstream response could not be read"}
 	}
 	if int64(len(body)) > s.policy.MaxBytes {

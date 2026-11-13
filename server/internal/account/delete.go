@@ -3,7 +3,7 @@ package account
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/store"
@@ -46,7 +46,7 @@ func (s *Service) DeleteTexture(ctx context.Context, actorUID, tid, ownerUID int
 		// deletion failed when it did not.
 		if res.ShareLeft == 0 {
 			if err := s.Textures.Remove(res.Hash); err != nil {
-				log.Printf("texture file remove failed (hash %s): %v", res.Hash, err)
+				slog.Warn("texture file remove failed", "hash", res.Hash, "error", err)
 			}
 		}
 		return nil
@@ -68,7 +68,7 @@ func (s *Service) DeleteTexture(ctx context.Context, actorUID, tid, ownerUID int
 	case errors.Is(lockErr, store.ErrBusy):
 		return errf(CodeBusy, "this texture is locked by another operation, try again shortly", lockErr)
 	case lockErr != nil:
-		log.Printf("texture delete failed: %v", lockErr)
+		slog.Warn("texture delete failed", "error", lockErr)
 		return errf(CodeInternal, "could not delete the texture", lockErr)
 	}
 

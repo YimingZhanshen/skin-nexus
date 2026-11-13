@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"log"
+	"log/slog"
 	"net"
 	"strings"
 	"sync"
@@ -410,7 +410,7 @@ func (s *Service) Authenticate(ctx context.Context, username, password, clientTo
 	if err != nil {
 		// Frozen wire keeps the 403 body, but a verify/db fault must not be
 		// indistinguishable from bad credentials in ops logs (review P2).
-		log.Printf("ygg authenticate: verify uid=%d: %v", u.ID, err)
+		slog.Warn("ygg authenticate: verify", "uid", u.ID, "error", err)
 		return Token{}, nil, ErrBadCredentials
 	}
 	if !ok {

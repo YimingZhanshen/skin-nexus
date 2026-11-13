@@ -12,7 +12,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -112,7 +112,7 @@ func (d *DB) QueryRowContext(ctx context.Context, query string, args ...any) *sq
 		// sql.Row carries no error of its own, so a mismatch would otherwise
 		// reach the caller as ErrNoRows — indistinguishable from "no such row".
 		// Report it and hand back an empty result instead of a wrong one.
-		log.Printf("dbx: %v", err)
+		slog.Warn("dbx: placeholder mismatch", "error", err)
 		return d.DB.QueryRowContext(ctx, `SELECT NULL WHERE 1 = 0`)
 	}
 	return d.DB.QueryRowContext(ctx, d.Bind(query), d.args(args)...)
@@ -180,7 +180,7 @@ func (t *Tx) QueryContext(ctx context.Context, query string, args ...any) (*sql.
 // QueryRowContext runs a row-returning query after placeholder rewriting.
 func (t *Tx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
 	if err := t.db.check(query, args); err != nil {
-		log.Printf("dbx: %v", err)
+		slog.Warn("dbx: placeholder mismatch", "error", err)
 		return t.Tx.QueryRowContext(ctx, `SELECT NULL WHERE 1 = 0`)
 	}
 	return t.Tx.QueryRowContext(ctx, t.Bind(query), t.db.args(args)...)
