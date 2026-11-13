@@ -11,10 +11,15 @@ import (
 	"os"
 )
 
+// exit is the process terminator. It is a variable for the same reason the
+// access log's clock is: a test observes the call instead of dying with it,
+// which is what keeps this file off the coverage floor's zero list.
+var exit = os.Exit
+
 // Fatal records msg at error level and terminates the process with status 1,
 // the way log.Fatal did. The arguments are slog key/value pairs, so the line
 // that precedes an exit is structured like every other line.
 func Fatal(msg string, args ...any) {
 	slog.Error(msg, args...)
-	os.Exit(1)
+	exit(1)
 }
