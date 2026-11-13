@@ -19,7 +19,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -144,14 +144,14 @@ func ensureSigKeypair(ctx context.Context, st *store.Mysql, keyFilePath string) 
 				// options — the bind mount becomes removable.
 				_ = st.SetOption(ctx, "union_oauth2_sig_private_key", filePEM)
 				_ = st.SetOption(ctx, "union_oauth2_sig_public_key", filePub)
-				log.Printf("union: OAuth2 sig keypair seeded into options from key file")
+				slog.Info("union: OAuth2 sig keypair seeded into options from key file")
 				return filePEM, filePub
 			}
 		}
 	}
 	k, err := rsa.GenerateKey(rand.Reader, 4096) // ygg_generate_rsa_keys: 4096 bits
 	if err != nil {
-		log.Printf("union: sig keypair generation failed: %v", err)
+		slog.Warn("union: sig keypair generation failed", "error", err)
 		return "", ""
 	}
 	privDER, err := x509.MarshalPKCS8PrivateKey(k)
@@ -166,7 +166,7 @@ func ensureSigKeypair(ctx context.Context, st *store.Mysql, keyFilePath string) 
 	pubPEM := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubDER}))
 	_ = st.SetOption(ctx, "union_oauth2_sig_private_key", privPEM)
 	_ = st.SetOption(ctx, "union_oauth2_sig_public_key", pubPEM)
-	log.Printf("union: OAuth2 sig keypair auto-generated into options (RSA-4096)")
+	slog.Info("union: OAuth2 sig keypair auto-generated into options (RSA-4096)")
 	return privPEM, pubPEM
 }
 
@@ -226,7 +226,7 @@ func newUnionStack(ctx context.Context, st *store.Mysql, cfg *config.Config, ver
 	}
 
 	audit := func(event string, detail map[string]any) {
-		log.Printf("union audit: %s %v", event, detail)
+		slog.Info("union audit", "event", event, "detail", detail)
 		st.InsertAudit(context.Background(), 0, "union."+event, detail)
 	}
 
@@ -254,19 +254,19 @@ func newUnionStack(ctx context.Context, st *store.Mysql, cfg *config.Config, ver
 		},
 	}
 	if err := ucfg.Validate(); err != nil {
-		log.Printf("union: config invalid, module inert: %v", err)
+		slog.Warn("union: config invalid, module inert", "error", err)
 		return u
 	}
 
 	out, err := union.NewOutbound(ucfg, nil)
 	if err != nil {
-		log.Printf("union: outbound build failed, module inert: %v", err)
+		slog.Warn("union: outbound build failed, module inert", "error", err)
 		return u
 	}
 	usigner := union.NewUnionSigner(ucfg, out, fallback, audit)
 	grant, err := union.NewGrantor(ucfg)
 	if err != nil {
-		log.Printf("union: grantor build failed, module inert: %v", err)
+		slog.Warn("union: grantor build failed, module inert", "error", err)
 		return u
 	}
 
@@ -307,7 +307,7 @@ func newUnionStack(ctx context.Context, st *store.Mysql, cfg *config.Config, ver
 	}
 	unionAPI, err := union.NewAPI(ucfg, out, usigner, grant, hooks, audit)
 	if err != nil {
-		log.Printf("union: api build failed, module inert: %v", err)
+		slog.Warn("union: api build failed, module inert", "error", err)
 		return u
 	}
 
@@ -345,7 +345,7 @@ func newUnionStack(ctx context.Context, st *store.Mysql, cfg *config.Config, ver
 		if err := usigner.RestoreKey(pemStr, kvVersion); err != nil {
 			audit("signer_key_restore_failed", map[string]any{"error": err.Error()})
 		} else {
-			log.Printf("union: hub signing key restored (version %q)", kvVersion)
+			slog.Info("union: hub signing key restored (version )", "kv_version", kvVersion)
 		}
 	}
 	// Self-description versions survive restarts (inbound.go caches start
@@ -376,7 +376,7 @@ func newUnionStack(ctx context.Context, st *store.Mysql, cfg *config.Config, ver
 		return optOrEnvBool(context.Background(), st, "union_resolve_names", cfg.UnionResolveNames)
 	}, union.MemberNamesOptions{})
 	u.setEnabled(ctx, enabled)
-	log.Printf("union: stack ready (enabled=%v, hub %s, queryemail %s)", enabled, apiRoot, queryEmail)
+	slog.Info("union: stack ready (, hub , queryemail )", "enabled", enabled, "api_root", apiRoot, "query_email", queryEmail)
 	return u
 }
 

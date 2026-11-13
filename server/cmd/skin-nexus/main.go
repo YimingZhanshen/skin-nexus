@@ -15,7 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log"
+	"log/slog"
 	"mime"
 	"net/http"
 	"net/url"
@@ -37,6 +37,7 @@ import (
 	"skin-nexus/server/internal/avatargen"
 	"skin-nexus/server/internal/config"
 	"skin-nexus/server/internal/jobs"
+	"skin-nexus/server/internal/logx"
 	"skin-nexus/server/internal/metrics"
 	"skin-nexus/server/internal/migrate"
 	"skin-nexus/server/internal/oidc"
@@ -122,7 +123,7 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("config: %v", err)
+		logx.Fatal("config", "error", err)
 	}
 	// A typo'd SKIN_* variable is otherwise invisible: the site starts, uses the
 	// default, and the operator believes they configured it.
@@ -138,17 +139,17 @@ func main() {
 	if envPath := os.Getenv("SKIN_LEGACY_ENV"); envPath != "" {
 		lenv, err := migrate.ParseLegacyEnv(envPath)
 		if err != nil {
-			log.Fatalf("legacy env: %v", err)
+			logx.Fatal("legacy env", "error", err)
 		}
 		legacy = auth.NewLegacyVerifier(lenv.MethodSalts())
-		log.Printf("legacy verifier: %d methods loaded", len(lenv.PWDMethods))
+		slog.Info("legacy verifier: methods loaded", "count", len(lenv.PWDMethods))
 	}
 
 	// The engine comes from the DSN (a `sqlite:` or `postgres://` prefix); a bare
 	// MySQL DSN stays MySQL, which is what every existing deployment runs on.
 	st, err := store.Open("", cfg.DatabaseDSN, legacy)
 	if err != nil {
-		log.Fatalf("store: %v", err)
+		logx.Fatal("store", "error", err)
 	}
 	defer st.Close()
 
@@ -159,12 +160,12 @@ func main() {
 	// collisions from pre-tracking databases are tolerated, all else fatal.
 	if cfg.AutoMigrate {
 		if err := migrate.ApplySQLDirTracked(st.DB(), cfg.MigrationsDir, st.Engine()); err != nil {
-			log.Fatalf("schema: %v", err)
+			logx.Fatal("schema", "error", err)
 		}
 		// Databases built before the DDL declared AUTOINCREMENT still hand a freed
 		// rowid to the next insert, and reports and tombstones cite those ids.
 		if err := migrate.EnsureNoRowIDReuse(st.DB(), st.Engine()); err != nil {
-			log.Fatalf("rowid: %v", err)
+			logx.Fatal("rowid", "error", err)
 		}
 	}
 	// Session and launcher tokens are stored as digests. Runs on every boot, not
@@ -173,19 +174,19 @@ func main() {
 	// exactly as it was (still plaintext, still working) and the next boot retries
 	// — which is why this logs rather than killing the process.
 	if n, err := st.EnsureTokenDigests(context.Background()); err != nil {
-		log.Printf("auth: WARNING token digests not applied, session and launcher tokens remain in plaintext: %v", err)
+		slog.Warn("auth: WARNING token digests not applied, session and launcher tokens remain in plaintext", "error", err)
 	} else if n > 0 {
-		log.Printf("auth: rewrote %d stored token(s) as digests (this happens once)", n)
+		slog.Info("auth: rewrote stored token(s) as digests (this happens once)", "count", n)
 	}
 	if n, err := st.BackfillPublicDedupe(context.Background()); err != nil {
-		log.Printf("dedupe: backfill public hashes: %v", err)
+		slog.Info("dedupe: backfill public hashes", "error", err)
 	} else if n > 0 {
-		log.Printf("dedupe: backfilled %d public texture hashes", n)
+		slog.Info("dedupe: backfilled public texture hashes", "count", n)
 	}
 	if uid, changed, err := st.EnsureSuperAdmin(context.Background()); err != nil {
-		log.Printf("auth: ensure super admin: %v", err)
+		slog.Info("auth: ensure super admin", "error", err)
 	} else if changed {
-		log.Printf("auth: promoted bootstrap admin uid=%d to super admin", uid)
+		slog.Info("auth: promoted bootstrap admin to super admin", "uid", uid)
 	}
 
 	// Setup wizard writes site_name/skin_domains to options; they override the
@@ -245,17 +246,17 @@ func main() {
 
 	ts, err := texture.NewStore(cfg.TexturesDir)
 	if err != nil {
-		log.Fatalf("textures: %v", err)
+		logx.Fatal("textures", "error", err)
 	}
 
 	// Phase 3: SEO + appearance (theme packs, custom CSS/JS).
 	seoEng := seo.NewEngine(st, seo.Defaults{SiteName: cfg.SiteName, BaseURL: cfg.BaseURL})
 	themeReg, err := theme.NewRegistry(cfg.ThemesDir, version)
 	if err != nil {
-		log.Fatalf("themes: %v", err)
+		logx.Fatal("themes", "error", err)
 	}
 	if n := len(themeReg.List()); n > 0 {
-		log.Printf("themes: %d packs loaded from %s", n, cfg.ThemesDir)
+		slog.Info("themes: packs loaded from", "n", n, "themes_dir", cfg.ThemesDir)
 	}
 	appearEng := appearance.NewEngine(st, themeReg)
 	// Mail palette: closures over the appearance engine, same shape as the
@@ -284,7 +285,7 @@ func main() {
 	var themeTrustKeys signedpkg.Keyring
 	if cfg.ThemeTrustKeys != "" {
 		if keys, err := signedpkg.ParseKeys(cfg.ThemeTrustKeys); err != nil {
-			log.Printf("theme market: bad SKIN_THEME_TRUST_KEYS (%v) — market installs disabled", err)
+			slog.Info("theme market: bad SKIN_THEME_TRUST_KEYS () — market installs disabled", "error", err)
 		} else {
 			themeTrustKeys = keys
 		}
@@ -298,7 +299,7 @@ func main() {
 			return appearEng.Settings(context.Background()).ActiveTheme == id
 		},
 	}, themeReg)
-	log.Printf("theme market: market=%q trustKeys=%d themesDir=%s", cfg.ThemeMarketURL, len(themeTrustKeys), cfg.ThemesDir)
+	slog.Info("theme market", "market", cfg.ThemeMarketURL, "trustKeys", len(themeTrustKeys), "themesDir", cfg.ThemesDir)
 
 	accessLog := accesslog.New(st.InsertAccessLog)
 	// Diagnostic mode (2026-11-05 拍板): the same switch the panel API writes.
@@ -315,14 +316,14 @@ func main() {
 	// so a crashing plugin cannot alter the frozen Yggdrasil wire.
 	var pluginSecrets *plugin.SecretBox
 	if box, err := plugin.NewSecretBox(os.Getenv("SKIN_PLUGIN_SECRET_KEY"), filepath.Join(filepath.Dir(cfg.PluginsDir), "plugin-secrets.key")); err != nil {
-		log.Printf("plugins: secret box disabled: %v", err)
+		slog.Info("plugins: secret box disabled", "error", err)
 	} else {
 		pluginSecrets = box
 	}
 	var trustKeys signedpkg.Keyring
 	if cfg.PluginTrustKeys != "" {
 		if keys, err := signedpkg.ParseKeys(cfg.PluginTrustKeys); err != nil {
-			log.Printf("plugins: trust keys invalid: %v", err)
+			slog.Warn("plugins: trust keys invalid", "error", err)
 		} else {
 			trustKeys = keys
 		}
@@ -360,18 +361,18 @@ func main() {
 			st.InsertAudit(ctx, plugin.ActorFromContext(ctx), action, detail)
 		},
 	})
-	log.Printf("plugins: market=%q trustKeys=%d stateDir=%s uploadMax=%d", cfg.PluginMarketURL, len(trustKeys), cfg.PluginStateDir, cfg.PluginUploadMax)
+	slog.Info("plugins", "market", cfg.PluginMarketURL, "trustKeys", len(trustKeys), "stateDir", cfg.PluginStateDir, "uploadMax", cfg.PluginUploadMax)
 	if err := pluginHost.Load(cfg.PluginsDir); err != nil {
-		log.Printf("plugins: load %s: %v", cfg.PluginsDir, err)
+		slog.Info("plugins: load", "plugins_dir", cfg.PluginsDir, "error", err)
 	} else if n := len(pluginHost.List()); n > 0 {
-		log.Printf("plugins: %d scanned from %s", n, cfg.PluginsDir)
+		slog.Info("plugins: scanned from", "n", n, "plugins_dir", cfg.PluginsDir)
 	}
 
 	signer, err := ygg.NewLocalSigner(cfg.SignKeyPath)
 	if err != nil {
-		log.Fatalf("signer: %v", err)
+		logx.Fatal("signer", "error", err)
 	}
-	log.Printf("signing key fingerprint: %s", signer.KeyFingerprint())
+	slog.Info("signing key fingerprint", "value", signer.KeyFingerprint())
 
 	// Phase 2: MUA Union member module. Options-first config (2026-10-24 拍板):
 	// the stack is ALWAYS assembled so `union_enabled` hot-toggles from the
@@ -399,7 +400,7 @@ func main() {
 	if cfg.OIDCEnabled {
 		okey, err := oidc.LoadOrCreateKey(cfg.OIDCSignKey)
 		if err != nil {
-			log.Fatalf("oidc key: %v", err)
+			logx.Fatal("oidc key", "error", err)
 		}
 		oidcProvider, err = oidc.New(st, oidc.ProfileSource{
 			Players: func(ctx context.Context, uid int64) ([]oidc.PlayerBrief, error) {
@@ -421,16 +422,16 @@ func main() {
 			LoginURL:       cfg.BaseURL + "/login",
 		})
 		if err != nil {
-			log.Fatalf("oidc: %v", err)
+			logx.Fatal("oidc", "error", err)
 		}
 		oidcProvider.SessionResolver = st.SessionUser
 		oidcProvider.Audit = func(event string, detail map[string]any) {
-			log.Printf("oidc audit: %s %v", event, detail)
+			slog.Info("oidc audit", "event", event, "detail", detail)
 			st.InsertAudit(context.Background(), 0, event, detail)
 		}
 		oidc.SetClientSecretVerifier(func(hash, secret string) bool { return auth.VerifyPHC(secret, hash) })
 		if err := oidcProvider.SeedSharedClient(context.Background()); err != nil {
-			log.Fatalf("oidc seed client: %v", err)
+			logx.Fatal("oidc seed client", "error", err)
 		}
 		// Dual-state token resolution: OIDC JWTs resolve through the jti
 		// ledger; opaque password-flow tokens fall back to the store lookup.
@@ -445,7 +446,7 @@ func main() {
 			return t, err
 		})
 		oidcDiscoveryURL = cfg.BaseURL + "/api/yggdrasil/.well-known/openid-configuration"
-		log.Printf("oidc: enabled (issuer %s, shared client %s)", cfg.OIDCIssuer, cfg.SharedClientID)
+		slog.Info("oidc: enabled (issuer , shared client )", "oidc_issuer", cfg.OIDCIssuer, "shared_client_id", cfg.SharedClientID)
 	}
 	yggSvc.RequireVerification = cfg.RequireVerification
 	yggAPI := ygg.NewAPI(yggSvc, ygg.MetadataConfig{
@@ -486,7 +487,7 @@ func main() {
 		for range ticker.C {
 			bg := context.Background()
 			if n, err := st.PurgeAccessLogs(bg, 90*24*time.Hour); err == nil && n > 0 {
-				log.Printf("access_logs: purged %d rows older than 90d", n)
+				slog.Info("access_logs: purged rows older than 90d", "count", n)
 			}
 			// Two clocks on the detail table, on this same tick (no second
 			// goroutine). Retention follows the panel option, read now; the
@@ -494,22 +495,22 @@ func main() {
 			// store.SweepAccessDetailCredentials for why those must not merge).
 			if window := detailDiag.RetentionWindow(bg); window > 0 {
 				if n, err := st.PurgeAccessDetails(bg, window); err != nil {
-					log.Printf("access_log_details: purge failed: %v", err)
+					slog.Warn("access_log_details: purge failed", "error", err)
 				} else if n > 0 {
-					log.Printf("access_log_details: purged %d rows older than %s", n, window)
+					slog.Info("access_log_details: purged rows older than", "n", n, "window", window)
 				}
 			}
 			if n, err := st.SweepAccessDetailCredentials(bg); err != nil {
-				log.Printf("access_log_details: credential sweep failed: %v", err)
+				slog.Warn("access_log_details: credential sweep failed", "error", err)
 			} else if n > 0 {
-				log.Printf("access_log_details: cleared credentials on %d expired row(s) (%s after capture)", n, accesslog.CredentialTTL)
+				slog.Info("access_log_details: cleared credentials on expired row(s) ( after capture)", "n", n, "credential_ttl", accesslog.CredentialTTL)
 			}
 			// Join sessions expire in 120 seconds and nothing had ever deleted
 			// them: the table only ever grew, while hasJoined scanned it.
 			if n, err := st.PurgeJoinSessions(bg); err != nil {
-				log.Printf("ygg_join_sessions: purge failed: %v", err)
+				slog.Warn("ygg_join_sessions: purge failed", "error", err)
 			} else if n > 0 {
-				log.Printf("ygg_join_sessions: purged %d expired row(s)", n)
+				slog.Info("ygg_join_sessions: purged expired row(s)", "count", n)
 			}
 		}
 	}()
@@ -521,12 +522,12 @@ func main() {
 		if tok, generated := installToken(cfg.SetupToken); tok != "" {
 			backend.SetupToken = tok
 			if generated {
-				log.Printf("setup: the site is not initialized yet — use install token %q in the wizard (or set SKIN_SETUP_TOKEN to keep it across restarts)", tok)
+				slog.Info("setup: the site is not initialized yet — use install token in the wizard (or set SKIN_SETUP_TOKEN to keep it across restarts)", "token", tok)
 			}
 		} else {
 			// No operator token and no random one (a host where crypto/rand fails).
 			// Say so loudly instead of quietly leaving the door open.
-			log.Printf("setup: WARNING the install wizard is unguarded because no setup token could be produced; set SKIN_SETUP_TOKEN before exposing this site")
+			slog.Warn("setup: WARNING the install wizard is unguarded because no setup token could be produced; set SKIN_SETUP_TOKEN before exposing this site")
 		}
 	}
 	backend.Appearance = appearEng
@@ -564,7 +565,7 @@ func main() {
 	backend.OnPasswordChange = func(uid int64) {
 		if oidcProvider != nil {
 			if err := oidcProvider.RevokeUserAllTokens(context.Background(), uid); err != nil {
-				log.Printf("password change: OIDC revoke uid=%d: %v", uid, err)
+				slog.Info("password change: OIDC revoke", "uid", uid, "error", err)
 			}
 		}
 	}
@@ -692,16 +693,16 @@ func main() {
 		switch key {
 		case "union_enabled":
 			ustack.setEnabled(context.Background(), value == "1")
-			log.Printf("union: hot toggle -> %s", value)
+			slog.Info("union: hot toggle", "value", value)
 		case "union_api_root":
 			if err := ustack.setAPIRoot(value); err != nil {
-				log.Printf("union: hot api_root rejected: %v", err)
+				slog.Warn("union: hot api_root rejected", "error", err)
 			}
 		case "union_member_key":
 			ustack.setMemberKey(value)
 		case "cdn_enabled", "cdn_headers":
 			applyCDN()
-			log.Printf("cdn: hot apply %s=%s", key, value)
+			slog.Info("cdn: hot apply", "key", key, "value", value)
 		}
 	}
 	// Dashboard storage card: sum of texture files on disk (the textures
@@ -768,7 +769,7 @@ func main() {
 	admin.OnUserCredentialChange = func(uid int64) {
 		if oidcProvider != nil {
 			if err := oidcProvider.RevokeUserAllTokens(context.Background(), uid); err != nil {
-				log.Printf("admin credential change: OIDC revoke uid=%d: %v", uid, err)
+				slog.Info("admin credential change: OIDC revoke", "uid", uid, "error", err)
 			}
 		}
 	}
@@ -791,7 +792,7 @@ func main() {
 				if err != nil {
 					st.InsertAudit(context.Background(), 0, "union_sync_delete_failed",
 						map[string]interface{}{"uid": uid, "uuid": uuid, "name": name, "error": err.Error()})
-					log.Printf("union sync delete failed uid=%d uuid=%s name=%s: %v", uid, uuid, name, err)
+					slog.Warn("union sync delete failed", "uid", uid, "uuid", uuid, "name", name, "error", err)
 				}
 			}
 		}()
@@ -811,7 +812,7 @@ func main() {
 			if err != nil {
 				st.InsertAudit(context.Background(), 0, "union_sync_delete_failed",
 					map[string]interface{}{"uuid": uuid, "name": name, "error": err.Error()})
-				log.Printf("union sync delete failed (admin player) uuid=%s name=%s: %v", uuid, name, err)
+				slog.Warn("union sync delete failed (admin player)", "uuid", uuid, "name", name, "error", err)
 			}
 		}()
 	}
@@ -1058,25 +1059,24 @@ func main() {
 	// log to read at 3am.
 	cspScript, err := parseCSPSources("SKIN_CSP_SCRIPT_EXTRA_SOURCES", cfg.CSPScriptExtraSources)
 	if err != nil {
-		log.Fatalf("%v", err)
+		logx.Fatal("startup", "error", err)
 	}
 	cspConnect, err := parseCSPSources("SKIN_CSP_CONNECT_EXTRA_SOURCES", cfg.CSPConnectExtraSources)
 	if err != nil {
-		log.Fatalf("%v", err)
+		logx.Fatal("startup", "error", err)
 	}
 	if len(cspScript) > 0 || len(cspConnect) > 0 {
-		log.Printf("csp: script-src also allows [%s]; connect-src also allows [%s]",
-			strings.Join(cspScript, " "), strings.Join(cspConnect, " "))
+		slog.Info("csp: extra sources allowed", "script_src", strings.Join(cspScript, " "), "connect_src", strings.Join(cspConnect, " "))
 	}
-	log.Printf("skin-nexus %s listening on %s (base %s)", version, addr, cfg.BaseURL)
+	slog.Info("skin-nexus listening", "version", version, "addr", addr, "base_url", cfg.BaseURL)
 
 	if len(cfg.TrustedProxies) > 0 {
 		// A typo here would silently widen the trust that every rate limit and
 		// audit row depends on, so refuse to start rather than fall back.
 		if err := ygg.ConfigureTrustedProxies(cfg.TrustedProxies); err != nil {
-			log.Fatalf("config: %v", err)
+			logx.Fatal("config", "error", err)
 		}
-		log.Printf("client IP: X-Forwarded-For accepted only from %s", strings.Join(cfg.TrustedProxies, ", "))
+		slog.Info("client IP: X-Forwarded-For accepted only from", "value", strings.Join(cfg.TrustedProxies, ", "))
 	}
 	// securityHeaders must be the outermost wrapper: pub.WrapRoot answers the
 	// CustomSkinAPI `GET /{player}.json` routes itself, so anything it wraps
@@ -1093,19 +1093,19 @@ func main() {
 	select {
 	case err := <-serveErr:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal(err)
+			logx.Fatal("err")
 		}
 	case sig := <-stop:
 		// Docker/systemd stop sends SIGTERM: drain in-flight requests instead
 		// of dropping uploads and texture downloads mid-response. 8s stays
 		// inside Docker's default 10s stop timeout before SIGKILL.
-		log.Printf("received %s, shutting down", sig)
+		slog.Info("received , shutting down", "sig", sig)
 		unionCancel()
 		_ = pluginHost.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(ctx); err != nil {
-			log.Printf("graceful shutdown: %v", err)
+			slog.Info("graceful shutdown", "error", err)
 		}
 	}
 }

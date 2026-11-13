@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -200,7 +200,7 @@ func (d *avatarDeps) serveAvatar(w http.ResponseWriter, r *http.Request, hash, t
 	if img == nil {
 		def, err := avatargen.DefaultAvatar(size, threeD)
 		if err != nil {
-			log.Printf("avatar: default asset: %v", err)
+			slog.Info("avatar: default asset", "error", err)
 			http.Error(w, "default avatar missing", http.StatusInternalServerError)
 			return
 		}
@@ -217,7 +217,7 @@ func (d *avatarDeps) handleAvatarPlayer(w http.ResponseWriter, r *http.Request) 
 			http.NotFound(w, r)
 			return
 		}
-		log.Printf("avatar/player %q: %v", name, err)
+		slog.Info("avatar/player", "name", name, "error", err)
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
@@ -272,7 +272,7 @@ func (d *avatarDeps) handleAvatarTID(w http.ResponseWriter, r *http.Request) {
 			d.serveAvatar(w, r, "", "", r.URL.Query().Has("3d"), false) // texture missing → default
 			return
 		}
-		log.Printf("avatar/%d visibility: %v", tid, err)
+		slog.Info("avatar/ visibility", "tid", tid, "error", err)
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
@@ -462,7 +462,7 @@ func writePNG(w http.ResponseWriter, img image.Image, cache string) {
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", cache)
 	if err := png.Encode(w, img); err != nil {
-		log.Printf("avatar: encode: %v", err)
+		slog.Info("avatar: encode", "error", err)
 	}
 }
 

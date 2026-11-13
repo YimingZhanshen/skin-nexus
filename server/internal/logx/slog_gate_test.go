@@ -29,9 +29,6 @@ import (
 // pending lists files that still call the standard library logger. It starts
 // as every offender and shrinks to nothing; see the package comment.
 var pending = []string{
-	"cmd/skin-nexus/avatar.go",
-	"cmd/skin-nexus/main.go",
-	"cmd/skin-nexus/union_boot.go",
 	"internal/accesslog/accesslog.go",
 	"internal/account/delete.go",
 	"internal/account/textures.go",
