@@ -5,8 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"strings"
-	"unicode/utf8"
 
 	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/store"
@@ -23,21 +21,17 @@ import (
 // U+FFFD rather than erroring, so the handler only ever sees valid UTF-8 — the
 // replacement character is the only trace left, and keeping it would store a
 // label that renders as black diamonds everywhere.
+// The rule itself lives in ugctext.Alias (one copy for the player closet and
+// the admin closet surface); only the HTTP-shaped reasons stay here.
 const (
-	aliasOK = iota
-	aliasTooLong
-	aliasUnreadable
+	aliasOK         = int(ugctext.AliasOK)
+	aliasTooLong    = int(ugctext.AliasTooLong)
+	aliasUnreadable = int(ugctext.AliasUnreadable)
 )
 
 func closetAlias(raw string) (string, int) {
-	if strings.ContainsRune(raw, utf8.RuneError) {
-		return "", aliasUnreadable
-	}
-	name := ugctext.Visible(strings.TrimSpace(raw))
-	if len([]rune(name)) > 50 {
-		return "", aliasTooLong
-	}
-	return name, aliasOK
+	name, reason := ugctext.Alias(raw)
+	return name, int(reason)
 }
 
 func writeClosetAliasError(w http.ResponseWriter, reason int) {

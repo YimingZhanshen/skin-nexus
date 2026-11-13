@@ -4,6 +4,7 @@ package ugctext
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Visible removes Unicode format characters (Cf) from user text: the BiDi
@@ -30,4 +31,28 @@ func Visible(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// AliasReason is why a closet alias was rejected; AliasOK means it passed.
+type AliasReason int
+
+const (
+	AliasOK AliasReason = iota
+	AliasTooLong
+	AliasUnreadable
+)
+
+// Alias is the single closet-alias rule, shared by the player closet and the
+// admin closet surface so the two can never accept different names: the text
+// must arrive as valid UTF-8 (RuneError in the raw input means it did not),
+// stay readable after Visible(), and fit 50 runes.
+func Alias(raw string) (string, AliasReason) {
+	if strings.ContainsRune(raw, utf8.RuneError) {
+		return "", AliasUnreadable
+	}
+	name := Visible(strings.TrimSpace(raw))
+	if len([]rune(name)) > 50 {
+		return "", AliasTooLong
+	}
+	return name, AliasOK
 }

@@ -148,6 +148,9 @@ func (b *Backend) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/admin/v1/users/{id}/verification", b.auth(b.handleUserSetVerification))
 	mux.HandleFunc("PUT /api/admin/v1/users/{id}/permission", b.auth(b.handleUserSetPermission))
 	mux.HandleFunc("DELETE /api/admin/v1/users/{id}", b.auth(b.handleUserDelete))
+	mux.HandleFunc("GET /api/admin/v1/users/{id}/closet", b.auth(b.handleAdminClosetList))
+	mux.HandleFunc("PUT /api/admin/v1/users/{id}/closet/{cid}", b.auth(b.handleAdminClosetRename))
+	mux.HandleFunc("DELETE /api/admin/v1/users/{id}/closet/{cid}", b.auth(b.handleAdminClosetRemove))
 	// Player management (B3, blessing 玩家管理 parity).
 	mux.HandleFunc("GET /api/admin/v1/players", b.auth(b.handleAdminPlayers))
 	mux.HandleFunc("PUT /api/admin/v1/players/{pid}/name", b.auth(b.handleAdminPlayerRename))
