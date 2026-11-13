@@ -18,8 +18,11 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
+
+	"skin-nexus/server/internal/metrics"
 )
 
 // observeNow is the request clock. Injectable for tests (same seam idea as
@@ -148,6 +151,13 @@ func Observe(next http.Handler) http.Handler {
 			return
 		}
 		l := &live{start: observeNow()}
+		// The request counter rides the same finalizer the log line does, so
+		// what is counted is exactly what is logged — a route that skips this
+		// middleware is invisible to both, never to one of them.
+		method := r.Method
+		l.finalizers = append(l.finalizers, func(status int, _ int64) {
+			metrics.HTTPRequests.Inc(method, strconv.Itoa(status))
+		})
 		// Only requests that claim a body get a tee; ContentLength 0 covers a
 		// plain GET (and http.NoBody), which has nothing to excerpt. Unknown
 		// length (-1, chunked) is wrapped, since that is a body.

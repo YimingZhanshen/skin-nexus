@@ -153,6 +153,7 @@ app 进程能看到哪些变量，取决于 compose 文件里 `environment:` 段
 |---|---|---|---|
 | `SKIN_LISTEN` | 可选 | `:8080` / `:8080` | 进程监听地址，**保持 `:8080` 即可**，改值见表下注 |
 | `SKIN_ENV` | 可选 | `production` / `production` | 部署环境标签（production/demo/staging…），仅用于管理面板「运行状态」展示，不改变行为 |
+| `SKIN_METRICS` | 可选 | 关 | 打开 `GET /metrics`（Prometheus 文本格式：请求数、任务队列、上传、联盟验签失败、进程 uptime）。**默认不注册该路由**——指标里有路由基数与错误计数，等于把站点结构告诉能连到端口的人；只在反代/防火墙已经挡住、或只想给本机采集器用时打开（`1`/`true`） |
 
 > `SKIN_LISTEN` 改值注意：bridge 网络下不要改成 `127.0.0.1:8080`（进程只绑容器环回 → 端口映射
 > connection refused，而 healthcheck 仍报 healthy，极难排查）；反代场景想只对本机开放就改 ports

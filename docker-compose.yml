@@ -59,6 +59,7 @@ services:
       # SKIN_PLUGIN_UPLOAD_MAX: '67108864' 
       # SKIN_UNION_ENABLED: 'false'                 # MUA Union member module (zero surface when off)
       # SKIN_INVITE_REQUIRED: 'true'                # registration requires an invitation code
+      # SKIN_METRICS: 'true'                        # expose GET /metrics (off by default: it publishes route counts)
     volumes:
       - skin-data:/data
     depends_on:

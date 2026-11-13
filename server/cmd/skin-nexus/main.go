@@ -37,6 +37,7 @@ import (
 	"skin-nexus/server/internal/avatargen"
 	"skin-nexus/server/internal/config"
 	"skin-nexus/server/internal/jobs"
+	"skin-nexus/server/internal/metrics"
 	"skin-nexus/server/internal/migrate"
 	"skin-nexus/server/internal/oidc"
 	"skin-nexus/server/internal/plugin"
@@ -958,6 +959,11 @@ func main() {
 	root.HandleFunc("GET /texture-render/{hash}", av.handleViewerTexture)
 	// Phase 3 public surface: health probe, SEO outputs, theme assets.
 	root.Handle("GET /healthz", healthzHandler(st))
+	// The scrape surface is registered unconditionally and gated in the
+	// handler: /metrics publishes route cardinality and error counts to
+	// whoever can reach the port, so the switch defaults to off (SKIN_METRICS)
+	// and an unparseable value never opens it.
+	root.Handle("GET /metrics", metricsHandler(metricsEnabled()))
 	root.Handle("GET /sitemap.xml", sitemapHandler(seoEng, st, cfg.BaseURL))
 	root.Handle("GET /robots.txt", robotsHandler(seoEng))
 	root.Handle("GET /llms.txt", llmsHandler(seoEng))
@@ -1326,15 +1332,51 @@ func spaHandler(dir string, seoEng *seo.Engine, appearEng *appearance.Engine, si
 	})
 }
 
-// healthzHandler is the container health probe (DB round-trip).
-func healthzHandler(st *store.Mysql) http.Handler {
+// healthChecker is what the probe needs from the store; naming it keeps the
+// answer's shape testable without standing up a database.
+type healthChecker interface {
+	Health(ctx context.Context) error
+}
+
+// healthzHandler is the container health probe (DB round-trip). It also
+// answers the two questions a human asks it during an incident — which build
+// is this, and how long has it been up — so neither needs a shell.
+func healthzHandler(st healthChecker) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := st.Health(r.Context()); err != nil {
 			http.Error(w, "unhealthy", http.StatusServiceUnavailable)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		fmt.Fprintf(w, `{"ok":true,"version":%q,"uptime_seconds":%d}`,
+			version, int64(metrics.Default.Uptime().Seconds()))
+	})
+}
+
+// metricsEnabled reads SKIN_METRICS. Unset or unparseable means off: the
+// endpoint publishes request cardinality and error counts, so it is a switch
+// the operator throws, never a default.
+func metricsEnabled() bool {
+	v := strings.TrimSpace(os.Getenv("SKIN_METRICS"))
+	if v == "" {
+		return false
+	}
+	on, err := strconv.ParseBool(v)
+	return err == nil && on
+}
+
+// metricsHandler renders the registry in Prometheus text exposition format,
+// or refuses with 404 when the switch is off — a route that answers 404 looks
+// exactly like a route that does not exist, which is the point.
+func metricsHandler(enabled bool) http.Handler {
+	if !enabled {
+		return http.NotFoundHandler()
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+		if err := metrics.Default.WriteText(w); err != nil {
+			http.Error(w, "metrics unavailable", http.StatusInternalServerError)
+		}
 	})
 }
 

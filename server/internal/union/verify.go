@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"skin-nexus/server/internal/metrics"
 )
 
 // Verifier authenticates hub -> member requests (analysis/yggdrasil-connect.md
@@ -155,7 +157,18 @@ func (v *Verifier) activeKey() (*rsa.PublicKey, error) {
 
 // Verify checks one message: the exact middleware core, usable outside HTTP.
 // Every failure maps to 403 in the middleware (legacy semantics).
+// Verify checks a hub-signed request. Every refusal except "the module is
+// off" is counted by reason — the same tokens the audit log records — so an
+// operator can tell a clock skew from a rotated key without a log dive.
 func (v *Verifier) Verify(rawBody []byte, signature, timestamp, nonce string) error {
+	err := v.verify(rawBody, signature, timestamp, nonce)
+	if err != nil && !errors.Is(err, ErrDisabled) {
+		metrics.SignatureFailures.Inc(verifyReason(err))
+	}
+	return err
+}
+
+func (v *Verifier) verify(rawBody []byte, signature, timestamp, nonce string) error {
 	if !v.Enabled() {
 		return ErrDisabled
 	}

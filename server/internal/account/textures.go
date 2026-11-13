@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"skin-nexus/server/internal/metrics"
 	"skin-nexus/server/internal/siteurl"
 	"time"
 	"unicode/utf8"
@@ -97,7 +98,17 @@ func (s *Service) ImportPrivateTexture(ctx context.Context, uid int64, typ, mode
 	return s.uploadTexture(ctx, uid, typ, model, UploadMeta{Name: desc, Public: false}, png, meta)
 }
 
-func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model string, um UploadMeta, png []byte, meta CallMeta) (TextureView, bool, *Error) {
+func (s *Service) uploadTexture(ctx context.Context, uid int64, typ, model string, um UploadMeta, png []byte, meta CallMeta) (v TextureView, reused bool, e *Error) {
+	// One recording point for every upload path (web form, plugin bridge,
+	// launcher-api, private import): a refusal the panel shows a user and a
+	// refusal the bridge shows a launcher are the same number here.
+	defer func() {
+		outcome := "ok"
+		if e != nil {
+			outcome = "error"
+		}
+		metrics.Uploads.Inc(outcome)
+	}()
 	if e := s.ensure(); e != nil {
 		return TextureView{}, false, e
 	}

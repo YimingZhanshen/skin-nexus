@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"skin-nexus/server/internal/dbx"
+	"skin-nexus/server/internal/metrics"
 )
 
 var ErrNotFound = errors.New("jobs: not found")
@@ -225,20 +226,40 @@ func (s *Store) SaveStep(ctx context.Context, id, worker string, cursor []byte, 
 
 func (s *Store) Finish(ctx context.Context, id, worker string, result []byte) error {
 	now := time.Now().UTC()
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE host_jobs SET state='done', result=?, progress=100, lease_owner='', lease_until=NULL,
 		 finished_at=?, updated_at=? WHERE id=? AND state='running' AND lease_owner=?`,
 		jsonOrNil(result), now, now, id, worker)
-	return err
+	if err != nil {
+		return err
+	}
+	recordTransition(res, "done")
+	return nil
 }
 
 func (s *Store) MarkCancelled(ctx context.Context, id, worker string) error {
 	now := time.Now().UTC()
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE host_jobs SET state='cancelled', lease_owner='', lease_until=NULL,
 		 finished_at=?, updated_at=? WHERE id=? AND state IN ('running','cancelling') AND lease_owner=?`,
 		now, now, id, worker)
-	return err
+	if err != nil {
+		return err
+	}
+	recordTransition(res, "cancelled")
+	return nil
+}
+
+// recordTransition counts a terminal state change only when the UPDATE
+// actually moved a row: a WHERE clause that matched nothing changed nothing,
+// and a counter that says otherwise draws a completion rate that never
+// happened. The retry path of Fail never reaches here.
+func recordTransition(res sql.Result, outcome string) {
+	n, err := res.RowsAffected()
+	if err != nil || n == 0 {
+		return
+	}
+	metrics.Jobs.Inc(outcome)
 }
 
 // Fail retries with exponential backoff, then marks failed.
@@ -257,11 +278,15 @@ func (s *Store) Fail(ctx context.Context, id, worker string, cause error, attemp
 			attempts, msg, now.Add(backoff), now, id, worker)
 		return err
 	}
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE host_jobs SET state='failed', attempts=?, last_error=?, lease_owner='', lease_until=NULL,
 		 finished_at=?, updated_at=? WHERE id=? AND lease_owner=?`,
 		attempts, msg, now, now, id, worker)
-	return err
+	if err != nil {
+		return err
+	}
+	recordTransition(res, "failed") // the retry leg above returned already
+	return nil
 }
 
 func (s *Store) RequestCancel(ctx context.Context, id string) error {

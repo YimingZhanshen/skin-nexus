@@ -44,6 +44,7 @@ services:
       SKIN_PLUGIN_TRUST_KEYS: '${SKIN_PLUGIN_TRUST_KEYS:-market-2026-10:ID2EWgcfs1E4UbGCCX9WjD0aCgTof3oeuHV03IpdGNY=}'
       SKIN_THEME_MARKET_URL: '${SKIN_THEME_MARKET_URL:-https://yimingzhanshen.github.io/skin-nexus-plugins/themes/v1/registry.json}'
       SKIN_THEME_TRUST_KEYS: '${SKIN_THEME_TRUST_KEYS:-theme-market-2026-11:EXxNehbsxNG9gdYUztMl/EU/lZ09+fPftPvmjeqPr/I=}'
+      # SKIN_METRICS: 'true'                        # expose GET /metrics (off by default: it publishes route counts)
     volumes:
       - skin-data:/data
     depends_on:
