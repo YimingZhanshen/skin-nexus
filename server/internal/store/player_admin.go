@@ -98,8 +98,11 @@ func (m *Mysql) AdminRenamePlayer(ctx context.Context, pid int64, newName string
 		return err
 	}
 	defer tx.Rollback()
+	// players.updated_at must be written here: only MySQL refreshes it via
+	// ON UPDATE CURRENT_TIMESTAMP, so without an explicit column the panel's
+	// updatedAt goes stale on PG/SQLite (store portability, W0 scan A1).
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE players SET name = ? WHERE id = ?`, newName, pid); err != nil {
+		`UPDATE players SET name = ?, updated_at = ? WHERE id = ?`, newName, m.now(), pid); err != nil {
 		if isDupKey(err) {
 			return ErrDuplicate
 		}
@@ -164,7 +167,8 @@ func (m *Mysql) AdminSetPlayerOwner(ctx context.Context, pid, uid int64) error {
 		}
 		return err
 	}
-	_, err := m.db.ExecContext(ctx, `UPDATE players SET uid = ? WHERE id = ?`, uid, pid)
+	_, err := m.db.ExecContext(ctx,
+		`UPDATE players SET uid = ?, updated_at = ? WHERE id = ?`, uid, m.now(), pid)
 	return err
 }
 
