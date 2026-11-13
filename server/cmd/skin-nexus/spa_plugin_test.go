@@ -40,9 +40,12 @@ func TestIsKnownSPAPathCoversEmailedLinks(t *testing.T) {
 // served. Both directions are asserted by reading the frontend source, the same
 // way the emailed-links test reads what the mailer actually sends.
 func TestSPARoutesAgreeWithAppMaps(t *testing.T) {
-	src, err := os.ReadFile(filepath.Join("..", "..", "..", "web", "src", "App.vue"))
+	// The two maps live in routes.js since W4-2 (data pulled out of the
+	// shell); the contract they pin — every view URL has a resolver and every
+	// resolver is a shell-known path — is unchanged.
+	src, err := os.ReadFile(filepath.Join("..", "..", "..", "web", "src", "routes.js"))
 	if err != nil {
-		t.Fatalf("read App.vue: %v", err)
+		t.Fatalf("read routes.js: %v", err)
 	}
 	text := string(src)
 	routes := objectField(text, "legacyRoutes", 0) // the URLs the app can resolve

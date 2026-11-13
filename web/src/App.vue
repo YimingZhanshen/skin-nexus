@@ -31,11 +31,15 @@ import { loadPluginUI, navPages, pageByPath, pluginLabel } from './pluginUI.js'
 import { useSiteConfig } from './composables/useSiteConfig.js'
 import { useSession } from './composables/useSession.js'
 import { useGoto } from './composables/useGoto.js'
+import { viewURLs, legacyRoutes } from './routes.js'
 import LoginCard from './components/auth/LoginCard.vue'
 import RegisterCard from './components/auth/RegisterCard.vue'
 import ForgotCard from './components/auth/ForgotCard.vue'
 import ResetCard from './components/auth/ResetCard.vue'
 import VerifyCard from './components/auth/VerifyCard.vue'
+import TopBar from './components/shell/TopBar.vue'
+import UserSide from './components/shell/UserSide.vue'
+import SiteFooter from './components/shell/SiteFooter.vue'
 import { setLocale } from './i18n.js'
 import { setUnauthorizedHandler } from './session.js'
 
@@ -162,22 +166,8 @@ const brandSVG = '<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
 
 // ── URL ↔ 视图双向同步（2026-10-27 逻辑修复：地址栏与视图曾完全脱节，
 //    同一皮肤库两个 URL 并存）──
-// /skinlib 为皮肤库唯一规范地址；/user/skinlib 仅作 PCL/旧链接深链兼容。
-const viewURLs = {
-  skinlib: '/skinlib',
-  help: '/help',
-  closet: '/user/closet',
-  profile: '/user/profile',
-  players: '/user/players',
-  dashboard: '/user/dashboard',
-  // Three views the nav offers with no address of their own: the URL bar kept
-  // saying /user/dashboard while 站内通知 was on screen, so a bookmark or a
-  // second-tab open landed somewhere else entirely.
-  notifications: '/user/notifications',
-  apps: '/user/apps',
-  union: '/user/union',
-  admin: '/admin',
-}
+// 两张映射表在 routes.js（数据），这里只有同步行为：/skinlib 是皮肤库
+// 唯一规范地址，/user/skinlib 仅作 PCL/旧链接深链兼容。
 let syncingURL = false
 watch(view, (v) => {
   menuOpen.value = false
@@ -222,21 +212,6 @@ setUnauthorizedHandler(() => { user.value = null; view.value = 'login' })
 // `user/closet` / `user/profile` (PageLoginProfileSkin.xaml.cs:151,
 // ProfileUi.cs:291) — the SPA must honor those URLs or the launcher's "换皮肤 /
 // 修改密码" buttons land on the dashboard. Same for HMCL's yggdrasil convention.
-const legacyRoutes = {
-  '/user/closet': 'closet',
-  '/user/profile': 'profile',
-  '/user/players': 'players',
-  '/user/skinlib': 'skinlib',
-  '/user/dashboard': 'dashboard',
-  '/skinlib': 'skinlib',
-  // Readable without a session: the page exists for the player who is stuck
-  // outside, so it must be reachable from a shared link before login.
-  '/help': 'help',
-  '/user/apps': 'apps',
-  '/user/notifications': 'notifications',
-  '/user/union': 'union',
-  '/admin': 'admin',
-}
 
 function withBootTimeout(promise, ms) {
   return new Promise((resolve, reject) => {
@@ -330,10 +305,6 @@ async function boot() {
 }
 
 
-function onLocaleChange(e) {
-  setLocale(e.target.value)
-}
-
 // 邮箱验证 (2026-11-02): the link is single-use. Landing only reads the URL;
 // the POST happens on click, because mail gateways and in-app browsers prefetch
 // links and would spend the token before the player arrives. The server never
@@ -406,38 +377,8 @@ onMounted(() => {
   <div v-else class="app-shell">
     <a class="skip-link" href="#main-content">{{ t('common.skipToContent') }}</a>
     <!-- 顶栏：品牌区 + 语言 + 会话操作（sticky 玻璃带） -->
-    <header class="topbar" :class="{ wide: view === 'admin' }">
-      <div class="topbar-inner">
-        <a class="brand" href="/" @click.prevent="goHome" :title="t('site.tagline')">
-          <span class="brand-n" v-html="brandSVG"></span>
-          <span class="brand-name">{{ siteName }}</span>
-        </a>
-        <div class="topbar-right" :class="{ open: menuOpen }">
-          <select :value="locale" class="locale-sel" @change="onLocaleChange">
-            <option value="zh-CN">{{ t('common.langZh') }}</option>
-            <option value="en">English</option>
-          </select>
-          <button v-if="view === 'admin'" class="secondary" @click="view = 'dashboard'">← {{ t('nav.backToDashboard') }}</button>
-          <template v-if="user">
-            <span class="badge">{{ user.nickname }}</span>
-            <button class="secondary" @click="doLogout">{{ t('common.logout') }}</button>
-          </template>
-          <template v-else>
-            <button class="secondary" @click="view = 'skinlib'">{{ t('nav.skinlib') }}</button>
-            <button class="secondary" @click="view = 'login'">{{ t('common.login') }}</button>
-            <button @click="view = 'register'">{{ t('common.register') }}</button>
-          </template>
-          <PluginSlot slot="app.topbar.after" />
-        </div>
-        <button class="secondary nav-toggle" :aria-expanded="menuOpen ? 'true' : 'false'"
-                :aria-label="menuOpen ? t('common.close') : t('nav.menu')" @click="menuOpen = !menuOpen">
-          <svg v-if="!menuOpen" class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
-          <svg v-else class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19" /></svg>
-        </button>
-      </div>
-    </header>
+    <TopBar :view="view" :menu-open="menuOpen" :site-name="siteName"
+            :brand-svg="brandSVG" @toggle-menu="menuOpen = !menuOpen" @logout="doLogout" />
 
     <div id="main-content" class="container" :class="{ wide: view === 'admin' }" tabindex="-1">
     <!-- AUTH VIEWS: 分栏场景式（左=远山+N 牌，右=表单）。独立 v-if：error 横幅
@@ -529,24 +470,9 @@ onMounted(() => {
     <!-- logged-in shell: sidebar + page (blessing 用户中心布局) -->
     <template v-else-if="user">
       <div class="user-shell">
-        <aside v-if="view !== 'admin'" class="card user-side">
-          <nav v-for="(g, gi) in navGroups" :key="gi" class="nav-group">
-            <div class="nav-title" v-if="g.items.length">{{ gi === 0 ? t('nav.userCenter') : t('nav.manageGroup') }}</div>
-            <button v-for="n in g.items" :key="n.id" class="nav-item"
-                    :class="{ active: n.path ? (view === 'ext' && extPath === n.path) : view === n.id }"
-                    @click="n.path ? openExt(n.path) : (view = n.id)">
-              <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" v-html="n.icon"></svg>
-              <span>{{ n.label || t(n.labelKey) }}</span>
-              <span v-if="n.badge" class="nav-badge">{{ n.badge > 99 ? '99+' : n.badge }}</span>
-            </button>
-          </nav>
-          <!-- 底部用户卡：昵称 + 退出（v3 布局） -->
-          <div class="user-chip">
-            <span class="who" :title="user.nickname">{{ user.nickname }}</span>
-            <button class="secondary" @click="doLogout">{{ t('common.logout') }}</button>
-          </div>
-        </aside>
+        <UserSide v-if="view !== 'admin'" :view="view" :ext-path="extPath"
+                  :nav-groups="navGroups" :user="user"
+                  @open-ext="openExt" @logout="doLogout" />
         <main class="user-main">
           <DashboardPage v-if="view === 'dashboard'" />
           <SkinlibPage v-else-if="view === 'skinlib'" :user="user" @login="skinlibLogin" />
@@ -563,17 +489,7 @@ onMounted(() => {
       </div>
     </template>
     </div><!-- /container -->
-    <PluginSlot slot="footer.before" />
-    <!-- SkinNexus · Copyright (C) 2026 SkinNexus contributors · AGPL-3.0 -->
-    <footer class="site-footer">
-      <nav v-if="siteFooter.links.length" class="site-footer-links" :aria-label="t('common.footerLinks')">
-        <a v-for="(l, i) in siteFooter.links" :key="i" :href="l.url" target="_blank" rel="noopener noreferrer">{{ l.label }}</a>
-      </nav>
-      <p v-if="siteFooter.text" class="site-footer-text">{{ siteFooter.text }}</p>
-      <p class="site-footer-credit">
-        Powered by <a href="https://github.com/YimingZhanshen/skin-nexus" target="_blank" rel="noopener noreferrer">SkinNexus</a><template v-if="siteFooter.siteName"> · © {{ siteFooter.year }} {{ siteFooter.siteName }}</template>
-      </p>
-    </footer>
+    <SiteFooter :site-footer="siteFooter" />
   </div><!-- /app-shell -->
   <ToastHub />
   <ModalHost />
