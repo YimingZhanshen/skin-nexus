@@ -125,7 +125,12 @@ func (b *Backend) handleUnionServers(w http.ResponseWriter, r *http.Request) {
 	// Names come from the peers themselves — the hub stores none (measured:
 	// 53/53 entries arrive with name empty). Fill serves what is already known
 	// and schedules reads for the rest; it never waits on them here.
-	servers := b.memberNames.Fill(doc.Servers)
+	//
+	// Canonicalise after the fill: Fill decides whether to fetch, using its own
+	// rules (it refuses credentials and IP literals), and folding first would
+	// hand it URLs it would have refused. The fold is what keeps one station
+	// spelled several ways from becoming several rows with duplicate Vue keys.
+	servers := union.CanonicalizeServers(b.memberNames.Fill(doc.Servers))
 	writeJSON(w, http.StatusOK, map[string]any{"servers": servers, "version": doc.Version})
 }
 

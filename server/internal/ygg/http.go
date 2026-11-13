@@ -192,9 +192,11 @@ func (a *API) skinDomains(r *http.Request) []string {
 	seen := map[string]bool{}
 	out := make([]string, 0, 8)
 	add := func(d string) {
-		if d != "" && !seen[d] {
-			seen[d] = true
-			out = append(out, d)
+		for _, form := range domainSpellings(d) {
+			if !seen[form] {
+				seen[form] = true
+				out = append(out, form)
+			}
 		}
 	}
 	for _, d := range a.cfg.SkinDomains {
@@ -222,6 +224,31 @@ func (a *API) skinDomains(r *http.Request) []string {
 		add(portlessTwin(out[i]))
 	}
 	return out
+}
+
+// domainSpellings is the case half of the whitelist contract. The entry is
+// always published exactly as configured (the G10 passthrough pin) and, when
+// its lowercase form differs, in lowercase as well.
+//
+// Why both: authlib-injector decides with String.equals / endsWith /
+// startsWith — all case-sensitive — against the host it reads out of the
+// texture URL with URI.getHost(), which keeps the case that URL was written
+// with (refs/authlib-injector .../SkinWhitelistTransformUnit.java:65-69,94).
+// A station we do not build URLs for (a union member, a CDN in SKIN_DOMAINS)
+// can therefore publish a texture host in either spelling, and matching only
+// the configured one silently drops skins for every player whose launcher
+// reads the other. Publishing the pair is a superset of the old list, so no
+// entry that matches today can stop matching; folding instead would delete
+// the spelling a mixed-case texture URL still needs.
+func domainSpellings(d string) []string {
+	if d == "" {
+		return nil
+	}
+	lo := strings.ToLower(d)
+	if lo == d {
+		return []string{d}
+	}
+	return []string{d, lo}
 }
 
 // portlessTwin returns the host-without-port form of an entry, or "" when the

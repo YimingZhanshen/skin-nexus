@@ -205,6 +205,15 @@ func TestG10TexturesPropertyExtraFields(t *testing.T) {
 //   - the appended request-host entry keeps its PORT, and authlib-injector
 //     compares against URI.getHost(), which has no port — a port-bearing
 //     default entry therefore matches nothing on the client. FINDING.
+//
+// Updated deliberately on 2026-11-13 (W1-2, docs/compat-matrix.md
+// 「skinDomains 条目的大小写」): every entry now also publishes its LOWERCASE
+// twin when the two differ, because the same client compares with
+// String.equals — case-sensitively — against a host URI.getHost() reads back
+// with its original case. The assertion set below is unchanged on purpose:
+// every fixture here is already lowercase, so passthrough, exact-string dedup
+// and the ordering pins all still hold; the derived twin is asserted in
+// skindomains_case_test.go.
 func TestG10SkinDomainsEmissionIsPassthrough(t *testing.T) {
 	api, _ := newTestAPI(t)
 	api.cfg.SkinDomains = []string{".skin.invalid", "skin.invalid", "", ".skin.invalid"}

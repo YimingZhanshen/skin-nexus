@@ -276,19 +276,8 @@ func newUnionStack(ctx context.Context, st *store.Mysql, cfg *config.Config, ver
 			_ = st.SetOption(context.Background(), "union_server_list_version", version)
 			// Legacy skinDomains formula: member hosts feed the texture
 			// whitelist (options-cached like union_server_list).
-			if raw, err := json.Marshal(list); err == nil {
-				var entries []struct {
-					BSRoot string `json:"bs_root"`
-				}
-				if err := json.Unmarshal(raw, &entries); err == nil {
-					hosts := make([]string, 0, len(entries))
-					for _, e := range entries {
-						if pu, err := url.Parse(e.BSRoot); err == nil && pu.Host != "" {
-							hosts = append(hosts, pu.Host)
-						}
-					}
-					_ = st.SetOption(context.Background(), "union_skin_domains", strings.Join(hosts, ","))
-				}
+			if hosts, ok := unionSkinDomains(list); ok {
+				_ = st.SetOption(context.Background(), "union_skin_domains", strings.Join(hosts, ","))
 			}
 		},
 		OnMemberKeyRotated: func(newKey string) {
@@ -389,4 +378,47 @@ func newUnionStack(ctx context.Context, st *store.Mysql, cfg *config.Config, ver
 	u.setEnabled(ctx, enabled)
 	log.Printf("union: stack ready (enabled=%v, hub %s, queryemail %s)", enabled, apiRoot, queryEmail)
 	return u
+}
+
+// unionSkinDomains reads the hub's server list — an opaque any, because that
+// is what the union package hands OnServerList — and returns the texture
+// hosts the member stations contribute to this station's whitelist. Whatever
+// comes out is read back by ygg.skinDomains as ExtraSkinDomains, so every
+// entry is a host every launcher here will trust for textures: only a real
+// http(s) station root may contribute. url.Parse reports a host for
+// "ftp://internal:11211/" just as happily as for a station, and the hub is a
+// third party, so the scheme is checked rather than assumed.
+//
+// The spelling the hub sent is kept, not folded here. The whitelist emitter
+// publishes the lowercase spelling alongside the original (ygg.domainSpellings),
+// so folding at this end would drop the one form a mixed-case member texture
+// URL matches today.
+//
+// ok is false only when the list could not be decoded at all — the caller
+// then leaves the previously stored value alone rather than clearing a
+// working whitelist over a malformed payload. An empty but decodable list
+// returns an empty slice on purpose: every member gone must clear the option.
+func unionSkinDomains(list any) (hosts []string, ok bool) {
+	raw, err := json.Marshal(list)
+	if err != nil {
+		return nil, false
+	}
+	var entries []struct {
+		BSRoot string `json:"bs_root"`
+	}
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		return nil, false
+	}
+	hosts = make([]string, 0, len(entries))
+	for _, e := range entries {
+		u, err := url.Parse(strings.TrimSpace(e.BSRoot))
+		if err != nil || u.Host == "" {
+			continue
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			continue
+		}
+		hosts = append(hosts, u.Host)
+	}
+	return hosts, true
 }
