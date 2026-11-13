@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path"
 	"strings"
@@ -692,7 +692,7 @@ func (rt *runtime) jsLog(call goja.FunctionCall) goja.Value {
 	if rt.logSink != nil {
 		rt.logSink(fmt.Sprintf("plugin %s: %s", rt.info.Name, line))
 	}
-	log.Printf("plugin %s: %s", rt.info.Name, line)
+	slog.Info("plugin", "name", rt.info.Name, "line", line)
 	return goja.Undefined()
 }
 

@@ -15,7 +15,7 @@ package theme
 import (
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -120,33 +120,32 @@ func (r *Registry) Rescan() error {
 			continue
 		}
 		if !idRe.MatchString(e.Name()) {
-			log.Printf("theme: skip %q: id must match %s", e.Name(), idRe)
+			slog.Info("theme: skip: id must match", "name", e.Name(), "id_re", idRe)
 			continue // unknown ids are skipped, never trusted
 		}
 		base := filepath.Join(r.dir, e.Name())
 		raw, err := os.ReadFile(filepath.Join(base, "theme.json"))
 		if err != nil {
-			log.Printf("theme: skip %s: no theme.json (%v)", e.Name(), err)
+			slog.Info("theme: skip: no theme.json", "name", e.Name(), "error", err)
 			continue // packs without a manifest are ignored
 		}
 		var m Manifest
 		if err := json.Unmarshal(raw, &m); err != nil {
-			log.Printf("theme: skip %s: bad theme.json (%v)", e.Name(), err)
+			slog.Info("theme: skip: bad theme.json", "name", e.Name(), "error", err)
 			continue
 		}
 		// manifest id must match the directory name (no aliasing surprises)
 		if m.ID != e.Name() {
-			log.Printf("theme: skip %s: theme.json id %q != directory name", e.Name(), m.ID)
+			slog.Info("theme: skip: theme.json id != directory name", "name", e.Name(), "id", m.ID)
 			continue
 		}
 		// required fields (theme-spec §2): name, version, inject
 		if m.Name == "" || m.Version == "" || (len(m.Inject.CSS) == 0 && len(m.Inject.JS) == 0) {
-			log.Printf("theme: skip %s: name/version/inject are required", e.Name())
+			slog.Info("theme: skip: name/version/inject are required", "name", e.Name())
 			continue
 		}
 		if !satisfiesRequires(m.Requires.SkinNexus, r.hostVer) {
-			log.Printf("theme: skip %s: requires.skin_nexus %q not met by host %s",
-				e.Name(), m.Requires.SkinNexus, r.hostVer)
+			slog.Info("theme: skip: requires.skin_nexus not met by host", "name", e.Name(), "skin_nexus", m.Requires.SkinNexus, "host_ver", r.hostVer)
 			continue
 		}
 		found[m.ID] = &Theme{Manifest: m, BaseDir: base}

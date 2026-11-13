@@ -28,11 +28,7 @@ import (
 
 // pending lists files that still call the standard library logger. It starts
 // as every offender and shrinks to nothing; see the package comment.
-var pending = []string{
-	"internal/plugin/host.go",
-	"internal/plugin/runtime_goja.go",
-	"internal/theme/theme.go",
-}
+var pending = []string{}
 
 // bareLog reports whether n is a call to the standard library's logger
 // (log.Print*, log.Fatal*, log.Panic*). Only a selector on an identifier

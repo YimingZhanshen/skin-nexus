@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -222,7 +222,7 @@ func (m *Manager) PluginSigner(name string) string {
 	return ""
 }
 
-func (m *Manager) logSink(line string) { log.Print(line) }
+func (m *Manager) logSink(line string) { slog.Info(line) }
 
 func (m *Manager) audit(ctx context.Context, action string, detail map[string]any) {
 	if m.cfg.Audit != nil {
@@ -252,7 +252,7 @@ func (m *Manager) Load(dir string) error {
 			continue
 		}
 		if count >= maxPlugins {
-			log.Printf("plugin: ignoring %s (max %d plugins)", e.Name(), maxPlugins)
+			slog.Info("plugin: ignoring plugin (max plugins reached)", "name", e.Name(), "max", maxPlugins)
 			continue
 		}
 		count++
@@ -433,7 +433,7 @@ func (m *Manager) persistMeta(ctx context.Context, inst *instance) {
 		Trust: inst.trust, Signer: inst.signer, Checksum: inst.checksum,
 		State: state, LastError: inst.lastErr, InstalledAt: inst.installedAt, UpdatedAt: inst.updatedAt,
 	}); err != nil {
-		log.Printf("plugin: persist meta %s: %v", inst.info.Name, err)
+		slog.Info("plugin: persist meta", "name", inst.info.Name, "error", err)
 	}
 }
 
