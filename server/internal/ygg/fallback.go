@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -156,7 +157,14 @@ func (f *Fallback) get(ctx context.Context, rawURL string) ([]byte, bool) {
 	if err != nil {
 		return nil, false
 	}
-	if req.URL.Scheme != base.Scheme || req.URL.Host != base.Host {
+	// Scheme and host are case-insensitive (RFC 3986 §3.2.2 / §3.2.1), so a
+	// base typed in one case and a builder-produced URL in the other are the
+	// same origin. Comparing with != would make the guard refuse a case
+	// variant of its own base: the panel reads "fallback on" while every
+	// lookup quietly degrades to a local miss. EqualFold rather than
+	// lowercasing both sides — this is the guard's only comparison and it
+	// must keep seeing the strings as they are.
+	if !strings.EqualFold(req.URL.Scheme, base.Scheme) || !strings.EqualFold(req.URL.Host, base.Host) {
 		return nil, false
 	}
 	req.Header.Set("Accept", "application/json")
