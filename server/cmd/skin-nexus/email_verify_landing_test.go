@@ -38,8 +38,13 @@ func TestEmailVerifyLandingDoesNotConsumeOnLoad(t *testing.T) {
 }
 
 func TestEmailVerifyConfirmIsClickWired(t *testing.T) {
-	src := appVueSource(t)
-	tpl := src[strings.Index(src, "</script>"):]
+	// The verify card owns its markup since W4-1; the assertion is unchanged,
+	// only the file it reads moved with the code it describes.
+	card, err := os.ReadFile(filepath.Join("..", "..", "..", "web", "src", "components", "auth", "VerifyCard.vue"))
+	if err != nil {
+		t.Fatalf("read VerifyCard.vue: %v", err)
+	}
+	tpl := string(card)
 	if !strings.Contains(tpl, `@click="doEmailVerify"`) {
 		t.Error("the ready branch has no button wired to doEmailVerify — removing auto-consume without wiring the click leaves verification unreachable")
 	}

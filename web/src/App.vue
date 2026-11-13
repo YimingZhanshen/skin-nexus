@@ -31,6 +31,11 @@ import { loadPluginUI, navPages, pageByPath, pluginLabel } from './pluginUI.js'
 import { useSiteConfig } from './composables/useSiteConfig.js'
 import { useSession } from './composables/useSession.js'
 import { useGoto } from './composables/useGoto.js'
+import LoginCard from './components/auth/LoginCard.vue'
+import RegisterCard from './components/auth/RegisterCard.vue'
+import ForgotCard from './components/auth/ForgotCard.vue'
+import ResetCard from './components/auth/ResetCard.vue'
+import VerifyCard from './components/auth/VerifyCard.vue'
 import { setLocale } from './i18n.js'
 import { setUnauthorizedHandler } from './session.js'
 
@@ -73,19 +78,11 @@ provide('sessionUser', user)
 const pluginFormData = ref({})
 
 
-// login form
-const identifier = ref('')
-const password = ref('')
-const email = ref('')
-const nickname = ref('')
-const invitationCode = ref('')
-// A1 找回密码: forgot card state + /reset-password?token=… reset card state
-const forgotEmail = ref('')
+// State the SHELL owns because a route or another card writes it: the forgot
+// card's sent-state (the login link clears it), and the reset token the mail
+// brought in on the URL. Every field a card types into lives in that card.
 const forgotSent = ref(false)
 const resetToken = ref('')
-const resetPw1 = ref('')
-const resetPw2 = ref('')
-const resetDone = ref(false)
 // 邮箱验证 (2026-11-02): /email-verify?token=… 由邮件带入。落地只展示按钮、
 // 点击才消费：邮件网关与微信/QQ 内置浏览器会预取链接，进页面即兑换会把
 // 一次性令牌烧在玩家点击之前。
@@ -337,99 +334,6 @@ function onLocaleChange(e) {
   setLocale(e.target.value)
 }
 
-async function doLogin() {
-  authErr.value = ''
-  if (locked.value) return
-  authBusy.value = true
-  try {
-    user.value = await api.login(identifier.value, password.value)
-    // New backends return `permission` on login; fall back to /me only for
-    // older servers (saves one RTT on every login) — and for a blocked
-    // account, which needs the address the screen has to name. login answers
-    // with id/nickname/permission only, so without this the gate's own page
-    // would read "the link is on its way to" and then nothing.
-    if (user.value && (user.value.permission === undefined || user.value.verifyRequired)) {
-      try { user.value = await api.me() } catch { /* keep login payload */ }
-    }
-  } catch (e) {
-    // A lockout answers with the seconds left in the body: without it the
-    // player only learns "too many attempts" and keeps clicking, which is how
-    // a typo turns into being shut out for fifteen minutes.
-    if (e.status === 429 && e.data && e.data.retry_after_seconds > 0) {
-      startWait(Number(e.data.retry_after_seconds))
-    } else {
-      authErr.value = e.message
-    }
-    return
-  } finally { authBusy.value = false }
-  finishAuth()
-}
-
-async function doRegister() {
-  authErr.value = ''
-  if (authBusy.value) return
-  // The verification gate is enforced server-side too (webapi.go), but the
-  // player learns it here, with the field named, rather than from a 400 after
-  // pressing the button.
-  if (verifyGateEnabled.value && !email.value.trim()) {
-    authErr.value = t('auth.emailRequiredErr'); return
-  }
-  // Invite required → fail fast client-side with a clear message instead of
-  // letting the server 400 the whole submission.
-  if (inviteIsRequired.value && !invitationCode.value.trim()) {
-    authErr.value = t('auth.inviteRequiredErr'); return
-  }
-  authBusy.value = true
-  try {
-    user.value = await api.register(email.value, nickname.value, password.value, invitationCode.value.trim(), pluginFormData.value)
-    if (user.value && user.value.permission === undefined) user.value = { ...user.value, permission: 0 }
-    // Same reason as in doLogin: the pending screen quotes the address, and the
-    // signup response does not carry it.
-    if (user.value && user.value.verifyRequired) {
-      try { user.value = await api.me() } catch { /* the screen still renders */ }
-    }
-  } catch (e) { authErr.value = e.message; return } finally { authBusy.value = false }
-  // The server mailed the verification link as it created the account, and the
-  // gate keeps the player off the server until that link is clicked. Dropping
-  // them on the dashboard, where the only trace is a muted 未验证 line on the
-  // profile page, loses the one instruction they need right now — so this
-  // screen carries it, unless another flow owns the landing.
-  // With a zero grace window the account is pending from the first second, and
-  // the blocking screen above already says everything this one would; the
-  // informational landing is for the site that gave the player a window.
-  if (verifyGateEnabled.value && !verifyPending.value && !authWaitingElsewhere()) {
-    verifyMailTo.value = email.value.trim()
-    verifyMailNote.value = ''
-    view.value = 'verify'
-    verifyState.value = 'mailed'
-    return
-  }
-  finishAuth()
-}
-
-// A1 找回密码: forgot always shows the same sent-state (server is
-// enumeration-safe); reset validates the two fields client-side first.
-async function doForgot() {
-  authErr.value = ''
-  if (authBusy.value) return
-  authBusy.value = true
-  try {
-    await api.forgotPassword(forgotEmail.value.trim())
-    forgotSent.value = true
-  } catch (e) { authErr.value = e.message } finally { authBusy.value = false }
-}
-
-async function doReset() {
-  authErr.value = ''
-  if (authBusy.value) return
-  if (resetPw1.value !== resetPw2.value) { authErr.value = t('auth.resetMismatch'); return }
-  authBusy.value = true
-  try {
-    await api.resetPassword(resetToken.value, resetPw1.value)
-    resetDone.value = true
-  } catch (e) { authErr.value = e.message } finally { authBusy.value = false }
-}
-
 // 邮箱验证 (2026-11-02): the link is single-use. Landing only reads the URL;
 // the POST happens on click, because mail gateways and in-app browsers prefetch
 // links and would spend the token before the player arrives. The server never
@@ -451,6 +355,20 @@ async function doEmailVerify() {
     verifyState.value = 'invalid'
   }
 }
+
+// The four sign-in cards share one state (only one is ever on screen), so it
+// is provided as one object instead of four prop chains. This is the fourth
+// frozen injection key; the cards inject it and never reach into this file.
+provide('authState', {
+  user, busy: authBusy, err: authErr, locked, waitText, startWait,
+  finishAuth, authWaitingElsewhere,
+  siteConf, confLoaded, mailEnabled, verifyGateEnabled, emailFieldShown,
+  inviteFieldShown, inviteIsRequired,
+  forgotSent, resetToken,
+  verifyState, verifyMailTo, verifyMailBusy, verifyMailNote, verifyPending,
+  prepareEmailVerify, doEmailVerify, resendVerificationMail,
+  pluginFormData,
+})
 
 // Resend from the gated-signup landing. Same endpoint and same wording as the
 // profile page's button; the server's own rate window answers, and its code
@@ -543,147 +461,12 @@ onMounted(() => {
         <div class="auth-pane">
 
     <!-- LOGIN -->
-    <div v-if="view === 'login'" class="card">
-      <h2>{{ t('auth.loginTitle') }}</h2>
-      <label for="f-identifier">{{ t('auth.identifier') }}</label>
-      <input id="f-identifier" v-model="identifier" autocomplete="username" />
-      <label for="f-password">{{ t('auth.password') }}</label>
-      <input id="f-password" v-model="password" type="password" autocomplete="current-password" @keyup.enter="doLogin" />
-      <!-- The two ways out of a failed sign-in: reset the password by mail, or
-           read why the account cannot get in. Both are reachable logged out. -->
-      <div class="row auth-links" style="margin-top: 8px; justify-content: space-between;">
-        <a href="/help" class="muted" @click.prevent="view = 'help'">{{ t('nav.help') }}</a>
-        <a href="/forgot-password" class="muted" v-if="mailEnabled" @click.prevent="forgotSent = false; view = 'forgot'">{{ t('auth.forgotLink') }}</a>
-      </div>
-      <div class="error" role="alert" v-if="authErr || locked">{{ locked ? waitText() : authErr }}</div>
-      <div class="row" style="margin-top: 16px;">
-        <button :disabled="authBusy || locked" @click="doLogin">{{ authBusy ? t('common.pleaseWait') : t('common.login') }}</button>
-        <button class="secondary" @click="view = 'register'">{{ t('common.register') }}</button>
-      </div>
-      <PluginSlot slot="auth.login.after" />
-    </div>
-
-    <!-- REGISTER -->
-    <div v-else-if="view === 'register'" class="card">
-      <h2>{{ t('auth.registerTitle') }}</h2>
-      <label for="f-nickname">{{ t('auth.nickname') }}</label>
-      <input id="f-nickname" v-model="nickname" />
-      <span class="field-hint">{{ t('auth.nicknameRule') }}</span>
-      <template v-if="emailFieldShown">
-        <label :class="{ required: verifyGateEnabled }" for="f-email">{{ t(verifyGateEnabled ? 'auth.emailRequired' : 'auth.email') }}</label>
-        <input id="f-email" v-model="email" type="email" :required="verifyGateEnabled" />
-        <span v-if="verifyGateEnabled" class="field-hint">{{ t('auth.emailGateHint') }}</span>
-      </template>
-      <label for="f-register-password">{{ t('auth.passwordMin') }}</label>
-      <input id="f-register-password" v-model="password" type="password" @keyup.enter="doRegister" />
-      <template v-if="inviteFieldShown">
-        <label class="required" for="f-invite">{{ t('auth.invitationCodeRequired') }}</label>
-        <input id="f-invite" v-model="invitationCode" @keyup.enter="doRegister" />
-      </template>
-      <PluginFields form="auth.register" v-model="pluginFormData" />
-      <div class="error" role="alert" v-if="authErr">{{ authErr }}</div>
-      <div class="row" style="margin-top: 16px;">
-        <button :disabled="authBusy" @click="doRegister">{{ authBusy ? t('common.pleaseWait') : t('common.register') }}</button>
-        <button class="secondary" @click="view = 'login'">{{ t('auth.toLogin') }}</button>
-      </div>
-      <PluginSlot slot="auth.register.after" />
-    </div>
-
-    <!-- FORGOT PASSWORD (A1 找回密码) -->
-    <div v-else-if="view === 'forgot'" class="card">
-      <h2>{{ t('auth.forgotTitle') }}</h2>
-      <!-- mail unconfigured → the flow is honestly unavailable (direct
-           navigation to /forgot-password lands here too) -->
-      <template v-if="confLoaded && !siteConf.mail_configured">
-        <p class="muted">{{ t('auth.mailDisabled') }}</p>
-        <div class="row" style="margin-top: 16px;">
-          <button class="secondary" @click="view = 'login'">{{ t('auth.toLogin') }}</button>
-        </div>
-      </template>
-      <template v-else-if="!forgotSent">
-        <label for="f-forgot-email">{{ t('auth.forgotEmail') }}</label>
-        <input id="f-forgot-email" v-model="forgotEmail" type="email" autocomplete="email" @keyup.enter="doForgot" />
-        <div class="error" role="alert" v-if="authErr">{{ authErr }}</div>
-        <div class="row" style="margin-top: 16px;">
-          <button :disabled="authBusy" @click="doForgot">{{ authBusy ? t('common.pleaseWait') : t('auth.forgotSubmit') }}</button>
-          <button class="secondary" @click="view = 'login'">{{ t('auth.toLogin') }}</button>
-        </div>
-      </template>
-      <template v-else>
-        <p class="muted">{{ t('auth.forgotSent') }}</p>
-        <div class="row" style="margin-top: 16px;">
-          <button class="secondary" @click="view = 'login'">{{ t('auth.toLogin') }}</button>
-        </div>
-      </template>
-    </div>
-
-    <!-- RESET PASSWORD (A1, /reset-password?token=…) -->
-    <div v-else-if="view === 'reset'" class="card">
-      <h2>{{ t('auth.resetTitle') }}</h2>
-      <template v-if="resetDone">
-        <p class="muted">{{ t('auth.resetDone') }}</p>
-        <div class="row" style="margin-top: 16px;">
-          <button @click="view = 'login'">{{ t('common.login') }}</button>
-        </div>
-      </template>
-      <template v-else-if="resetToken">
-        <label for="f-reset1">{{ t('auth.resetNew') }}</label>
-        <input id="f-reset1" v-model="resetPw1" type="password" autocomplete="new-password" />
-        <label for="f-reset2">{{ t('auth.resetConfirm') }}</label>
-        <input id="f-reset2" v-model="resetPw2" type="password" autocomplete="new-password" @keyup.enter="doReset" />
-        <div class="error" role="alert" v-if="authErr">{{ authErr }}</div>
-        <div class="row" style="margin-top: 16px;">
-          <button :disabled="authBusy" @click="doReset">{{ authBusy ? t('common.pleaseWait') : t('auth.resetSubmit') }}</button>
-          <button class="secondary" @click="view = 'login'">{{ t('auth.toLogin') }}</button>
-        </div>
-      </template>
-      <template v-else>
-        <p class="error" role="alert">{{ t('auth.resetInvalid') }}</p>
-        <div class="row" style="margin-top: 16px;">
-          <button v-if="mailEnabled" @click="forgotSent = false; view = 'forgot'">{{ t('auth.forgotSubmit') }}</button>
-          <button class="secondary" @click="view = 'login'">{{ t('auth.toLogin') }}</button>
-        </div>
-      </template>
-    </div>
-
-    <!-- EMAIL VERIFY (2026-11-02, /email-verify?token=…) -->
-    <div v-else-if="view === 'verify'" class="card">
-      <h2>{{ t('auth.verifyTitle') }}</h2>
-      <p class="muted" v-if="verifyState === 'working'">{{ t('common.loading') }}</p>
-      <template v-else-if="verifyState === 'done'">
-        <p class="success" role="status">{{ t('auth.verifyDone') }}</p>
-        <div class="row" style="margin-top: 16px;">
-          <button @click="view = user ? 'profile' : 'login'">{{ user ? t('nav.userCenter') : t('common.login') }}</button>
-        </div>
-      </template>
-      <template v-else-if="verifyState === 'ready'">
-        <p class="muted">{{ t('auth.verifyConfirmHint') }}</p>
-        <div class="row" style="margin-top: 16px;">
-          <button @click="doEmailVerify">{{ t('auth.verifyConfirm') }}</button>
-          <button class="secondary" @click="view = user ? 'profile' : 'login'">{{ user ? t('nav.userCenter') : t('common.login') }}</button>
-        </div>
-      </template>
-      <!-- Gated signup: the account exists, the link is in the mailbox (or the
-           site cannot mail at all — said plainly, because the gate is closed
-           either way and the player would otherwise guess at a missing email). -->
-      <template v-else-if="verifyState === 'mailed'">
-        <p class="success" role="status" v-if="mailEnabled">{{ t('auth.verifyMailed', { email: verifyMailTo }) }}</p>
-        <p class="error" role="alert" v-else>{{ t('auth.verifyMailedNoMail') }}</p>
-        <p class="muted" role="status" v-if="verifyMailNote">{{ verifyMailNote }}</p>
-        <div class="row" style="margin-top: 16px;">
-          <button class="secondary" v-if="mailEnabled" :disabled="verifyMailBusy" @click="resendVerificationMail">{{ verifyMailBusy ? t('auth.verifySubmitting') : t('auth.verifySubmit') }}</button>
-          <button @click="view = 'profile'">{{ t('nav.userCenter') }}</button>
-        </div>
-      </template>
-      <template v-else>
-        <p class="error" role="alert">{{ t('auth.verifyInvalid') }}</p>
-        <div class="row" style="margin-top: 16px;">
-          <button v-if="user" @click="view = 'profile'">{{ t('auth.verifyBackToProfile') }}</button>
-          <button v-else class="secondary" @click="view = 'login'">{{ t('auth.toLogin') }}</button>
-        </div>
-      </template>
-    </div>
-      </div><!-- /auth-pane -->
+    <LoginCard v-if="view === 'login'" />
+    <RegisterCard v-else-if="view === 'register'" />
+    <ForgotCard v-else-if="view === 'forgot'" />
+    <ResetCard v-else-if="view === 'reset'" />
+    <VerifyCard v-else-if="view === 'verify'" />
+          </div><!-- /auth-pane -->
       </div><!-- /auth-split -->
     </template>
 
