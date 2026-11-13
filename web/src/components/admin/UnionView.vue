@@ -246,7 +246,7 @@ onMounted(load)
       <div class="muted">{{ t('admin.unionDisabled') }}</div>
     </div>
 
-    <UnionBlacklistSection :union-status="unionStatus" />
+    <UnionBlacklistSection :union-status="unionStatus" @error="error = $event" />
 
     <!-- 自助诊断: native <dialog> in the top layer (see openDiagnose) -->
     <dialog

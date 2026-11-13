@@ -10,6 +10,7 @@ import PluginSlot from '../components/plugin/PluginSlot.vue'
 import PluginFields from '../components/plugin/PluginFields.vue'
 import DOMPurify from 'dompurify'
 import SkinPreview from '../components/SkinPreview.vue'
+import TexturesCard from './TexturesCard.vue'
 import { api, uploadTexture } from '../api.js'
 import { detectSkinModel } from '../skinModel.js'
 import { nameFromFile } from '../textureLabel.js'
@@ -196,8 +197,8 @@ async function doUpload() {
     detailTab.value = 'edit'
     clearPreview()
     // 列表按 id 倒序，新材质只在第 1 页：以前传完停在原页码，玩家看不见刚传的，
-    // 于是重复上传。回到第 1 页并描边那一行。
-    texPage.value = 1
+    // 于是重复上传。回到第 1 页并描边那一行——分页与描边都归纹理卡管，
+    // reload 内部会把页码拨回 1。
     await texCard.value?.reload(d.id || 0)
   } catch (e) {
     if (e.data && e.data.textureId) {

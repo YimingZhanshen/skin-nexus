@@ -18,6 +18,10 @@ const { t } = useI18n()
 const props = defineProps({
   unionStatus: { type: Object, default: null },
 })
+// Errors surface in the parent's banner — the same shared spot they showed
+// in before the split, so a failed blacklist call lands where the operator
+// already looks. Empty string clears it, matching the old shared ref.
+const emit = defineEmits(['error'])
 
 // blacklist
 const blRows = ref([])
@@ -36,7 +40,7 @@ const blEmail = ref('')
 const blReason = ref('')
 
 async function loadBlacklist() {
-  error.value = ''
+  emit('error', '')
   try {
     const d = await fetchJSON(`/api/admin/v1/union/blacklist?q=${encodeURIComponent(blQ.value)}&page=${blPage.value}`)
     // hub returns Laravel pagination JSON; tolerate both shaped answers
@@ -47,13 +51,13 @@ async function loadBlacklist() {
     blTotalPages.value = d.last_page || Math.max(1, Math.ceil((blTotal.value || 0) / per))
   } catch (e) {
     blRows.value = []
-    error.value = e.message
+    emit('error', e.message)
   }
 }
 
 async function blAdd() {
   if (!blEmail.value.trim()) return
-  error.value = ''
+  emit('error', '')
   try {
     await fetchJSON('/api/admin/v1/union/blacklist', {
       method: 'POST',
@@ -62,26 +66,26 @@ async function blAdd() {
     blEmail.value = ''
     blReason.value = ''
     await loadBlacklist()
-  } catch (e) { error.value = e.message }
+  } catch (e) { emit('error', e.message) }
 }
 
 async function blRelease(row) {
   if (!(await confirmDialog(t('admin.unionBlReleaseConfirm', { email: row.email || row.id }), { danger: true }))) return
-  error.value = ''
+  emit('error', '')
   try {
     await fetchJSON(`/api/admin/v1/union/blacklist/${encodeURIComponent(row.id)}/invalidate`, { method: 'PUT' })
     await loadBlacklist()
-  } catch (e) { error.value = e.message }
+  } catch (e) { emit('error', e.message) }
 }
 
 async function blDelete(row) {
   if (!(await confirmDialog(t('admin.unionBlDeleteConfirm1', { email: row.email || row.id }), { danger: true }))) return
   if (!(await confirmDialog(t('admin.unionBlDeleteConfirm2'), { danger: true }))) return
-  error.value = ''
+  emit('error', '')
   try {
     await fetchJSON(`/api/admin/v1/union/blacklist/${encodeURIComponent(row.id)}`, { method: 'DELETE' })
     await loadBlacklist()
-  } catch (e) { error.value = e.message }
+  } catch (e) { emit('error', e.message) }
 }
 
 watch(() => props.unionStatus, (v) => { if (v) loadBlacklist() }, { immediate: true })

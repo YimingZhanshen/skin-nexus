@@ -12,6 +12,7 @@ import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { confirmDialog } from '../dialog.js'
 import { guard401 } from '../session.js'
+import { shortHash, textureLabel } from '../textureLabel.js'
 import EmptyState from '../components/EmptyState.vue'
 import Pager from '../components/Pager.vue'
 
@@ -197,7 +198,7 @@ defineExpose({ reload })
     </table>
     </div>
     <EmptyState v-else-if="!pageErr" :text="texQ || texType ? t('dashboard.texNoMatch') : t('dashboard.texturesEmpty')" :hint="t('dashboard.texturesHint')">
-      <button @click="pickFile">{{ t('dashboard.chooseFile') }}</button>
+      <button @click="emit('choose-file')">{{ t('dashboard.chooseFile') }}</button>
     </EmptyState>
     <Pager :page="texPage" :pages="texPages" :total="texTotal" @update:page="goTexPage" />
   </div>
