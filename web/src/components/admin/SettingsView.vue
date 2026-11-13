@@ -7,6 +7,8 @@ import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
 import ThemeMarketSection from './ThemeMarketSection.vue'
+import SeoSection from './SeoSection.vue'
+import OidcClientsCard from './OidcClientsCard.vue'
 
 // t() and nothing else renders these, so the sentences must stay legal message
 // templates: check-locales rule 7 rejects a bare @ or | in settings.*.desc,
@@ -119,35 +121,6 @@ async function clearSetting(s) {
 }
 
 // SEO (phase 3)
-const seo = ref(null)
-const seoError = ref('')
-const seoOk = ref('')
-async function loadSEO() {
-  seoError.value = ''
-  try { seo.value = await fetchJSON('/api/admin/v1/seo') } catch (e) { seoError.value = e.message }
-}
-async function seoOneClick() {
-  seoError.value = ''
-  try { seo.value = await fetchJSON('/api/admin/v1/seo/oneclick', { method: 'POST' }) }
-  catch (e) { seoError.value = e.message }
-}
-async function seoSave() {
-  seoError.value = ''
-  seoOk.value = ''
-  try {
-    await fetchJSON('/api/admin/v1/seo', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(seo.value),
-    })
-    // Saving used to be silent on success: the operator was left staring at the
-    // same fields, unsure whether the click had landed or the page had frozen.
-    seoOk.value = t('common.saved')
-  } catch (e) {
-    // review P2-10: refetch so the UI doesn't keep unsaved values
-    await loadSEO()
-    seoError.value = e.message
-  }
-}
-
 // Appearance + themes
 const appearance = ref(null)
 const appearError = ref('')
@@ -180,59 +153,12 @@ async function appearSave() {
 }
 
 // OIDC clients
-const oidcClients = ref([])
-const oidcError = ref('')
-const newClient = ref({ client_id: '', name: '', redirect_uris: '', public: true })
-const lastSecret = ref('') // shown once after create
-const oidcBusy = ref(false)
-
-async function loadOIDC() {
-  oidcError.value = ''
-  try {
-    const c = await fetchJSON('/api/admin/v1/oidc/clients')
-    oidcClients.value = c.clients || []
-  } catch (e) { oidcError.value = e.message }
-}
-async function createClient() {
-  if (oidcBusy.value) return
-  oidcError.value = ''
-  const body = {
-    client_id: newClient.value.client_id.trim(),
-    name: newClient.value.name.trim() || newClient.value.client_id.trim(),
-    redirect_uris: newClient.value.redirect_uris.split('\n').map(s => s.trim()).filter(Boolean),
-    grant_types: ['authorization_code', 'refresh_token'],
-    public: newClient.value.public,
-  }
-  if (!body.client_id) { oidcError.value = t('admin.oidcIdRequired'); return }
-  oidcBusy.value = true
-  try {
-    const d = await fetchJSON('/api/admin/v1/oidc/clients', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-    })
-    // The secret is handed over once and never stored in a readable form, so a
-    // second submit must not blank what the first one just produced. It is
-    // replaced only by the next successful create — a public client genuinely
-    // has none, so clearing there is the server telling us so.
-    lastSecret.value = d.secret || ''
-    newClient.value = { client_id: '', name: '', redirect_uris: '', public: true }
-    await loadOIDC()
-  } catch (e) { oidcError.value = e.message }
-  finally { oidcBusy.value = false }
-}
-async function deleteClient(id) {
-  if (!(await confirmDialog(t('admin.oidcDeleteConfirm', { id }), { danger: true }))) return
-  oidcError.value = ''
-  try {
-    await fetchJSON(`/api/admin/v1/oidc/clients/${encodeURIComponent(id)}`, { method: 'DELETE' })
-    oidcClients.value = oidcClients.value.filter(c => c.client_id !== id)
-  } catch (e) { oidcError.value = e.message }
-}
 
 async function load() {
+  // SEO and the OIDC clients fetch for themselves on mount — each owns its
+  // own retry banner, so the settings screen does not serialize them.
   await loadSettings()
-  await loadSEO()
   await loadAppearance()
-  await loadOIDC()
 }
 onMounted(load)
 </script>
@@ -277,45 +203,7 @@ onMounted(load)
       </template>
     </div>
 
-    <!-- SEO：加载失败不再静默（卡外横幅 + 重试），卡内横幅只管保存失败 -->
-    <div class="card" v-if="!seo && seoError">
-      <h2>{{ t('admin.seo.title') }}</h2>
-      <div class="error" role="alert">{{ seoError }}</div>
-      <button class="secondary" style="margin-top: 12px;" @click="loadSEO">{{ t('common.retry') }}</button>
-    </div>
-    <div class="card" v-if="seo">
-      <h2>{{ t('admin.seo.title') }}</h2>
-      <div class="row">
-        <button class="secondary" @click="seoOneClick">{{ t('admin.seo.oneClick') }}</button>
-        <button @click="seoSave">{{ t('admin.seo.save') }}</button>
-        <span class="success" role="status" v-if="seoOk">{{ seoOk }}</span>
-      </div>
-      <label for="seo-title">{{ t('admin.seo.siteTitle') }}</label>
-      <input id="seo-title" v-model="seo.title" />
-      <p class="muted">
-        {{ t('admin.seo.titleLength', { n: (seo.title || '').length }) }}
-        {{ t('admin.seo.titleHint') }}
-      </p>
-      <label for="seo-desc">meta description</label>
-      <textarea id="seo-desc" v-model="seo.description" rows="2"></textarea>
-      <label for="seo-keywords">{{ t('admin.seo.keywords') }}</label>
-      <input id="seo-keywords" v-model="seo.keywords" />
-      <label for="seo-og">{{ t('admin.seo.ogImage') }}</label>
-      <input id="seo-og" v-model="seo.og_image" />
-      <label for="seo-canonical">{{ t('admin.seo.canonical') }}</label>
-      <input id="seo-canonical" v-model="seo.canonical" />
-      <div class="row" style="margin-top: 8px;">
-        <label style="display: flex; align-items: center; gap: 4px;">
-          <input type="checkbox" v-model="seo.sitemap" /> {{ t('admin.seo.enableSitemap') }}
-        </label>
-        <label style="display: flex; align-items: center; gap: 4px;">
-          <input type="checkbox" v-model="seo.noindex" /> {{ t('admin.seo.noindex') }}
-        </label>
-      </div>
-      <label style="margin-top: 8px;" for="seo-robots">{{ t('admin.seo.robots') }}</label>
-      <textarea id="seo-robots" v-model="seo.robots" rows="3"></textarea>
-      <div class="error" role="alert" v-if="seoError">{{ seoError }}</div>
-    </div>
+    <SeoSection />
 
     <!-- Appearance: themes + custom CSS/JS（失败卡外可见 + 重试） -->
     <div class="card" v-if="!appearance && appearError">
@@ -360,38 +248,7 @@ onMounted(load)
       <ThemeMarketSection @changed="loadAppearance" />
     </div>
 
-    <!-- OIDC clients -->
-    <div class="card">
-      <h2>{{ t('admin.oidcClientsTitle', { count: oidcClients.length }) }}</h2>
-      <div class="row">
-        <input v-model="newClient.client_id" :placeholder="t('admin.oidcClientId')" style="max-width: 180px;" />
-        <input v-model="newClient.name" :placeholder="t('admin.oidcClientName')" style="max-width: 180px;" />
-        <label style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-          <input type="checkbox" v-model="newClient.public" /> {{ t('admin.oidcPublicCheckbox') }}
-        </label>
-        <button :disabled="oidcBusy" @click="createClient">{{ oidcBusy ? t('admin.oidcCreating') : t('admin.oidcCreate') }}</button>
-      </div>
-      <textarea v-model="newClient.redirect_uris" :placeholder="t('admin.oidcRedirectPlaceholder')" rows="2"
-                style="margin-top: 8px; width: 100%;"></textarea>
-      <div class="success" role="status" v-if="lastSecret" style="margin-top: 8px;">
-        {{ t('admin.oidcSecretOnce') }}<code>{{ lastSecret }}</code>
-      </div>
-      <div class="error" role="alert" v-if="oidcError">{{ oidcError }}</div>
-      <div class="table-scroll" v-if="oidcClients.length" style="margin-top: 12px;">
-      <table>
-        <caption class="sr-only">{{ t('admin.oidcClientsTitle', { count: oidcClients.length }) }}</caption>
-        <tr><th scope="col">{{ t('admin.oidcClientId') }}</th><th scope="col">{{ t('admin.oidcClientName') }}</th><th scope="col">{{ t('admin.oidcClientType') }}</th><th scope="col">{{ t('admin.oidcClientGrants') }}</th><th scope="col">{{ t('admin.oidcClientRedirects') }}</th><th scope="col"></th></tr>
-        <tr v-for="c in oidcClients" :key="c.client_id">
-          <td><code>{{ c.client_id }}</code></td>
-          <td>{{ c.name }}</td>
-          <td><span class="badge">{{ c.public ? t('admin.oidcPublic') : t('admin.oidcConfidential') }}</span></td>
-          <td class="muted" style="font-size: var(--fs-xs);">{{ (c.grant_types || []).join(', ') }}</td>
-          <td class="muted" style="font-size: var(--fs-xs);">{{ (c.redirect_uris || []).join(', ') || '—' }}</td>
-          <td><button class="secondary" @click="deleteClient(c.client_id)">{{ t('admin.oidcDelete') }}</button></td>
-        </tr>
-      </table>
-      </div>
-    </div>
+    <OidcClientsCard />
   </div>
 </template>
 
