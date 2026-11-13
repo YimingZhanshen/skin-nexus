@@ -39,17 +39,26 @@ async function ensureViewer() {
     emit('gl-unavailable')
     return
   }
-  const skinview3d = await import('skinview3d')
-  viewer = new skinview3d.SkinViewer({
-    canvas: canvas.value,
-    width: props.width,
-    height: props.height,
-    zoom: 0.7,
-  })
-  // A spinning preview is the one thing on the page that never stops asking for
-  // the GPU, and 「reduced motion」 is how people opt out of exactly that.
-  viewer.autoRotate = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  viewer.playerModelType = props.modelType === 'slim' ? 'slim' : 'default'
+  try {
+    const skinview3d = await import('skinview3d')
+    viewer = new skinview3d.SkinViewer({
+      canvas: canvas.value,
+      width: props.width,
+      height: props.height,
+      zoom: 0.7,
+    })
+    // A spinning preview is the one thing on the page that never stops asking for
+    // the GPU, and 「reduced motion」 is how people opt out of exactly that.
+    viewer.autoRotate = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    viewer.playerModelType = props.modelType === 'slim' ? 'slim' : 'default'
+  } catch {
+    // The probe can pass while the real context still fails (blocklisted GPU,
+    // exhausted context budget, headless drivers). Fall back exactly like the
+    // no-WebGL branch instead of leaking a raw TypeError from an async call.
+    viewer = null
+    glLost.value = true
+    emit('gl-unavailable')
+  }
 }
 
 async function apply() {
