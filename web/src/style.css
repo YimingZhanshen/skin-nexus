@@ -82,7 +82,7 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
 .app-shell > .container { flex: 1 0 auto; }
 .crumb { font-size: var(--fs-s); color: var(--muted); margin: 0 0 16px; }
 .crumb a { color: var(--jade); }
-.crumb .sep { margin: 0 6px; color: var(--muted); }
+.crumb .sep { margin: 0 8px; color: var(--muted); }
 .site-footer {
   flex: none; margin-top: 32px; padding: 16px 24px 24px;
   border-top: 1px solid var(--line); text-align: center;
@@ -111,7 +111,7 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
 .auth-scene .mtn-far { fill: var(--mtn-far); opacity: .5; }
 .auth-scene .mtn-mid { fill: var(--mtn-mid); opacity: .8; }
 .auth-scene .mtn-near { fill: var(--mtn-near); }
-.locale-sel { width: 110px; }
+.locale-sel { width: 112px; }
 .auth-scene .scene-fog { position: absolute; left: 0; width: 100%; height: 96px;
   background: radial-gradient(50% 100% at 50% 100%, var(--fog), transparent 70%); }
 /* 两层雾是场景的纵深，不是永动机：70s/110s 的循环漂移是「AI 做的页面」最容易被
@@ -224,7 +224,7 @@ label.required { color: var(--cinnabar); }
 .tabs { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 .tab {
   background: transparent; border: 1px solid var(--line); color: var(--muted);
-  padding: 6px 16px; min-height: 36px; border-radius: var(--r-m);
+  padding: 8px 16px; min-height: 36px; border-radius: var(--r-m);
   cursor: pointer; font-size: var(--fs-s); font-weight: 500;
   transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
@@ -317,7 +317,7 @@ tbody tr:hover, table tr:hover { background: var(--hover-wash); }
 .nav-item.active .nav-ico { opacity: 1; }
 /* 未读通知数（大改新增） */
 .nav-badge {
-  margin-left: auto; min-width: 20px; padding: 0 6px; border-radius: 10px;
+  margin-left: auto; min-width: 20px; padding: 0 8px; border-radius: 10px;
   background: var(--cinnabar); color: var(--on-cinnabar);
   font-size: var(--fs-xs); line-height: 20px; text-align: center; font-weight: 600;
 }
