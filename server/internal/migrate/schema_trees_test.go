@@ -323,3 +323,52 @@ func filesIn(t *testing.T, eng dialect.Engine) []string {
 	}
 	return files
 }
+
+// player_admin renames/owner-changes and AdminDeletePlayer all UPDATE
+// ygg_tokens WHERE selected_pid = ?, but no tree ever indexed that column —
+// every rename scanned a table that grows with users x tokens (W0 store
+// scan A3). TestMigrationTreesAreParallel only catches the trees disagreeing
+// with each other; this pins the index itself, so three trees agreeing on
+// nothing also goes red.
+func TestYggTokensSelectedPidIsIndexed(t *testing.T) {
+	for _, eng := range []dialect.Engine{dialect.MySQL, dialect.SQLite, dialect.Postgres} {
+		s := readShape(t, eng)
+		if !s.indexes["idx_ygg_tokens_selected_pid"] {
+			t.Errorf("%s tree has no idx_ygg_tokens_selected_pid — selected_pid updates are table scans", eng)
+		}
+	}
+}
+
+// plugin_kv keys and plugin_docs ids are case-sensitive identifiers on
+// SQLite and PostgreSQL; MySQL's default utf8mb4 collation folds case, so
+// `Count` and `count` were the same PK slot there (the upsert silently
+// overwrote one with the other) and `LIKE 'Co%'` swallowed the other case.
+// The fix is a column collation in the MySQL tree only — this pins the
+// ALTER so nobody drops it while rewording migrations (behavioral pin is
+// the CI-MySQL leg of TestPluginKVAndDocsAreCaseSensitive).
+func TestMySQLPluginKeysAreCaseSensitive(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join(TreeDir(trees, dialect.MySQL), "*.sql"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("mysql tree files: %v", err)
+	}
+	sort.Strings(files)
+	var b strings.Builder
+	for _, f := range files {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		b.Write(raw)
+		b.WriteByte('\n')
+	}
+	// whitespace-normalized so reformatting the migration does not go red
+	flat := strings.Join(strings.Fields(b.String()), " ")
+	for _, want := range []string{
+		"MODIFY k VARCHAR(191) COLLATE utf8mb4_bin",
+		"MODIFY id VARCHAR(191) COLLATE utf8mb4_bin",
+	} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("mysql tree never declares %q — plugin keys fold case on MySQL only", want)
+		}
+	}
+}

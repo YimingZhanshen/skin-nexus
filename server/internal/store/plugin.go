@@ -246,15 +246,33 @@ func (m *Mysql) DeletePluginKV(ctx context.Context, plugin, ns, key string) erro
 	return err
 }
 
+// prefixMatch builds the "starts with" predicate for plugin key/doc listings.
+// MySQL (utf8mb4_bin, migration 0032) and PostgreSQL compare case-sensitively
+// in both `=` and LIKE, but SQLite's LIKE folds ASCII case while its PK does
+// not — so a prefix listing would swallow the other case there. Flipping
+// case_sensitive_like is off the table (every search box depends on the
+// folding), so SQLite gets a length-bounded substring compare instead, which
+// matches the case-sensitive equality and stays inside the (plugin, …) PK
+// slice. An empty prefix lists everything on every engine.
+func (m *Mysql) prefixMatch(col, prefix string) (string, []any) {
+	if m.Engine() == dialect.SQLite && prefix != "" {
+		return "substr(" + col + ", 1, length(?)) = ?", []any{prefix, prefix}
+	}
+	return col + " LIKE " + m.db.Dialect().Concat("?", "'%'") + dialect.LikeEscapeClause(),
+		[]any{dialect.LikePrefix(prefix)}
+}
+
 func (m *Mysql) ListPluginKV(ctx context.Context, plugin, ns, prefix string, limit int) ([]PluginKV, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 100
 	}
+	pred, prefixArgs := m.prefixMatch("k", prefix)
 	rows, err := m.db.QueryContext(ctx,
 		`SELECT ns, k, v, expires_at, updated_at FROM plugin_kv
-		  WHERE plugin=? AND ns=? AND k LIKE `+m.db.Dialect().Concat("?", "'%'")+dialect.LikeEscapeClause()+`
+		  WHERE plugin=? AND ns=? AND `+pred+`
 		    AND (expires_at IS NULL OR expires_at > ?)
-		  ORDER BY k LIMIT ?`, plugin, ns, dialect.LikePrefix(prefix), m.now().UTC(), limit)
+		  ORDER BY k LIMIT ?`,
+		append([]any{plugin, ns}, append(prefixArgs, m.now().UTC(), limit)...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -343,10 +361,12 @@ func (m *Mysql) ListPluginDocs(ctx context.Context, plugin, coll, prefix string,
 	if limit <= 0 || limit > 1000 {
 		limit = 100
 	}
+	pred, prefixArgs := m.prefixMatch("id", prefix)
 	rows, err := m.db.QueryContext(ctx,
 		`SELECT coll, id, doc, created_at, updated_at FROM plugin_docs
-		  WHERE plugin=? AND coll=? AND id LIKE `+m.db.Dialect().Concat("?", "'%'")+dialect.LikeEscapeClause()+`
-		  ORDER BY id LIMIT ?`, plugin, coll, dialect.LikePrefix(prefix), limit)
+		  WHERE plugin=? AND coll=? AND `+pred+`
+		  ORDER BY id LIMIT ?`,
+		append([]any{plugin, coll}, append(prefixArgs, limit)...)...)
 	if err != nil {
 		return nil, err
 	}

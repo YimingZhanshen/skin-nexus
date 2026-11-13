@@ -133,3 +133,55 @@ func jsonEqual(a, b []byte) bool {
 	}
 	return ab.String() == bb.String()
 }
+
+// plugin_kv keys and plugin_docs ids are case-sensitive identifiers: `Count`
+// and `count` are two slots, and a prefix listing must not swallow the other
+// case. SQLite/PG behaved that way all along; MySQL folded case until the
+// 0032 column collation. Locally (SQLite) this is green from the start —
+// the red reading for the fix lives in TestMySQLPluginKeysAreCaseSensitive;
+// this test is the CI-MySQL behavioral pin that would have caught the merge.
+func TestPluginKVAndDocsAreCaseSensitive(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	name := "plugin-case-test"
+	defer m.DeletePluginData(ctx, name)
+
+	if err := m.SetPluginKV(ctx, name, "", "Count", "upper", nil); err != nil {
+		t.Fatalf("set Count: %v", err)
+	}
+	if err := m.SetPluginKV(ctx, name, "", "count", "lower", nil); err != nil {
+		t.Fatalf("set count: %v", err)
+	}
+	if n, err := m.CountPluginKV(ctx, name); err != nil || n != 2 {
+		t.Fatalf("kv rows = %d (err %v), want 2 — case-distinct keys merged", n, err)
+	}
+	v, _, found, err := m.GetPluginKV(ctx, name, "", "Count")
+	if err != nil || !found || v != "upper" {
+		t.Fatalf("Get(Count) = %q found=%v err=%v, want upper", v, found, err)
+	}
+	v, _, found, err = m.GetPluginKV(ctx, name, "", "count")
+	if err != nil || !found || v != "lower" {
+		t.Fatalf("Get(count) = %q found=%v err=%v, want lower", v, found, err)
+	}
+	rows, err := m.ListPluginKV(ctx, name, "", "Cou", 100)
+	if err != nil || len(rows) != 1 || rows[0].Key != "Count" {
+		t.Fatalf("prefix Cou -> %+v err=%v, want only Count", rows, err)
+	}
+
+	if err := m.PutPluginDoc(ctx, name, "c", "Doc", []byte(`{"n":1}`)); err != nil {
+		t.Fatalf("put Doc: %v", err)
+	}
+	if err := m.PutPluginDoc(ctx, name, "c", "doc", []byte(`{"n":2}`)); err != nil {
+		t.Fatalf("put doc: %v", err)
+	}
+	if d, err := m.GetPluginDoc(ctx, name, "c", "Doc"); err != nil || string(d.Doc) != `{"n":1}` {
+		t.Fatalf("Get(Doc) = %s err=%v, want {\"n\":1}", d.Doc, err)
+	}
+	if d, err := m.GetPluginDoc(ctx, name, "c", "doc"); err != nil || string(d.Doc) != `{"n":2}` {
+		t.Fatalf("Get(doc) = %s err=%v, want {\"n\":2}", d.Doc, err)
+	}
+	docs, err := m.ListPluginDocs(ctx, name, "c", "Do", 100)
+	if err != nil || len(docs) != 1 || docs[0].ID != "Doc" {
+		t.Fatalf("prefix Do -> %+v err=%v, want only Doc", docs, err)
+	}
+}
