@@ -29,7 +29,7 @@ function onLocaleChange(e) {
 <template>
   <header class="topbar" :class="{ wide: view === 'admin' }">
     <div class="topbar-inner">
-      <a class="brand" href="/" @click.prevent="goto(user ? 'dashboard' : 'login')"  <!-- brand = home, the URL watch follows --> :title="t('site.tagline')">
+      <a class="brand" href="/" @click.prevent="goto(user ? 'dashboard' : 'login')" :title="t('site.tagline')">
         <span class="brand-n" v-html="brandSvg"></span>
         <span class="brand-name">{{ siteName }}</span>
       </a>
