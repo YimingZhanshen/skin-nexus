@@ -5,7 +5,7 @@ package adminapi
 
 import (
 	"context"
-	"log"
+	"log/slog"
 )
 
 // notify appends one inbox row. Best-effort by design: losing a notification
@@ -16,7 +16,7 @@ func (b *Backend) notify(ctx context.Context, uid int64, kind string, tid int64,
 		return
 	}
 	if err := b.Store.InsertNotification(ctx, uid, kind, tid, ref); err != nil {
-		log.Printf("notify %s uid=%d: %v", kind, uid, err)
+		slog.Info("notify", "kind", kind, "uid", uid, "error", err)
 	}
 }
 

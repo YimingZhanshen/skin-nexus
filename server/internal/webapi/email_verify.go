@@ -19,7 +19,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -89,9 +89,9 @@ func (b *Backend) sendVerificationMail(ctx context.Context, uid int64, address s
 		// The link never left the server, so the credential must not stay
 		// behind: an unread token is still a live one for whoever dumps the DB.
 		if delErr := b.Store.DeleteEmailVerifyToken(ctx, hex.EncodeToString(digest[:])); delErr != nil {
-			log.Printf("email-verification token cleanup uid=%d: %v", uid, delErr)
+			slog.Info("email-verification token cleanup", "uid", uid, "error", delErr)
 		}
-		log.Printf("email-verification mail to %s (uid %d): %v", redact.Email(address), uid, err)
+		slog.Warn("email-verification mail", "to", redact.Email(address), "uid", uid, "error", err)
 		b.Store.InsertAudit(ctx, uid, "email_verify_mail_failed", map[string]any{
 			"to": redact.Email(address), "error": err.Error(),
 		})
@@ -110,7 +110,7 @@ func (b *Backend) sendVerificationMailDetached(uid int64, address string, lang s
 		ctx, cancel := context.WithTimeout(context.Background(), verifyMailTimeout)
 		defer cancel()
 		if err := b.sendVerificationMail(ctx, uid, address, 0, lang); err != nil {
-			log.Printf("register %d: verification mail: %v", uid, err)
+			slog.Info("register: verification mail", "uid", uid, "error", err)
 		}
 	}()
 }

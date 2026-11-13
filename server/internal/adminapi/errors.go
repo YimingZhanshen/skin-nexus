@@ -18,7 +18,7 @@ package adminapi
 //	    shows it, so it stays — but it is named, so a leak cannot hide behind it.
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 
 	"skin-nexus/server/internal/account"
@@ -70,6 +70,6 @@ func writeInternal(r *http.Request, w http.ResponseWriter, err error) {
 // an upstream hub at 502, a disabled module at 503. The error goes to the log;
 // the body says only what a client can act on.
 func writeLogged(r *http.Request, w http.ResponseWriter, status int, code, msg string, err error) {
-	log.Printf("admin %s %s: %v", r.Method, r.URL.Path, err)
+	slog.Warn("admin request failed", "method", r.Method, "path", r.URL.Path, "error", err)
 	writeErrCode(w, status, msg, code)
 }

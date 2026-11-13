@@ -15,7 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -182,7 +182,7 @@ func writePluginFormError(w http.ResponseWriter, err error) {
 	}
 	// Not a field error: the plugin runtime itself failed. Its text is a Go
 	// error for the log, not a sentence for the user.
-	log.Printf("plugin form check failed: %v", err)
+	slog.Warn("plugin form check failed", "error", err)
 	writeErrCode(w, http.StatusBadRequest, "plugin data rejected", i18n.MsgPluginForm)
 }
 
@@ -220,7 +220,7 @@ func (b *Backend) SyncProfileCreate(ctx context.Context, uuid, name string) {
 		if err := b.union.SyncProfileCreate(ctx, uuid, name); err != nil {
 			b.Store.InsertAudit(context.Background(), 0, "union_sync_create_failed",
 				map[string]interface{}{"uuid": uuid, "name": name, "error": err.Error()})
-			log.Printf("union sync create failed uuid=%s name=%s: %v", uuid, name, err)
+			slog.Warn("union sync create failed", "uuid", uuid, "name", name, "error", err)
 		}
 	}()
 }
@@ -236,7 +236,7 @@ func (b *Backend) SyncProfileRename(ctx context.Context, uuid, name string) {
 		if err := b.union.SyncProfileRename(ctx, uuid, name); err != nil {
 			b.Store.InsertAudit(context.Background(), 0, "union_sync_rename_failed",
 				map[string]interface{}{"uuid": uuid, "name": name, "error": err.Error()})
-			log.Printf("union sync rename failed uuid=%s name=%s: %v", uuid, name, err)
+			slog.Warn("union sync rename failed", "uuid", uuid, "name", name, "error", err)
 		}
 	}()
 }
@@ -252,7 +252,7 @@ func (b *Backend) SyncProfileDelete(ctx context.Context, uuid, name string) {
 		if err := b.union.SyncProfileDelete(ctx, uuid); err != nil {
 			b.Store.InsertAudit(context.Background(), 0, "union_sync_delete_failed",
 				map[string]interface{}{"uuid": uuid, "name": name, "error": err.Error()})
-			log.Printf("union sync delete failed uuid=%s name=%s: %v", uuid, name, err)
+			slog.Warn("union sync delete failed", "uuid", uuid, "name", name, "error", err)
 		}
 	}()
 }
@@ -489,7 +489,7 @@ func writeErrExtras(w http.ResponseWriter, status int, msg, code string, extra m
 // error to keep the site debuggable — which is how credentials reach a client.
 func writeLogged(r *http.Request, w http.ResponseWriter, status int, code, msg string, err error) {
 	if err != nil {
-		log.Printf("webapi %s %s: %v (%s)", r.Method, r.URL.Path, err, code)
+		slog.Warn("webapi request failed", "method", r.Method, "path", r.URL.Path, "error", err, "code", code)
 	}
 	writeErrCode(w, status, msg, code)
 }

@@ -14,7 +14,7 @@ package adminapi
 // to" then becomes a phishing question rather than a configuration one.
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -82,7 +82,7 @@ func (b *Backend) handleMailTest(w http.ResponseWriter, r *http.Request) {
 		// The raw transport error names the operator's own host and reason, so
 		// it goes to the log and the audit row; the player-facing dictionary
 		// entry stays generic.
-		log.Printf("admin mail-test uid=%d: %v", uid, err)
+		slog.Info("admin mail-test", "uid", uid, "error", err)
 		b.Store.InsertAudit(ctx, uid, "mail_test_failed", map[string]any{
 			"host": cfg.Host, "error": err.Error(),
 		})

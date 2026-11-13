@@ -32,10 +32,6 @@ var pending = []string{
 	"internal/accesslog/accesslog.go",
 	"internal/account/delete.go",
 	"internal/account/textures.go",
-	"internal/adminapi/errors.go",
-	"internal/adminapi/mailtest.go",
-	"internal/adminapi/notifications_emit.go",
-	"internal/adminapi/usermgmt.go",
 	"internal/config/env.go",
 	"internal/dbx/dbx.go",
 	"internal/outbound/scoped.go",
@@ -43,9 +39,6 @@ var pending = []string{
 	"internal/plugin/runtime_goja.go",
 	"internal/store/access_detail.go",
 	"internal/theme/theme.go",
-	"internal/webapi/email_verify.go",
-	"internal/webapi/password.go",
-	"internal/webapi/webapi.go",
 	"internal/ygg/service.go",
 }
 
