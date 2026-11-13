@@ -21,9 +21,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
+
+	"skin-nexus/server/internal/version"
 )
 
 // Manifest is the theme.json schema (see docs/theme-spec.md).
@@ -157,8 +158,12 @@ func (r *Registry) Rescan() error {
 }
 
 // satisfiesRequires checks the only constraint form the spec defines:
-// ">=x.y" (optional patch). Empty constraint passes; unparseable constraints
-// fail closed so a typo never silently widens compatibility.
+// ">=x.y" (optional patch). Empty constraint passes; anything that cannot be
+// parsed — the constraint, or the host version it is checked against — fails
+// closed, so a typo never silently widens compatibility. Comparison itself
+// lives in internal/version: this gate and the plugin/market gates must
+// order the same string the same way, or a pack accepted here is rejected
+// there.
 func satisfiesRequires(constraint, hostVer string) bool {
 	if constraint == "" {
 		return true
@@ -167,29 +172,15 @@ func satisfiesRequires(constraint, hostVer string) bool {
 	if c == constraint { // unsupported operator
 		return false
 	}
-	return cmpVersion(hostVer, c) >= 0
-}
-
-// cmpVersion compares dotted numeric versions (missing parts count as 0).
-// Non-numeric parts compare as 0, keeping "0.1" == "0.1.0".
-func cmpVersion(a, b string) int {
-	pa, pb := strings.Split(a, "."), strings.Split(b, ".")
-	for i := 0; i < len(pa) || i < len(pb); i++ {
-		na, nb := 0, 0
-		if i < len(pa) {
-			na, _ = strconv.Atoi(strings.TrimSpace(pa[i]))
-		}
-		if i < len(pb) {
-			nb, _ = strconv.Atoi(strings.TrimSpace(pb[i]))
-		}
-		if na != nb {
-			if na < nb {
-				return -1
-			}
-			return 1
-		}
+	host, err := version.Parse(hostVer)
+	if err != nil {
+		return false // a host we cannot order proves nothing
 	}
-	return 0
+	want, err := version.Parse(c)
+	if err != nil {
+		return false // a typo must never widen the gate
+	}
+	return host.Compare(want) >= 0
 }
 
 // List returns manifests sorted by id.

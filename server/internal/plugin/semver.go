@@ -5,54 +5,19 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-)
 
-// versionRe is deliberately narrower than semver 2.0: plugin manifests use
-// plain x.y[.z] versions, and unsupported operator syntax must fail closed
-// rather than silently allowing a plugin meant for a newer host.
-var versionRe = regexp.MustCompile(`^[vV]?(\d+)(?:\.(\d+))?(?:\.(\d+))?$`)
+	"skin-nexus/server/internal/version"
+)
 
 var constraintRe = regexp.MustCompile(`^(>=|<=|>|<|=)?(.+)$`)
 
-type semVersion struct {
-	major, minor, patch int
-}
-
-func parseSemVersion(s string) (semVersion, error) {
-	m := versionRe.FindStringSubmatch(strings.TrimSpace(s))
-	if m == nil {
-		return semVersion{}, fmt.Errorf("invalid version %q", s)
-	}
-	parse := func(v string) int {
-		if v == "" {
-			return 0
-		}
-		n, _ := strconv.Atoi(v)
-		return n
-	}
-	return semVersion{parse(m[1]), parse(m[2]), parse(m[3])}, nil
-}
-
-func (v semVersion) compare(o semVersion) int {
-	switch {
-	case v.major != o.major:
-		if v.major < o.major {
-			return -1
-		}
-		return 1
-	case v.minor != o.minor:
-		if v.minor < o.minor {
-			return -1
-		}
-		return 1
-	case v.patch != o.patch:
-		if v.patch < o.patch {
-			return -1
-		}
-		return 1
-	}
-	return 0
-}
+// semVersion is the shared version type. The grammar (x.y[.z] with an
+// optional v prefix, nothing else) and the ordering live in internal/version
+// so the plugin gate, the market formatter and the theme gate cannot drift
+// apart again — they used to parse the same string three different ways.
+// This alias keeps every call site below unchanged in shape while the rules
+// have exactly one home.
+type semVersion = version.Version
 
 // checkMinServer evaluates a plugin minServer constraint against the host
 // version. It supports the forms used by this repository: >=x.y[.z],
@@ -64,7 +29,7 @@ func checkMinServer(constraint, hostVersion string) (bool, error) {
 	if constraint == "" {
 		return true, nil
 	}
-	host, err := parseSemVersion(hostVersion)
+	host, err := version.Parse(hostVersion)
 	if err != nil {
 		return false, fmt.Errorf("host version: %w", err)
 	}
@@ -83,11 +48,11 @@ func checkMinServer(constraint, hostVersion string) (bool, error) {
 		if op == "" {
 			op = "="
 		}
-		want, err := parseSemVersion(m[2])
+		want, err := version.Parse(m[2])
 		if err != nil {
 			return false, fmt.Errorf("constraint %q: %w", part, err)
 		}
-		c := host.compare(want)
+		c := host.Compare(want)
 		ok := false
 		switch op {
 		case ">=":
@@ -111,8 +76,8 @@ func checkMinServer(constraint, hostVersion string) (bool, error) {
 // satisfiesVersion implements the dependency-constraint subset used by
 // manifests: comparators, ^, ~, *, x wildcards, and ||. Malformed constraints
 // fail closed (error), never "allow everything".
-func satisfiesVersion(version, constraint string) (bool, error) {
-	v, err := parseSemVersion(version)
+func satisfiesVersion(ver, constraint string) (bool, error) {
+	v, err := version.Parse(ver)
 	if err != nil {
 		return false, err
 	}
@@ -170,9 +135,9 @@ func satisfiesToken(v semVersion, tok string) (bool, error) {
 			if err != nil {
 				return false, fmt.Errorf("invalid wildcard %q", tok)
 			}
-			return v.major == base && v.minor == minor, nil
+			return v.Major == base && v.Minor == minor, nil
 		}
-		return v.major == base, nil
+		return v.Major == base, nil
 	}
 	op := ""
 	for _, p := range []string{">=", "<=", ">", "<", "=", "^", "~"} {
@@ -182,11 +147,11 @@ func satisfiesToken(v semVersion, tok string) (bool, error) {
 			break
 		}
 	}
-	want, err := parseSemVersion(tok)
+	want, err := version.Parse(tok)
 	if err != nil {
 		return false, fmt.Errorf("constraint %q: %w", tok, err)
 	}
-	c := v.compare(want)
+	c := v.Compare(want)
 	switch op {
 	case "", "=":
 		return c == 0, nil
@@ -202,18 +167,18 @@ func satisfiesToken(v semVersion, tok string) (bool, error) {
 		if c < 0 {
 			return false, nil
 		}
-		if want.major > 0 {
-			return v.major == want.major, nil
+		if want.Major > 0 {
+			return v.Major == want.Major, nil
 		}
-		if want.minor > 0 {
-			return v.major == 0 && v.minor == want.minor, nil
+		if want.Minor > 0 {
+			return v.Major == 0 && v.Minor == want.Minor, nil
 		}
-		return v.major == 0 && v.minor == 0 && v.patch == want.patch, nil
+		return v.Major == 0 && v.Minor == 0 && v.Patch == want.Patch, nil
 	case "~":
 		if c < 0 {
 			return false, nil
 		}
-		return v.major == want.major && v.minor == want.minor, nil
+		return v.Major == want.Major && v.Minor == want.Minor, nil
 	}
 	return false, fmt.Errorf("unsupported constraint %q", tok)
 }

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"skin-nexus/server/internal/signedpkg"
+	"skin-nexus/server/internal/version"
 )
 
 type Dist struct {
@@ -145,38 +146,10 @@ func VerifyRegistry(raw []byte, ring signedpkg.Keyring, now time.Time) (*Registr
 	return &r, nil
 }
 
+// CompareVersions orders two package versions with the repository's one
+// version predicate (internal/version). A version that cannot be ordered is
+// an error, never a zero: the callers below already treat an error as "no
+// comparison", which is what a malformed registry entry deserves.
 func CompareVersions(a, b string) (int, error) {
-	av, err := parseVersion(a)
-	if err != nil {
-		return 0, err
-	}
-	bv, err := parseVersion(b)
-	if err != nil {
-		return 0, err
-	}
-	for i := range av {
-		if av[i] < bv[i] {
-			return -1, nil
-		}
-		if av[i] > bv[i] {
-			return 1, nil
-		}
-	}
-	return 0, nil
-}
-
-func parseVersion(s string) ([3]int, error) {
-	var out [3]int
-	parts := strings.Split(strings.TrimPrefix(strings.TrimSpace(s), "v"), ".")
-	if len(parts) > 3 || len(parts) == 0 {
-		return out, fmt.Errorf("invalid version %q", s)
-	}
-	for i, p := range parts {
-		var n int
-		if _, err := fmt.Sscanf(p, "%d", &n); err != nil || n < 0 {
-			return out, fmt.Errorf("invalid version %q", s)
-		}
-		out[i] = n
-	}
-	return out, nil
+	return version.CompareStrings(a, b)
 }
