@@ -28,51 +28,47 @@ const ProfilePage = asyncPage(() => import('./pages/ProfilePage.vue'))
 const HelpPage = asyncPage(() => import('./pages/HelpPage.vue'))
 const PluginPage = asyncPage(() => import('./components/plugin/PluginPage.vue'))
 import { loadPluginUI, navPages, pageByPath, pluginLabel } from './pluginUI.js'
+import { useSiteConfig } from './composables/useSiteConfig.js'
+import { useSession } from './composables/useSession.js'
+import { useGoto } from './composables/useGoto.js'
 import { setLocale } from './i18n.js'
 import { setUnauthorizedHandler } from './session.js'
 
 const { t, locale } = useI18n()
+// Site capabilities live in one composable so the auth cards and the shell read
+// the same fetch result; App provides the ref to the tree under `siteConfig`.
+const {
+  siteConf, confLoaded, normalizeFooter,
+  siteFooter, siteName, inviteFieldShown, inviteIsRequired,
+  mailEnabled, verifyGateEnabled, emailFieldShown, unionEnabled,
+} = useSiteConfig()
 
-const user = ref(null)
-// Admin panel entry (blessing parity): only accounts with permission > 0 see
-// it — normal users never do. `permission` comes from GET /api/v1/me
-// (0 = normal, >0 = admin, -1 = banned).
-const isAdmin = computed(() => Number(user.value && user.value.permission) > 0)
+// Session state and the two sign-in guards live with the auth flow; App keeps
+// the refs it renders and provides them to the tree under the frozen keys
+// `sessionUser` and `authState`.
+const {
+  user, isAdmin, authErr, authBusy, locked, lockSecondsLeft, waitText, startWait,
+  verifyPending, pendingBusy, pendingNote, pendingChangeOpen, pendingEmail,
+  verifyMailTo, verifyMailBusy, verifyMailNote,
+  refreshMe, pendingResend, pendingSaveEmail, resendVerificationMail, onInboxRead,
+} = useSession()
+
+// Which view the shell is on, and every transition into another one. The URL
+// half stays below (viewURLs / legacyRoutes / the watches), because the source
+// gates read the address-bar contract out of this file.
+const {
+  view, extPath, pendingExt, pendingView, menuOpen,
+  openExt, finishAuth, authWaitingElsewhere, skinlibLogin, goHome, backToDashboard,
+} = useGoto({ isAdmin, user })
+
+// Frozen injection keys (W4-1): sessionUser, siteConfig, gotoView — and
+// authState, which arrives with the auth-card components. These names are the
+// shell's public API to every page and plugin frame; renaming one is a
+// breaking change for code that lives outside this file, so each is declared
+// here once and never repeated as a literal elsewhere.
 provide('sessionUser', user)
 // login | register | setup | device | dashboard | closet | players |
 // profile | apps | union | admin
-const view = ref('login')
-const extPath = ref('')
-const pendingExt = ref('')
-// mobile topbar drawer (≤640px hamburger)
-const menuOpen = ref(false)
-const authErr = ref('') // login + register cards
-// One in-flight guard for the four auth cards (only one is ever on screen), and
-// the lockout countdown the server's 429 carries. Both exist for the same
-// failure mode: a slow or impatient player double-clicking, which used to fire a
-// second request and then lock the account with no way to see why.
-const authBusy = ref(false)
-// A deadline, not a counter: a backgrounded tab gets its timer throttled to one
-// tick a minute, and a counter would then show a frozen "804 seconds" that has
-// long since expired. Reading the clock each tick stays correct whenever the
-// page does get to run, and switching language re-renders the sentence at once.
-const lockUntil = ref(0)
-const nowTick = ref(Date.now())
-let tickTimer = null
-const locked = computed(() => lockUntil.value > nowTick.value)
-const lockSecondsLeft = computed(() => Math.max(0, Math.ceil((lockUntil.value - nowTick.value) / 1000)))
-function waitText() { return t('auth.lockedSeconds', { n: lockSecondsLeft.value }) }
-function startWait(sec) {
-  const until = Date.now() + sec * 1000
-  if (until <= lockUntil.value) return // never shorten a lock the page already knows
-  lockUntil.value = until
-  nowTick.value = Date.now()
-  if (tickTimer) return
-  tickTimer = setInterval(() => {
-    nowTick.value = Date.now()
-    if (lockUntil.value <= nowTick.value) { clearInterval(tickTimer); tickTimer = null }
-  }, 1000)
-}
 // Host-rendered plugin fields on the register card (ui.forms "auth.register").
 const pluginFormData = ref({})
 
@@ -95,60 +91,22 @@ const resetDone = ref(false)
 // 一次性令牌烧在玩家点击之前。
 const verifyToken = ref('')
 const verifyState = ref('')      // '' | 'ready' | 'working' | 'done' | 'invalid' | 'mailed'
-// 'mailed' is the landing after a gated signup: no token is involved, the
-// server already minted one and tried to mail it. These carry that screen.
-const verifyMailTo = ref('')
-const verifyMailBusy = ref(false)
-const verifyMailNote = ref('')
 // Public site capabilities (GET /api/v1/site-config): the auth forms follow
 // the deployment's real configuration — invite field required-or-absent,
 // email field + forgot flow available-or-hidden. Until the fetch resolves
 // (or if it fails) the pre-config UI stays = today's behavior.
-function defaultFooter() {
-  return { text: '', links: [], siteName: 'SkinNexus', year: new Date().getFullYear() }
-}
-function normalizeFooter(raw) {
-  const f = raw && typeof raw === 'object' ? raw : {}
-  return { ...defaultFooter(), ...f, links: Array.isArray(f.links) ? f.links : [] }
-}
-const siteConf = ref({ site_name: '', invite_required: false, mail_configured: false, verify_gate_enabled: false, union_enabled: false, max_upload_kb: 0, footer: defaultFooter() })
 // Pages read the deployment's real limits off the same boot fetch instead of
 // hardcoding them (the upload form states the byte ceiling it will enforce).
 provide('siteConfig', siteConf)
 // Pages hand the player to another page (an empty closet points at the players
 // page) through the shell, instead of a full reload that drops the boot state.
 provide('gotoView', (v) => { view.value = v })
-const siteFooter = computed(() => normalizeFooter(siteConf.value.footer))
-const siteName = computed(() => siteConf.value.site_name || siteFooter.value.siteName || t('site.name'))
-const confLoaded = ref(false)
 // Boot gate: hide the auth/shell until session + site capabilities settle.
 // Without it a logged-in refresh renders the login card first (the old boot
 // awaited setup→config→pluginUI→me sequentially, so the flash lasted seconds
 // behind a high-latency CDN).
 const booting = ref(true)
 const bootErr = ref('')
-// Invite field is absent unless the server says it is required. The old
-// "show an optional box while config loads" behavior produced a dead
-// "邀请码（选填）" field on sites that never use invitations.
-const inviteFieldShown = computed(() => confLoaded.value && siteConf.value.invite_required)
-const inviteIsRequired = computed(() => confLoaded.value && siteConf.value.invite_required)
-const mailEnabled = computed(() => confLoaded.value && siteConf.value.mail_configured)
-// The join gate is enforced at the server door and needs an address to mail, so
-// with the gate on the email field must appear even when SMTP is not configured
-// yet, and it must be filled: an account without an address can never pass.
-const verifyGateEnabled = computed(() => confLoaded.value && siteConf.value.verify_gate_enabled === true)
-const emailFieldShown = computed(() => mailEnabled.value || verifyGateEnabled.value)
-// The verdict, not the flag. /me, /login and /register all carry
-// `verifyRequired`, so the shell knows before it draws anything whether this
-// session is a member or a guest who happens to hold a cookie. The server is
-// the one refusing; this only decides what the player is shown while that is
-// true — a banner inside a usable panel would read as a suggestion.
-const verifyPending = computed(() => !!(user.value && user.value.verifyRequired === true))
-const pendingBusy = ref(false)
-const pendingNote = ref('')
-const pendingChangeOpen = ref(false)
-const pendingEmail = ref('')
-const unionEnabled = computed(() => confLoaded.value && siteConf.value.union_enabled)
 
 // Sidebar nav (blessing parity: 用户中心/管理 两组). device/apps/union are
 // user-center entries too — kept out of the sidebar to preserve the
@@ -193,16 +151,6 @@ const navGroups = computed(() => {
   return groups
 })
 
-function openExt(path) {
-  const page = pageByPath(path)
-  if (page && page.area === 'admin' && !isAdmin.value) {
-    view.value = 'dashboard'
-    return
-  }
-  extPath.value = path
-  view.value = 'ext'
-  if (location.pathname !== path) history.pushState({ ext: path }, '', path)
-}
 
 // Brand mark: the N plate (favicon.svg same artwork, brand colors) — the
 // topbar/auth-scene signature. Logo colors are brand assets: never retheme.
@@ -214,11 +162,6 @@ const brandSVG = '<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
   + '<path d="M150 372V150h52l108 138V150h52v222h-52L202 234v138z" fill="url(#bn-g)"/>'
   + '</svg>'
 
-function goHome() {
-  // 品牌点击 = 回工作台（URL 由下方 watch 同步为 /user/dashboard，
-  // 不再 replaceState '/' —— 那曾造成地址栏与视图脱节）
-  view.value = user.value ? 'dashboard' : 'login'
-}
 
 // ── URL ↔ 视图双向同步（2026-10-27 逻辑修复：地址栏与视图曾完全脱节，
 //    同一皮肤库两个 URL 并存）──
@@ -297,9 +240,6 @@ const legacyRoutes = {
   '/user/union': 'union',
   '/admin': 'admin',
 }
-// Deep-linked view held for after login (open /user/closet logged-out → login
-// card first, then drop straight into the closet).
-const pendingView = ref('')
 
 function withBootTimeout(promise, ms) {
   return new Promise((resolve, reject) => {
@@ -392,55 +332,10 @@ async function boot() {
   booting.value = false
 }
 
-function backToDashboard() {
-  // restore the site root URL when leaving the device page
-  if (location.pathname === '/device') history.replaceState(null, '', '/')
-  view.value = 'dashboard'
-}
 
 function onLocaleChange(e) {
   setLocale(e.target.value)
 }
-
-// Same-origin ?next target as an absolute href, or '' when absent or foreign.
-// Decided by the browser's own URL parser rather than a hand-written prefix
-// rule: `/\evil.com` starts with one "/" and is not "//", yet resolves to
-// another host. Origin equality also rejects javascript: URIs.
-function sameOriginNext() {
-  const next = new URLSearchParams(location.search).get('next')
-  if (!next) return ''
-  const target = new URL(next, location.origin)
-  return target.origin === location.origin ? target.href : ''
-}
-
-// 登录/注册共同收尾：?next= 回跳（详情页 viewer 401 引导来的）优先整页跳回；
-// 其次设备页流程、launcher 深链恢复；落地即清 pendingView（防"迟到恢复"跳页）。
-function finishAuth() {
-  const href = sameOriginNext()
-  if (href) {
-    pendingView.value = ''
-    location.href = href
-    return
-  }
-  if (location.pathname === '/device') view.value = 'device'
-  else if (pendingExt.value) { const p = pendingExt.value; pendingExt.value = ''; openExt(p) }
-  // A panel deep link survives the login card unchanged in the address bar, so
-  // the URL itself is the resume target — more robust than remembering a view
-  // name, and it keeps the tab/plugin segment AdminPanel is about to read.
-  else if (location.pathname === '/admin' || location.pathname.startsWith('/admin/')) view.value = 'admin'
-  else if (pendingView.value) { view.value = pendingView.value; pendingView.value = '' }
-  else view.value = 'dashboard'
-}
-
-// Is another flow about to take the screen? The gated-signup landing asks this
-// before stepping in, so an OAuth or device hand-off is never hijacked — it
-// reads exactly the conditions finishAuth acts on above.
-function authWaitingElsewhere() {
-  return !!sameOriginNext() || location.pathname === '/device' || !!pendingExt.value || !!pendingView.value
-}
-
-// 皮肤库访客点 ♥ 等需登录操作：登录后回到皮肤库（pendingView 闭环）
-function skinlibLogin() { pendingView.value = 'skinlib'; view.value = 'login' }
 
 async function doLogin() {
   authErr.value = ''
@@ -564,62 +459,6 @@ async function doEmailVerify() {
 // because the verdict is the server's: after a resend, an address change or a
 // successful exchange, the shell has to stop treating the player as blocked
 // without a reload.
-async function refreshMe() {
-  try { user.value = await api.me() } catch { /* the 401 path owns sign-out */ }
-}
-
-async function pendingResend() {
-  if (pendingBusy.value) return
-  pendingBusy.value = true
-  pendingNote.value = ''
-  try {
-    await api.requestEmailVerification()
-    pendingNote.value = t('auth.verifySent')
-  } catch (e) { pendingNote.value = e.message } finally { pendingBusy.value = false }
-  await refreshMe()
-}
-
-async function pendingSaveEmail() {
-  if (pendingBusy.value) return
-  const next = pendingEmail.value.trim()
-  if (!next) { pendingNote.value = t('auth.pendingEmailMissing'); return }
-  pendingBusy.value = true
-  pendingNote.value = ''
-  try {
-    // The nickname rides along unchanged: the route takes both fields, and the
-    // address is the only thing a pending account is allowed to repair.
-    await api.updateProfile(user.value.nickname, next)
-    pendingChangeOpen.value = false
-    pendingEmail.value = ''
-    // Changing the address does not mail anything by itself (the server sends
-    // only when asked), so the client asks right here. The note below is then
-    // what the transport actually reported — not a promise that a link is on
-    // its way.
-    try {
-      await api.requestEmailVerification()
-      pendingNote.value = t('auth.pendingSaved')
-    } catch (e) { pendingNote.value = t('auth.pendingSavedNoSend', { message: e.message }) }
-''
-  } catch (e) { pendingNote.value = e.message } finally { pendingBusy.value = false }
-  await refreshMe()
-}
-
-async function resendVerificationMail() {
-  if (verifyMailBusy.value) return
-  verifyMailBusy.value = true
-  verifyMailNote.value = ''
-  try {
-    await api.requestEmailVerification()
-    verifyMailNote.value = t('auth.verifySent')
-  } catch (e) { verifyMailNote.value = e.message } finally { verifyMailBusy.value = false }
-}
-
-// The inbox clears its badge locally when the page marks rows read; the count
-// is re-fetched on the next boot anyway.
-function onInboxRead() {
-  if (user.value) user.value.unreadNotifications = 0
-}
-
 async function doLogout() {
   try {
     await api.logout()
@@ -634,7 +473,6 @@ onMounted(() => {
   window.addEventListener('popstate', onPopState)
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape') menuOpen.value = false })
 })
-onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
 </script>
 
 <template>

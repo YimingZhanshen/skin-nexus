@@ -119,6 +119,25 @@ func funcBody(src, name string) string {
 			}
 			continue
 		}
+		// Comments are prose, not code: an apostrophe in one ("AdminPanel's
+		// own popstate listener") opens a quote that then swallows everything
+		// below it, so whether the body ever closes used to depend on text two
+		// hundred lines away — a refactor elsewhere turned this extractor red
+		// on a body it never looked at. Skip both comment forms.
+		if c == '/' && j+1 < len(src) && src[j+1] == '/' {
+			for j < len(src) && src[j] != '\n' {
+				j++
+			}
+			continue
+		}
+		if c == '/' && j+1 < len(src) && src[j+1] == '*' {
+			j += 2
+			for j+1 < len(src) && !(src[j] == '*' && src[j+1] == '/') {
+				j++
+			}
+			j++
+			continue
+		}
 		switch c {
 		case '\'', '"', '`':
 			quote = c
