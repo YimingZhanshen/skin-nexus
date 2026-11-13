@@ -48,6 +48,42 @@ type Provider struct {
 	// Audit receives security-relevant events (device approve/deny, token
 	// revocation). Nil = silent (tests); wired to the audit_log in main.
 	Audit func(event string, detail map[string]any)
+
+	// DeviceKnobs, when set (main wires the panel-backed store reader), is
+	// the live source for the device-code lifetime and poll interval. Nil =
+	// the baked boot-time config, which is what tests use.
+	DeviceKnobs func() (lifetime time.Duration, pollSecs int)
+
+	live *liveDevice
+}
+
+// liveDevice is the zitadel OpenIDProvider the device_authorization route is
+// served with: everything delegates to the engine except the device knobs.
+// zitadel bakes op.DeviceAuthorizationConfig into op.Provider at construction
+// and reads it back through this very interface method (createDeviceAuthorization
+// does config := o.DeviceAuthorization()), so overriding it here is what makes
+// a panel save effective with no restart. The same live config feeds BOTH the
+// advertised expires_in / interval and the expiry stored for the code, so the
+// two can never disagree.
+type liveDevice struct {
+	*op.Provider
+	owner *Provider
+	// baked is the engine's construction-time config, captured once in New:
+	// the knobs override only Lifetime/PollInterval and keep the rest of the
+	// shape (UserCode charset, form path) exactly as configured.
+	baked op.DeviceAuthorizationConfig
+}
+
+func (l *liveDevice) DeviceAuthorization() op.DeviceAuthorizationConfig {
+	cfg := l.baked
+	if l.owner == nil || l.owner.DeviceKnobs == nil {
+		return cfg
+	}
+	if life, poll := l.owner.DeviceKnobs(); life > 0 && poll > 0 {
+		cfg.Lifetime = life
+		cfg.PollInterval = time.Duration(poll) * time.Second
+	}
+	return cfg
 }
 
 // auditEvent is a nil-safe fire-and-forget emit.
@@ -101,6 +137,7 @@ func New(backend Backend, profiles ProfileSource, cfg Config) (*Provider, error)
 		return nil, err
 	}
 	p := &Provider{cfg: cfg, storage: storage, engine: engine, backend: backend}
+	p.live = &liveDevice{Provider: engine, owner: p, baked: engine.DeviceAuthorization()}
 	return p, nil
 }
 
@@ -144,7 +181,7 @@ func (p *Provider) Wrap(next http.Handler) http.Handler {
 	mux.Handle("/revoke", p.engine.HttpHandler())
 	mux.Handle("/end_session", p.engine.HttpHandler())
 	mux.Handle("/keys", p.engine.HttpHandler())
-	mux.Handle("/device_authorization", p.engine.HttpHandler())
+	mux.Handle("/device_authorization", http.HandlerFunc(op.DeviceAuthorizationHandler(p.live)))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if handler, pattern := mux.Handler(r); pattern != "" {
 			handler.ServeHTTP(w, r)

@@ -425,6 +425,11 @@ func main() {
 			logx.Fatal("oidc", "error", err)
 		}
 		oidcProvider.SessionResolver = st.SessionUser
+		// Device-code knobs are panel settings, read live per request — a
+		// save takes effect on the next device_authorization without restart.
+		oidcProvider.DeviceKnobs = func() (time.Duration, int) {
+			return st.OIDCDeviceKnobs(context.Background())
+		}
 		oidcProvider.Audit = func(event string, detail map[string]any) {
 			slog.Info("oidc audit", "event", event, "detail", detail)
 			st.InsertAudit(context.Background(), 0, event, detail)
@@ -732,6 +737,8 @@ func main() {
 		"invite_required":        boolStr(cfg.RequireInvite),
 		"require_verification":   boolStr(cfg.RequireVerification),
 		"rate_limit_auth":        strconv.Itoa(cfg.RateLimitAuth),
+		"oidc_device_lifetime":   strconv.Itoa(int(store.DefaultDeviceCodeLifetime / time.Second)),
+		"oidc_device_poll_secs":  strconv.Itoa(store.DefaultDeviceCodePoll),
 		"login_fail_limit":       strconv.Itoa(cfg.LoginFailLimit),
 		"cdn_enabled":            "0",
 		"cdn_headers":            strings.Join(ygg.DefaultCDNHeaders(), ","),

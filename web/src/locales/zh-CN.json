@@ -708,6 +708,7 @@
       "basic": "站点基础",
       "register": "注册与验证",
       "mail": "邮件服务（SMTP）",
+      "oidc": "OIDC 与设备码",
       "security": "安全与限流",
       "ygg": "Yggdrasil 服务",
       "texture": "角色与材质",
@@ -1352,6 +1353,12 @@
     },
     "smtp_from": {
       "desc": "发件人（留空=用 smtp_user；可写 Name <a{'@'}b.c> 形式）"
+    },
+    "oidc_device_lifetime": {
+      "desc": "设备码有效期（秒，默认 600），立即生效"
+    },
+    "oidc_device_poll_secs": {
+      "desc": "启动器轮询设备码的间隔（秒，默认 5），立即生效"
     },
     "rate_limit_auth": {
       "desc": "认证端点每 IP 每 10 分钟请求数上限（0=关闭；重启后生效）"

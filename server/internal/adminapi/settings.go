@@ -82,6 +82,10 @@ var settingsWhitelist = []settingSpec{
 	{"player_name_length_min", false, "texture", false},
 	{"player_name_length_max", false, "texture", false},
 	{"texture_name_regexp", false, "texture", false},
+	// OIDC device-code knobs: read LIVE by the provider (no restart), so the
+	// panel row shows 立即生效 via the restart flag being false.
+	{"oidc_device_lifetime", false, "oidc", false},
+	{"oidc_device_poll_secs", false, "oidc", false},
 	{"union_enabled", false, "union", false}, // Union（blessing yggdrasil-connect 原名；union_enabled 为本项目新增键——老站用插件启停表达，无 option 行。热切换 2026-10-24 拍板）
 	{"union_api_root", false, "union", false},
 	{"union_member_key", false, "union", true},

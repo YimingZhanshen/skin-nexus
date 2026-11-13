@@ -35,7 +35,7 @@ const textKeys = new Set([
 // Panel section grouping: the backend tags every whitelist key with a
 // `group`; this list is the display order (unknown ids fall to the end,
 // keeping the API forward-compatible).
-const GROUP_ORDER = ['basic', 'register', 'mail', 'security', 'ygg', 'texture', 'union']
+const GROUP_ORDER = ['basic', 'register', 'mail', 'security', 'oidc', 'ygg', 'texture', 'union']
 const unionOn = computed(() => String(settings.value.find((s) => s.key === 'union_enabled')?.value || '0') === '1')
 // When Union is off, hide its configuration pages; keep the enable switch
 // under Security so it can be turned back on.

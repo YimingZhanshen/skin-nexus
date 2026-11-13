@@ -708,6 +708,7 @@
       "basic": "Site Basics",
       "register": "Registration & Verification",
       "mail": "Mail Service (SMTP)",
+      "oidc": "OIDC & Device Codes",
       "security": "Security & Rate Limits",
       "ygg": "Yggdrasil Service",
       "texture": "Profiles & Textures",
@@ -1352,6 +1353,12 @@
     },
     "smtp_from": {
       "desc": "Sender address (empty = use smtp_user; accepts the Name <a{'@'}b.c> form)"
+    },
+    "oidc_device_lifetime": {
+      "desc": "Device code lifetime in seconds (default 600), applies immediately"
+    },
+    "oidc_device_poll_secs": {
+      "desc": "Launcher poll interval in seconds (default 5), applies immediately"
     },
     "rate_limit_auth": {
       "desc": "Auth-endpoint requests per IP per 10 minutes (0 = off; applies on restart)"
