@@ -7,6 +7,7 @@ import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { guard401 } from '../session.js'
 import { confirmDialog, promptDialog } from '../dialog.js'
+import { shortHash } from '../textureLabel.js'
 import PluginSlot from '../components/plugin/PluginSlot.vue'
 import Pager from '../components/Pager.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -266,6 +267,7 @@ onMounted(async () => {
             <span v-if="!it.public" class="lock" :title="t('skinlib.privateTip')">{{ t('skinlib.privateBadge') }}</span>
             <a :href="'/skinlib/' + it.tid" class="skin-card-link">{{ it.name || `#${it.tid}` }}</a>
           </div>
+          <code class="hash-plate" :title="it.hash">{{ shortHash(it.hash) }}</code>
           <div class="skin-card-meta">
             <!-- 披风无模型之分，不渲染 Steve/Alex 徽章（cape 空 model 被误判 Steve） -->
             <span v-if="it.type !== 'cape'" class="badge" :class="it.model === 'slim' ? 'alex' : 'steve'">
@@ -346,6 +348,13 @@ onMounted(async () => {
 }
 .skin-card-link { color: inherit; text-decoration: none; }
 .skin-card-link:hover { color: var(--accent); }
+/* 签名铭牌：12 位短哈希，完整值在 title 里（与详情页 meta 同款） */
+.hash-plate {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: var(--fs-xs); color: var(--muted);
+  letter-spacing: .04em; cursor: default;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .skin-card-prev a { display: flex; align-items: center; justify-content: center; height: 100%; }
 /* 私密标记：方块小徽章（原 emoji 锁按中文 UI 规范去图标化） */
 .lock {

@@ -28,6 +28,8 @@ body {
 h1, h2, h3 { line-height: 1.25; font-weight: 600; text-wrap: balance; letter-spacing: -0.01em; }
 h1 { font-size: var(--fs-xl); margin: 0 0 4px; }
 h2 { font-size: var(--fs-l); margin: 0 0 12px; }
+/* 机读串（哈希/ID/令牌）统一走主题等宽栈——UA 默认 monospace 不跟主题包换字体 */
+code, pre { font-family: var(--mono, ui-monospace, monospace); }
 a { color: var(--jade); text-decoration: none; }
 a:hover { color: var(--jade-hi); text-decoration: underline; }
 :focus-visible { outline: 2px solid var(--jade); outline-offset: 2px; }

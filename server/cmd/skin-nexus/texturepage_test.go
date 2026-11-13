@@ -27,6 +27,7 @@ func detailFixture() texDetailData {
 		Likes:         7,
 		Public:        true,
 		UploadAt:      "2026-10-01",
+		Hash:          "a3f9c2d1e4b78a56f0d3c8e1a2b4c6d8e0f1a2b3c4d5e6f708192a3b4c5d6e7f",
 		TextureURL:    "https://skin.example.com/textures/abc",
 		PreviewURL:    "/preview/42",
 		PreviewAbsURL: "https://skin.example.com/preview/42",
@@ -58,6 +59,8 @@ func TestTexDetailTemplateRenders(t *testing.T) {
 		"下载材质 PNG",          // download action
 		"材质 ID",             // meta grid label
 		"#42",               // tid
+		"a3f9c2d1e4b7…",     // 12-char mono nameplate (W6 signature)
+		"材质指纹",              // nameplate label, from the catalog
 		"2026-10-01",        // upload date
 		landingHeadAnchors,  // injection anchors preserved for SEO/theme layers
 		landingBodyAnchor,
@@ -92,6 +95,8 @@ func TestTexDetailTemplateRendersEnglish(t *testing.T) {
 		`<html lang="en">`,
 		"Download the PNG",
 		"Texture ID",
+		"a3f9c2d1e4b7…", // nameplate survives the language switch
+		"Fingerprint",   // ...labeled from the catalog, not zh copy
 		"Skin (Alex slim)",
 		"uploaded by",
 		"Skip to main content",

@@ -35,11 +35,23 @@ import (
 // tmplFuncs resolve catalog copy at render time, so ONE parsed template serves
 // every language. `t` takes (lang, key); `f` also takes positional
 // "name", value pairs for {placeholders}.
+// shortHash is the 12-char nameplate (a3f9… form) drawn by the SPA's
+// textureLabel.js shortHash — one signature across skinlib, detail and
+// the texture list. Empty input stays empty; the template only calls it
+// behind an {{if .Hash}} guard.
+func shortHash(h string) string {
+	if len(h) <= 12 {
+		return h
+	}
+	return h[:12] + "…"
+}
+
 var tmplFuncs = template.FuncMap{
-	"t":      webi18n.T,
-	"f":      webi18n.F,
-	"kind":   kindLabel,
-	"viewer": webi18n.ViewerPayload,
+	"t":         webi18n.T,
+	"f":         webi18n.F,
+	"kind":      kindLabel,
+	"viewer":    webi18n.ViewerPayload,
+	"shortHash": shortHash,
 }
 
 // texDetailData feeds the detail template.
@@ -54,6 +66,7 @@ type texDetailData struct {
 	Likes         int64
 	Liked         bool
 	Public        bool
+	Hash          string // content address; the meta grid shows its 12-char plate
 	UploadAt      string // "2006-01-02"-style display date, "" when unknown
 	TextureURL    string // absolute, for download + JSON-LD
 	ViewerURL     string // absolute, background-normalized sheet for skinview3d
@@ -159,6 +172,9 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
   .meta dt { font-size: var(--fs-xs); color: var(--moon-2); margin: 0 0 2px; }
   .meta dd { margin: 0; font-size: var(--fs-s); font-weight: 600; overflow-wrap: anywhere;
              font-variant-numeric: tabular-nums; }
+  /* 等宽签名铭牌：全站唯一一处把完整哈希藏在 title 里 */
+  .meta .hash-plate { font-family: var(--mono, ui-monospace, monospace);
+             font-size: var(--fs-xs); font-weight: 500; letter-spacing: .04em; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .actions a, .actions button { display: inline-block; padding: 8px 20px; border-radius: var(--r-s);
         font-size: var(--fs-s); font-weight: 600; text-decoration: none; cursor: pointer;
@@ -233,6 +249,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
       <dl class="meta">
         <div><dt>{{t .Lang "detail.metaType"}}</dt><dd>{{if eq .Type "cape"}}{{t .Lang "detail.kindCape"}}{{else if eq .Model "slim"}}{{t .Lang "detail.typeSkinSlim"}}{{else}}{{t .Lang "detail.typeSkinDefault"}}{{end}}</dd></div>
         <div><dt>{{t .Lang "detail.metaId"}}</dt><dd>#{{.TID}}</dd></div>
+        {{if .Hash}}<div><dt>{{t .Lang "detail.metaHash"}}</dt><dd><code class="hash-plate" title="{{.Hash}}">{{shortHash .Hash}}</code></dd></div>{{end}}
         <div><dt>{{t .Lang "detail.metaLikes"}}</dt><dd><span id="like-count">{{.Likes}}</span> {{t .Lang "detail.likesUnit"}}</dd></div>
         {{if .UploadAt}}<div><dt>{{t .Lang "detail.metaUploadAt"}}</dt><dd>{{.UploadAt}}</dd></div>{{end}}
         <div><dt>{{t .Lang "detail.metaVisibility"}}</dt><dd>{{if .Public}}{{t .Lang "detail.visibilityPublic"}}{{else}}{{t .Lang "detail.visibilityPrivate"}}{{end}}</dd></div>
@@ -404,6 +421,7 @@ func texturePageHandler(st *store.Mysql, seoEng *seo.Engine, appearEng *appearan
 			Likes:       row.Likes,
 			Liked:       row.Liked,
 			Public:      row.Public,
+			Hash:        row.Hash,
 			Source:      row.Source,
 			SourceURL:   row.SourceURL,
 			DetailHTML:  template.HTML(texturemd.Render(row.DetailMD)),

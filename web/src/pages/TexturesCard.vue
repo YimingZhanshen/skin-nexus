@@ -186,7 +186,7 @@ defineExpose({ reload })
           <span v-else>{{ tx.model || '—' }}</span>
         </td>
         <td><img :src="tx.previewURL || tx.url" :alt="t('dashboard.colPreview')" :title="tx.type === 'cape' ? t('common.capeFlat') : ''" style="height: 48px; image-rendering: pixelated;" loading="lazy" decoding="async" /></td>
-        <td class="muted">{{ shortHash(tx.hash) }}</td>
+        <td class="muted"><code>{{ shortHash(tx.hash) }}</code></td>
         <td>
           <div class="row" style="gap: 6px; flex-wrap: wrap;">
             <button class="secondary" :disabled="rowBusy.has(tx.id)" v-if="!tx.inCloset" @click="addToCloset(tx)">{{ t('dashboard.closetAdd') }}</button>
