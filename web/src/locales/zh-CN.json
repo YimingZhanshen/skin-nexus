@@ -211,6 +211,7 @@
     "players": "角色管理",
     "profile": "个人资料",
     "notifications": "站内通知",
+    "myReports": "我的举报",
     "adminPanel": "管理面板",
     "apps": "授权管理",
     "union": "联盟绑定",
@@ -519,6 +520,20 @@
         "hidden": "「{name}」已被下架并标记为违规"
       }
     }
+  },
+  "myreports": {
+    "title": "我的举报",
+    "hint": "这里汇总你在素材详情页提交过的举报与处理结果。",
+    "empty": "还没有提交过举报",
+    "colTexture": "材质",
+    "colReason": "原因",
+    "colStatus": "状态",
+    "colSubmitted": "提交时间",
+    "colHandled": "处理时间",
+    "view": "查看",
+    "statusOpen": "待处理",
+    "statusResolved": "已成立",
+    "statusDismissed": "已驳回"
   },
   "apps": {
     "title": "已授权应用（{count}）",

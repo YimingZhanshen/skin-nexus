@@ -18,6 +18,7 @@ export const viewURLs = {
   // saying /user/dashboard while 站内通知 was on screen, so a bookmark or a
   // second-tab open landed somewhere else entirely.
   notifications: '/user/notifications',
+  myreports: '/user/reports',
   apps: '/user/apps',
   union: '/user/union',
   admin: '/admin',
@@ -35,6 +36,7 @@ export const legacyRoutes = {
   '/help': 'help',
   '/user/apps': 'apps',
   '/user/notifications': 'notifications',
+  '/user/reports': 'myreports',
   '/user/union': 'union',
   '/admin': 'admin',
 }

@@ -326,6 +326,7 @@ func (b *Backend) Handler() http.Handler {
 	// /me rather than polling.
 	mux.HandleFunc("GET /api/v1/me/notifications", b.handleNotificationsList)
 	mux.HandleFunc("POST /api/v1/me/notifications/read", b.handleNotificationMarkRead)
+	mux.HandleFunc("GET /api/v1/me/reports", b.handleMyReportsList)
 	// User-center self-service (A 级批次): profile edit / account delete /
 	// avatar / own-player rename+delete — ownership-gated, blessing parity.
 	mux.HandleFunc("PUT /api/v1/me/profile", b.handleProfileUpdate)

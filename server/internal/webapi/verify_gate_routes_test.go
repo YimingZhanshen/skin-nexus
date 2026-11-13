@@ -67,6 +67,7 @@ func TestWebGateExemptionListIsLiveAndDeclared(t *testing.T) {
 		"GET /api/v1/me/closet",
 		"POST /api/v1/me/closet",
 		"GET /api/v1/me/notifications",
+		"GET /api/v1/me/reports",
 		"POST /api/v1/skinlib/{tid}/like",
 		"POST /api/v1/skinlib/{tid}/report",
 		"POST /api/v1/union/bind",

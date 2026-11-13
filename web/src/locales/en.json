@@ -211,6 +211,7 @@
     "players": "Profiles",
     "profile": "Profile",
     "notifications": "Notifications",
+    "myReports": "My reports",
     "adminPanel": "Admin panel",
     "apps": "Authorized apps",
     "union": "Union binding",
@@ -519,6 +520,20 @@
         "hidden": "“{name}” was taken down and marked a violation"
       }
     }
+  },
+  "myreports": {
+    "title": "My reports",
+    "hint": "Reports you filed from a texture page, and how they turned out.",
+    "empty": "You haven't filed any reports yet",
+    "colTexture": "Texture",
+    "colReason": "Reason",
+    "colStatus": "Status",
+    "colSubmitted": "Submitted",
+    "colHandled": "Handled",
+    "view": "View",
+    "statusOpen": "Pending",
+    "statusResolved": "Upheld",
+    "statusDismissed": "Dismissed"
   },
   "apps": {
     "title": "Authorized apps ({count})",

@@ -55,6 +55,8 @@ export const api = {
   notifications: (page, perPage, unread) =>
     req('GET', `/api/v1/me/notifications?page=${Number(page) || 1}&perPage=${Number(perPage) || 20}${unread ? '&unread=1' : ''}`),
   markNotificationsRead: (body) => req('POST', '/api/v1/me/notifications/read', body),
+  myReports: (page, perPage) =>
+    req('GET', `/api/v1/me/reports?page=${Number(page) || 1}&perPage=${Number(perPage) || 20}`),
   closet: (page = 1, pageSize = 50, q = '', type = '') => req('GET',
     `/api/v1/me/closet?page=${Number(page) || 1}&pageSize=${Number(pageSize) || 50}`
     + (q ? `&q=${encodeURIComponent(q)}` : '') + (type ? `&type=${type}` : '')),

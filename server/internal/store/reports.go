@@ -94,13 +94,26 @@ const reportJoinSQL = `
 	  LEFT JOIN users rep ON rep.id = r.reporter_uid`
 
 func (m *Mysql) ListReports(ctx context.Context, opt ReportOpts) ([]ReportRow, int, error) {
-	opt = normalizeReportOpts(opt)
 	where, args := "1=1", []any{}
 	switch opt.Status {
 	case "open", "resolved", "dismissed":
 		where += " AND r.status = ?"
 		args = append(args, opt.Status)
 	}
+	return m.listReports(ctx, where, args, opt)
+}
+
+// ListMyReports returns one player's own reports (the tracking view behind
+// /api/v1/me/reports). The uid scope is the security boundary: this feeds an
+// endpoint any logged-in caller can reach, so a missing filter would leak
+// every report on the site.
+func (m *Mysql) ListMyReports(ctx context.Context, uid int64, opt ReportOpts) ([]ReportRow, int, error) {
+	return m.listReports(ctx, "r.reporter_uid = ?", []any{uid}, opt)
+}
+
+func (m *Mysql) listReports(ctx context.Context, where string, whereArgs []any, opt ReportOpts) ([]ReportRow, int, error) {
+	opt = normalizeReportOpts(opt)
+	args := append([]any{}, whereArgs...)
 	var total int
 	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM texture_reports r WHERE `+where, args...).Scan(&total); err != nil {
 		return nil, 0, err

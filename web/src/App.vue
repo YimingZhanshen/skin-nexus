@@ -18,6 +18,7 @@ const AdminPanel = asyncPage(() => import('./components/AdminPanel.vue'))
 const DevicePage = asyncPage(() => import('./pages/DevicePage.vue'))
 const AuthorizedAppsPage = asyncPage(() => import('./pages/AuthorizedAppsPage.vue'))
 const NotificationsPage = asyncPage(() => import('./pages/NotificationsPage.vue'))
+const MyReportsPage = asyncPage(() => import('./pages/MyReportsPage.vue'))
 const UnionBindPage = asyncPage(() => import('./pages/UnionBindPage.vue'))
 const SetupPage = asyncPage(() => import('./pages/SetupPage.vue'))
 const DashboardPage = asyncPage(() => import('./pages/DashboardPage.vue'))
@@ -123,6 +124,7 @@ const navIcons = {
   union: '<path d="M12 3a9 9 0 1 0 9 9M12 3a9 9 0 0 1 9 9M12 8a4 4 0 1 0 4 4"/>',
   notifications: '<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/>',
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7v.5M12 17h.01"/>',
+  myreports: '<path d="M5 21V4l14 3-3 5 3 5-14 3"/>',
   admin: '<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3zM9.5 12l2 2 3.5-4"/>',
 }
 const navGroups = computed(() => {
@@ -142,6 +144,7 @@ const navGroups = computed(() => {
         id: 'notifications', labelKey: 'nav.notifications', icon: navIcons.notifications,
         badge: Number(user.value.unreadNotifications || 0),
       },
+      { id: 'myreports', labelKey: 'nav.myReports', icon: navIcons.myreports },
       { id: 'apps', labelKey: 'nav.apps', icon: navIcons.apps },
       { id: 'help', labelKey: 'nav.help', icon: navIcons.help },
       ...(unionEnabled.value ? [{ id: 'union', labelKey: 'nav.union', icon: navIcons.union }] : []),
@@ -480,6 +483,7 @@ onMounted(() => {
           <PlayersPage v-else-if="view === 'players'" />
           <ProfilePage v-else-if="view === 'profile'" :mail-enabled="mailEnabled" />
           <NotificationsPage v-else-if="view === 'notifications'" @read="onInboxRead" />
+          <MyReportsPage v-else-if="view === 'myreports'" />
           <AuthorizedAppsPage v-else-if="view === 'apps'" />
           <HelpPage v-else-if="view === 'help'" />
           <UnionBindPage v-else-if="view === 'union'" />
