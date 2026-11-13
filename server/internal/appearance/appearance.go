@@ -18,6 +18,7 @@ import (
 	stdhtml "html"
 	"html/template"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -269,6 +270,36 @@ func sanitizeFooterLinks(in []FooterLink) []FooterLink {
 	return out
 }
 
+// themeColorRE matches the browser-chrome meta the templates and the SPA
+// shell carry; only the content value is rewritten, the tag shape around it
+// is left alone.
+var themeColorRE = regexp.MustCompile(`<meta name="theme-color" content="[^"]*"`)
+
+// themeColor returns the effective --bg for the current settings as a
+// concrete color, or "" when nothing overrides the template default — the
+// caller then keeps the literal, which the cmd-side gate pins to
+// theme-base's --bg. The cascade mirrors injection order: custom CSS wins
+// over the active pack, the pack over theme-base. Values that are not a
+// flat color a browser can paint chrome with (gradients, alpha, var()
+// chains that resolve nowhere) fall through to the next layer instead of
+// being emitted.
+func (e *Engine) themeColor(s Settings) string {
+	var pack map[string]string
+	if s.ActiveTheme != "" {
+		if t, err := e.themes.Get(s.ActiveTheme); err == nil {
+			pack = t.TokenMap()
+		}
+	}
+	// custom CSS is injected after the pack, so its --bg wins when usable
+	if c := theme.RootColor(s.CustomCSS, "--bg", pack); c != "" {
+		return c
+	}
+	if pack != nil {
+		return pack["--bg"]
+	}
+	return ""
+}
+
 // Render fills the injection markers in the SPA index.html.
 //
 // The theme block and custom head block are emitted right before </head> so
@@ -279,6 +310,15 @@ func sanitizeFooterLinks(in []FooterLink) []FooterLink {
 // markers are kept in templates as anchors and are removed on render.
 func (e *Engine) Render(ctx context.Context, indexHTML string) string {
 	s := e.Settings(ctx)
+
+	// theme-color: the browser chrome must match the page background. The
+	// templates carry theme-base's --bg as a literal (the no-override
+	// default, pinned by a cmd-side gate); an active pack or custom CSS
+	// that rewrites the token rewrites the meta here — the one step every
+	// rendered surface (landing, detail, SPA shell) crosses.
+	if bg := e.themeColor(s); bg != "" {
+		indexHTML = themeColorRE.ReplaceAllString(indexHTML, `<meta name="theme-color" content="`+bg+`"`)
+	}
 
 	// theme block
 	var themeHTML string

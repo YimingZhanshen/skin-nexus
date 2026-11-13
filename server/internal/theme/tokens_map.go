@@ -151,3 +151,34 @@ func usableTokenColor(v string) string {
 	}
 	return ""
 }
+
+// RootColor resolves the root custom property name declared in css to a
+// concrete color, consulting base (typically the active theme's TokenMap)
+// for var() targets css does not define itself — css is injected after the
+// pack, so its own declarations win the merge. It returns "" when the
+// property is absent from both sheets or the value does not resolve to a
+// color a browser can echo back as chrome (the same opaque hex/rgb rule
+// TokenMap applies for mail); the caller then keeps whatever default it
+// already had. Only unconditional :root declarations count, so a
+// media-scoped --bg does not leak — the server cannot know the reader's
+// scheme, and a var() reaching only into theme-base.css does not resolve
+// here (at worst the meta keeps a neighbouring dark default).
+func RootColor(css, name string, base map[string]string) string {
+	raw := rootTokenDecls(css)
+	v, ok := raw[name]
+	if !ok {
+		return ""
+	}
+	merged := make(map[string]string, len(base)+len(raw))
+	for k, bv := range base {
+		merged[k] = bv
+	}
+	for k, rv := range raw {
+		merged[k] = rv
+	}
+	resolved, ok := resolveTokenAlias(merged, name, v, 0, map[string]bool{})
+	if !ok {
+		return ""
+	}
+	return usableTokenColor(resolved)
+}

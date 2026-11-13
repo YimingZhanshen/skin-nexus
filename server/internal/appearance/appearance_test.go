@@ -91,6 +91,68 @@ func TestNoThemeNoMarkersLeft(t *testing.T) {
 	}
 }
 
+const themeColorTpl = `<html><head><meta name="theme-color" content="#101825" /></head><body></body></html>`
+
+// writePackCSS drops a stylesheet into the fixture pack. TokenMap reads inject
+// CSS lazily, so the file must exist before the first Render call.
+func writePackCSS(t *testing.T, reg *theme.Registry, css string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(reg.Dir(), "dark", "style.css"), []byte(css), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The browser chrome colour must follow the page background: the templates
+// carry theme-base's dark --bg as a literal, so a light pack (or custom CSS)
+// that redefines --bg has to rewrite the meta — otherwise the chrome
+// contradicts the page (unslop 2026-11-09 #4).
+func TestRenderThemeColorTracksBackground(t *testing.T) {
+	// a light pack rewrites the default
+	reg := testRegistry(t)
+	writePackCSS(t, reg, `:root { --bg: #ffffff; }`)
+	e := NewEngine(&fakeOpts{kv: map[string]string{"active_theme": "dark"}}, reg)
+	if got := e.Render(context.Background(), themeColorTpl); !strings.Contains(got, `content="#ffffff"`) {
+		t.Fatalf("pack --bg did not reach theme-color: %q", got)
+	}
+
+	// no override keeps the template literal (theme-base's default)
+	e = NewEngine(&fakeOpts{}, testRegistry(t))
+	if got := e.Render(context.Background(), themeColorTpl); !strings.Contains(got, `content="#101825"`) {
+		t.Fatalf("literal default lost without an override: %q", got)
+	}
+
+	// custom CSS wins over the pack — it injects after it
+	e = NewEngine(&fakeOpts{kv: map[string]string{
+		"active_theme": "dark",
+		"custom_css":   `:root { --bg: #000000; }`,
+	}}, reg)
+	if got := e.Render(context.Background(), themeColorTpl); !strings.Contains(got, `content="#000000"`) {
+		t.Fatalf("custom CSS --bg did not win over the pack: %q", got)
+	}
+
+	// a var() in custom CSS resolves against the pack's tokens
+	reg2 := testRegistry(t)
+	writePackCSS(t, reg2, `:root { --panel: #abcdef; }`)
+	e = NewEngine(&fakeOpts{kv: map[string]string{
+		"active_theme": "dark",
+		"custom_css":   `:root { --bg: var(--panel); }`,
+	}}, reg2)
+	if got := e.Render(context.Background(), themeColorTpl); !strings.Contains(got, `content="#abcdef"`) {
+		t.Fatalf("custom CSS var() did not resolve against pack tokens: %q", got)
+	}
+
+	// a value that is not a colour never reaches the attribute: the meta keeps
+	// the default even though the same CSS is injected verbatim into <style>
+	// (custom CSS is trusted admin input; the meta must not amplify it).
+	e = NewEngine(&fakeOpts{kv: map[string]string{
+		"custom_css": `:root { --bg: " onload="pwned; }`,
+	}}, testRegistry(t))
+	got := e.Render(context.Background(), themeColorTpl)
+	if !strings.Contains(got, `<meta name="theme-color" content="#101825" />`) {
+		t.Fatalf("meta poisoned by a non-colour --bg: %q", got)
+	}
+}
+
 func TestFooterDataAndHTML(t *testing.T) {
 	e := NewEngine(&fakeOpts{kv: map[string]string{
 		"footer_text":  "© {year} {site_name} · 浙ICP备123号\n第二行",
