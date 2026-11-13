@@ -174,10 +174,14 @@ func TestPluginKVAndDocsAreCaseSensitive(t *testing.T) {
 	if err := m.PutPluginDoc(ctx, name, "c", "doc", []byte(`{"n":2}`)); err != nil {
 		t.Fatalf("put doc: %v", err)
 	}
-	if d, err := m.GetPluginDoc(ctx, name, "c", "Doc"); err != nil || string(d.Doc) != `{"n":1}` {
+	// JSON compared semantically: MySQL's JSON column re-serializes on read
+	// ({"n":1} comes back as {"n": 1}) while SQLite stores the bytes as
+	// written — byte-equality would fail on MySQL for a reason that has
+	// nothing to do with case.
+	if d, err := m.GetPluginDoc(ctx, name, "c", "Doc"); err != nil || !jsonEqual(d.Doc, []byte(`{"n":1}`)) {
 		t.Fatalf("Get(Doc) = %s err=%v, want {\"n\":1}", d.Doc, err)
 	}
-	if d, err := m.GetPluginDoc(ctx, name, "c", "doc"); err != nil || string(d.Doc) != `{"n":2}` {
+	if d, err := m.GetPluginDoc(ctx, name, "c", "doc"); err != nil || !jsonEqual(d.Doc, []byte(`{"n":2}`)) {
 		t.Fatalf("Get(doc) = %s err=%v, want {\"n\":2}", d.Doc, err)
 	}
 	docs, err := m.ListPluginDocs(ctx, name, "c", "Do", 100)
