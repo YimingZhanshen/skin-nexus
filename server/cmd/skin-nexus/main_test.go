@@ -101,7 +101,7 @@ func TestSpaHandlerInjectsEveryHTMLPath(t *testing.T) {
 					{TID: 7, Name: "测试皮", URL: "/preview/7"},
 					{TID: 8, Name: "测试披风", URL: "/textures/abc"},
 				}}
-		}, nil, nil)
+		}, nil, nil, nil)
 
 	for _, path := range []string{"/index.html", "/register", "/skinlib"} {
 		rec := httptest.NewRecorder()
@@ -175,7 +175,7 @@ func TestSpaHandlerServesLandingAtRoot(t *testing.T) {
 					{TID: 7, Name: "测试皮", URL: "/preview/7"},
 					{TID: 8, Name: "测试披风", URL: "/textures/abc"},
 				}}
-		}, nil, nil)
+		}, nil, nil, nil)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))

@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"html/template"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -121,6 +122,59 @@ func TestSkinlibPrerenderFallsBackToTheShell(t *testing.T) {
 	}
 	if _, _, ok := prerenderSkinlib(r.Context(), r, nil, "Rig"); ok {
 		t.Fatal("no lister wired should behave like a failing store")
+	}
+}
+
+type fakeLoginStore struct{ uids map[string]int64 }
+
+func (f fakeLoginStore) SessionUser(_ context.Context, token string) (int64, error) {
+	if id, ok := f.uids[token]; ok {
+		return id, nil
+	}
+	return 0, errors.New("no such session")
+}
+
+// The public list ships in the HTML for crawlers and cold anonymous loads. A
+// signed-in viewer boots the interactive app, so the shell must not also hand
+// them the crawler list first — that swap is the double render. (index.html's
+// "swap is the first paint" only holds when JS beats the first paint; under
+// latency it does not, so the fix is to not render the list for sign-ins.)
+func TestSkinlibPrerenderSkippedForSignedInViewers(t *testing.T) {
+	st := &fakeSkinlib{
+		rows:  []store.SkinlibRow{{TID: 7, Name: "夜行者", Nickname: "steve", Type: "skin"}},
+		total: 1,
+	}
+	logins := fakeLoginStore{uids: map[string]int64{"good": 42}}
+	loggedIn := func(r *http.Request) bool {
+		_, ok := sessionUserID(logins, r)
+		return ok
+	}
+	h := spaFixture(t, st, loggedIn)
+
+	// Anonymous (or a crawler): the list is in the HTML.
+	anon := httptest.NewRequest(http.MethodGet, "/skinlib", nil)
+	recAnon := httptest.NewRecorder()
+	h.ServeHTTP(recAnon, anon)
+	if !strings.Contains(recAnon.Body.String(), `class="ssr-list"`) {
+		t.Fatalf("anonymous /skinlib lost the prerendered list:\n%s", recAnon.Body.String())
+	}
+
+	// Signed-in: the shell keeps the boot spinner; the SPA renders the library.
+	reqIn := httptest.NewRequest(http.MethodGet, "/skinlib", nil)
+	reqIn.AddCookie(&http.Cookie{Name: skinSessionCookie, Value: "good"})
+	recIn := httptest.NewRecorder()
+	h.ServeHTTP(recIn, reqIn)
+	if strings.Contains(recIn.Body.String(), `class="ssr-list"`) {
+		t.Fatalf("a signed-in viewer was still shipped the crawler list (the double render):\n%s", recIn.Body.String())
+	}
+
+	// A stale/unknown session cookie is anonymous, not a half-signed-in ghost.
+	reqBad := httptest.NewRequest(http.MethodGet, "/skinlib", nil)
+	reqBad.AddCookie(&http.Cookie{Name: skinSessionCookie, Value: "expired"})
+	recBad := httptest.NewRecorder()
+	h.ServeHTTP(recBad, reqBad)
+	if !strings.Contains(recBad.Body.String(), `class="ssr-list"`) {
+		t.Fatalf("a stale session cookie wrongly suppressed the crawler list:\n%s", recBad.Body.String())
 	}
 }
 

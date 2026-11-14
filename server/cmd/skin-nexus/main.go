@@ -1048,7 +1048,13 @@ func main() {
 		d.Featured = stats.Featured
 		return d
 	}
-	spa := spaHandler(spaDistDir, seoEng, appearEng, cfg.SiteName, landingFn, st, pluginHost.HasUIPath)
+	// A signed-in viewer boots the interactive app, so the shell must not also
+	// ship them the crawler's public list (that swap is the double render).
+	loggedInFn := func(r *http.Request) bool {
+		_, ok := sessionUserID(st, r)
+		return ok
+	}
+	spa := spaHandler(spaDistDir, seoEng, appearEng, cfg.SiteName, landingFn, loggedInFn, st, pluginHost.HasUIPath)
 	if oidcProvider != nil {
 		spa = oidcProvider.Wrap(spa)
 	}
@@ -1258,7 +1264,7 @@ func isKnownSPAPath(p string, uiPath func(string) bool) bool {
 	return strings.HasPrefix(p, "user/")
 }
 
-func spaHandler(dir string, seoEng *seo.Engine, appearEng *appearance.Engine, siteName string, landing func(*http.Request) landingData, skinlib skinlibLister, uiPath func(string) bool) http.Handler {
+func spaHandler(dir string, seoEng *seo.Engine, appearEng *appearance.Engine, siteName string, landing func(*http.Request) landingData, loggedIn func(*http.Request) bool, skinlib skinlibLister, uiPath func(string) bool) http.Handler {
 	if st, err := os.Stat(dir); err == nil && st.IsDir() {
 		fs := http.FileServer(http.Dir(dir))
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1307,9 +1313,17 @@ func spaHandler(dir string, seoEng *seo.Engine, appearEng *appearance.Engine, si
 				// Bing says critical content must not live behind client-side
 				// rendering, and AI crawlers do not run JavaScript at all.
 				if strings.TrimRight(p, "/") == "skinlib" {
-					if block, pm, ok := prerenderSkinlib(r.Context(), r, skinlib, siteName); ok {
-						html = injectAppContent(html, block)
-						meta = pm
+					// The list is for crawlers and cold anonymous loads. A signed-in
+					// viewer boots the interactive app, so the shell must not also
+					// ship them the crawler list first — that swap is the double
+					// render (index.html's "swap is the first paint" only holds when
+					// JS beats the first paint; under latency it does not).
+					signedIn := loggedIn != nil && loggedIn(r)
+					if !signedIn {
+						if block, pm, ok := prerenderSkinlib(r.Context(), r, skinlib, siteName); ok {
+							html = injectAppContent(html, block)
+							meta = pm
+						}
 					}
 				}
 				html = seoEng.RenderHeadWith(r.Context(), html, meta)

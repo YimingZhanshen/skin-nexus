@@ -85,6 +85,24 @@ func sessionViewer(st previewAuthStore, r *http.Request) (int64, bool) {
 	return uid, false
 }
 
+// sessionUserID resolves the request's session cookie to a signed-in uid, ok
+// false for anonymous or stale cookies. It stops short of the staff lookup
+// sessionViewer adds: enough to know a viewer will boot the interactive app,
+// which is all the skin-library prerender gate needs.
+func sessionUserID(st interface {
+	SessionUser(ctx context.Context, token string) (int64, error)
+}, r *http.Request) (int64, bool) {
+	c, err := r.Cookie(skinSessionCookie)
+	if err != nil {
+		return 0, false
+	}
+	uid, err := st.SessionUser(r.Context(), c.Value)
+	if err != nil || uid == 0 {
+		return 0, false
+	}
+	return uid, true
+}
+
 // privatePreviewAllowed mirrors the skinlib detail page visibility rule:
 // the owner or an admin (permission > 0) may see a private texture.
 func privatePreviewAllowed(st previewAuthStore, r *http.Request, tid int64) bool {

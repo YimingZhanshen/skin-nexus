@@ -168,7 +168,7 @@ func TestPersistLangCookieContract(t *testing.T) {
 
 // spaFixture builds the SPA shell handler the way main_test.go does, so the
 // assertions below run through the real route assembly, not around it.
-func spaFixture(t *testing.T, skinlib skinlibLister) http.Handler {
+func spaFixture(t *testing.T, skinlib skinlibLister, loggedIn func(*http.Request) bool) http.Handler {
 	t.Helper()
 	dir := t.TempDir()
 	tpl := `<!DOCTYPE html><html lang="zh-CN"><head><!--skin-seo--><!--skin-theme--><!--skin-custom-head--></head>` +
@@ -187,11 +187,11 @@ func spaFixture(t *testing.T, skinlib skinlibLister) http.Handler {
 		"Rig",
 		func(r *http.Request) landingData {
 			return landingData{Lang: webi18n.ResolveLang(r), SiteName: "Rig", Users: 1, Players: 2, Textures: 3}
-		}, skinlib, nil)
+		}, loggedIn, skinlib, nil)
 }
 
 func TestLandingShipsSwitchAndPersistsExplicitHl(t *testing.T) {
-	h := spaFixture(t, nil)
+	h := spaFixture(t, nil, nil)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/?hl=en", nil))
