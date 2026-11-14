@@ -53,7 +53,7 @@
   "landing.statPlayers": "游戏角色",
   "landing.statTextures": "皮肤材质",
   "landing.statUsers": "注册用户",
-  "landing.tag": "Minecraft 皮肤站，支持 Yggdrasil 外置登录",
+  "landing.tag": "自托管的 Minecraft 皮肤站——账号、纹理与签名密钥都在站长自己的机器上",
   "lib.by": "上传者 {name}",
   "lib.count": "公开材质 {n} 个",
   "lib.description": "在 {site} 浏览 {n} 个公开 Minecraft 皮肤与披风：可按最新或最多收藏排序，预览图由服务端渲染，每个材质都有独立详情页。",

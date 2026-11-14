@@ -135,7 +135,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
   .topbar .brand span { font-family: var(--font-serif); font-size: var(--fs-l); font-weight: 600; letter-spacing: .06em;
                         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .topnav { display: flex; align-items: center; gap: 4px; flex: none; }
-  .topnav a { padding: 6px 10px; border-radius: var(--r-s); color: var(--jade); font-size: var(--fs-s); }
+  .topnav a { padding: 4px 8px; border-radius: var(--r-s); color: var(--jade); font-size: var(--fs-s); }
   .topnav a:hover { background: var(--hover-wash); color: var(--jade-hi); text-decoration: none; }
   .topnav a.primary { background: var(--cinnabar); color: var(--on-cinnabar); font-weight: 600; }
   .topnav a.primary:hover { background: var(--cinnabar-hi); color: var(--on-cinnabar); }
@@ -144,7 +144,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
   .langsw a:hover { color: var(--text); text-decoration: underline; }
   .langsw a[aria-current="true"] { color: var(--text); font-weight: 600; text-decoration: none; }
   /* 与 SPA 侧栏的 .nav-badge 同一形态（同宽同高同字号），SSR 与面板不再各写一套 */
-  .unread-badge { display: inline-block; min-width: 20px; margin-left: 6px; padding: 0 6px; border-radius: 10px; background: var(--cinnabar); color: var(--on-cinnabar); font-size: var(--fs-xs); line-height: 20px; text-align: center; font-weight: 600; }
+  .unread-badge { display: inline-block; min-width: 20px; margin-left: 8px; padding: 0 8px; border-radius: 10px; background: var(--cinnabar); color: var(--on-cinnabar); font-size: var(--fs-xs); line-height: 20px; text-align: center; font-weight: 600; }
   .wrap { flex: 1 0 auto; width: 100%; max-width: 940px; margin: 0 auto; padding: 32px 24px 56px; }
   .crumb { font-size: var(--fs-s); color: var(--muted); margin: 0 0 16px; }
   .crumb .sep { color: var(--muted); }
@@ -163,12 +163,12 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
   .meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
           gap: 12px; margin: 0 0 24px; }
   .meta div { position: relative; background: var(--ink-3); border: 1px solid var(--line);
-              border-radius: var(--r-m); padding: 10px 12px; }
+              border-radius: var(--r-m); padding: 12px; }
   /* 赭石回纹角饰（与落地页统计卡同款小音量） */
   .meta div::before, .meta div::after { content: ""; position: absolute; width: 8px; height: 8px;
               border: 1.5px solid var(--gold); opacity: .55; }
-  .meta div::before { top: 5px; left: 5px; border-right: none; border-bottom: none; }
-  .meta div::after { bottom: 5px; right: 5px; border-left: none; border-top: none; }
+  .meta div::before { top: 4px; left: 4px; border-right: none; border-bottom: none; }
+  .meta div::after { bottom: 4px; right: 4px; border-left: none; border-top: none; }
   .meta dt { font-size: var(--fs-xs); color: var(--moon-2); margin: 0 0 2px; }
   .meta dd { margin: 0; font-size: var(--fs-s); font-weight: 600; overflow-wrap: anywhere;
              font-variant-numeric: tabular-nums; }
@@ -204,7 +204,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
   .source-line a { color: var(--jade); }
   .report-dialog { border: 1px solid var(--border); border-radius: var(--r-m); background: var(--panel);
     color: var(--text); max-width: 420px; width: calc(100% - 32px); padding: 20px; }
-  .report-dialog label { display: block; margin: 10px 0; font-size: var(--fs-s); }
+  .report-dialog label { display: block; margin: 8px 0; font-size: var(--fs-s); }
   .report-dialog select, .report-dialog textarea { width: 100%; margin-top: 4px; }
   .report-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
   .report-error { color: var(--danger-ink, var(--danger)); font-size: var(--fs-s); }
@@ -212,10 +212,9 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
   @media (max-width: 560px) {
     .topbar-inner { padding: 0 16px; }
     .topbar .brand span { display: none; }
-    .topnav a { padding: 5px 8px; }
     .wrap { padding: 20px 16px 40px; }
     .card { padding: 20px; }
-    h1 { font-size: 23px; }
+    h1 { font-size: 24px; }
     .viewer { min-height: 240px; }
   }
 </style>

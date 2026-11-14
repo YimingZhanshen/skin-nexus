@@ -53,7 +53,7 @@
   "landing.statPlayers": "Game profiles",
   "landing.statTextures": "Textures",
   "landing.statUsers": "Registered users",
-  "landing.tag": "A Minecraft skin site with Yggdrasil external login",
+  "landing.tag": "A self-hosted Minecraft skin site — accounts, textures and signing keys stay on the operator's own machine",
   "lib.by": "by {name}",
   "lib.count": "{n} public textures",
   "lib.description": "Browse {n} public Minecraft skins and capes on {site}, sorted by newest or most liked, with server-rendered previews and per-skin detail pages.",

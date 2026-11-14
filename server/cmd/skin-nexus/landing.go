@@ -107,7 +107,7 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
          font-size: var(--fs-m); line-height: 1.7; -webkit-font-smoothing: antialiased; line-break: strict;
          background: var(--ink); color: var(--moon); }
   /* 远山云雾：全页唯一景（fixed 垫在内容层后，静谧不抢内容） */
-  .scene { position: fixed; inset: auto 0 0 0; height: 44vh; min-height: 250px;
+  .scene { position: fixed; inset: auto 0 0 0; height: 44vh; min-height: 248px;
            pointer-events: none; z-index: 0; overflow: hidden; }
   .scene-mountains { position: absolute; inset: auto 0 0 0; width: 100%; height: 100%; display: block; }
   /* 三层山色与雾底走令牌，不在 SVG 属性里抄十六进制（var() 在 fill= 这类呈现属性里
@@ -129,14 +129,15 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
   .hero h1 { margin: 0 0 12px; font-family: var(--font-serif); font-size: 48px; font-weight: 600;
              letter-spacing: .06em; line-height: 1.25; }
   .hero .tag { color: var(--moon-2); font-size: var(--fs-m); margin: 0 0 28px; }
-  .cta a { display: inline-block; margin: 0 8px; padding: 12px 28px; border-radius: var(--r-s);
+  .cta a { display: inline-block; margin: 0 8px; padding: 12px 8px; border-radius: var(--r-s);
            font-size: var(--fs-m); text-decoration: none; font-weight: 600;
-           transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); }
-  .cta .primary { background: var(--cinnabar); color: var(--on-cinnabar); }
+           transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease); }
+  .cta .primary { background: var(--cinnabar); color: var(--on-cinnabar); padding: 12px 28px; }
   .cta .primary:hover { background: var(--cinnabar-hi); }
-  .cta .alt { border: 1px solid var(--line); color: var(--moon); }
-  .cta .alt:hover { background: var(--ink-2); border-color: var(--ochre); }
-  .unread-badge { display: inline-block; min-width: 20px; margin-left: 6px; padding: 0 6px; border-radius: 10px;
+  /* 次动作收成静默文字链（一主一静默，不再两个同级描边按钮） */
+  .cta .alt { color: var(--jade); }
+  .cta .alt:hover { color: var(--jade-hi); background: transparent; text-decoration: underline; }
+  .unread-badge { display: inline-block; min-width: 20px; margin-left: 8px; padding: 0 8px; border-radius: 10px;
                   background: var(--ink-3); border: 1px solid var(--cinnabar); color: var(--cinnabar);
                   font-size: var(--fs-xs); line-height: 20px; text-align: center; font-weight: 600; }
   .cta a:focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
@@ -149,16 +150,16 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
   .stats div { position: relative; flex: 1; text-align: center; padding: 24px 12px; border-radius: var(--r-l);
                background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
                font-variant-numeric: tabular-nums; }
-  .stats div::before, .stats div::after { content: ""; position: absolute; width: 10px; height: 10px;
+  .stats div::before, .stats div::after { content: ""; position: absolute; width: 8px; height: 8px;
                border: 1.5px solid var(--ochre); opacity: .6; }
-  .stats div::before { top: 6px; left: 6px; border-right: none; border-bottom: none; }
-  .stats div::after { bottom: 6px; right: 6px; border-left: none; border-top: none; }
+  .stats div::before { top: 4px; left: 4px; border-right: none; border-bottom: none; }
+  .stats div::after { bottom: 4px; right: 4px; border-left: none; border-top: none; }
   .stats b { display: block; font-size: var(--fs-2xl); color: var(--ochre); font-weight: 600; }
   .stats span { font-size: var(--fs-s); color: var(--moon-2); }
   /* 祥云分隔：一枝纹样 repeat-x */
-  .divider { height: 26px; margin: 4px 0 0; opacity: .55; background-repeat: repeat-x;
-             background-position: center; background-size: auto 26px;
-             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='132' height='26' viewBox='0 0 132 26'%3E%3Cpath d='M8 19c0-5 4-8 8-7 1-6 10-8 13-2 5-2 10 1 9 6 4 0 7 1 9 3' fill='none' stroke='%23c9a06a' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M60 19c7 0 10-6 16-6 7 0 9 6 16 6 6 0 9-4 14-4' fill='none' stroke='%23c9a06a' stroke-width='1.2' opacity='.65'/%3E%3C/svg%3E"); }
+  .divider { height: 24px; margin: 4px 0 0; opacity: .55; background-repeat: repeat-x;
+             background-position: center; background-size: auto 24px;
+             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='132' height='24' viewBox='0 0 132 24'%3E%3Cpath d='M8 19c0-5 4-8 8-7 1-6 10-8 13-2 5-2 10 1 9 6 4 0 7 1 9 3' fill='none' stroke='%23c9a06a' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M60 19c7 0 10-6 16-6 7 0 9 6 16 6 6 0 9-4 14-4' fill='none' stroke='%23c9a06a' stroke-width='1.2' opacity='.65'/%3E%3C/svg%3E"); }
   /* 皮肤库入口：次级按钮（与 CTA 描边款同语言，赭石线 + 金边 hover） */
   .more { text-align: center; margin: 20px 0 0; }
   .more a { display: inline-block; padding: 8px 24px; border-radius: var(--r-s);
@@ -192,7 +193,7 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
   .site-footer-credit { margin: 0; }
   /* 品牌标识入场编舞：1600ms 共此时钟，offset 为关键帧内百分比；
      keyframe 缓动一律字面值（var() 在 @keyframes 内会被 Chromium 静默丢弃）。 */
-  .brandmark { width: 112px; height: 112px; margin: 0 auto 18px; }
+  .brandmark { width: 112px; height: 112px; margin: 0 auto 16px; }
   .brandmark svg { width: 100%; height: 100%; display: block; }
   #p2m-stage, #p2m-plate, #p2m-wipe, #p2m-node-1, #p2m-node-2, #p2m-node-3 { transform-box: fill-box; }
   #p2m-stage, #p2m-plate, #p2m-node-1, #p2m-node-2, #p2m-node-3 { transform-origin: center; }
@@ -259,7 +260,7 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
     .hero h1 { font-size: 32px; }
     .stats { flex-wrap: wrap; gap: 8px; margin: 24px 0; }
     .stats div { min-width: calc(50% - 4px); padding: 16px 8px; }
-    .brandmark { width: 88px; height: 88px; margin-bottom: 14px; }
+    .brandmark { width: 88px; height: 88px; margin-bottom: 12px; }
   }
 </style>
 </head>
@@ -328,6 +329,17 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
       </div>
       {{.LangSwitch}}
     </header>
+    {{if .Featured}}
+    <section class="feat">
+      <h2>{{t .Lang "landing.featured"}}</h2>
+      <div class="grid">
+        {{range .Featured}}
+        <figure><img src="{{.URL}}" alt="{{.Name}}" loading="lazy" /><figcaption title="{{.Name}}">{{.Name}}</figcaption></figure>
+        {{end}}
+      </div>
+      <p class="more"><a href="/skinlib">{{t .Lang "landing.enterSkinlib"}}</a></p>
+    </section>
+    {{end}}
     <section class="stats">
       <div><b>{{.Users}}</b><span>{{t .Lang "landing.statUsers"}}</span></div>
       <div><b>{{.Players}}</b><span>{{t .Lang "landing.statPlayers"}}</span></div>
@@ -344,17 +356,6 @@ var landingTmpl = template.Must(template.New("landing").Funcs(tmplFuncs).Parse(`
     <!-- The most common first question is "why is my skin not showing"; the
          answer page is public, so the way to it is on the public front door. -->
     <p class="more"><a href="/help">{{t .Lang "landing.help"}}</a></p>
-    {{if .Featured}}
-    <section class="feat">
-      <h2>{{t .Lang "landing.featured"}}</h2>
-      <div class="grid">
-        {{range .Featured}}
-        <figure><img src="{{.URL}}" alt="{{.Name}}" loading="lazy" /><figcaption title="{{.Name}}">{{.Name}}</figcaption></figure>
-        {{end}}
-      </div>
-      <p class="more"><a href="/skinlib">{{t .Lang "landing.enterSkinlib"}}</a></p>
-    </section>
-    {{end}}
   </div>
   {{if .FooterHTML}}<footer class="site-footer">{{.FooterHTML}}</footer>{{end}}
   {{.BodyAnchor}}
