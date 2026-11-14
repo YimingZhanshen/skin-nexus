@@ -281,7 +281,10 @@ onMounted(async () => {
           <div class="skin-card-actions">
             <button class="like-btn" :class="{ liked: it.liked }" :disabled="busyTid.has(it.tid)"
                     :title="t(it.liked ? 'skinlib.likedTip' : 'skinlib.likeTip')" @click="toggleLike(it)">
-              ♥ {{ it.likes }}<span class="like-state" v-if="it.liked">{{ t('skinlib.closetBadge') }}</span>
+              <!-- 线性心形与导航图标同语言（G7）；文案里的 ♥ 指代本按钮，不涉 -->
+              <svg class="like-ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                   stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5C12 20.5 3.5 15 3.5 8.8 3.5 5.9 5.8 4 8.3 4c1.7 0 3 .9 3.7 2.1C12.7 4.9 14 4 15.7 4c2.5 0 4.8 1.9 4.8 4.8 0 6.2-8.5 11.7-8.5 11.7z"/></svg>
+              {{ it.likes }}<span class="like-state" v-if="it.liked">{{ t('skinlib.closetBadge') }}</span>
             </button>
             <template v-if="canEdit(it)">
               <button class="ghost" :disabled="busyTid.has(it.tid)" @click="renameItem(it)">{{ t('skinlib.rename') }}</button>
@@ -331,6 +334,7 @@ onMounted(async () => {
 }
 .skin-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-lift); }
 /* the scoped .like-btn min-height outspecifies the global coarse-pointer rule */
+.like-ico { vertical-align: -3px; margin-right: 4px; }
 @media (pointer: coarse) {
   .like-btn { min-height: 44px; padding-inline: 16px; }
 }
