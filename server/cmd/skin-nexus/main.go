@@ -390,6 +390,7 @@ func main() {
 	}
 
 	yggSvc := ygg.NewService(st, activeSigner)
+	yggSvc.Audit = st.InsertAudit
 	yggSvc.TextureURL = pluginHost.TextureURL
 	yggSvc.ProfileFilter = pluginHost.ProfileFilter
 	yggSvc.AuthPhase = pluginHost.EmitAuthPhase

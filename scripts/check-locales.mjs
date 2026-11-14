@@ -467,7 +467,7 @@ for (const locale of LOCALES) {
 // blob. Top-level string arguments of an emitter call are exactly the actions
 // (account's bridge passes two — the web-side name and the plugin-side one);
 // anything nested inside a map or a call is not.
-const AUDIT_EMITTERS = new Set(['InsertAudit', 'detailInsertAudit', 'Audit', 'audit', 'auditEvent'])
+const AUDIT_EMITTERS = new Set(['InsertAudit', 'detailInsertAudit', 'Audit', 'audit', 'auditEvent', 'revokeUserTokens'])
 const AUDIT_ACTION = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)*$/
 const AUDIT_FLOOR = 60
 

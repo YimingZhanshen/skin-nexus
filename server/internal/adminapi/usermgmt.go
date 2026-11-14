@@ -1,6 +1,7 @@
 package adminapi
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -146,7 +147,7 @@ func (b *Backend) handleUserSetPassword(w http.ResponseWriter, r *http.Request) 
 		writeErrCode(w, http.StatusInternalServerError, "update failed", i18n.MsgInternal)
 		return
 	}
-	_ = b.Store.InvalidateUserTokens(r.Context(), id)
+	b.revokeUserTokens(r.Context(), actorUID(r), id, "admin_user_password_reset_token_revoke_failed", nil)
 	if b.OnUserCredentialChange != nil {
 		b.OnUserCredentialChange(id)
 	}
@@ -380,8 +381,23 @@ func (b *Backend) handleUserSetPermission(w http.ResponseWriter, r *http.Request
 	// A demoted/banned admin's session must die now — the session gate
 	// re-checks permission per request, but their tokens/grants linger.
 	if perm < 1 {
-		_ = b.Store.InvalidateUserTokens(r.Context(), id)
+		b.revokeUserTokens(r.Context(), actorUID(r), id, "admin_user_permission_update_token_revoke_failed", map[string]any{"permission": perm})
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_user_permission_update", map[string]any{"target": id, "permission": perm})
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// revokeUserTokens kills a user's ygg tokens as security hygiene. The revoke
+// is best-effort to the caller, but a DB blip must leave a trace — silent
+// swallowing hid half-done revocations (webapi/password.go pattern).
+func (b *Backend) revokeUserTokens(ctx context.Context, actor, target int64, action string, detail map[string]any) {
+	if err := b.Store.InvalidateUserTokens(ctx, target); err != nil {
+		if detail == nil {
+			detail = map[string]any{}
+		}
+		detail["target"] = target
+		detail["error"] = err.Error()
+		b.Store.InsertAudit(ctx, actor, action, detail)
+		slog.Warn("token revoke failed", "action", action, "target", target, "error", err)
+	}
 }

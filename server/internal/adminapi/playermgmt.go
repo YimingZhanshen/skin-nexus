@@ -140,7 +140,7 @@ func (b *Backend) handleAdminPlayerOwner(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	// Old owner's launcher profile selection dies with the re-home.
-	_ = b.Store.InvalidateUserTokens(r.Context(), before.UID)
+	b.revokeUserTokens(r.Context(), actorUID(r), before.UID, "admin_player_owner_update_token_revoke_failed", map[string]any{"pid": pid, "to": req.UID})
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_player_owner_update",
 		map[string]any{"pid": pid, "name": before.Name, "from": before.UID, "to": req.UID})
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})

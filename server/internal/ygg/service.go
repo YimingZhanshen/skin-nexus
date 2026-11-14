@@ -101,6 +101,9 @@ type Service struct {
 	signer  Signer
 	joinTTL time.Duration
 	now     func() time.Time
+	// Audit, when set, records security-hygiene events that have no other
+	// home in this package (main wires store.InsertAudit). nil = no trace.
+	Audit func(ctx context.Context, actorUID int64, action string, detail any)
 	// resolve resolves an access token string to a Token. Default: opaque
 	// store lookup. Phase-2 dual-state: the OIDC layer injects a resolver
 	// that also accepts signed JWTs (phase-2 dual-state).
@@ -484,7 +487,14 @@ func (s *Service) Refresh(ctx context.Context, accessToken, clientToken string, 
 	}
 	// Legacy semantics: a refresh invalidates the previous token. (Validation
 	// happens first so a rejected select never burns the caller's token.)
-	_ = s.store.InvalidateToken(ctx, accessToken)
+	// Failure is non-fatal to the new token but must leave a trace — a silent
+	// swallow leaves the old token alive while the caller believes it rotated.
+	if err := s.store.InvalidateToken(ctx, accessToken); err != nil {
+		if s.Audit != nil {
+			s.Audit(ctx, old.UserID, "ygg_refresh_token_revoke_failed", map[string]any{"error": err.Error()})
+		}
+		slog.Warn("ygg refresh: revoke old token", "uid", old.UserID, "error", err)
+	}
 	t := Token{
 		AccessToken: randomHex(32),
 		ClientToken: old.ClientToken,
