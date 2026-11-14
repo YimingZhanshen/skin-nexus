@@ -280,9 +280,32 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
     <h2>{{ t('dashboard.uploadTitle') }}</h2>
     <div class="up-grid">
       <div class="up-controls">
-        <label>{{ t('dashboard.materialName') }}
-          <input v-model="uploadName" maxlength="50" :placeholder="t('dashboard.materialNameHint')" />
-        </label>
+        <!-- 文件区合一：拖放 + 区内选择按钮（键盘可达；stop 防区点击双发） -->
+        <div class="drop-zone" :class="{ over: dragging }"
+             @dragover.prevent="dragging = true" @dragleave.prevent="dragging = false"
+             @drop.prevent="onDrop" @click="pickFile">
+          <input type="file" accept="image/png" ref="fileInput" @change="onPick" class="file-hidden" />
+          <span v-if="uploadFile" class="file-name" :title="uploadFile.name">{{ uploadFile.name }}</span>
+          <span v-else class="muted">{{ t('dashboard.dropHint') }}</span>
+          <button type="button" class="secondary pick-file" @click.stop="pickFile">{{ t('dashboard.chooseFile') }}</button>
+          <button v-if="uploadFile" class="secondary file-clear" :aria-label="t('dashboard.clearFile')" @click.stop="clearPreview">×</button>
+        </div>
+        <span class="field-hint">{{ t('dashboard.uploadHint') }}{{ uploadLimitText ? t('dashboard.uploadLimit', { size: uploadLimitText }) : '' }}</span>
+        <div class="row">
+          <label class="grow">{{ t('dashboard.materialName') }}
+            <input v-model="uploadName" maxlength="50" :placeholder="t('dashboard.materialNameHint')" />
+          </label>
+          <select v-model="uploadType" style="width: 120px;" :aria-label="t('dashboard.colType')">
+            <option value="skin">{{ t('dashboard.typeSkin') }}</option>
+            <option value="cape">{{ t('dashboard.typeCape') }}</option>
+          </select>
+          <span v-if="uploadType === 'skin' && uploadFile" class="muted model-badge">
+            {{ modelChecked
+              ? t('dashboard.modelDetected', { model: previewModel === 'slim' ? t('dashboard.modelSlim') : t('dashboard.modelDefault') })
+              : t('dashboard.modelChecking') }}
+          </span>
+        </div>
+        <p v-if="uploadType === 'skin'" class="muted model-hint">{{ t('dashboard.modelAutoHint') }}</p>
         <div>
           <div class="field-label">{{ t('dashboard.materialSource') }}</div>
           <div class="radio-row">
@@ -295,32 +318,6 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
           <input v-model="uploadSourceUrl" type="url" placeholder="https://" />
           <span class="muted source-hint">{{ t('dashboard.sourceUrlHint') }}</span>
         </label>
-        <div class="row">
-          <select v-model="uploadType" style="width: 120px;">
-            <option value="skin">{{ t('dashboard.typeSkin') }}</option>
-            <option value="cape">{{ t('dashboard.typeCape') }}</option>
-          </select>
-          <span v-if="uploadType === 'skin'" class="muted model-badge">
-            {{ modelChecked
-              ? t('dashboard.modelDetected', { model: previewModel === 'slim' ? t('dashboard.modelSlim') : t('dashboard.modelDefault') })
-              : t('dashboard.modelChecking') }}
-          </span>
-        </div>
-        <p v-if="uploadType === 'skin'" class="muted model-hint">{{ t('dashboard.modelAutoHint') }}</p>
-        <div class="drop-zone" :class="{ over: dragging }"
-             @dragover.prevent="dragging = true" @dragleave.prevent="dragging = false"
-             @drop.prevent="onDrop" @click="pickFile">
-          <input type="file" accept="image/png" ref="fileInput" @change="onPick" class="file-hidden" />
-          <template v-if="uploadFile">
-            <span class="file-name" :title="uploadFile.name">{{ uploadFile.name }}</span>
-            <button class="secondary file-clear" :aria-label="t('dashboard.clearFile')" @click.stop="clearPreview">×</button>
-          </template>
-          <span v-else class="muted">{{ t('dashboard.dropHint') }}</span>
-        </div>
-        <!-- The zone itself is click/drag only: a keyboard user needs a real
-             control, and a role="button" wrapper would have to contain the
-             "clear file" button once a file is picked. -->
-        <button type="button" class="secondary pick-file" @click="pickFile">{{ t('dashboard.chooseFile') }}</button>
         <div class="detail-editor">
           <div class="tabs detail-tabs">
             <button type="button" class="tab" :class="{ active: detailTab === 'edit' }" @click="detailTab = 'edit'">{{ t('dashboard.detailEdit') }}</button>
@@ -351,7 +348,6 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
         </div>
         <div class="success" role="status" v-if="uploadOk">{{ uploadOk }}</div>
         <PluginFields form="texture.upload" v-model="uploadPluginData" />
-        <div class="muted">{{ t('dashboard.uploadHint') }}{{ uploadLimitText ? t('dashboard.uploadLimit', { size: uploadLimitText }) : '' }}</div>
       </div>
       <div class="prev-box">
         <template v-if="previewURL">
@@ -428,9 +424,12 @@ h3 { font-size: var(--fs-s); margin: 16px 0 4px; color: var(--muted); font-weigh
 /* 刚上传那一行的标记：不是动画，避免 reduced-motion 下玩家看不到反馈 */
 .row-new { outline: 2px solid var(--jade); outline-offset: -2px; border-radius: 4px; }
 .file-hidden { display: none; }
-.file-name { font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drop-zone > .muted { flex: 1; }
+.file-name { flex: 1 1 auto; min-width: 0; font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+label.grow { flex: 1; min-width: 0; }
+.pick-file { min-height: 28px; padding: 4px 8px; font-size: var(--fs-xs); flex: none; }
 .tx-name { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-.file-clear { min-height: 28px; padding: 0 8px; font-size: var(--fs-xs); margin-left: auto; flex: none; }
+.file-clear { min-height: 28px; padding: 0 8px; font-size: var(--fs-xs); flex: none; }
 .prev-box {
   display: flex; align-items: center; justify-content: center;
   min-height: 220px; border: 1px solid var(--border); border-radius: var(--r-m);
