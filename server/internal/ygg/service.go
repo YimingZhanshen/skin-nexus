@@ -3,6 +3,7 @@ package ygg
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"log/slog"
@@ -464,7 +465,7 @@ func (s *Service) Refresh(ctx context.Context, accessToken, clientToken string, 
 	if err != nil || !s.refreshable(ctx, old) {
 		return Token{}, nil, ErrTokenInvalid
 	}
-	if clientToken != "" && clientToken != old.ClientToken {
+	if clientToken != "" && subtle.ConstantTimeCompare([]byte(clientToken), []byte(old.ClientToken)) != 1 {
 		return Token{}, nil, ErrTokenInvalid
 	}
 	// Ownership gate (review P2: a token holder could select ANY player UUID
@@ -523,7 +524,7 @@ func (s *Service) Validate(ctx context.Context, accessToken, clientToken string)
 	if err != nil || t.Invalidated || s.now().After(t.ExpiresAt) {
 		return ErrTokenInvalid
 	}
-	if clientToken != "" && t.ClientToken != "" && clientToken != t.ClientToken {
+	if clientToken != "" && t.ClientToken != "" && subtle.ConstantTimeCompare([]byte(clientToken), []byte(t.ClientToken)) != 1 {
 		return ErrTokenInvalid
 	}
 	return nil
