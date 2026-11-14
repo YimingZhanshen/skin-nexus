@@ -12,19 +12,26 @@
   <!--skin-theme-->
   <!--skin-custom-head-->
   <style>
-    /* Paint something before the SPA bundle arrives (slow links / CDN RTT). */
+    /* Paint the app's loading screen before the SPA bundle arrives (slow links /
+       CDN RTT). Same mark, spinner and copy as .boot-screen so the two loading
+       stages read as one; colors ride the theme tokens — the theme's mode class
+       is set pre-paint, so the palette matches from the very first frame. */
     #app { min-height: 100vh; }
     .boot-static {
       min-height: 100vh; display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 14px;
-      background: #101825; color: #e9edf1;
+      padding: 24px; text-align: center;
+      background: var(--bg, #101825); color: var(--text, #e9edf1);
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     }
+    .boot-static .boot-logo { width: 56px; height: 56px; display: block; }
     .boot-static .spin {
       width: 22px; height: 22px; border-radius: 50%;
-      border: 2px solid rgba(233,237,241,.18); border-top-color: #20b983;
+      border: 2px solid var(--line, rgba(233,237,241,.18));
+      border-top-color: var(--cinnabar, #20b983);
       animation: boot-static-spin .8s linear infinite;
     }
+    .boot-static .boot-hint { margin: 0; font-size: 13px; color: var(--muted, #9aa7b4); }
     @keyframes boot-static-spin { to { transform: rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) {
       .boot-static .spin { animation-duration: 2.4s; }
@@ -36,7 +43,7 @@
        server-rendered content (the public skin library list). Vue takes over
        #app on mount either way, so the swap is the first paint, not a second
        copy of the list. -->
-  <div id="app"><!--skin-app-start--><div class="boot-static"><span class="spin" aria-hidden="true"></span><p>…</p></div><!--skin-app-end--></div>
+  <div id="app"><!--skin-app-start--><div class="boot-static" role="status" aria-live="polite"><img class="boot-logo" src="/favicon.svg" alt="" width="56" height="56" /><span class="spin" aria-hidden="true"></span><p class="boot-hint">加载中…</p></div><!--skin-app-end--></div>
   <script type="module" src="/src/main.js"></script>
   <!--skin-custom-body-->
 </body>
