@@ -403,20 +403,20 @@ h3 { font-size: var(--fs-s); margin: 16px 0 4px; color: var(--muted); font-weigh
 /* 上传卡 v3：双栏（控件 | 即时预览）、拖放区、披风平面图 */
 .up-grid { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 16px; align-items: start; }
 .up-controls { display: flex; flex-direction: column; gap: 12px; }
-.field-label { font-size: var(--fs-s); color: var(--muted); margin-bottom: 6px; }
-.radio-row { display: flex; flex-wrap: wrap; gap: 14px; }
-.radio-row label, .check-line { display: flex; gap: 6px; align-items: center; font-size: var(--fs-s); }
+.field-label { font-size: var(--fs-s); color: var(--muted); margin-bottom: 8px; }
+.radio-row { display: flex; flex-wrap: wrap; gap: 16px; }
+.radio-row label, .check-line { display: flex; gap: 8px; align-items: center; font-size: var(--fs-s); }
 .source-hint { display: block; margin-top: 4px; font-size: var(--fs-xs); }
 .model-badge { font-size: var(--fs-xs); }
 .model-hint { margin: 0; font-size: var(--fs-xs); }
-.model-fix { width: auto; font-size: var(--fs-xs); padding: 2px 6px; }
+.model-fix { width: auto; font-size: var(--fs-xs); padding: 2px 8px; }
 .detail-tabs { width: 100%; }
 .detail-tabs .char-count { margin-left: auto; font-size: var(--fs-xs); }
 .detail-editor textarea { width: 100%; resize: vertical; }
 .detail-preview { min-height: 120px; border: 1px solid var(--border); border-radius: var(--r-m);
-  padding: 10px 12px; background: var(--bg); }
-.upload-progress { display: flex; align-items: center; gap: 10px; }
-.upload-progress .bar { flex: 1; height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+  padding: 12px 12px; background: var(--bg); }
+.upload-progress { display: flex; align-items: center; gap: 12px; }
+.upload-progress .bar { flex: 1; height: 8px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
 .upload-progress .bar i { display: block; height: 100%; background: var(--accent); transition: width var(--t-fast) var(--ease); }
 .drop-zone {
   display: flex; align-items: center; gap: 8px;

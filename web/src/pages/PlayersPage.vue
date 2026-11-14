@@ -206,7 +206,7 @@ onMounted(load)
 /* 160×240 is what SkinPreview is told to render; pinning the display size keeps
    the backing store and the box equal, so the skin is not resampled. */
 .pc-preview :deep(canvas) { width: 160px; height: 240px; display: block; }
-.pc-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.pc-body { padding: 12px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
 .pc-name { margin: 0; font-size: var(--fs-m); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pc-meta { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-xs); }
 /* A 32-char UUID has no break points; side by side with PID it wrapped into

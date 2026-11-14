@@ -142,12 +142,12 @@ onMounted(load)
       <table>
         <tr v-for="n in 4" :key="n">
           <td><span class="skeleton" style="display:block; width:48px; height:48px;"></span></td>
-          <td colspan="5"><span class="skeleton" style="display:block; height:14px;"></span></td>
+          <td colspan="5"><span class="skeleton" style="display:block; height:16px;"></span></td>
         </tr>
       </table>
     </div>
     <div class="table-scroll" v-else-if="closet.length">
-    <table style="margin-top: 10px;">
+    <table style="margin-top: 12px;">
       <caption class="sr-only">{{ t('closet.title', { count: total }) }}</caption>
       <tr>
         <th scope="col">{{ t('dashboard.colPreview') }}</th>
@@ -170,9 +170,9 @@ onMounted(load)
           <!-- The avatar endpoint rejects capes (422); offering the button on a
                cape row was a dead click. -->
           <button class="secondary" v-if="c.type === 'skin'" :disabled="busyId === c.id" @click="setAsAvatar(c)">{{ t('closet.setAvatar') }}</button>
-          <button class="secondary" style="margin-left: 6px;" :disabled="busyId === c.id" @click="openWear(c)">{{ t('wear.button') }}</button>
-          <button class="secondary" style="margin-left: 6px;" :disabled="busyId === c.id" @click="renameEntry(c)">{{ t('closet.rename') }}</button>
-          <button class="secondary danger-outline" style="margin-left: 6px;" :disabled="busyId === c.id" @click="removeEntry(c)">{{ t('closet.remove') }}</button>
+          <button class="secondary" style="margin-left: 8px;" :disabled="busyId === c.id" @click="openWear(c)">{{ t('wear.button') }}</button>
+          <button class="secondary" style="margin-left: 8px;" :disabled="busyId === c.id" @click="renameEntry(c)">{{ t('closet.rename') }}</button>
+          <button class="secondary danger-outline" style="margin-left: 8px;" :disabled="busyId === c.id" @click="removeEntry(c)">{{ t('closet.remove') }}</button>
         </td>
       </tr>
     </table>

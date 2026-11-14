@@ -106,7 +106,7 @@ onMounted(load)
 </template>
 
 <style scoped>
-.filter { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-s); color: var(--moon-2); }
+.filter { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-s); color: var(--moon-2); }
 .unread td { font-weight: 600; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; background: transparent; border: 1px solid var(--line); }
 .dot.on { background: var(--cinnabar); border-color: var(--cinnabar); }

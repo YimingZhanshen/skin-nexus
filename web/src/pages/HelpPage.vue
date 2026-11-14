@@ -77,12 +77,12 @@ const verifyGate = computed(() => conf.value.verify_gate_enabled === true)
 </template>
 
 <style scoped>
-h3 { margin: 22px 0 4px; font-size: var(--fs-m); }
-.help-list { margin: 8px 0 0; padding-left: 22px; display: grid; gap: 10px; }
+h3 { margin: 24px 0 4px; font-size: var(--fs-m); }
+.help-list { margin: 8px 0 0; padding-left: 24px; display: grid; gap: 12px; }
 .help-list li { display: grid; gap: 2px; }
 .help-list b { font-weight: 600; }
 .help-list span { color: var(--muted); font-size: var(--fs-s); }
-.help-flat { margin: 8px 0 0; padding-left: 22px; color: var(--muted); font-size: var(--fs-s); }
+.help-flat { margin: 8px 0 0; padding-left: 24px; color: var(--muted); font-size: var(--fs-s); }
 .link-like {
   background: none; border: none; padding: 0; width: fit-content; min-height: 0;
   color: var(--jade); cursor: pointer; font-size: var(--fs-s);

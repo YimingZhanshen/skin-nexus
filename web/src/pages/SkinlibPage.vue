@@ -309,7 +309,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.wear-next { align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.wear-next { align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
 .mine-on { border-color: var(--accent) !important; color: var(--accent) !important; }
 .source-badge { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
 .source-original { color: var(--jade, #7dd3a0); border-color: currentColor; }
@@ -332,14 +332,14 @@ onMounted(async () => {
 .skin-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-lift); }
 /* the scoped .like-btn min-height outspecifies the global coarse-pointer rule */
 @media (pointer: coarse) {
-  .like-btn { min-height: 44px; padding-inline: 14px; }
+  .like-btn { min-height: 44px; padding-inline: 16px; }
 }
 .skin-card-prev {
   height: 180px; display: flex; align-items: center; justify-content: center;
   background: var(--panel-2);
 }
-.skin-preview-img { height: 150px; image-rendering: pixelated; object-fit: contain; transition: transform var(--t-mid) var(--ease); }
-.cape-thumb { max-width: 90%; max-height: 150px; image-rendering: pixelated; transition: transform var(--t-mid) var(--ease); }
+.skin-preview-img { height: 152px; image-rendering: pixelated; object-fit: contain; transition: transform var(--t-mid) var(--ease); }
+.cape-thumb { max-width: 90%; max-height: 152px; image-rendering: pixelated; transition: transform var(--t-mid) var(--ease); }
 .skin-card:hover .skin-preview-img, .skin-card:hover .cape-thumb { transform: scale(1.04); }
 .skin-card-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .skin-card-name {
@@ -374,6 +374,6 @@ onMounted(async () => {
 .like-btn:hover { color: var(--danger); border-color: var(--danger); background: transparent; box-shadow: none; transform: none; }
 .like-btn.liked { color: var(--danger); border-color: var(--danger); }
 .like-state { margin-left: 4px; font-size: 0.85em; }
-.skel-line { height: 14px; border-radius: var(--r-s); }
+.skel-line { height: 16px; border-radius: var(--r-s); }
 .skel-line.short { width: 60%; }
 </style>

@@ -155,7 +155,7 @@ onMounted(load)
       <button class="secondary" v-if="mailEnabled && me && !me.emailVerified" :disabled="mailBusy" @click="requestEmailVerification">{{ mailBusy ? t('auth.verifySubmitting') : t('auth.verifySubmit') }}</button>
       <span class="muted" v-if="me">{{ t('profile.verifiedState', { state: me.emailVerified ? t('profile.verified') : t('profile.unverified') }) }}</span>
     </div>
-    <div class="muted" style="margin-top: 6px; font-size: var(--fs-xs);">{{ t('profile.emailResetHint') }}</div>
+    <div class="muted" style="margin-top: 8px; font-size: var(--fs-xs);">{{ t('profile.emailResetHint') }}</div>
 
     <!-- password -->
     <h3>{{ t('auth.pwTitle') }}</h3>
@@ -164,7 +164,7 @@ onMounted(load)
       <input v-model="newPw" type="password" :placeholder="t('auth.pwNew')" style="max-width: 220px;" @keyup.enter="changePassword" />
       <button :disabled="pwBusy" @click="changePassword">{{ t('auth.pwSubmit') }}</button>
     </div>
-    <div class="muted" style="margin-top: 6px; font-size: var(--fs-xs);">{{ t('auth.pwHint') }}</div>
+    <div class="muted" style="margin-top: 8px; font-size: var(--fs-xs);">{{ t('auth.pwHint') }}</div>
 
     <!-- delete account (admins blocked server-side) -->
     <h3 class="danger-text">{{ t('profile.dangerZone') }}</h3>
@@ -172,7 +172,7 @@ onMounted(load)
       <input v-model="delPw" type="password" :placeholder="t('profile.deletePwPlaceholder')" style="max-width: 260px;" />
       <button class="danger" :disabled="delBusy" @click="deleteAccount">{{ t('profile.deleteBtn') }}</button>
     </div>
-    <div class="muted" style="margin-top: 6px; font-size: var(--fs-xs);">{{ t('profile.deleteHint') }}</div>
+    <div class="muted" style="margin-top: 8px; font-size: var(--fs-xs);">{{ t('profile.deleteHint') }}</div>
     <PluginSlot slot="profile.card.footer" />
   </div>
 
@@ -186,7 +186,7 @@ onMounted(load)
 </template>
 
 <style scoped>
-h3 { font-size: 14px; margin: 18px 0 8px; color: var(--muted); font-weight: 600; }
+h3 { font-size: var(--fs-s); margin: 20px 0 8px; color: var(--muted); font-weight: 600; }
 .avatar-row { gap: 16px; }
 .avatar-box { width: 64px; height: 64px; border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 /* face crop (legacy parity: TextureController render2dAvatar = front-head

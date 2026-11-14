@@ -105,11 +105,11 @@ function goHome() {
       <template v-if="tokenRequired">
         <label for="s-setup-token">{{ t('setup.setupToken') }}</label>
         <input id="s-setup-token" v-model="setupToken" autocomplete="off" spellcheck="false" />
-        <div class="muted" style="font-size: var(--fs-xs); margin-top: 6px;">
+        <div class="muted" style="font-size: var(--fs-xs); margin-top: 8px;">
           {{ t('setup.setupTokenHint') }}
         </div>
       </template>
-      <div class="muted" style="font-size: var(--fs-xs); margin-top: 6px;">
+      <div class="muted" style="font-size: var(--fs-xs); margin-top: 8px;">
         {{ t('setup.baseUrlHint') }}
       </div>
     </template>
@@ -130,7 +130,7 @@ function goHome() {
     <template v-else-if="step === 3">
       <label for="s-domains">{{ t('setup.domains') }}</label>
       <textarea id="s-domains" v-model="skinDomains" rows="6" placeholder="skin.example.com"></textarea>
-      <div class="muted" style="font-size: var(--fs-xs); margin-top: 6px;">
+      <div class="muted" style="font-size: var(--fs-xs); margin-top: 8px;">
         {{ t('setup.domainsHint') }}
       </div>
     </template>
@@ -138,7 +138,7 @@ function goHome() {
     <!-- step 4: done -->
     <template v-else>
       <div class="success" role="status">{{ t('setup.done') }}</div>
-      <p class="muted" style="margin-top: 10px;">
+      <p class="muted" style="margin-top: 12px;">
         {{ t('setup.siteUrlWritten') }}
         <b>{{ result.site_url || t('setup.envFallback') }}</b>
       </p>
@@ -149,7 +149,7 @@ function goHome() {
 
     <div class="error" role="alert" v-if="error">{{ error }}</div>
 
-    <div class="row" style="margin-top: 14px;">
+    <div class="row" style="margin-top: 16px;">
       <button v-if="step > 1 && step < 4" class="secondary" @click="step--">{{ t('setup.prev') }}</button>
       <button v-if="step < 3" @click="next">{{ t('setup.next') }}</button>
       <button v-if="step === 3" :disabled="loading" @click="finish">{{ loading ? t('setup.submitting') : t('setup.finish') }}</button>
