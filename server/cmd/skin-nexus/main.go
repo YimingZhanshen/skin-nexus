@@ -36,6 +36,7 @@ import (
 	"skin-nexus/server/internal/auth"
 	"skin-nexus/server/internal/avatargen"
 	"skin-nexus/server/internal/config"
+	"skin-nexus/server/internal/indexnow"
 	"skin-nexus/server/internal/jobs"
 	"skin-nexus/server/internal/logx"
 	"skin-nexus/server/internal/metrics"
@@ -521,6 +522,23 @@ func main() {
 		}
 	}()
 	backend := webapi.New(st, ts, yggSvc)
+	// IndexNow (2026-11-15 拍板：默认关 + 面板开关): the env seeds the
+	// default, the panel toggle is read per call, and enabling submits site
+	// URLs to Microsoft/Bing. The endpoint is a protocol constant — nothing
+	// here is user-influenced routing.
+	indexNow := &indexnow.Client{
+		Enabled: func() bool {
+			if v, ok, err := st.GetOption(context.Background(), "indexnow_enabled"); err == nil && ok {
+				return v == "1" || v == "true"
+			}
+			return cfg.IndexNowEnabled
+		},
+		Key: cfg.IndexNowKey,
+	}
+	if u, err := url.Parse(cfg.BaseURL); err == nil {
+		indexNow.Host = u.Hostname()
+	}
+	backend.IndexNow = indexNow
 	// The SPA gates its authorized-apps/device pages on this flag; without it
 	// those nav entries lead to a 404 whenever OIDC is off.
 	backend.OIDCEnabled = cfg.OIDCEnabled
@@ -740,6 +758,7 @@ func main() {
 		"skin_domains":           strings.Join(cfg.SkinDomains, ","),
 		"invite_required":        boolStr(cfg.RequireInvite),
 		"require_verification":   boolStr(cfg.RequireVerification),
+		"indexnow_enabled":       boolStr(cfg.IndexNowEnabled),
 		"rate_limit_auth":        strconv.Itoa(cfg.RateLimitAuth),
 		"oidc_device_lifetime":   strconv.Itoa(int(store.DefaultDeviceCodeLifetime / time.Second)),
 		"oidc_device_poll_secs":  strconv.Itoa(store.DefaultDeviceCodePoll),
@@ -978,6 +997,12 @@ func main() {
 	root.Handle("GET /metrics", metricsHandler(metricsEnabled()))
 	root.Handle("GET /sitemap.xml", sitemapHandler(seoEng, st, cfg.BaseURL))
 	root.Handle("GET /robots.txt", robotsHandler(seoEng))
+	// IndexNow validation file: an exact route (the key is static config) —
+	// malformed keys never get a route, and the body is served only while the
+	// panel toggle is on.
+	if indexnow.KeyShape.MatchString(cfg.IndexNowKey) {
+		root.Handle("GET /"+cfg.IndexNowKey+".txt", indexNowKeyHandler(indexNow))
+	}
 	root.Handle("GET /llms.txt", llmsHandler(seoEng))
 	root.Handle("GET /theme-assets/{id}/{file}", themeAssetHandler(themeReg))
 	// Version-in-path form: immune to CDNs that strip query strings from the
@@ -1435,6 +1460,20 @@ func sitemapHandler(seoEng *seo.Engine, st *store.Mysql, baseURL string) http.Ha
 		}
 		w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 		_, _ = w.Write([]byte(seo.SitemapXML(s.Canonical, baseURL, entries)))
+	})
+}
+
+// indexNowKeyHandler serves the IndexNow key validation file while the
+// feature is on; disabled (or a hit on a stale route) is a plain 404.
+func indexNowKeyHandler(c *indexnow.Client) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key, ok := c.KeyFile()
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte(key))
 	})
 }
 

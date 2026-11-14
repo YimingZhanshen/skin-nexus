@@ -1336,6 +1336,9 @@
     "require_verification": {
       "desc": "Email verification gate (applies immediately): an address is required at signup, and once the grace window ends an unverified account is refused Minecraft join, the web user centre and the admin panel alike. Super admins are exempt, so a broken mail transport can still be repaired."
     },
+    "indexnow_enabled": {
+      "desc": "IndexNow change ping (applies immediately): when on, publishing, deleting or flipping a texture's visibility submits its detail-page URL to Microsoft Bing for indexing (at most 10 per batch), and the /key.txt validation file is served. Off by default — turning it on hands site URLs to a search engine. A well-formed 8-128 character SKIN_INDEXNOW_KEY is required before anything is submitted"
+    },
     "email_verify_grace_days": {
       "desc": "Email-verification grace period in days: for N days after signup an unverified account still passes, 0 = enforce at once (applies immediately)"
     },

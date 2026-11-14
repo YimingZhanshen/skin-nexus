@@ -29,6 +29,7 @@ import (
 	"skin-nexus/server/internal/auth"
 	"skin-nexus/server/internal/dbx"
 	"skin-nexus/server/internal/i18n"
+	"skin-nexus/server/internal/indexnow"
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/ratelimit"
 	"skin-nexus/server/internal/redact"
@@ -108,6 +109,10 @@ type Backend struct {
 	OnUserLifecycle   func(ctx context.Context, e plugin.UserLifecycleEvent)
 	// Account is the shared character/texture service (nil = legacy paths off).
 	Account *account.Service
+	// IndexNow pings search engines when a public detail page changes
+	// (nil = off; main wires the client, whose Enabled resolver backs the
+	// settings-panel toggle).
+	IndexNow *indexnow.Client
 	// v2 generic events/guards (nil = no plugins).
 	CheckGuard func(ctx context.Context, kind string, p plugin.EventPayload) error
 	OnEvent    func(ctx context.Context, kind string, p plugin.EventPayload)
@@ -1098,6 +1103,9 @@ func (b *Backend) handleUploadTexture(w http.ResponseWriter, r *http.Request) {
 	if aerr != nil {
 		writeAccountErr(w, aerr)
 		return
+	}
+	if public {
+		b.indexNowPush(v.ID)
 	}
 	status := http.StatusCreated
 	if !created {

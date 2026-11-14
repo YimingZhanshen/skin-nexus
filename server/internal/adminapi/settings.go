@@ -52,6 +52,9 @@ var settingsWhitelist = []settingSpec{
 	{"server_name", true, "basic", false},
 	{"site_url", true, "basic", false}, // B4 (blessing 原名 — 迁移导入器原样搬运生产 options，改名会让存量值成死键)
 	{"announcement", false, "basic", false},
+	// IndexNow（2026-11-15 拍板：默认关）。开启=站点 URL 提交给微软/Bing 收录，
+	// 归 basic 组与 site_url 同节——它操作的就是站点对外可见面。
+	{"indexnow_enabled", false, "basic", false},
 	{"invite_required", false, "register", false},
 	{"require_verification", false, "register", false},
 	{"email_verify_grace_days", false, "register", false},
@@ -145,7 +148,7 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch req.Key {
-	case "invite_required", "require_verification", "union_enabled", "union_enable_update", "union_enable_oauth2", "union_resolve_names", "ygg_mojang_fallback", "cdn_enabled":
+	case "invite_required", "require_verification", "indexnow_enabled", "union_enabled", "union_enable_update", "union_enable_oauth2", "union_resolve_names", "ygg_mojang_fallback", "cdn_enabled":
 		normalized, ok := normalizeBool(val)
 		if !ok {
 			writeErrCode(w, http.StatusBadRequest, "boolean must be 1/0/true/false/on/off/yes/no", i18n.MsgInvalidValue)

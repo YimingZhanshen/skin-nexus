@@ -58,6 +58,11 @@ type Config struct {
 	// Join gate on email_verified (fork's require_verification setting).
 	// Default off until the verification mail flow ships (P1).
 	RequireVerification bool // SKIN_REQUIRE_VERIFICATION
+	// IndexNow (search-engine change ping): off by default — enabling submits
+	// site URLs to Microsoft/Bing, so the operator opts in from the panel; the
+	// env seeds the default and Key is the /{key}.txt validation secret.
+	IndexNowEnabled bool   // SKIN_INDEXNOW_ENABLED
+	IndexNowKey     string // SKIN_INDEXNOW_KEY
 	// RateLimitAuth = auth requests per IP per 10-minute sliding window
 	// (0 disables the window layer). LoginFailLimit = consecutive failures
 	// per identifier before a 15-minute lockout (0 disables). Both tunable
@@ -183,6 +188,8 @@ func Load() (*Config, error) {
 
 		OIDCEnabled:         getenv("SKIN_OIDC_ENABLED", "false") == "true",
 		RequireVerification: getenv("SKIN_REQUIRE_VERIFICATION", "false") == "true",
+		IndexNowEnabled:     getenv("SKIN_INDEXNOW_ENABLED", "false") == "true",
+		IndexNowKey:         strings.TrimSpace(getenv("SKIN_INDEXNOW_KEY", "")),
 		RequireInvite:       getenv("SKIN_INVITE_REQUIRED", "false") == "true",
 		RateLimitAuth:       atoiDefault(getenv("SKIN_RATE_LIMIT_AUTH", "120"), 120),
 		LoginFailLimit:      atoiDefault(getenv("SKIN_LOGIN_FAIL_LIMIT", "5"), 5),

@@ -17,6 +17,7 @@ import (
 	"skin-nexus/server/internal/account"
 	"skin-nexus/server/internal/avatargen"
 	"skin-nexus/server/internal/i18n"
+	"skin-nexus/server/internal/siteurl"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/ugctext"
 	"skin-nexus/server/internal/ygg"
@@ -280,6 +281,9 @@ func (b *Backend) handleSkinlibPatch(w http.ResponseWriter, r *http.Request) {
 			event = "texture_make_public"
 		}
 		b.Store.InsertAudit(r.Context(), uid, event, map[string]any{"tid": tid, "hash": cur.Hash})
+		// The page's crawlability just changed in either direction — tell the
+		// engines to re-check (IndexNow is best-effort, async, and off by default).
+		b.indexNowPush(tid)
 	}
 	if patch.Model != nil {
 		b.Store.InsertAudit(r.Context(), uid, "texture_model_update", map[string]any{
@@ -317,6 +321,7 @@ func (b *Backend) handleTextureDeleteSelf(w http.ResponseWriter, r *http.Request
 		writeAccountErr(w, aerr)
 		return
 	}
+	b.indexNowPush(tid)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -385,4 +390,19 @@ func (b *Backend) handleTextureReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true})
+}
+
+// indexNowPush notifies search engines that public detail pages changed
+// (publish / unpublish / delete). Best-effort: the push runs on a bounded
+// background goroutine and its failures never reach the user.
+func (b *Backend) indexNowPush(tids ...int64) {
+	if b.IndexNow == nil || len(tids) == 0 {
+		return
+	}
+	base := strings.TrimRight(siteurl.Get(), "/")
+	urls := make([]string, 0, len(tids))
+	for _, tid := range tids {
+		urls = append(urls, base+"/skinlib/"+strconv.FormatInt(tid, 10))
+	}
+	b.IndexNow.PushAsync(urls)
 }
