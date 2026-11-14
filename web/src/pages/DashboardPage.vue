@@ -295,17 +295,27 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
           <label class="grow">{{ t('dashboard.materialName') }}
             <input v-model="uploadName" maxlength="50" :placeholder="t('dashboard.materialNameHint')" />
           </label>
-          <select v-model="uploadType" style="width: 120px;" :aria-label="t('dashboard.colType')">
-            <option value="skin">{{ t('dashboard.typeSkin') }}</option>
-            <option value="cape">{{ t('dashboard.typeCape') }}</option>
-          </select>
+          <!-- 类型二选一收成分段按钮：无标签浮空下拉在带标签的名称框旁太突兀 -->
+          <div class="type-field">
+            <span class="type-label">{{ t('dashboard.colType') }}</span>
+            <div class="seg" role="group" :aria-label="t('dashboard.colType')">
+              <label class="seg-item" :class="{ active: uploadType === 'skin' }">
+                <input type="radio" name="texture-type" value="skin" v-model="uploadType" />{{ t('dashboard.typeSkin') }}
+              </label>
+              <label class="seg-item" :class="{ active: uploadType === 'cape' }">
+                <input type="radio" name="texture-type" value="cape" v-model="uploadType" />{{ t('dashboard.typeCape') }}
+              </label>
+            </div>
+          </div>
+        </div>
+        <p v-if="uploadType === 'skin'" class="muted model-hint">
           <span v-if="uploadType === 'skin' && uploadFile" class="muted model-badge">
             {{ modelChecked
               ? t('dashboard.modelDetected', { model: previewModel === 'slim' ? t('dashboard.modelSlim') : t('dashboard.modelDefault') })
               : t('dashboard.modelChecking') }}
           </span>
-        </div>
-        <p v-if="uploadType === 'skin'" class="muted model-hint">{{ t('dashboard.modelAutoHint') }}</p>
+          {{ t('dashboard.modelAutoHint') }}
+        </p>
         <div>
           <div class="field-label">{{ t('dashboard.materialSource') }}</div>
           <div class="radio-row">
@@ -331,9 +341,10 @@ onBeforeUnmount(() => { if (previewURL.value) URL.revokeObjectURL(previewURL.val
             <span v-else class="muted">{{ t('dashboard.detailEmpty') }}</span>
           </div>
         </div>
-        <label class="check-line"><input type="checkbox" v-model="uploadPrivate" /> {{ t('dashboard.privateUpload') }}</label>
-        <div class="row">
-          <button :disabled="uploading || !uploadFile" @click="doUpload">
+        <!-- 动作行：勾选居左、主按钮居右，进度紧随 -->
+        <div class="row action-row">
+          <label class="check-line"><input type="checkbox" v-model="uploadPrivate" /> {{ t('dashboard.privateUpload') }}</label>
+          <button class="upload-btn" :disabled="uploading || !uploadFile" @click="doUpload">
             {{ uploading ? t('dashboard.uploading') : t('dashboard.upload') }}
           </button>
         </div>
@@ -406,6 +417,21 @@ h3 { font-size: var(--fs-s); margin: 16px 0 4px; color: var(--muted); font-weigh
 .model-badge { font-size: var(--fs-xs); }
 .model-hint { margin: 0; font-size: var(--fs-xs); }
 .model-fix { width: auto; font-size: var(--fs-xs); padding: 2px 8px; }
+/* 类型分段按钮：与输入框同高（8px 内距 + 1px 边）；原生 radio 视觉隐藏但保焦点 */
+.type-field { flex: none; margin: 12px 0 4px; }
+.type-label { display: block; margin: 0; font-size: var(--fs-s); color: var(--muted); }
+.seg { display: flex; gap: 4px; }
+.seg-item {
+  display: inline-flex; align-items: center; margin: 0;
+  padding: 8px 16px; font-size: var(--fs-s); color: var(--muted); line-height: 16px;
+  border: 1px solid var(--line-strong); border-radius: var(--r-s);
+  cursor: pointer; white-space: nowrap;
+  transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.seg-item input { position: absolute; width: 0; height: 0; opacity: 0; }
+.seg-item.active { color: var(--accent); border-color: var(--accent); background: var(--ink-3); }
+.seg-item:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.action-row .upload-btn { margin-left: auto; }
 .detail-tabs { width: 100%; }
 .detail-tabs .char-count { margin-left: auto; font-size: var(--fs-xs); }
 .detail-editor textarea { width: 100%; resize: vertical; }
