@@ -85,6 +85,7 @@
   "report.reasonViolence": "Violence or gore",
   "report.submit": "Submit report",
   "report.title": "Report this texture",
+  "report.trackHint": "You can follow the outcome under My reports in your dashboard.",
   "seo.description": "{intro} - a Minecraft {kind}{model} in the {site} skin library, uploaded by {who} and collected by {likes} players. Create an account to use it.",
   "seo.introWithSummary": "{name}: {summary}",
   "seo.modelDefault": " (Steve classic)",

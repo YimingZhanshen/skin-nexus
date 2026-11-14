@@ -204,9 +204,17 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
   .source-line a { color: var(--jade); }
   .report-dialog { border: 1px solid var(--border); border-radius: var(--r-m); background: var(--panel);
     color: var(--text); max-width: 420px; width: calc(100% - 32px); padding: 20px; }
-  .report-dialog label { display: block; margin: 8px 0; font-size: var(--fs-s); }
-  .report-dialog select, .report-dialog textarea { width: 100%; margin-top: 4px; }
-  .report-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  .report-dialog h2 { margin: 0 0 16px; }
+  .report-dialog label { display: block; margin: 12px 0 4px; font-size: var(--fs-s); }
+  /* 控件套 SPA 表单语言（style.css 同形）：原生 select 的浅底在主题面板上
+     像另一个产品；举报与编辑资料两弹窗共用本类，一改两处齐。 */
+  .report-dialog select, .report-dialog textarea, .report-dialog input {
+    width: 100%; margin-top: 4px; background: var(--ink); border: 1px solid var(--line-strong);
+    color: var(--text); border-radius: var(--r-s); padding: 8px 12px; font-size: var(--fs-s); }
+  .report-dialog textarea { resize: vertical; }
+  .report-count { float: right; font-size: var(--fs-xs); color: var(--muted); }
+  .field-hint { display: block; margin-top: 4px; color: var(--muted); font-size: var(--fs-xs); }
+  .report-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
   .report-error { color: var(--danger-ink, var(--danger)); font-size: var(--fs-s); }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
   @media (max-width: 560px) {
@@ -307,8 +315,10 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
         </select>
       </label>
       <label>{{t .Lang "report.detail"}}
+        <span class="report-count" id="report-count">0 / 500</span>
         <textarea id="report-detail" rows="3" maxlength="500"></textarea>
       </label>
+      <span class="field-hint">{{t .Lang "report.trackHint"}}</span>
       <p class="report-error" id="report-error" hidden></p>
       <div class="report-actions">
         <button type="button" class="alt" id="report-cancel">{{t .Lang "ui.cancel"}}</button>

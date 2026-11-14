@@ -85,6 +85,7 @@
   "report.reasonViolence": "暴力或血腥",
   "report.submit": "提交举报",
   "report.title": "举报材质",
+  "report.trackHint": "处理结果可在用户中心的「我的举报」跟踪。",
   "seo.description": "{intro} — {site}皮肤库中的 Minecraft {kind}{model}，由 {who} 上传，{likes} 人收藏。注册账号即可一键使用。",
   "seo.introWithSummary": "{name}：{summary}",
   "seo.modelDefault": "，Steve 常规模型",

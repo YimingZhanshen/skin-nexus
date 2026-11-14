@@ -99,6 +99,12 @@ function wireReportButton() {
   const show = (msg) => { err.textContent = msg; err.hidden = !msg }
   btn.addEventListener('click', () => { show(''); dlg.showModal() })
   cancel.addEventListener('click', () => dlg.close())
+  // 0/500 计数与上传描述同语言：让「选填」的边界可见
+  const detail = document.getElementById('report-detail')
+  const count = document.getElementById('report-count')
+  if (detail && count) {
+    detail.addEventListener('input', () => { count.textContent = detail.value.length + ' / 500' })
+  }
   form.addEventListener('submit', async (e) => {
     e.preventDefault()
     const tid = btn.getAttribute('data-tid')
