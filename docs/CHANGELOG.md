@@ -52,6 +52,19 @@ hero 纵深收紧（死空带消除）；rig 读数 gap=40 / clamp=2。
 修法：基态 1px 透明边等化（描边款只换边色即同盒）+ danger-outline 的 min-height 归还基态治理；
 宿主基态同步。夹具实测四款 68×42 同盒、small 28 不变。
 
+**同日六轮（查漏补缺轮：全仓审查发现修复 + 积压清账）**：外部五维审查 4 条发现逐条复核属实后全修——
+①（高危）插件桥 `request()` 的 path 可用点段逃逸 `/api/plugins/<name>/` 前缀、以宿主会话调用任意同源 API
+（写侧无 CSRF 层同样可达）：改为 URL 解析后断言 pathname 必须留在插件前缀下（不抄黑名单），
+源码断言闸 + 真机两态读数（逃逸 400 零外联、合法路径 200）（`b21c9fc`）；② 令牌吊销失败静默吞错 ×4
+（ygg refresh、管理改密/改权、角色过户）补审计留痕 + 告警（`a7eeae4`）；③ clientToken 比较改常量时间
+（refresh/validate 两处，`ef5bc97`）；④ CHANGELOG 五轮登记补提交（`95edecd`）。积压清账：G10 核实
+11-07 已落（台账陈旧销账）、G11 残余=对话框 prompt 输入无可访问名已补并钉进 check-a11y 闸（`b7b82e9`）、
+C2 用量预算闸前提否证经拍板关账不设。补扫 plugins-dist 渠道内容（无 eval/动态导入/外联，skin-importer
+的 Mojang 查询为本职）与 npm build 全绿。新功能 **IndexNow 收录通知**（`43278b8`，拍板=默认关 + 面板
+开关）：`SKIN_INDEXNOW_ENABLED` 播种默认、面板热切、`SKIN_INDEXNOW_KEY` 密钥校验文件 `/{密钥}.txt`、
+发布/删除/改公开性事件批量提交 ≤10 条/次、失败只记日志零外联（关闭时），env 同批改齐两份 compose 与
+deploy.md 变量表。
+
 ## 2026-11-14 · v0.7.0 开发周期
 
 W0–W7 八波推进（技术债清查 → 可观测/结构闸 → 功能/重构 → 视觉翻修 → 收尾）。六组主线：
