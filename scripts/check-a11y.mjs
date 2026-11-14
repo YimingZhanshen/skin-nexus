@@ -55,6 +55,17 @@ for (const d of dirs) {
     for (const m of src.matchAll(/<img\b[^>]*>/g)) {
       if (!/\balt\s*=/.test(m[0])) errors.push(`${rel}: <img> without alt= — ${m[0].trim()}`)
     }
+
+    // The dialog prompt input (ModalHost's dialog-field) speaks for itself via
+    // the prompt message; without a name a screen reader announces a bare
+    // "edit text". Other inputs are tracked separately — this rule pins the
+    // one residual the G11 sweep registered.
+    for (const m of src.matchAll(/<input\b[^>]*>/g)) {
+      const tag = m[0]
+      if (/dialog-field/.test(tag) && !/\b(aria-label|aria-labelledby)\s*=/.test(tag)) {
+        errors.push(`${rel}: dialog prompt input without an accessible name — ${tag.trim()}`)
+      }
+    }
   }
 }
 
@@ -63,4 +74,4 @@ if (errors.length) {
   for (const e of errors) console.error('  ' + e)
   process.exit(1)
 }
-console.log('check-a11y: ok (th scope / table caption / img alt)')
+console.log('check-a11y: ok (th scope / table caption / img alt / dialog input name)')

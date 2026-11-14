@@ -42,6 +42,7 @@ function onOpened() {
       ref="field"
       class="dialog-field"
       :value="dialogState.value"
+      :aria-label="dialogState.message"
       @keyup.enter="accept"
     />
   </DialogPanel>
