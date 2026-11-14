@@ -257,6 +257,12 @@ jobs:
         # animates transform — which is how the union diagnose modal ended up
         # below the fold on a long admin page.
         run: node scripts/check-modal-chrome.mjs
+      - name: Table and image accessibility
+        # th scope / table caption / img alt are the load-bearing bits of the
+        # table contract screen readers rely on. web/ has no component test
+        # runner, so the zero-dep scanner is the gate; it strips comments so
+        # prose that merely mentions <img> never trips it.
+        run: node scripts/check-a11y.mjs
       - name: Diagnose report model
         # Which leg a field belongs to is the whole meaning of the union
         # diagnose report, and web/ has no component test framework. node:test
