@@ -70,6 +70,11 @@ const props = defineProps({
   confLoaded: { type: Boolean, default: false },
 })
 const current = ref('dashboard')
+const menuOpen = ref(false)
+const currentLabel = computed(() => {
+  const hit = nav.find((n) => n.id === current.value)
+  return hit ? t(hit.labelKey) : t('admin.title')
+})
 const currentComp = shallowRef(DashboardView)
 const currentPlugin = ref('')
 const pluginPages = ref([])
@@ -195,7 +200,15 @@ onMounted(async () => {
 
 <template>
   <div class="admin-shell">
-    <aside class="card admin-side">
+    <aside class="card admin-side" :class="{ open: menuOpen }">
+      <button class="secondary nav-toggle side-toggle" :aria-expanded="menuOpen ? 'true' : 'false'"
+              :aria-label="t('nav.menu')" @click="menuOpen = !menuOpen">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+             stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h16"/>
+        </svg>
+        <span>{{ currentLabel }}</span>
+      </button>
       <h2>{{ t('admin.title') }}</h2>
       <!-- X-Admin-Token fallback row: only when the session can't reach admin data -->
       <div v-if="needToken" class="admin-token">
@@ -206,7 +219,7 @@ onMounted(async () => {
         <span class="muted">{{ t('admin.tokenStoredHint') }}</span>
         <button class="secondary" @click="clearStoredToken">{{ t('admin.tokenClear') }}</button>
       </div>
-      <nav class="admin-nav">
+      <nav class="admin-nav" @click="menuOpen = false">
         <button v-for="n in visibleNav" :key="n.id" class="nav-item"
                 :class="{ active: current === n.id }" @click="go(n.id)">
           <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
