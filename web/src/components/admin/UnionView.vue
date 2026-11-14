@@ -163,7 +163,7 @@ function exportDiagnose() {
       if (r.pre) cell = `<pre style="white-space:pre-wrap;word-break:break-all;background:#f4f4f5;padding: 8px;">${htmlEscape(r.pre)}</pre>`
       return `<tr><th scope="row" style="text-align:left;vertical-align:top;width:22%;padding: 8px 12px;">${htmlEscape(r.k)}</th><td style="padding: 8px 12px;">${cell}</td></tr>`
     }).join('')
-    return `<h3>${htmlEscape(leg.title)} — ${htmlEscape(stateWord(leg.state))}</h3><table style="border-collapse:collapse;width:100%;">${rows}</table>`
+    return `<h3>${htmlEscape(leg.title)} — ${htmlEscape(stateWord(leg.state))}</h3><table style="border-collapse:collapse;width:100%;" aria-label="${htmlEscape(leg.title)}">${rows}</table>`
   }).join('')
   const meta = diagMeta.value.map((m) => `${htmlEscape(m.k)}: ${htmlEscape(m.v)}`).join(' · ')
   const title = htmlEscape(t('admin.diagExportTitle'))

@@ -139,7 +139,7 @@ onMounted(load)
          skeleton the skin library uses; later fetches keep the old rows rather
          than blanking the page under the cursor. -->
     <div class="table-scroll" v-if="loading && !closet.length" aria-hidden="true">
-      <table>
+      <table aria-hidden="true">
         <tr v-for="n in 4" :key="n">
           <td><span class="skeleton" style="display:block; width:48px; height:48px;"></span></td>
           <td colspan="5"><span class="skeleton" style="display:block; height:16px;"></span></td>
