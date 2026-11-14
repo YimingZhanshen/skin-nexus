@@ -50,7 +50,7 @@ const { t, locale } = useI18n()
 const {
   siteConf, confLoaded, normalizeFooter,
   siteFooter, siteName, inviteFieldShown, inviteIsRequired,
-  mailEnabled, verifyGateEnabled, emailFieldShown, unionEnabled,
+  mailEnabled, verifyGateEnabled, emailFieldShown, unionEnabled, oidcEnabled,
 } = useSiteConfig()
 
 // Session state and the two sign-in guards live with the auth flow; App keeps
@@ -145,7 +145,9 @@ const navGroups = computed(() => {
         badge: Number(user.value.unreadNotifications || 0),
       },
       { id: 'myreports', labelKey: 'nav.myReports', icon: navIcons.myreports },
-      { id: 'apps', labelKey: 'nav.apps', icon: navIcons.apps },
+      // The apps page lists OIDC grants — the route only exists when the
+      // provider is mounted, so the entry must not outlive the capability.
+      ...(oidcEnabled.value ? [{ id: 'apps', labelKey: 'nav.apps', icon: navIcons.apps }] : []),
       { id: 'help', labelKey: 'nav.help', icon: navIcons.help },
       ...(unionEnabled.value ? [{ id: 'union', labelKey: 'nav.union', icon: navIcons.union }] : []),
       ...pluginItems,
@@ -427,7 +429,7 @@ onMounted(() => {
         <button @click="view = 'login'">{{ t('device.goLogin') }}</button>
       </div>
       <template v-else>
-        <DevicePage />
+        <DevicePage :oidc-enabled="oidcEnabled" />
         <div class="row" style="margin-top: 12px;">
           <button class="secondary" @click="backToDashboard">{{ t('nav.backToDashboard') }}</button>
         </div>
@@ -484,7 +486,7 @@ onMounted(() => {
           <ProfilePage v-else-if="view === 'profile'" :mail-enabled="mailEnabled" />
           <NotificationsPage v-else-if="view === 'notifications'" @read="onInboxRead" />
           <MyReportsPage v-else-if="view === 'myreports'" />
-          <AuthorizedAppsPage v-else-if="view === 'apps'" />
+          <AuthorizedAppsPage v-else-if="view === 'apps'" :oidc-enabled="oidcEnabled" />
           <HelpPage v-else-if="view === 'help'" />
           <UnionBindPage v-else-if="view === 'union'" />
           <PluginPage v-else-if="view === 'ext'" :path="extPath" />

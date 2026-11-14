@@ -38,16 +38,33 @@ func (p *Provider) listTokens(w http.ResponseWriter, r *http.Request) {
 	type item struct {
 		JTI         string    `json:"jti"`
 		ClientID    string    `json:"client_id"`
+		ClientName  string    `json:"client_name"`
 		Scopes      []string  `json:"scopes"`
 		SelectedPID int64     `json:"selected_pid"`
 		CreatedAt   time.Time `json:"created_at"`
 		ExpiresAt   time.Time `json:"expires_at"`
+	}
+	// The list is player-facing: client_id is the technical identifier, the
+	// display name is what a person recognizes. A deleted client keeps its id
+	// as the name so the row never renders blank.
+	names := map[string]string{}
+	clientName := func(id string) string {
+		if n, ok := names[id]; ok {
+			return n
+		}
+		n := id
+		if rec, err := p.backend.GetClient(r.Context(), id); err == nil && rec.Name != "" {
+			n = rec.Name
+		}
+		names[id] = n
+		return n
 	}
 	out := make([]item, 0, len(recs))
 	for _, rec := range recs {
 		out = append(out, item{
 			JTI:         rec.JTI,
 			ClientID:    rec.ClientID,
+			ClientName:  clientName(rec.ClientID),
 			Scopes:      rec.Scopes,
 			SelectedPID: rec.SelectedPID,
 			CreatedAt:   rec.CreatedAt,

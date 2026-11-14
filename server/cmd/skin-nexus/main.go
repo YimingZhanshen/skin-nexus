@@ -520,6 +520,9 @@ func main() {
 		}
 	}()
 	backend := webapi.New(st, ts, yggSvc)
+	// The SPA gates its authorized-apps/device pages on this flag; without it
+	// those nav entries lead to a 404 whenever OIDC is off.
+	backend.OIDCEnabled = cfg.OIDCEnabled
 	// The wizard is the one endpoint that answers before anyone exists. Guard it
 	// while it is still open, and say the token out loud in the log so the
 	// operator — the only person reading that log — can complete the install.

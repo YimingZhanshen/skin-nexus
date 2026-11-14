@@ -109,3 +109,48 @@ func TestRevokeReportsClientRefreshFailure(t *testing.T) {
 		t.Fatalf("error code = %v, want oidc.revoke_partial — the jti died but the refresh scope did not", body["code"])
 	}
 }
+
+// The authorized-apps list is player-facing: client_id is the technical
+// identifier, the client's display name is what a person recognizes. An
+// unknown client (deleted mid-session) must fall back to the id rather than
+// render an empty name.
+func TestListTokensCarriesClientName(t *testing.T) {
+	p, b := testProvider(t)
+	p.SessionResolver = func(context.Context, string) (int64, error) { return 42, nil }
+	now := time.Now()
+	for _, rec := range []AccessTokenRecord{
+		{JTI: "jti-named", UserID: 42, ClientID: "2", Scopes: []string{"openid"}, CreatedAt: now, ExpiresAt: now.Add(time.Hour)},
+		{JTI: "jti-ghost", UserID: 42, ClientID: "ghost", Scopes: []string{"openid"}, CreatedAt: now, ExpiresAt: now.Add(time.Hour)},
+	} {
+		if err := b.SaveAccessToken(context.Background(), rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := p.Wrap(http.NotFoundHandler())
+	r := httptest.NewRequest("GET", "/api/v1/oidc/tokens", nil)
+	r.AddCookie(&http.Cookie{Name: "skin_session", Value: "s1"})
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list tokens: %d: %s", w.Code, w.Body.String())
+	}
+	var out struct {
+		Tokens []struct {
+			ClientID   string `json:"client_id"`
+			ClientName string `json:"client_name"`
+		} `json:"tokens"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]string{}
+	for _, tk := range out.Tokens {
+		names[tk.ClientID] = tk.ClientName
+	}
+	if names["2"] != "Shared launcher client" {
+		t.Fatalf(`client_name for "2" = %q, want the seeded client's display name`, names["2"])
+	}
+	if names["ghost"] != "ghost" {
+		t.Fatalf(`client_name for a deleted client = %q, want the id as fallback`, names["ghost"])
+	}
+}

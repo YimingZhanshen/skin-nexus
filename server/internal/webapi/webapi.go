@@ -83,6 +83,11 @@ type Backend struct {
 	// never mean "graceful" in the launcher and "blocked" in the panel.
 	// Nil = enforce immediately.
 	VerifyGrace func(ctx context.Context) time.Duration
+	// OIDCEnabled reports whether the OIDC provider (and its /api/v1/oidc/*
+	// routes) exists on this deployment. The SPA gates the authorized-apps and
+	// device pages on it: without the flag those pages are offered but answer
+	// 404. main wires cfg.OIDCEnabled — same source as the provider mount.
+	OIDCEnabled bool
 	// Appearance supplies the public footer config (nil = default credit).
 	Appearance *appearance.Engine
 	// ThemePalette / ThemeID bake the active theme into outgoing mail (nil =
@@ -587,6 +592,7 @@ func (b *Backend) handleSiteConfig(w http.ResponseWriter, r *http.Request) {
 		// actually on; without this it would either guess or stay silent on the
 		// one reason a player gets refused at the door.
 		"verify_gate_enabled": b.Ygg != nil && b.Ygg.VerificationRequired(r.Context()),
+		"oidc_enabled":        b.OIDCEnabled,
 		"footer":              footer,
 	})
 }

@@ -2,13 +2,19 @@
 // DevicePage: RFC 8628 verification page (SPA). Reached at /device?user_code=…
 // (launcher verification_uri). Without a code it shows an input box for the
 // bare verification_uri case. Submit is the JSON endpoint /api/v1/oidc/device/submit.
-import { ref, onMounted, inject } from 'vue'
+import { ref, watch, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { oidc } from '../api.js'
 import { describe } from '../errors.js'
+import EmptyState from '../components/EmptyState.vue'
 
 const { t } = useI18n()
 const goto = inject('gotoView', null)
+
+// Same capability gate as the apps page: /api/v1/oidc/* only exists when the
+// provider is mounted, so a device link on an OIDC-off deployment must land on
+// an explanation, not a raw transport error.
+const props = defineProps({ oidcEnabled: { type: Boolean, default: false } })
 
 const userCode = ref(new URLSearchParams(location.search).get('user_code') || '')
 const inputCode = ref('')
@@ -59,15 +65,18 @@ async function submit(decision) {
   } finally { loading.value = false }
 }
 
-onMounted(loadInfo)
+watch(() => props.oidcEnabled, (on) => { if (on) loadInfo() }, { immediate: true })
 </script>
 
 <template>
   <div class="card" style="max-width: 480px;">
     <h2>{{ t('device.title') }}</h2>
 
+    <!-- capability off: the API family does not exist on this deployment -->
+    <EmptyState v-if="!oidcEnabled" :text="t('apps.notEnabled')" />
+
     <!-- done -->
-    <div v-if="done" class="success">{{ done }}</div>
+    <div v-else-if="done" class="success">{{ done }}</div>
 
     <!-- no user_code: manual input -->
     <template v-else-if="!userCode">

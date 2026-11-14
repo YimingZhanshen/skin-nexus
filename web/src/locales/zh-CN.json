@@ -548,7 +548,8 @@
     "revokeDone": "已吊销（含该应用的刷新令牌）",
     "revokeAllConfirm": "退出所有已登录的应用/启动器？所有令牌立即失效。",
     "revokeAllDone": "已退出全部应用",
-    "empty": "当前没有生效的授权。用启动器 OAuth 登录后会出现在这里。"
+    "empty": "当前没有生效的授权。用启动器 OAuth 登录后会出现在这里。",
+    "notEnabled": "该功能未启用：本站未开启 OIDC。"
   },
   "union": {
     "title": "Union 联盟绑定",

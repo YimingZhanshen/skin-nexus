@@ -548,7 +548,8 @@
     "revokeDone": "Revoked (including this app's refresh tokens)",
     "revokeAllConfirm": "Sign out of all apps/launchers? Every token dies immediately.",
     "revokeAllDone": "Signed out everywhere",
-    "empty": "No active grants. They appear here after an OAuth launcher sign-in."
+    "empty": "No active grants. They appear here after an OAuth launcher sign-in.",
+    "notEnabled": "Not available: OIDC is disabled on this site."
   },
   "union": {
     "title": "Union binding",
