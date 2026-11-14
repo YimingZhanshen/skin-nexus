@@ -154,18 +154,16 @@ onMounted(load)
         <th scope="col">{{ t('dashboard.colType') }}</th>
         <th scope="col">{{ t('closet.colName') }}</th>
         <th scope="col">{{ t('dashboard.materialName') }}</th>
-        <th scope="col">{{ t('closet.colHash') }}</th>
         <th scope="col"></th>
       </tr>
       <tr v-for="c in closet" :key="c.id">
         <td><img v-if="c.previewURL || c.url" :src="c.previewURL || c.url" class="thumb" alt="" loading="lazy" decoding="async" /><span v-else class="muted">—</span></td>
-        <td>{{ c.type || '—' }}</td>
+        <td>{{ c.type === 'skin' ? t('dashboard.typeSkin') : c.type === 'cape' ? t('dashboard.typeCape') : '—' }}</td>
         <td>{{ c.itemName || '—' }}</td>
         <!-- Two different names, deliberately shown side by side: the alias is
              this user's own label, the texture name is shared by everyone. An
              empty alias used to leave the row with no readable name at all. -->
         <td class="tx-name">{{ c.description || shortHash(c.hash) }}</td>
-        <td class="muted"><code class="hash">{{ shortHash(c.hash) }}</code></td>
         <td class="nowrap">
           <!-- The avatar endpoint rejects capes (422); offering the button on a
                cape row was a dead click. -->
@@ -202,7 +200,6 @@ onMounted(load)
 
 <style scoped>
 .thumb { height: 48px; image-rendering: pixelated; vertical-align: middle; border-radius: 4px; }
-.hash { font-size: var(--fs-xs); }
 .tx-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nowrap { white-space: nowrap; }
 </style>

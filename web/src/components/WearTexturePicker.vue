@@ -135,7 +135,8 @@ watch(() => props.open, (on) => { if (on) { page.value = 1; load() } })
         >
           <img v-if="r.previewURL || r.url" :src="r.previewURL || r.url" alt="" loading="lazy" decoding="async" />
           <span class="pc-label">{{ r.named ? r.label : what() }}</span>
-          <span class="muted pc-hash">{{ shortHash(r.hash) }}</span>
+          <!-- 拍板「只收列表面」：具名行不再挂哈希；无名孤儿保留短哈希作识别 -->
+          <span class="muted pc-hash" v-if="!r.named">{{ shortHash(r.hash) }}</span>
           <span class="muted pc-state" v-if="current(r)">{{ t('picker.current') }}</span>
         </button>
         <button class="pc-rename secondary" :disabled="renaming === r.closetId" @click="rename(r)">

@@ -12,7 +12,7 @@ import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
 import { confirmDialog } from '../dialog.js'
 import { guard401 } from '../session.js'
-import { shortHash, textureLabel } from '../textureLabel.js'
+import { textureLabel } from '../textureLabel.js'
 import EmptyState from '../components/EmptyState.vue'
 import Pager from '../components/Pager.vue'
 
@@ -172,10 +172,10 @@ defineExpose({ reload })
     <div class="table-scroll" v-if="textures.length">
     <table>
       <caption class="sr-only">{{ t('dashboard.texturesTitle', { count: texTotal }) }}</caption>
-      <tr><th scope="col">{{ t('dashboard.materialName') }}</th><th scope="col">{{ t('dashboard.colType') }}</th><th scope="col">{{ t('dashboard.colModel') }}</th><th scope="col">{{ t('dashboard.colPreview') }}</th><th scope="col">{{ t('dashboard.colHash') }}</th><th scope="col"></th></tr>
+      <tr><th scope="col">{{ t('dashboard.materialName') }}</th><th scope="col">{{ t('dashboard.colType') }}</th><th scope="col">{{ t('dashboard.colModel') }}</th><th scope="col">{{ t('dashboard.colPreview') }}</th><th scope="col"></th></tr>
       <tr v-for="tx in textures" :key="tx.id" :class="{ 'row-new': tx.id === newTexId }">
         <td class="tx-name" :title="tx.description || tx.hash">{{ textureLabel(tx) }}</td>
-        <td>{{ tx.type }}</td>
+        <td>{{ tx.type === 'skin' ? t('dashboard.typeSkin') : t('dashboard.typeCape') }}</td>
         <td>
           <!-- 64×32 旧格式没有可判定的像素，识别只会给出 default；这里保留纠正入口 -->
           <select v-if="tx.type === 'skin'" class="model-fix" :value="tx.model" :disabled="rowBusy.has(tx.id)"
@@ -186,7 +186,6 @@ defineExpose({ reload })
           <span v-else>{{ tx.model || '—' }}</span>
         </td>
         <td><img :src="tx.previewURL || tx.url" :alt="t('dashboard.colPreview')" :title="tx.type === 'cape' ? t('common.capeFlat') : ''" style="height: 48px; image-rendering: pixelated;" loading="lazy" decoding="async" /></td>
-        <td class="muted"><code>{{ shortHash(tx.hash) }}</code></td>
         <td>
           <div class="row" style="gap: 8px; flex-wrap: wrap;">
             <button class="secondary" :disabled="rowBusy.has(tx.id)" v-if="!tx.inCloset" @click="addToCloset(tx)">{{ t('dashboard.closetAdd') }}</button>
