@@ -159,9 +159,9 @@ a:hover { color: var(--jade-hi); text-decoration: underline; }
 button {
   background: var(--cinnabar);
   color: var(--on-cinnabar);
-  border: none;
+  border: 1px solid transparent;
   border-radius: var(--r-s);
-  padding: 8px 16px;
+  padding: 7px 15px;
   min-height: 40px;
   cursor: pointer;
   font-size: var(--fs-s);
