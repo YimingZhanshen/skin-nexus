@@ -305,7 +305,7 @@ tbody tr:hover, table tr:hover { background: var(--hover-wash); }
   display: flex; align-items: center; gap: 8px;
   width: 100%; text-align: left;
   background: none; border: 1px solid transparent;
-  padding: 8px 12px; border-radius: var(--r-s); cursor: pointer;
+  padding: 4px 12px; min-height: 36px; border-radius: var(--r-s); cursor: pointer;
   font-size: var(--fs-s); color: var(--moon-2); margin-bottom: 2px;
   transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }

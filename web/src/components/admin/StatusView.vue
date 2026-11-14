@@ -177,21 +177,21 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.status-section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.status-section { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
 .status-section:first-of-type { margin-top: 0; padding-top: 0; border-top: 0; }
 .status-section h3 { margin: 0 0 12px; font-size: var(--fs-m); }
-.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 24px; }
+.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px 24px; }
 .status-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .status-item .k { color: var(--muted); font-size: var(--fs-xs); }
 .status-item .v { color: var(--text); font-size: var(--fs-s); overflow-wrap: anywhere; }
-.status-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.status-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 .diag-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .diag-head h3 { margin: 0; }
-.diag-intro { font-size: var(--fs-xs); margin: 6px 0 14px; }
-.diag-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); }
+.diag-intro { font-size: var(--fs-xs); margin: 8px 0 16px; }
+.diag-row { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--line); }
 .diag-row:first-of-type { border-top: 0; }
 .diag-row .badge { flex: 0 0 auto; min-width: 5.5em; text-align: center; }
-.diag-body { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.diag-body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .diag-name { font-size: var(--fs-s); color: var(--text); }
 .diag-value { font-size: var(--fs-xs); color: var(--muted); overflow-wrap: anywhere; }
 .diag-fix { font-size: var(--fs-xs); color: var(--text); }

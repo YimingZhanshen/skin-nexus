@@ -142,7 +142,7 @@ onMounted(load)
 </template>
 
 <style scoped>
-.job-table { min-width: 1080px; width: 100%; table-layout: fixed; margin-top: 10px; }
+.job-table { min-width: 1080px; width: 100%; table-layout: fixed; margin-top: 12px; }
 .job-table td { overflow: hidden; text-overflow: ellipsis; }
 .job-table th:nth-child(1), .job-table td:nth-child(1) { width: 132px; }
 .job-table th:nth-child(2), .job-table td:nth-child(2) { width: 150px; }
@@ -154,7 +154,7 @@ onMounted(load)
 .nowrap { white-space: nowrap; }
 .mono { font-family: var(--mono, monospace); font-size: var(--fs-xs); }
 .msg { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.oc { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: var(--fs-xs); border: 1px solid transparent; }
+.oc { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: var(--fs-xs); border: 1px solid transparent; }
 .oc-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
 .oc-miss { color: var(--muted); border-color: var(--line); }
 .oc-warn { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 40%, transparent); }

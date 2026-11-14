@@ -111,7 +111,7 @@ onMounted(load)
     </div>
     <div class="error" role="alert" v-if="error">{{ error }}</div>
     <div class="table-scroll" v-if="players.length">
-    <table class="players-table" style="margin-top: 10px;">
+    <table class="players-table" style="margin-top: 12px;">
       <caption class="sr-only">{{ t('admin.playersTitle') }}</caption>
       <tr>
         <th scope="col">PID</th><th scope="col">{{ t('admin.colPreview') }}</th><th scope="col">{{ t('admin.colPlayerName') }}</th>
@@ -142,8 +142,8 @@ onMounted(load)
         <td class="muted nowrap">{{ (p.updatedAt || '').slice(0, 10) }}</td>
         <td class="nowrap">
           <button class="secondary" @click="renamePlayer(p)">{{ t('admin.rename') }}</button>
-          <button class="secondary" style="margin-left: 6px;" @click="changeOwner(p)">{{ t('admin.changeOwner') }}</button>
-          <button class="secondary danger-outline" style="margin-left: 6px;" @click="deletePlayer(p)">{{ t('admin.delete') }}</button>
+          <button class="secondary" style="margin-left: 8px;" @click="changeOwner(p)">{{ t('admin.changeOwner') }}</button>
+          <button class="secondary danger-outline" style="margin-left: 8px;" @click="deletePlayer(p)">{{ t('admin.delete') }}</button>
         </td>
       </tr>
     </table>
@@ -167,6 +167,6 @@ onMounted(load)
 .pname { font-weight: 600; }
 .thumb { width: 28px; height: auto; image-rendering: pixelated; vertical-align: middle; border-radius: 4px; }
 .thumb-sm { width: 18px; height: auto; image-rendering: pixelated; vertical-align: middle; }
-.cell-btn { padding: 3px 8px; min-width: 48px; display: inline-flex; align-items: center; justify-content: center; }
+.cell-btn { padding: 4px 8px; min-width: 48px; display: inline-flex; align-items: center; justify-content: center; }
 .uuid { font-size: var(--fs-xs); letter-spacing: .2px; }
 </style>

@@ -28,11 +28,15 @@ var gridProps = map[string]bool{
 	"margin": true, "margin-top": true, "margin-right": true, "margin-bottom": true, "margin-left": true,
 	"padding": true, "padding-top": true, "padding-right": true, "padding-bottom": true, "padding-left": true,
 	"padding-inline": true, "padding-block": true,
-	"gap": true, "width": true, "height": true,
-	"min-width": true, "min-height": true, "max-width": true, "max-height": true,
+	"gap": true, "height": true,
+	"min-height": true, "max-height": true,
 	"top": true, "left": true, "bottom": true, "right": true,
 	"font-size": true, "line-height": true,
 }
+
+// width / min-width / max-width are deliberately absent: table column and form
+// input widths are content-driven layout dimensions, not the margin/padding/gap/
+// fixed-height spacing the 4px grid governs. Rounding them would re-flow tables.
 
 var fsScale = map[float64]bool{12: true, 14: true, 16: true, 20: true, 24: true, 32: true, 48: true}
 
@@ -47,6 +51,26 @@ var gridFiles = []string{
 	"../../../web/src/pages/SetupPage.vue",
 	"../../../web/src/pages/SkinlibPage.vue",
 	"../../../web/src/pages/TexturesCard.vue",
+	"../../../web/src/components/AdminPanel.vue",
+	"../../../web/src/components/admin/AccessLogsView.vue",
+	"../../../web/src/components/admin/AuditView.vue",
+	"../../../web/src/components/admin/ClosetView.vue",
+	"../../../web/src/components/admin/JobsView.vue",
+	"../../../web/src/components/admin/PlayersView.vue",
+	"../../../web/src/components/admin/PluginsView.vue",
+	"../../../web/src/components/admin/ReportsView.vue",
+	"../../../web/src/components/admin/SettingsView.vue",
+	"../../../web/src/components/admin/StatusView.vue",
+	"../../../web/src/components/admin/TexturesView.vue",
+	"../../../web/src/components/admin/ThemeMarketSection.vue",
+	"../../../web/src/components/admin/UnionView.vue",
+	"../../../web/src/components/admin/UsersView.vue",
+	"../../../web/src/components/admin/DashboardView.vue",
+	"../../../web/src/components/admin/InvitationView.vue",
+	"../../../web/src/components/admin/MarketView.vue",
+	"../../../web/src/components/admin/OidcClientsCard.vue",
+	"../../../web/src/components/admin/SeoSection.vue",
+	"../../../web/src/components/admin/UnionBlacklistSection.vue",
 }
 
 var (

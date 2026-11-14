@@ -285,7 +285,7 @@ onMounted(async () => {
       <ul v-if="planOf(selected).conflicts && planOf(selected).conflicts.length" class="error" role="status" aria-live="polite">
         <li v-for="c in planOf(selected).conflicts" :key="c">{{ c }}</li>
       </ul>
-      <label v-if="planOf(selected).addedPermissions && planOf(selected).addedPermissions.length" class="row" style="align-items:center;gap:8px;">
+      <label v-if="planOf(selected).addedPermissions && planOf(selected).addedPermissions.length" class="row" style="align-items:center;gap: 8px;">
         <input v-model="consent" type="checkbox" />
         <span>{{ t('admin.marketConsent') }}</span>
       </label>

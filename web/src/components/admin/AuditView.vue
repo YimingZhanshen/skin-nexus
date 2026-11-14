@@ -143,7 +143,7 @@ onMounted(load)
 </template>
 
 <style scoped>
-.audit-table { min-width: 860px; width: 100%; table-layout: fixed; margin-top: 10px; }
+.audit-table { min-width: 860px; width: 100%; table-layout: fixed; margin-top: 12px; }
 .audit-table td { overflow: hidden; text-overflow: ellipsis; }
 .audit-table th:nth-child(1), .audit-table td:nth-child(1) { width: 160px; }
 .audit-table th:nth-child(2), .audit-table td:nth-child(2) { width: 84px; }

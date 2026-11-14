@@ -221,8 +221,8 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.tm-title { font-size: var(--fs-s); margin: 18px 0 4px; color: var(--muted); letter-spacing: .06em; }
-.tm-hint { margin: 0 0 10px; }
-.tm-inspect { margin-top: 10px; padding: 14px 16px; }
+.tm-title { font-size: var(--fs-s); margin: 20px 0 4px; color: var(--muted); letter-spacing: .06em; }
+.tm-hint { margin: 0 0 12px; }
+.tm-inspect { margin-top: 12px; padding: 16px 16px; }
 .tm-risk { margin-top: 8px; font-size: var(--fs-s); color: var(--gold); }
 </style>

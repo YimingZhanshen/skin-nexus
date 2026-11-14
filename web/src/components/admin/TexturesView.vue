@@ -242,7 +242,7 @@ onMounted(load)
 <style scoped>
 .tex-bar { flex-wrap: wrap; gap: 8px; align-items: center; }
 .tex-bar select { max-width: 150px; }
-.tex-table { min-width: 1180px; width: 100%; table-layout: fixed; margin-top: 10px; }
+.tex-table { min-width: 1180px; width: 100%; table-layout: fixed; margin-top: 12px; }
 .tex-table td { overflow: hidden; text-overflow: ellipsis; }
 .tex-table th:nth-child(1), .tex-table td:nth-child(1) { width: 52px; }
 .tex-table th:nth-child(2), .tex-table td:nth-child(2) { width: 56px; }
@@ -260,8 +260,8 @@ onMounted(load)
 .hash-btn { border: none; background: transparent; color: var(--muted); cursor: pointer; padding: 2px 4px; min-height: 28px; }
 .hash-btn:hover { color: var(--text); box-shadow: none; transform: none; background: transparent; }
 .hash-btn.copied { color: var(--ok); }
-.tex-act button { margin-right: 6px; }
-.oc { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: var(--fs-xs); border: 1px solid transparent; }
+.tex-act button { margin-right: 8px; }
+.oc { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: var(--fs-xs); border: 1px solid transparent; }
 .oc-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
 .oc-miss { color: var(--muted); border-color: var(--line); }
 .oc-bad { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }

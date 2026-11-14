@@ -211,11 +211,11 @@ onMounted(load)
 </template>
 
 <style scoped>
-.report-tex { display: flex; gap: 10px; align-items: center; }
-.report-tex img { width: 42px; height: 42px; object-fit: contain; image-rendering: pixelated; background: var(--bg); border-radius: 4px; }
+.report-tex { display: flex; gap: 12px; align-items: center; }
+.report-tex img { width: 44px; height: 44px; object-fit: contain; image-rendering: pixelated; background: var(--bg); border-radius: 4px; }
 .report-detail { margin-top: 4px; font-size: var(--fs-xs); color: var(--muted); white-space: pre-wrap; }
 .struck { margin-top: 4px; font-size: var(--fs-xs); color: var(--danger); }
-.report-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.btn-link { display: inline-flex; align-items: center; padding: 6px 12px; text-decoration: none; }
+.report-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-link { display: inline-flex; align-items: center; padding: 8px 12px; text-decoration: none; }
 button.active { border-color: var(--accent); color: var(--accent); }
 </style>

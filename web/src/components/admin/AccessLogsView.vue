@@ -229,7 +229,7 @@ onMounted(() => { load(); loadDetail() })
     </div>
     <div class="error" role="alert" v-if="error">{{ error }}</div>
     <div class="table-scroll" v-if="logs.length">
-    <table class="logs-table" style="margin-top: 10px;">
+    <table class="logs-table" style="margin-top: 12px;">
       <caption class="sr-only">{{ t('admin.accessTitle') }}</caption>
       <tr>
         <th scope="col">{{ t('admin.colTime') }}</th><th scope="col">{{ t('admin.colKind') }}</th>
@@ -305,7 +305,7 @@ onMounted(() => { load(); loadDetail() })
 <style scoped>
 /* diagnostic-mode switch: a quiet bordered band above the filters; the state
    badge reuses the table's outcome tones so ON/OFF reads the same language. */
-.detail-mode { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 10px 0 4px; }
+.detail-mode { border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin: 12px 0 4px; }
 .dm-title { margin: 0 0 2px; font-size: var(--fs-m, 1rem); }
 .dm-state { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
 .dm-controls { flex-wrap: wrap; gap: 8px; }
@@ -332,7 +332,7 @@ onMounted(() => { load(); loadDetail() })
   text-overflow: ellipsis;
 }
 .ua { font-size: var(--fs-xs); }
-.oc { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: var(--fs-xs); border: 1px solid transparent; }
+.oc { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: var(--fs-xs); border: 1px solid transparent; }
 .oc-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
 .oc-miss { color: var(--muted); border-color: var(--line); }
 .oc-warn { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 40%, transparent); }
@@ -340,7 +340,7 @@ onMounted(() => { load(); loadDetail() })
 /* detail sub-row: an expanded request's diagnostic fields, kept visually under
    the summary line it belongs to. The cell spans all columns and never
    ellipsizes, so the body excerpt and headers wrap instead of clipping. */
-.logs-table tr.sub-row > td { overflow: visible; padding: 10px 14px; border-top: 1px solid var(--line); }
+.logs-table tr.sub-row > td { overflow: visible; padding: 12px 16px; border-top: 1px solid var(--line); }
 .axd { display: flex; flex-direction: column; gap: 8px; }
 .axd-grid { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
 .axd-grid dt { color: var(--muted); font-size: var(--fs-xs); }

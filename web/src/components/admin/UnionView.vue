@@ -160,8 +160,8 @@ function exportDiagnose() {
       let cell = htmlEscape(r.v ?? '')
       if (r.mono) cell += ` <code>${htmlEscape(r.mono)}</code>`
       if (r.state) cell = `<span style="color:${EXPORT_INK[r.state]};font-weight:600;">${htmlEscape(stateWord(r.state))}</span> ${cell}`
-      if (r.pre) cell = `<pre style="white-space:pre-wrap;word-break:break-all;background:#f4f4f5;padding:8px;">${htmlEscape(r.pre)}</pre>`
-      return `<tr><th scope="row" style="text-align:left;vertical-align:top;width:22%;padding:8px 12px;">${htmlEscape(r.k)}</th><td style="padding:8px 12px;">${cell}</td></tr>`
+      if (r.pre) cell = `<pre style="white-space:pre-wrap;word-break:break-all;background:#f4f4f5;padding: 8px;">${htmlEscape(r.pre)}</pre>`
+      return `<tr><th scope="row" style="text-align:left;vertical-align:top;width:22%;padding: 8px 12px;">${htmlEscape(r.k)}</th><td style="padding: 8px 12px;">${cell}</td></tr>`
     }).join('')
     return `<h3>${htmlEscape(leg.title)} — ${htmlEscape(stateWord(leg.state))}</h3><table style="border-collapse:collapse;width:100%;">${rows}</table>`
   }).join('')

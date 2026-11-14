@@ -131,7 +131,7 @@ onMounted(() => { if (uid.value) load() })
         <td class="muted" style="font-family: var(--mono);">{{ row.hash ? row.hash.slice(0, 12) : '—' }}</td>
         <td>
           <button class="secondary" @click="rename(row)">{{ t('admin.rename') }}</button>
-          <button class="danger-outline" style="margin-left: 6px;" @click="remove(row)">{{ t('admin.delete') }}</button>
+          <button class="danger-outline" style="margin-left: 8px;" @click="remove(row)">{{ t('admin.delete') }}</button>
         </td>
       </tr>
     </table>

@@ -183,7 +183,7 @@ onMounted(load)
           <input v-if="boolKeys.has(s.key)"
                  type="checkbox" v-model="s.value" true-value="1" false-value="0" />
           <textarea v-else-if="!s.secret && textKeys.has(s.key)"
-                    v-model="s.value" :style="s.key.startsWith('union_oauth2_sig_') ? 'max-width: 360px; min-height: 72px; font-family: monospace; font-size: var(--fs-xs);' : 'max-width: 360px; min-height: 38px;'"></textarea>
+                    v-model="s.value" :style="s.key.startsWith('union_oauth2_sig_') ? 'max-width: 360px; min-height: 72px; font-family: monospace; font-size: var(--fs-xs);' : 'max-width: 360px; min-height: 40px;'"></textarea>
           <select v-else-if="s.key === 'player_name_rule'" v-model="s.value" style="max-width: 160px;">
             <option value="official">{{ t('admin.settings.ruleOfficial') }}</option>
             <option value="cjk">{{ t('admin.settings.ruleCjk') }}</option>
@@ -224,13 +224,13 @@ onMounted(load)
       <label style="margin-top: 12px;" for="ap-footer-text">{{ t('admin.appearance.footerText') }} <span class="muted">{{ '{year} / {site_name} / {site_url}' }}</span></label>
       <textarea id="ap-footer-text" v-model="appearance.footer_text" rows="3" maxlength="1000" :placeholder="t('admin.appearance.footerPlaceholder')"></textarea>
       <label style="margin-top: 12px;">{{ t('admin.appearance.footerLinks', { max: 8 }) }}</label>
-      <div v-for="(link, i) in appearance.footer_links" :key="i" class="row" style="gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">
+      <div v-for="(link, i) in appearance.footer_links" :key="i" class="row" style="gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
         <input v-model="link.label" maxlength="40" :placeholder="t('admin.appearance.footerLinkName')" style="max-width: 180px;" />
         <input v-model="link.url" maxlength="2048" placeholder="https://" style="max-width: 420px;" />
         <button class="secondary" type="button" @click="appearance.footer_links.splice(i, 1)">{{ t('common.delete') }}</button>
       </div>
       <button class="secondary" type="button" v-if="appearance.footer_links.length < 8" @click="appearance.footer_links.push({ label: '', url: '' })">{{ t('admin.appearance.addLink') }}</button>
-      <p class="muted" style="font-size: var(--fs-xs); margin-top: 6px;">{{ t('admin.appearance.footerPublicHint') }}</p>
+      <p class="muted" style="font-size: var(--fs-xs); margin-top: 8px;">{{ t('admin.appearance.footerPublicHint') }}</p>
       <label style="margin-top: 12px;" for="ap-css">{{ t('admin.appearance.css') }}</label>
       <textarea id="ap-css" v-model="appearance.custom_css" rows="5" placeholder=".card { border-radius: 16px; }"></textarea>
       <label for="ap-js">{{ t('admin.appearance.js') }}</label>

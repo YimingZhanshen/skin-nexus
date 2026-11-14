@@ -188,7 +188,7 @@ onMounted(async () => {
     <h2 style="margin-top: 0;">{{ t('admin.pluginsTitle') }}</h2>
     <p class="muted">{{ t('admin.pluginsHint') }}</p>
     <p class="muted" v-if="readOnly">{{ t('admin.pluginsReadOnly') }}</p>
-    <label v-if="isSuper" class="row" style="align-items:center;gap:8px;margin:8px 0;">
+    <label v-if="isSuper" class="row" style="align-items:center;gap: 8px;margin: 8px 0;">
       <input type="checkbox" :checked="guardsBypassed" :disabled="bypassBusy" @change="toggleBypass" />
       <span class="muted">{{ t('admin.pluginsGuardBypass') }}</span>
     </label>
@@ -277,11 +277,11 @@ onMounted(async () => {
 .plugin-info { min-width: 0; }
 .plugin-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .plugin-title-row strong { font-size: var(--fs-m); }
-.plugin-desc { margin: 6px 0 10px; color: var(--muted); font-size: var(--fs-s); line-height: 1.6; }
-.plugin-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: var(--fs-xs); color: var(--muted); align-items: center; }
-.plugin-meta > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.plugin-desc { margin: 8px 0 12px; color: var(--muted); font-size: var(--fs-s); line-height: 1.6; }
+.plugin-meta { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: var(--fs-xs); color: var(--muted); align-items: center; }
+.plugin-meta > span { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .meta-label { color: var(--muted); opacity: .72; }
-.plugin-perms { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+.plugin-perms { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
 .plugin-actions { display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; justify-content: flex-end; max-width: 280px; }
 .plugin-actions .danger-outline { border-color: var(--danger); color: var(--danger); }
 .plugin-actions .danger-outline:hover { background: var(--danger); color: var(--on-danger); }
