@@ -459,7 +459,6 @@
     "newEmail": "New email (leave empty to keep)",
     "emailKeepHint": "Leave empty to keep current",
     "saved": "Saved",
-    "verifiedState": "Email state: {state}",
     "verified": "verified",
     "unverified": "unverified",
     "emailResetHint": "Changing the email resets the verified state (re-verification required before a verification gate lets you join).",

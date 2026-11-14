@@ -153,9 +153,10 @@ onMounted(load)
     <div class="row" style="margin-top: 8px;">
       <button @click="saveProfile">{{ t('common.save') }}</button>
       <button class="secondary" v-if="mailEnabled && me && !me.emailVerified" :disabled="mailBusy" @click="requestEmailVerification">{{ mailBusy ? t('auth.verifySubmitting') : t('auth.verifySubmit') }}</button>
-      <span class="muted" v-if="me">{{ t('profile.verifiedState', { state: me.emailVerified ? t('profile.verified') : t('profile.unverified') }) }}</span>
+      <!-- 状态是徽章不是行内灰字：一眼可辨且不与提示文本混流 -->
+      <span v-if="me" class="badge" :class="me.emailVerified ? 'ok' : 'danger'">{{ me.emailVerified ? t('profile.verified') : t('profile.unverified') }}</span>
     </div>
-    <div class="muted" style="margin-top: 8px; font-size: var(--fs-xs);">{{ t('profile.emailResetHint') }}</div>
+    <span class="field-hint">{{ t('profile.emailResetHint') }}</span>
 
     <!-- password -->
     <h3>{{ t('auth.pwTitle') }}</h3>
@@ -164,15 +165,17 @@ onMounted(load)
       <input v-model="newPw" type="password" :placeholder="t('auth.pwNew')" style="max-width: 220px;" @keyup.enter="changePassword" />
       <button :disabled="pwBusy" @click="changePassword">{{ t('auth.pwSubmit') }}</button>
     </div>
-    <div class="muted" style="margin-top: 8px; font-size: var(--fs-xs);">{{ t('auth.pwHint') }}</div>
+    <span class="field-hint">{{ t('auth.pwHint') }}</span>
 
-    <!-- delete account (admins blocked server-side) -->
-    <h3 class="danger-text">{{ t('profile.dangerZone') }}</h3>
-    <div class="row">
-      <input v-model="delPw" type="password" :placeholder="t('profile.deletePwPlaceholder')" style="max-width: 260px;" />
-      <button class="danger" :disabled="delBusy" @click="deleteAccount">{{ t('profile.deleteBtn') }}</button>
+    <!-- delete account (admins blocked server-side)：危险区独立描边小卡 -->
+    <div class="danger-zone">
+      <h3 class="danger-text">{{ t('profile.dangerZone') }}</h3>
+      <div class="row">
+        <input v-model="delPw" type="password" :placeholder="t('profile.deletePwPlaceholder')" style="max-width: 260px;" />
+        <button class="danger" :disabled="delBusy" @click="deleteAccount">{{ t('profile.deleteBtn') }}</button>
+      </div>
+      <span class="field-hint">{{ t('profile.deleteHint') }}</span>
     </div>
-    <div class="muted" style="margin-top: 8px; font-size: var(--fs-xs);">{{ t('profile.deleteHint') }}</div>
     <PluginSlot slot="profile.card.footer" />
   </div>
 
@@ -205,4 +208,11 @@ h3 { font-size: var(--fs-s); margin: 20px 0 8px; color: var(--muted); font-weigh
 .fld { flex: 1; min-width: 220px; }
 .fld input { margin-top: 4px; }
 .danger-text { color: var(--danger); }
+/* 危险区独立成块：细 danger 描边小卡，与上方账号区安静分层 */
+.danger-zone {
+  margin-top: 24px; padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  border-radius: var(--r-m);
+}
+.danger-zone h3 { margin-top: 0; }
 </style>

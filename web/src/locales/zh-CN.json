@@ -459,7 +459,6 @@
     "newEmail": "新邮箱（留空保持不变）",
     "emailKeepHint": "留空则不修改",
     "saved": "已保存",
-    "verifiedState": "邮箱状态：{state}",
     "verified": "已验证",
     "unverified": "未验证",
     "emailResetHint": "修改邮箱会将验证状态重置为未验证（需重新验证后才能通过验证门进服）。",
