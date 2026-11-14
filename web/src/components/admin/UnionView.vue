@@ -286,6 +286,7 @@ onMounted(load)
               <span>{{ leg.title }}</span>
               <span class="diag-badge" :class="leg.state">{{ t('admin.diagState.' + leg.state) }}</span>
             </h4>
+            <div class="table-scroll">
             <table class="diag-table">
               <caption class="sr-only">{{ leg.title }}</caption>
               <tr v-for="(r, i) in leg.rows" :key="i">
@@ -301,6 +302,7 @@ onMounted(load)
                 </td>
               </tr>
             </table>
+            </div>
           </section>
           <p class="diag-meta" v-if="diagMeta.length">
             <span v-for="m in diagMeta" :key="m.k" class="diag-meta-item">

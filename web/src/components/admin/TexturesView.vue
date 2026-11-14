@@ -214,7 +214,7 @@ onMounted(load)
           <td class="name" :title="row.name || ''">
             <a class="tex-open" :href="'/skinlib/' + row.id" target="_blank" rel="noopener">{{ row.name || '—' }}</a>
           </td>
-          <td class="nowrap">{{ row.type }}<span class="muted" v-if="row.model"> · {{ row.model }}</span></td>
+          <td class="nowrap">{{ row.type === 'skin' ? t('dashboard.typeSkin') : row.type === 'cape' ? t('dashboard.typeCape') : '—' }}<span class="muted" v-if="row.model"> · {{ row.model === 'slim' ? t('dashboard.modelSlim') : t('dashboard.modelDefault') }}</span></td>
           <td class="nowrap">
             <span :title="'#' + row.uid">{{ row.nickname || ('#' + row.uid) }}</span>
           </td>

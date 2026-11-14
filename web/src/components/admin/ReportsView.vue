@@ -27,6 +27,15 @@ const error = ref('')
 const ok = ref('')
 let seq = 0
 
+// 状态三枚举（store/reports.go）：open / resolved / dismissed——与玩家侧
+// 我的举报共用一套状态词，面板不再裸显枚举原文。
+const reportStatusKeys = {
+  open: 'myreports.statusOpen',
+  resolved: 'myreports.statusResolved',
+  dismissed: 'myreports.statusDismissed',
+}
+const statusText = (r) => t(reportStatusKeys[r.status] || 'myreports.statusOpen')
+
 const reasons = {
   copyright: 'admin.reasonCopyright',
   sexual: 'admin.reasonSexual',
@@ -189,7 +198,8 @@ onMounted(load)
             <div v-if="r.detail" class="report-detail">{{ r.detail }}</div>
           </td>
           <td>
-            <div>{{ r.status }}</div>
+            <!-- 状态用徽章不用裸枚举：open=待处理、resolved=已处理、dismissed=已驳回 -->
+            <span class="badge" :class="r.status === 'open' ? 'gold' : r.status === 'resolved' ? 'ok' : 'dim'">{{ statusText(r) }}</span>
             <div class="muted">{{ r.createdAt }}</div>
           </td>
           <td>

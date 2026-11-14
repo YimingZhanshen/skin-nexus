@@ -83,7 +83,8 @@ onMounted(load)
     <div class="error" role="alert" v-if="error">{{ error }}</div>
     <p class="muted">{{ t('notifications.hint') }}</p>
 
-    <table v-if="rows.length">
+    <div class="table-scroll" v-if="rows.length">
+    <table>
       <caption class="sr-only">{{ t('notifications.title') }}</caption>
       <tr>
         <th scope="col">{{ t('notifications.colWhat') }}</th>
@@ -100,6 +101,7 @@ onMounted(load)
         <td><button class="secondary small" v-if="!n.read" :disabled="busy" @click="markRead(n.id)">{{ t('notifications.markRead') }}</button></td>
       </tr>
     </table>
+    </div>
     <EmptyState v-else :text="onlyUnread ? t('notifications.emptyUnread') : t('notifications.empty')" />
     <Pager :page="page" :pages="pages" :total="total" @update:page="(p) => { page = p; load() }" />
   </div>

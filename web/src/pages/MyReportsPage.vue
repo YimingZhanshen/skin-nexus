@@ -75,7 +75,8 @@ onMounted(load)
     <div class="error" role="alert" v-if="error">{{ error }}</div>
     <p class="muted">{{ t('myreports.hint') }}</p>
 
-    <table v-if="rows.length">
+    <div class="table-scroll" v-if="rows.length">
+    <table>
       <caption class="sr-only">{{ t('myreports.title') }}</caption>
       <tr>
         <th scope="col">{{ t('myreports.colTexture') }}</th>
@@ -99,6 +100,7 @@ onMounted(load)
         <td><a class="secondary btn-link" :href="`/skinlib/${r.textureId}`">{{ t('myreports.view') }}</a></td>
       </tr>
     </table>
+    </div>
     <EmptyState v-else :text="t('myreports.empty')" />
     <Pager :page="page" :pages="pages" :total="total" @update:page="(p) => { page = p; load() }" />
   </div>
