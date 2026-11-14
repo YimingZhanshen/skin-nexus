@@ -102,3 +102,24 @@ func TestPluginNavigateStaysOnThisOrigin(t *testing.T) {
 		t.Error("navigate is back to a string-prefix guard, which admits /\\evil.com")
 	}
 }
+
+// `request` sends a plugin page's calls under /api/plugins/<name>/, and the raw
+// path is the only part the plugin controls. Guarding the raw string is the
+// shape that leaks: URL parsing folds ".." segments (and turns backslashes into
+// slashes) in the *resolved* path, so "/api/plugins/foo/../../admin/v1/users"
+// arrives at /api/admin/v1/users carrying the user's session — the server never
+// sees a plugin prefix to defend. The judgment has to be made on the parsed
+// URL's pathname, after folding, against the plugin's own base.
+func TestPluginRequestStaysUnderThePluginPrefix(t *testing.T) {
+	src := pluginFrameSource(t)
+	fn := topLevelFunc(t, src, "async function request(")
+	if !strings.Contains(fn, "new URL(") {
+		t.Errorf("request() does not resolve the plugin path before judging it, so \"..\" escapes /api/plugins/<name>/ and any same-source API becomes callable as the user:\n%s", fn)
+	}
+	if !strings.Contains(fn, "pathname") || !strings.Contains(fn, "startsWith(") {
+		t.Errorf("request() does not assert the resolved pathname against the plugin prefix:\n%s", fn)
+	}
+	if !strings.Contains(fn, "status: 400") {
+		t.Errorf("request() has no refusal branch; an escaped path must be answered with 400, not fetched:\n%s", fn)
+	}
+}

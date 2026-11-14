@@ -136,14 +136,23 @@ async function loadContext() {
 }
 
 async function request(payload, id) {
-  const path = '/' + String(payload.path || '').replace(/^\/+/, '')
+  const raw = String(payload.path || '').replace(/^\/+/, '')
+  const base = '/api/plugins/' + encodeURIComponent(props.plugin) + '/'
+  // The plugin controls only the tail of this URL, and URL parsing folds ".."
+  // segments (and backslashes) in the *resolved* path — so judge the parsed
+  // pathname against the plugin's base, never the raw string.
+  const target = new URL(base + raw, location.origin)
+  if (target.origin !== location.origin || !target.pathname.startsWith(base)) {
+    send('response', { status: 400, error: 'path not allowed' }, id)
+    return
+  }
   const method = String(payload.method || 'GET').toUpperCase()
   const headers = { 'Content-Type': 'application/json' }
   if (csrf && method !== 'GET' && method !== 'HEAD') headers['X-CSRF-Token'] = csrf
   let body
   if (payload.body !== undefined && method !== 'GET' && method !== 'HEAD') body = JSON.stringify(payload.body)
   try {
-    const r = await fetch(`/api/plugins/${encodeURIComponent(props.plugin)}${path}`, {
+    const r = await fetch(target.pathname + target.search, {
       method, headers, body, credentials: 'same-origin',
     })
     let out = null
