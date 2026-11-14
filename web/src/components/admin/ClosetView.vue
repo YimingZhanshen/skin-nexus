@@ -55,6 +55,13 @@ function search() {
   load()
 }
 
+// 与玩家侧纹理列表同款 300ms 防抖：键入即请求会在慢网下堆出一串查询
+let qTimer = 0
+function searchDebounced() {
+  clearTimeout(qTimer)
+  qTimer = setTimeout(search, 300)
+}
+
 async function rename(row) {
   const id = Number(uid.value)
   const current = row.itemName || row.description || ('#' + row.textureId)
@@ -90,26 +97,25 @@ onMounted(() => { if (uid.value) load() })
 </script>
 
 <template>
-  <div>
-    <div class="row" style="justify-content: space-between; align-items: center;">
-      <h2 style="margin: 0;">{{ t('admin.closetManage') }}</h2>
-      <div class="row">
-        <input v-model="uid" :placeholder="t('admin.closetUidPh')" :aria-label="t('admin.closetUidPh')"
-               inputmode="numeric" style="max-width: 140px;" @keyup.enter="search" />
-        <input v-model="q" :placeholder="t('admin.closetSearchPh')" :aria-label="t('admin.closetSearchPh')"
-               style="max-width: 240px;" @input="search" />
-        <select v-model="typ" :aria-label="t('admin.closetType')" @change="search" style="max-width: 130px;">
-          <option value="">{{ t('dashboard.texTypeAll') }}</option>
-          <option value="skin">{{ t('dashboard.texTypeSkin') }}</option>
-          <option value="cape">{{ t('dashboard.texTypeCape') }}</option>
-        </select>
-        <button class="secondary" @click="search">{{ t('admin.reload') }}</button>
-      </div>
+  <div class="card">
+    <h2 style="margin-top: 0;">{{ t('admin.closetManage') }}</h2>
+    <div class="row">
+      <input v-model="uid" :placeholder="t('admin.closetUidPh')" :aria-label="t('admin.closetUidPh')"
+             inputmode="numeric" style="max-width: 140px;" @keyup.enter="search" />
+      <input v-model="q" :placeholder="t('admin.closetSearchPh')" :aria-label="t('admin.closetSearchPh')"
+             style="max-width: 240px;" @input="searchDebounced" />
+      <select v-model="typ" :aria-label="t('admin.closetType')" @change="search" style="max-width: 130px;">
+        <option value="">{{ t('dashboard.texTypeAll') }}</option>
+        <option value="skin">{{ t('dashboard.texTypeSkin') }}</option>
+        <option value="cape">{{ t('dashboard.texTypeCape') }}</option>
+      </select>
+      <button class="secondary" @click="search">{{ t('admin.search') }}</button>
     </div>
     <div class="error" role="alert" v-if="error">{{ error }}</div>
 
     <p class="muted" v-if="!loaded" style="margin-top: 16px;">{{ t('admin.closetNeedUid') }}</p>
-    <table v-else-if="rows.length" style="margin-top: 12px;">
+    <div class="table-scroll" v-else-if="rows.length">
+    <table style="margin-top: 12px;">
       <caption class="sr-only">{{ t('admin.closetManage') }}</caption>
       <tr>
         <th scope="col">{{ t('dashboard.colPreview') }}</th>
@@ -127,7 +133,7 @@ onMounted(() => { if (uid.value) load() })
         </td>
         <td>{{ label(row) }}</td>
         <td>{{ row.itemName || '—' }}</td>
-        <td>{{ row.type || '—' }}</td>
+        <td>{{ row.type === 'skin' ? t('dashboard.typeSkin') : row.type === 'cape' ? t('dashboard.typeCape') : '—' }}</td>
         <td class="muted" style="font-family: var(--mono);">{{ row.hash ? row.hash.slice(0, 12) : '—' }}</td>
         <td>
           <button class="secondary" @click="rename(row)">{{ t('admin.rename') }}</button>
@@ -135,6 +141,7 @@ onMounted(() => { if (uid.value) load() })
         </td>
       </tr>
     </table>
+    </div>
     <EmptyState v-else-if="loaded" :text="t('admin.closetEmpty')" style="margin-top: 12px;" />
     <Pager v-if="loaded && rows.length" :page="page" :pages="pages" :total="total"
            @update:page="(p) => { page = p; load() }" />
