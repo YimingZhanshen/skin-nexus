@@ -52,8 +52,8 @@ func TestRenderLayers(t *testing.T) {
 	}}, testRegistry(t))
 	html := e.Render(context.Background(), tpl)
 	for _, want := range []string{
-		`/theme-assets/dark/style.css`,
-		`/theme-assets/dark/fx.js`,
+		`/theme-assets/dark/1.0.0/style.css`,
+		`/theme-assets/dark/1.0.0/fx.js`,
 		`<style id="skin-custom-css">`,
 		`.card{border-radius:20px}`,
 		`<script id="skin-custom-js" data-cfasync="false">`,

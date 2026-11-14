@@ -184,7 +184,7 @@ CSS **之后**（同特异性后定义者胜）——所以平实的 `:root { --
 - **改样式调试**：改 CSS 后浏览器可能吃缓存（资源缓存 86400s）——把 theme.json 的 `version`
   递增（链接自动带 `?v=` 破缓存）或强制刷新（Ctrl+F5）。
 - **排查清单**：① 查看网页源码，确认 `<!--skin-theme-->` 等标记已被替换（看到 `/theme-assets/...`
-  链接即注入成功）；② 浏览器 Network 确认 `/theme-assets/<id>/<file>` 返回 200（404 = 文件名
+  链接即注入成功）；② 浏览器 Network 确认 `/theme-assets/<id>/<version>/<file>` 返回 200（404 = 文件名
   不合规则/不在包根）；③ DevTools → Computed 看 `--bg` 等变量是否你的值；④ 深链接（刷新一次
   任意页面）确保拿的是注入后的页面；⑤ 还不行看服务日志 `theme: skip ...` 原因。
 

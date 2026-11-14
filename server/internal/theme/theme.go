@@ -233,13 +233,13 @@ func (r *Registry) ResolveAsset(id, name string) (string, error) {
 // /theme-assets/<id>/<file> (cached for 86400s; ?v=<theme version> lets a
 // version bump bust the cache).
 func (t *Theme) HeadHTML() string {
-	v := "?v=" + url.QueryEscape(t.Manifest.Version)
+	v := url.PathEscape(t.Manifest.Version)
 	var sb strings.Builder
 	for _, f := range t.Manifest.Inject.CSS {
 		if !fileRe.MatchString(f) {
 			continue
 		}
-		sb.WriteString(`<link rel="stylesheet" href="/theme-assets/` + t.Manifest.ID + `/` + f + v + `">` + "\n")
+		sb.WriteString(`<link rel="stylesheet" href="/theme-assets/` + t.Manifest.ID + `/` + v + `/` + f + `">` + "\n")
 	}
 	for _, f := range t.Manifest.Inject.JS {
 		if !fileRe.MatchString(f) {
@@ -248,7 +248,7 @@ func (t *Theme) HeadHTML() string {
 		// data-cfasync="false": Rocket Loader (Cloudflare) would otherwise
 		// defer this script past the first paint — the theme's mode script
 		// must set the light/dark class before anything is drawn.
-		sb.WriteString(`<script src="/theme-assets/` + t.Manifest.ID + `/` + f + v + `" data-cfasync="false"></script>` + "\n")
+		sb.WriteString(`<script src="/theme-assets/` + t.Manifest.ID + `/` + v + `/` + f + `" data-cfasync="false"></script>` + "\n")
 	}
 	return sb.String()
 }

@@ -90,8 +90,14 @@ func TestHeadHTML(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := th.HeadHTML()
-	if !strings.Contains(h, `/theme-assets/dark/style.css`) {
-		t.Fatalf("head = %q", h)
+	// The version goes in the PATH: CDNs that strip query strings from the
+	// cache key made ?v= busting a no-op (2026-11-15 demo incident — a 3.3.0
+	// stylesheet kept being served under the 4.0.0 URL for the whole TTL).
+	if !strings.Contains(h, `/theme-assets/dark/1.0.0/style.css`) {
+		t.Fatalf("version-in-path URL missing, head = %q", h)
+	}
+	if strings.Contains(h, `?v=`) {
+		t.Fatalf("query-string busting is dead weight against query-stripping caches, head = %q", h)
 	}
 }
 

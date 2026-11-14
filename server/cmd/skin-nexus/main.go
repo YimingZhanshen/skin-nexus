@@ -979,6 +979,9 @@ func main() {
 	root.Handle("GET /robots.txt", robotsHandler(seoEng))
 	root.Handle("GET /llms.txt", llmsHandler(seoEng))
 	root.Handle("GET /theme-assets/{id}/{file}", themeAssetHandler(themeReg))
+	// Version-in-path form: immune to CDNs that strip query strings from the
+	// cache key (see theme.HeadHTML). The legacy shape stays for old cached HTML.
+	root.Handle("GET /theme-assets/{id}/{ver}/{file}", themeAssetHandler(themeReg))
 	// A plugin UI page paints with its own inline defaults, so the theme has to
 	// travel as CSS in <head> rather than only through the postMessage bridge —
 	// otherwise every plugin page shows the stock palette for a moment before the
