@@ -245,7 +245,10 @@ func (t *Theme) HeadHTML() string {
 		if !fileRe.MatchString(f) {
 			continue
 		}
-		sb.WriteString(`<script src="/theme-assets/` + t.Manifest.ID + `/` + f + v + `"></script>` + "\n")
+		// data-cfasync="false": Rocket Loader (Cloudflare) would otherwise
+		// defer this script past the first paint — the theme's mode script
+		// must set the light/dark class before anything is drawn.
+		sb.WriteString(`<script src="/theme-assets/` + t.Manifest.ID + `/` + f + v + `" data-cfasync="false"></script>` + "\n")
 	}
 	return sb.String()
 }

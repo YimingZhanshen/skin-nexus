@@ -56,7 +56,7 @@ func TestRenderLayers(t *testing.T) {
 		`/theme-assets/dark/fx.js`,
 		`<style id="skin-custom-css">`,
 		`.card{border-radius:20px}`,
-		`<script id="skin-custom-js">`,
+		`<script id="skin-custom-js" data-cfasync="false">`,
 		`console.log('hi')`,
 	} {
 		if !strings.Contains(html, want) {

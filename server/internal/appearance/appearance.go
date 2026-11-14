@@ -343,10 +343,12 @@ func (e *Engine) Render(ctx context.Context, indexHTML string) string {
 		indexHTML = indexHTML[:i] + head.String() + indexHTML[i:]
 	}
 
-	// custom body: JS before </body>
+	// custom body: JS before </body>. data-cfasync="false" keeps Rocket
+	// Loader (Cloudflare) from moving admin JS past the first paint — the
+	// documented position is parse time at </body>, not post-load.
 	var body strings.Builder
 	if s.CustomJS != "" {
-		body.WriteString(`<script id="skin-custom-js">` + "\n" + s.CustomJS + "\n</script>\n")
+		body.WriteString(`<script id="skin-custom-js" data-cfasync="false">` + "\n" + s.CustomJS + "\n</script>\n")
 	}
 	return strings.Replace(indexHTML, "<!--skin-custom-body-->", body.String(), 1)
 }

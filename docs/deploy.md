@@ -683,6 +683,12 @@ CF-Connecting-IP, True-Client-IP, Ali-CDN-Real-IP, X-Real-IP, X-Forwarded-For
 - `X-Forwarded-For` 仍取最后一跳，所以有 CDN 专用头时优先用专用头。
 - 配置即时生效，无需重启。
 
+**Rocket Loader 注意**（Cloudflare「Speed → 优化」里的自动脚本加速）：它会把页面里的
+`<script>` 改写成延迟执行，主题的明暗模式脚本若被推迟到首绘之后，刷新时会先按相反
+颜色绘制、稍后才翻转。服务端发出的主题 JS 与面板自定义 JS 标签已带 `data-cfasync="false"`
+豁免改写；若在「自定义 head」里自己贴 `<script>`，需要首绘前生效的也请自行加这个属性，
+或者直接在 Cloudflare 关掉 Rocket Loader。
+
 Nginx 侧建议显式覆盖，避免客户端伪造透传：
 
 ```nginx
