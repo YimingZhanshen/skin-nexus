@@ -82,7 +82,7 @@ docker build -t skin-nexus:latest .   # 本地源码构建（离线/内网场景
 | integration | 两者 | MySQL 8.0 / 5.7 各跑 `-p 1 -tags integration ./internal/store/ ./internal/account/`。`-p 1` 是必需的：两套用例共用同一个库，而 store 那套在迁移前会把所有表 DROP 掉，并行时互相打断（sqlite、postgres、mariadb 三条腿同一签名报错）。5.7 专抓版本差异 SQL（login COLLATE / prepared 1267） |
 | integration-mariadb | 两者 | MariaDB 11.4 / 10.11，同一条命令；抓只有 MySQL 自家扩展能吃下的写法 |
 | integration-portable | 两者 | PostgreSQL 16 与 SQLite 文件库，同一条命令；抓方言与序列差异 |
-| web | 两者 | `npm ci` + `check-locales.mjs` + `npm run build` + `npm audit --audit-level=high`（low 及以上另写 step summary，不阻断） |
+| web | 两者 | `npm ci` + `check-locales.mjs` + `check-modal-chrome.mjs` + `check-a11y.mjs`（th scope / table caption / img alt）+ `npm run build` + `npm audit --audit-level=high`（low 及以上另写 step summary，不阻断） |
 | codesql | 两者 | CodeQL（go + javascript-typescript），告警进 security tab 作审查队列，非发布门禁 |
 | docs | 两者 | `check-docs.mjs`：死链 / 表格 / 快照 dating / env 双向真源；`check-theme-contract.mjs`：`theme-spec.md` §3 契约默认值与 `theme-base.css` 逐键比对 + 主题包对宿主令牌的悬空引用（包在姊妹仓，本 checkout 里没有时明确打印跳过而不算通过） |
 | zizmor | 两者 | workflow 自身卫生（模板注入、未固定第三方 action），`continue-on-error`，非阻断 |

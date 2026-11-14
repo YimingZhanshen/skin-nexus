@@ -2,6 +2,32 @@
 
 > 迭代历史（按日期倒序，每天一条，只记要点）。开发细节见对应 commit；README 状态行只留一句话摘要。
 
+## 2026-11-14 · v0.7.0 开发周期
+
+W0–W7 八波推进（技术债清查 → 可观测/结构闸 → 功能/重构 → 视觉翻修 → 收尾）。六组主线：
+
+1. **技术债清查与低成本正确性（W0/W1）**：pending-registry 全量销账复核 + 四面并行深扫（小债即修、
+   大债登记）；OIDC 错误分层（真 DB 错返 500、不再吞成 unauthorized_client）、认证服务器 URL 归一化、
+   三引擎版本谓词统一到 plugin/semver 单一真源、版本号九处一致性闸。
+2. **运维可观测（W2）**：零依赖 /metrics（手写 Prometheus 文本：HTTP/队列/上传/Ygg 验签计数，
+   默认不暴露公网）+ healthz 带版本与 uptime；slog 结构化日志迁移（4 批消裸 log + log.Fatal 语义单列），
+   裸 log 闸常驻 CI 防回潮。
+3. **结构闸（W3）**：adminapi 注册即认证闸（堵住漏挂认证的同类事故）+ settingsWhitelist 与错误码目录
+   双向接线闸（空集防虚过）。
+4. **前端结构重构（W4）**：抽 useSession/useGoto/useSiteConfig、认证五卡组件化、App.vue 拆壳层与路由、
+   大文件拆分；provide 键名自此冻结，SPA 路由闸/spa_admin_test 常绿。
+5. **可感知功能（W5）**：我的举报跟踪页（只看本人 + 分页）、admin 衣柜管理（改名/移除往返）、
+   设备码有效期与轮询间隔面板可配（即存即生效）。
+6. **全站视觉翻修（W6）**：设计方向定稿（晴空琉璃同族冻结）；令牌层核对（对比度实测 AA 全绿）；
+   theme-color 按有效 --bg 服务端计算；12 位等宽哈希铭牌贯穿皮肤库/详情/材质列表；落地页首屏精选上
+   场景板 + 文案去通用化（自托管主张、一主一静默 CTA）；玩家侧与管理面板脱格值收进 4px 栅格并立
+   栅格闸（width/height 内容尺寸豁免）；管理面板密度统一（导航 32–36px）；零依赖 check-a11y 闸
+   （th scope/table caption/img alt）接进 CI；默认 + 晴空琉璃双主题真机验证。
+
+工程健康：全闸绿（gofmt/vet/test + check-locales/docs/modal-chrome/theme-contract/a11y + web build）；
+每片先红后绿 + 变异复证；>300 行文件 80 个（最大 store/integration_test.go 1886 行，测试文件为主）。
+发版门槛（演示站真机验收后打 tag）由站长拍板。
+
 ## 2026-11-12 · v0.6.0 发布
 
 自 v0.5.0（2026-11-01）以来 234 个提交的汇总发布。镜像 `ghcr.io/yimingzhanshen/skin-nexus:sha-<发版提交>`

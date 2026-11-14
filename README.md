@@ -12,7 +12,8 @@
 
 Go 单二进制 + Vue 3，数据库可选 MySQL / MariaDB / PostgreSQL / SQLite，AGPL-3.0。协议层兼容 [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) 及其插件生态，可以从老站无损迁移：主键保留、玩家 UUID 不变、旧密码算式继续可用。已在一套真实生产环境完成迁移与切流，67 用户 / 61 纹理零丢行。
 
-当前版本 v0.6.0（2026-11-12 发布）；`main` 在其之后仍在推进，逐片 commit + push，
+当前版本 v0.6.0（2026-11-12 发布）；`main` 已完成 v0.7.0 开发周期（W0–W7：技术债清查、
+可观测/结构闸、可感知功能、前端重构、全站视觉翻修），打 tag 由站长拍板。
 迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)。
 
 ## 部署
