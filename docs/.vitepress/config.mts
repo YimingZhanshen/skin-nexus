@@ -21,6 +21,99 @@ export default withMermaid(
     head: [
       ['link', { rel: 'sitemap', type: 'application/xml', href: '/sitemap.xml' }],
     ],
+    // GEO/AEO：每页补 OG/Twitter meta；首页挂 SoftwareApplication+Organization
+    // JSON-LD；手册 FAQ 页挂 FAQPage JSON-LD（问题/答案与页面可见问答逐条对齐，
+    // 搜索引擎要求标记内容与可见内容一致）。无 og:image——品牌视觉素材留站长定。
+    transformHead({ pageData, title, description }) {
+      const rel = pageData.relativePath.replace(/\.md$/, '').replace(/(^|\/)index$/, '$1')
+      const url = HOST + '/' + rel
+      const desc =
+        description ||
+        'Self-hosted Minecraft skin server documentation — deploy a Go skin server with Yggdrasil external auth and migrate losslessly from blessing-skin-server.'
+      const head: any[] = [
+        ['meta', { property: 'og:title', content: title || 'SkinNexus 文档' }],
+        ['meta', { property: 'og:description', content: desc }],
+        ['meta', { property: 'og:url', content: url }],
+        ['meta', { property: 'og:site_name', content: 'SkinNexus 文档' }],
+        ['meta', { property: 'og:type', content: 'website' }],
+        ['meta', { property: 'og:locale', content: 'zh_CN' }],
+        ['meta', { name: 'twitter:card', content: 'summary' }],
+      ]
+      if (pageData.relativePath === 'index.md') {
+        head.push([
+          'script',
+          { type: 'application/ld+json' },
+          JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'SoftwareApplication',
+            name: 'SkinNexus',
+            applicationCategory: 'GameApplication',
+            operatingSystem: 'Linux (Docker)',
+            description: desc,
+            url: HOST + '/',
+            codeRepository: 'https://github.com/YimingZhanshen/skin-nexus',
+            license: 'https://www.gnu.org/licenses/agpl-3.0.html',
+            author: { '@type': 'Person', name: 'YMZS' },
+          }),
+        ])
+        head.push([
+          'script',
+          { type: 'application/ld+json' },
+          JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'Organization',
+            name: 'YMZS',
+            url: 'https://github.com/YimingZhanshen',
+          }),
+        ])
+      }
+      if (pageData.relativePath === 'handbook/故障排除与常见问题.md') {
+        const q = (name: string, text: string) => ({
+          '@type': 'Question',
+          name,
+          acceptedAnswer: { '@type': 'Answer', text },
+        })
+        head.push([
+          'script',
+          { type: 'application/ld+json' },
+          JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'FAQPage',
+            mainEntity: [
+              q(
+                'SkinNexus 管理员或玩家无法登录怎么办',
+                '常见现象是提交账号密码后页面没有跳转或提示认证失败。逐项排查：新站未初始化需用一次性安装令牌（SKIN_SETUP_TOKEN 或容器日志）完成 /api/v1/setup；迁移来的账号若老站 password 列为空会被拒绝，需超管重置或走找回密码；邮箱验证门开启且宽限期已过会拦下未验证账号，应先配 SMTP、再设宽限期、最后开门；短时间内重复登录失败会触发认证限流（429），查访问日志来源 IP。',
+              ),
+              q(
+                'SkinNexus 收不到验证邮件或找回密码信怎么办',
+                '完全收不到信先查 SMTP 主机/端口/用户名/密码/发件人配置（部署自检 mail 项）；进垃圾箱多因缺 SPF 或 DMARC，需在域名 DNS 补记录（部署自检 mail_dns 项）；偶发失败会自动重试一次，持续失败查审计日志中的 mail_test_failed 等事件。发信失败会写入审计并在运行状态的 24 小时发信失败计数中体现。',
+              ),
+              q(
+                'SkinNexus 皮肤上传失败怎么排查',
+                '上传后文件不在磁盘：核对 SKIN_TEXTURES_DIR 与数据卷挂载（fsck 报 missing files）；存在孤立文件：fsck 先 dry-run 确认后 fix（默认只报告不删除）；纹理渲染失败：重新上传正确分辨率的皮肤；SPA 页面空白：部署 web/dist 前端构建产物或使用 Docker 镜像自带静态资源。',
+              ),
+              q(
+                'SkinNexus 管理面板空白怎么办',
+                'API 能访问但管理界面空白，多为静态资源目录不存在——自助诊断 assets 项会报 fail 并给出 index.html 路径，部署 web/dist 或换 Docker 镜像即可；仅管理路由异常则查管理员权限、会话与反代透传（访问日志 401/403）。',
+              ),
+              q(
+                '启动器连接 SkinNexus 进服报错怎么办',
+                'authlib-injector 或 yggc/OIDC 启动器报认证失败：发现文档找不到（404/无 CORS）时确保 /api/yggdrasil 规范地址直接返回 200 且无重复 Access-Control-Allow-Origin；选角后 403 查启动器版本与 join 请求日志；OIDC 免密登录按钮不出现查 discovery 与 shared_client_id 是否暴露。',
+              ),
+              q(
+                'SkinNexus 登录后皮肤不显示怎么办',
+                '本地能看到而玩家看不到：site_url/base_url 解析成了内网地址，设置公网地址后重启（自助诊断 site 项会警告）；联盟成员站名称消失：反代（如宝塔 WAF 跨域设置）重复注入 CORS 头，关闭后恢复；带端口域名无法匹配 skinDomains：改用无端口域名（系统会为带端口条目追加去端口孪生）。',
+              ),
+              q(
+                'SkinNexus 角色改名后 UUID 丢失或联盟站角色不同步怎么办',
+                'UUID 零漂移是铁律：改名后 UUID 应始终不变，若变化需检查迁移流程与外部系统是否误算 OfflinePlayer UUID。联盟站角色未更新：查审计日志的 union_sync_*_failed 事件，在管理面板「同步角色数据」手动收敛；自删账号不同步查 hub 回探连通性与签名密钥。',
+              ),
+            ],
+          }),
+        ])
+      }
+      return head
+    },
     markdown: {
       lineNumbers: false,
     },
