@@ -10,7 +10,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-green" alt="AGPL-3.0"></a>
 </p>
 
-A self-hosted Minecraft skin station. Players upload and manage skins and capes in the browser and join servers through launcher passwordless login; the operator runs it themselves — accounts, texture files and the signing key stay on their own machine.
+A self-hosted Minecraft skin server. Players upload and manage skins and capes in the browser and join servers through launcher passwordless login; the operator runs it themselves — accounts, texture files and the signing key stay on their own machine.
 
 One Go binary + Vue 3, on MySQL, MariaDB, PostgreSQL or SQLite — AGPL-3.0. The protocol layer is compatible with [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) and its plugin ecosystem, so a legacy site can be migrated losslessly: primary keys preserved, player UUIDs unchanged, old password hashes still verifiable. A real production site has been migrated and cut over — 67 users / 61 textures, zero rows lost.
 
