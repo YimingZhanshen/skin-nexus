@@ -35,11 +35,11 @@ features:
 
 ## 文档导航
 
-- [部署运维](/deploy) —— Docker 或裸二进制上线、环境变量全表、反代与备份
-- [从 blessing-skin-server 迁移](/migration) —— 三步迁移手册与回滚
-- [知识手册](/handbook/index) —— 80 篇架构与模块文档（含架构图）
-- [插件规范](/plugin-spec) · [主题规范](/theme-spec) · [启动器 API](/launcher-api)
-- [竞品源码分析](/competitor-analysis) · [变更日志](/CHANGELOG) · [迁移演练夹具](https://github.com/YimingZhanshen/skin-nexus/tree/main/demo)
+- [部署运维](deploy.md) —— Docker 或裸二进制上线、环境变量全表、反代与备份
+- [从 blessing-skin-server 迁移](migration.md) —— 三步迁移手册与回滚
+- [知识手册](handbook/index.md) —— 80 篇架构与模块文档（含架构图）
+- [插件规范](plugin-spec.md) · [主题规范](theme-spec.md) · [启动器 API](launcher-api.md)
+- [竞品源码分析](competitor-analysis.md) · [变更日志](CHANGELOG.md) · [迁移演练夹具](https://github.com/YimingZhanshen/skin-nexus/tree/main/demo)
 
 **English**: SkinNexus is a self-hosted Minecraft skin server in one Go binary — Yggdrasil
 external auth for authlib-injector, a lossless migration path from blessing-skin-server
