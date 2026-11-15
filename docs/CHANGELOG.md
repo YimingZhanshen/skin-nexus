@@ -76,6 +76,8 @@ md 互链保留），README 双语挂链；竞品分析校正三处过期状态�
 
 **同日八轮（GitHub wiki 关停，知识手册整册迁入）**：知识中心 Repo Wiki 快照 80 篇（4.5 万行、百余张架构图）整册迁入 `docs/handbook/`（`6fbc9b1`），分组索引 + 溯源说明（引用钉 `797ae1a` 快照）；迁移前隐私/措辞扫描与链接体检通过。GitHub wiki 就此关闭（`has_wiki=false`），文档单一真源 = 仓库 `docs/`（契约主目录 + handbook 实现手册），知识中心继续承担对内生成，产出经校对后增量迁入 handbook。
 
+**同日九轮（文档站迁 VitePress + Cloudflare Pages，域名定档）**：SSG 拍板 VitePress（与 web/ Vite 工具链同构），docs/ 内就地建站（`5f15feb`）——Pagefind 中文搜索（Intl.Segmenter）、mermaid 渲染、sitemap 与 llms.txt（AI 答案引擎入口）；清 Jekyll Liquid 标签、API 路径参数花括号防 attrs 误解析、正文裸标签实体化、死链逐条修（构建即闸，无 ignoreDeadLinks）。托管迁 Cloudflare Pages（Git 集成、构建触发收窄 docs/**），正式域 **docs.skin.yimingzhanshen.cn**（CF 管 TLS，绕开 GH Pages+橙云+LE 证书坑），README 双语已切链（`b90605d`）；旧 github.io 镜像暂存过渡。
+
 ## 2026-11-14 · v0.7.0 开发周期
 
 W0–W7 八波推进（技术债清查 → 可观测/结构闸 → 功能/重构 → 视觉翻修 → 收尾）。六组主线：
