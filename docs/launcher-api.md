@@ -1,3 +1,7 @@
+---
+description: "面向桌面启动器的 Launcher API v1 摘要：设备码登录流程、账号/角色/外观能力与服务端要求。"
+---
+
 # 启动器 API（Launcher API v1）
 
 面向桌面启动器的账号/角色管理接口，由官方插件 `launcher-api` 提供。

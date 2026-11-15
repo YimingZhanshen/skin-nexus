@@ -1,3 +1,7 @@
+---
+description: "SkinNexus 竞品源码分析：blessing / Drasl / chrly / HRPAuth 等的能力矩阵、品类缺口与可借鉴的工程纪律。"
+---
+
 # 竞品源码分析
 
 > 结论先行：功能面没有一家对手同时具备我们手里的四件套；真正的品类缺口是

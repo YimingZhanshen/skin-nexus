@@ -1,3 +1,7 @@
+---
+description: "SkinNexus 与 blessing / yggdrasil-connect 的兼容矩阵：Yggdrasil 硬契约、OIDC 免密、联盟兼容面与刻意偏差台账。"
+---
+
 # 兼容矩阵 —— blessing / yggdrasil-connect 1:1 复刻进度
 
 > 依据：2026-10-23 对线上 legacy 站点全量只读实测（报文留档于维护者本地，不随仓库分发）

@@ -12,10 +12,12 @@ export default withMermaid(
   defineConfig({
     lang: 'zh-CN',
     title: 'SkinNexus 文档',
+    titleTemplate: ':title | SkinNexus 文档',
     description:
       'Self-hosted Minecraft skin server documentation — deploy a Go skin server with Yggdrasil external auth and migrate losslessly from blessing-skin-server.',
     base: '/',
     cleanUrls: true,
+    lastUpdated: true,
     head: [
       ['link', { rel: 'sitemap', type: 'application/xml', href: '/sitemap.xml' }],
     ],
@@ -23,6 +25,10 @@ export default withMermaid(
       lineNumbers: false,
     },
     themeConfig: {
+      editLink: {
+        pattern: 'https://github.com/YimingZhanshen/skin-nexus/edit/main/docs/:path',
+        text: '在 GitHub 上编辑此页',
+      },
       nav: [
         { text: '部署', link: '/deploy' },
         { text: '迁移', link: '/migration' },

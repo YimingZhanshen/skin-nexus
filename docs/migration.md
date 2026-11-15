@@ -1,3 +1,7 @@
+---
+description: "从 blessing-skin-server 无损迁移：迁移前 checklist、preflight/dry-run/实跑/对账命令、切流五条断言与告警词典。"
+---
+
 # 从 blessing-skin-server 迁移（migrate 子命令手册）
 
 > 目标读者：自行部署 SkinNexus 并要把既有 blessing-skin-server（老皮肤站）数据

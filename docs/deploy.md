@@ -1,3 +1,7 @@
+---
+description: "Docker Compose 部署 SkinNexus 的完整手册：quickstart、53 个环境变量、启动验收、升级备份、Nginx 反代与宝塔、排错表。"
+---
+
 # SkinNexus 部署手册（Docker 优先）
 
 > 推荐所有站长用 **Docker Compose** 部署：升级只换容器、数据卷零丢失、免装运行时，

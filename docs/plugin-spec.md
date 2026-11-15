@@ -1,3 +1,7 @@
+---
+description: "SkinNexus 插件创作规范（宿主 v2）：plugin.json 清单、权限声明、路由/UI/store/jobs 契约与给 AI 的提示词模板。"
+---
+
 # SkinNexus 插件创作规范（plugin-spec）—— 宿主 v2
 
 > 面向想为 SkinNexus 写插件的人（包括让 AI 代劳）。**零构建原则**：插件 = `plugin.json` +

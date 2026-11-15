@@ -1,3 +1,7 @@
+---
+description: "插件与主题的签名发布流程：密钥生成、market.json、打包签名、registry 构建、GitHub Pages 发布与生产信任配置。"
+---
+
 # 扩展发布与签名市场（插件 + 主题）
 
 本文面向作者/站长：如何生成签名 bundle、构建签名 registry、发布到 GitHub Pages，

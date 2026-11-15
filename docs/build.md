@@ -1,3 +1,7 @@
+---
+description: "从源码构建 SkinNexus：Go 单二进制、前端构建、Docker 多阶段镜像、CI 各 job 拦截面、本地开发联调。"
+---
+
 # SkinNexus 构建指南
 
 > 目标读者：想从源码构建 SkinNexus 的皮肤站站长、贡献者与 AI agent。

@@ -1,3 +1,7 @@
+---
+description: "SkinNexus 主题创作规范：theme.json、CSS 变量契约、选择器安全区、落地页 token 与 AI 生成提示词模板。"
+---
+
 # SkinNexus 主题创作规范（theme-spec）—— 含 AI 生成提示词模板
 
 > 面向任何人（包括让 AI 代劳）创作 SkinNexus 主题包。**零构建原则**：主题 = theme.json + 纯 CSS（+ 可选 JS），
