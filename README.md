@@ -25,7 +25,7 @@
 
 ## What is this
 
-**SkinNexus is an external-login and player-management site for Minecraft servers, in one place.** Most community servers run without premium verification — players are mostly on offline launchers, and even premium players get no skins on such servers. The old options were making players type `/login` after joining (the AuthMe way — clunky) or having players wrestle with skin mods. A skin site catches all of it at once: players sign in at the launcher with their site account and join directly, skins and capes just work; the owner manages player profiles, bans and invite codes in one console — **identity, skins and management in one place**.
+**SkinNexus is an external-login and player-management site for Minecraft servers, in one place.** Most community servers run without premium verification — players are mostly on offline launchers, and even premium players get no skins on such servers. The traditional approach is an in-game password-lock plugin like AuthMe (players type `/login` after joining — clunky), with skins left to fiddly mods. A skin site with external login catches all of it at once: authentication moves to the launcher — players sign in with their site account and join directly, **making AuthMe unnecessary**; skins and capes just work; the owner manages player profiles, bans and invite codes in one console — **identity, skins and management in one place**.
 
 **blessing-skin-server (short: bs) is the oldest and most widely used program of this kind** — most skin sites out there are built on it. But its login-and-management story is mostly assembled from add-on plugins, and its foundation is ten-year-old PHP — when a security hole appears, users often wait forever for an official fix, and features have barely moved for years.
 
@@ -35,7 +35,7 @@
 
 | Pain you may know | blessing-skin-server (bs) | SkinNexus |
 |---|---|---|
-| Typing `/login` after joining | AuthMe-style in-game auth, clunky | Sign in at the launcher — join directly |
+| Typing `/login` after joining (AuthMe in-game password lock) | Solvable via Yggdrasil plugins, but assemble-it-yourself | External login built in — works right after setup |
 | Aging tech, nobody fixes holes | A decade of PHP, fixes come when upstream ships | Modern rewrite — we fix and ship ourselves |
 | Fear of losing data on migration | — | Accounts / skins / identities / old passwords preserved |
 | Passwordless login is a chore | Needs an extra login add-on | Built in — works right after setup |
