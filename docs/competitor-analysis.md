@@ -5,8 +5,8 @@
 >
 > 取证口径：浅克隆到 `refs/`（不入库）后源码 grep，格内 `文件:行` 为对方仓库内定位；
 > 未找到写 `NOT FOUND`，不猜；「未取证」≠ 对方没有。README 宣称与源码不符处单独标注。
-> 正文取证 2026-11-01，覆盖率复测 11-09，状态校正与增补 11-15（历史快照见 git 历史）。
-> 与 blessing 的协议兼容事实不在本文，见 [`compat-matrix.md`](compat-matrix.md) 与 [`migration.md`](migration.md)。
+> 快照口径：2026-11-01（正文取证；覆盖率复测 2026-11-09，状态校正与增补 2026-11-15）。
+> 历史快照见 git 历史。与 blessing 的协议兼容事实不在本文，见 [`compat-matrix.md`](compat-matrix.md) 与 [`migration.md`](migration.md)。
 
 **许可证边界**：只吸收概念与公开协议事实；禁止复制、翻译改写 GPL/AGPL 竞品源码、译文或测试
 fixture；引用一律注明对方路径与行号。
