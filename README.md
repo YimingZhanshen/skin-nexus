@@ -17,7 +17,7 @@
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/-external_login--no_login_command-2ea44f?style=for-the-badge" alt="External login: no login command">
+  <img src="https://img.shields.io/badge/-login_once--join_like_premium-2ea44f?style=for-the-badge" alt="Login once, join like premium">
   <img src="https://img.shields.io/badge/-skins_and_capes--freer_than_premium-1d76db?style=for-the-badge" alt="Skins and capes freer than premium">
   <img src="https://img.shields.io/badge/-move_from_blessing--lose_nothing-6f42c1?style=for-the-badge" alt="Move from blessing: lose nothing">
   <img src="https://img.shields.io/badge/-fix_holes_yourself--safe_upgrades-b0453a?style=for-the-badge" alt="Fix holes yourself, safe upgrades">
@@ -25,11 +25,11 @@
 
 ## What is this
 
-**SkinNexus is an external-login and player-management site for Minecraft servers, in one place.** Most community servers run without premium verification — players are mostly on offline launchers, and even premium players get no skins on such servers. The traditional approach is an in-game password-lock plugin like AuthMe (players type `/login` after joining — clunky), with skins left to fiddly mods. A skin site with external login catches all of it at once: authentication moves to the launcher — players sign in with their site account and join directly, **making AuthMe unnecessary**; skins and capes just work; the owner manages player profiles, bans and invite codes in one console — **identity, skins and management in one place**.
+**SkinNexus is an external-login and player-management site for Minecraft servers, in one place.** Most community servers run without premium verification — players are mostly on offline launchers and the server can't tell who is who. The traditional fix is an **in-game password-lock** plugin like AuthMe (players type `/login password` on every join), with skins left to fiddly mods — and even premium players get no skins on such servers.
 
-**blessing-skin-server (short: bs) is the oldest and most widely used program of this kind** — most skin sites out there are built on it. But its login-and-management story is mostly assembled from add-on plugins, and its foundation is ten-year-old PHP — when a security hole appears, users often wait forever for an official fix, and features have barely moved for years.
+**What bs + Yggdrasil do is move that lock to the launcher.** Players sign in to their site account once; every game start joins the server straight away — **just like premium, no retyping credentials**. Skins and capes load with the login, and the owner manages player profiles, bans and invite codes in one console — identity, skins, management in one place. This setup was made popular by **blessing-skin-server (short: bs — the oldest and most widely used program of this kind)** with its Yggdrasil plugins; most skin sites out there run that combination.
 
-**SkinNexus makes all of this built-in, first-class.** External login (launcher passwordless included), player management and skin serving work out of the box. Moving from blessing loses **nothing** — accounts, skins and capes, in-game identities and old passwords all carry over, and players will barely notice the switch. After the move, here is what actually changes.
+**SkinNexus is the modern replacement for that combination.** Already on bs? [The table below](#why-switch) is the whole difference. New to this? In one line: external login works out of the box (bs assembles it from plugins), we fix and ship security holes ourselves, and moving in from blessing loses nothing.
 
 ## Why switch
 
