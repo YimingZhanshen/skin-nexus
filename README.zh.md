@@ -12,7 +12,7 @@
 
 自托管的 Minecraft 皮肤站。玩家在网页上传管理皮肤与披风，用启动器免密登录直接进服；站长自己跑，账号、纹理文件和签名密钥都在自己机器上。
 
-Go 单二进制 + Vue 3，数据库可选 MySQL / MariaDB / PostgreSQL / SQLite，AGPL-3.0。协议层兼容 [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) 及其插件生态，可以从老站无损迁移：主键保留、玩家 UUID 不变、旧密码算式继续可用。已在一套真实生产环境完成迁移与切流，67 用户 / 61 纹理零丢行。
+Go 单二进制 + Vue 3，数据库可选 MySQL / MariaDB / PostgreSQL / SQLite，AGPL-3.0。它是 blessing-skin-server 的替代方案：协议层兼容 [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) 及其插件生态，可以从老站无损迁移——主键保留、玩家 UUID 不变、旧密码算式继续可用。已在一套真实生产环境完成迁移与切流，67 用户 / 61 纹理零丢行。
 
 当前版本 v0.6.0（2026-11-12 发布）；`main` 已完成下一个开发周期（W0–W7：技术债清查、
 可观测/结构闸、可感知功能、前端重构、全站视觉翻修），打 tag 由站长拍板。
@@ -41,7 +41,7 @@ docker compose -f docker-compose.quickstart.yml up -d
 `docker compose pull && docker compose up -d`，数据卷不动。
 
 已有外部数据库（MySQL / MariaDB / PostgreSQL）、或想跑一个文件库（SQLite）、裸二进制与源码构建：见 [`docs/deploy.md`](docs/deploy.md) 与 [`docs/build.md`](docs/build.md)。
-从老站迁数据：[`docs/migration.md`](docs/migration.md)（`preflight → dry-run → import`，小站通常 10 分钟，可回滚）。
+从 blessing-skin-server 迁数据：[`docs/migration.md`](docs/migration.md)（`preflight → dry-run → import`，小站通常 10 分钟，可回滚）。
 
 上线前有两件事必须做：
 

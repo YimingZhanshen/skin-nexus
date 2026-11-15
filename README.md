@@ -12,7 +12,7 @@
 
 A self-hosted Minecraft skin server. Players upload and manage skins and capes in the browser and join servers through launcher passwordless login; the operator runs it themselves — accounts, texture files and the signing key stay on their own machine.
 
-One Go binary + Vue 3, on MySQL, MariaDB, PostgreSQL or SQLite — AGPL-3.0. The protocol layer is compatible with [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) and its plugin ecosystem, so a legacy site can be migrated losslessly: primary keys preserved, player UUIDs unchanged, old password hashes still verifiable. A real production site has been migrated and cut over — 67 users / 61 textures, zero rows lost.
+One Go binary + Vue 3, on MySQL, MariaDB, PostgreSQL or SQLite — AGPL-3.0. It is built as a blessing-skin-server alternative: the protocol layer stays compatible with [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) and its plugin ecosystem, so a legacy site migrates losslessly — primary keys preserved, player UUIDs unchanged, old password hashes still verifiable. A real production site has been migrated and cut over — 67 users / 61 textures, zero rows lost.
 
 Current release v0.6.0 (2026-11-12); `main` has completed the next development cycle (W0–W7:
 tech-debt sweep, observability/structure gates, user-facing features, frontend refactor, full visual
@@ -42,7 +42,7 @@ start and prints it on the `docker compose logs skin-nexus` install-token line. 
 `docker compose pull && docker compose up -d`; data volumes are never touched.
 
 An external database (MySQL / MariaDB / PostgreSQL), a single-file SQLite database, a bare binary or a source build: [`docs/deploy.md`](docs/deploy.md) and [`docs/build.md`](docs/build.md).
-Migrating from a legacy site: [`docs/migration.md`](docs/migration.md) (`preflight → dry-run → import`, rollback available).
+Migrating from blessing-skin-server: [`docs/migration.md`](docs/migration.md) (`preflight → dry-run → import`, rollback available).
 
 Two things are required before going live:
 
