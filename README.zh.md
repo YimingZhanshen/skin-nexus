@@ -8,9 +8,7 @@
 
 > 自托管的 Minecraft 皮肤站。账号、纹理文件和签名密钥，都在你自己机器上。
 
-[![CI](https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml)
-[![release](https://img.shields.io/badge/release-v0.6.0-blue)](https://github.com/YimingZhanshen/skin-nexus/releases/tag/v0.6.0)
-[![license](https://img.shields.io/badge/license-AGPL--3.0-green)](LICENSE)
+[![CI](https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml) [![release](https://img.shields.io/badge/release-v0.6.0-blue)](https://github.com/YimingZhanshen/skin-nexus/releases/tag/v0.6.0) [![license](https://img.shields.io/badge/license-AGPL--3.0-green)](LICENSE)
 
 [部署](#部署) · [功能](#功能) · [文档](https://docs.skin.yimingzhanshen.cn/) · [参与贡献](CONTRIBUTING.md) · [许可](#许可)
 
