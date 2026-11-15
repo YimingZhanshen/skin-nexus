@@ -95,7 +95,7 @@ docker compose -f docker-compose.quickstart.yml up -d
 
 ## 文档
 
-- 部署运维 [`docs/deploy.md`](docs/deploy.md) · 构建与 CI [`docs/build.md`](docs/build.md) · 迁移 [`docs/migration.md`](docs/migration.md)
+- 文档站 [yimingzhanshen.github.io/skin-nexus](https://yimingzhanshen.github.io/skin-nexus/) · 部署运维 [`docs/deploy.md`](docs/deploy.md) · 构建与 CI [`docs/build.md`](docs/build.md) · 迁移 [`docs/migration.md`](docs/migration.md) · 先拿 [`demo` 夹具](demo/README.md) 演练一遍迁移
 - 兼容基线 [`docs/compat-matrix.md`](docs/compat-matrix.md) · 启动器 API [`docs/launcher-api.md`](docs/launcher-api.md)
 - 主题包 [`docs/theme-spec.md`](docs/theme-spec.md) · 插件 [`docs/plugin-spec.md`](docs/plugin-spec.md) · 发布与签名 [`docs/plugin-publishing.md`](docs/plugin-publishing.md)
 - 竞品取证 [`docs/competitor-analysis.md`](docs/competitor-analysis.md) · 迭代历史 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)

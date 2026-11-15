@@ -96,7 +96,7 @@ Measured on one 2-core / 3.5 GB production VPS: landing ~600 RPS, texture delive
 
 ## Documentation
 
-- Deployment and operations [`docs/deploy.md`](docs/deploy.md) · build and CI [`docs/build.md`](docs/build.md) · migration [`docs/migration.md`](docs/migration.md)
+- Documentation site [yimingzhanshen.github.io/skin-nexus](https://yimingzhanshen.github.io/skin-nexus/) · deployment and operations [`docs/deploy.md`](docs/deploy.md) · build and CI [`docs/build.md`](docs/build.md) · migration [`docs/migration.md`](docs/migration.md) · rehearse the migration on the [`demo` fixture](demo/README.md)
 - Compatibility baseline [`docs/compat-matrix.md`](docs/compat-matrix.md) · launcher API [`docs/launcher-api.md`](docs/launcher-api.md)
 - Theme packs [`docs/theme-spec.md`](docs/theme-spec.md) · plugins [`docs/plugin-spec.md`](docs/plugin-spec.md) · publishing and signing [`docs/plugin-publishing.md`](docs/plugin-publishing.md)
 - Competitor evidence [`docs/competitor-analysis.md`](docs/competitor-analysis.md) · iteration history [`docs/CHANGELOG.md`](docs/CHANGELOG.md)

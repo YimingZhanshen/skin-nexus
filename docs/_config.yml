@@ -1,0 +1,11 @@
+title: SkinNexus Docs
+description: >-
+  Self-hosted Minecraft skin server documentation — deploy a Go skin server with
+  Yggdrasil external auth and migrate losslessly from blessing-skin-server.
+theme: minima
+plugins:
+  - jekyll-sitemap
+  - jekyll-relative-links
+relative_links:
+  enabled: true
+  collections: true
