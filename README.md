@@ -6,7 +6,7 @@
 
 <img src="docs/assets/logo.svg" width="140" alt="SkinNexus pixel hub N mark">
 
-> A website program for managing Minecraft character looks — self-hosted, so accounts, skins and passwords all stay on your own machine.
+> The self-hosted player accounts and skins site for Minecraft: players register and customize here — accounts and data all stay on your own machine.
 
 [![CI](https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml) [![release](https://img.shields.io/badge/release-v0.6.0-blue)](https://github.com/YimingZhanshen/skin-nexus/releases/tag/v0.6.0) [![license](https://img.shields.io/badge/license-AGPL--3.0-green)](LICENSE)
 
@@ -17,23 +17,23 @@
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/-move_from_bs--lose_nothing-2ea44f?style=for-the-badge" alt="Move from bs: lose nothing">
-  <img src="https://img.shields.io/badge/-security_fixes--ship_same_day-b0453a?style=for-the-badge" alt="Security fixes ship the same day">
-  <img src="https://img.shields.io/badge/-launcher_login--no_password-1d76db?style=for-the-badge" alt="Launcher login without passwords">
-  <img src="https://img.shields.io/badge/-easy_deploy--safe_upgrades-6f42c1?style=for-the-badge" alt="Easy deploys, safe upgrades">
+  <img src="https://img.shields.io/badge/-player_accounts--under_control-2ea44f?style=for-the-badge" alt="Player accounts under control">
+  <img src="https://img.shields.io/badge/-skins_and_capes--freer_than_premium-1d76db?style=for-the-badge" alt="Skins and capes freer than premium">
+  <img src="https://img.shields.io/badge/-move_from_blessing--lose_nothing-6f42c1?style=for-the-badge" alt="Move from blessing: lose nothing">
+  <img src="https://img.shields.io/badge/-fix_holes_yourself--safe_upgrades-b0453a?style=for-the-badge" alt="Fix holes yourself, safe upgrades">
 </p>
 
 ## What is this
 
-**SkinNexus is a website where Minecraft players manage their character looks.** Players upload skins and capes in the browser, dress up their characters, browse a shared skin library, then join game servers through their launcher — no password typing. The site runs on your own server, so player accounts, skins and passwords all live on your own machine.
+**SkinNexus is a player-accounts-and-skins site for Minecraft servers.** Most community servers run without premium verification — their players use offline launchers. But with verification off, cheaters and banned players who just hop to a new account become everyday problems. So server owners run a skin site as their player account system: players register, manage skins and capes, and join the server through their launcher with that account. The owner gets one place to look up, manage and ban players; players get skin and cape freedom beyond what premium accounts offer.
 
-**blessing-skin-server (nicknamed "bs" in the community) is the oldest program of this kind.** The skin site you play on is very likely built with it. It has the biggest ecosystem and the most tutorials, but its foundation is ten-year-old PHP — when a security hole appears, users often wait forever for an official fix, and features have barely moved for years.
+**blessing-skin-server (short: bs) is the oldest and most widely used program of this kind** — most skin sites out there are built on it. It has the biggest ecosystem and the most tutorials, but its foundation is ten-year-old PHP — when a security hole appears, users often wait forever for an official fix, and features have barely moved for years.
 
-**SkinNexus is a modern replacement, built for people coming from the old site.** The most important thing: moving over loses **nothing** — accounts, skins and capes, in-game identities and old passwords all carry over, and players will barely notice the switch. After the move, here is what actually changes.
+**SkinNexus is a modern replacement, built for people coming from blessing.** The most important thing: moving over loses **nothing** — accounts, skins and capes, in-game identities and old passwords all carry over, and players will barely notice the switch. After the move, here is what actually changes.
 
 ## Why switch
 
-| Pain you may know | Old site (blessing-skin-server) | SkinNexus |
+| Pain you may know | blessing-skin-server (bs) | SkinNexus |
 |---|---|---|
 | Aging tech, nobody fixes holes | Ten-year-old PHP, waiting on upstream | Modern rewrite — we fix and ship ourselves |
 | Fear of losing data on migration | — | Accounts / skins / identities / old passwords preserved |
@@ -68,7 +68,7 @@ Two things before going live:
 1. If you use a reverse proxy (Nginx, BaoTa, …), forward `X-Forwarded-Proto` and `X-Forwarded-For` (copy the config from the [deploy docs](https://docs.skin.yimingzhanshen.cn/deploy)) — otherwise address detection and login protection misbehave.
 2. Back up the signing key (`/data/sign-key.pem` inside the `skin-data` volume). Lose it and every skin image players have downloaded fails verification.
 
-More options (external databases, bare-metal, migrating from an old site) live at [docs.skin.yimingzhanshen.cn](https://docs.skin.yimingzhanshen.cn/deploy). Coming from blessing-skin-server? See the [migration guide](https://docs.skin.yimingzhanshen.cn/migration) — check first, rehearse, then switch, with rollback.
+More options (external databases, bare-metal, migrating your existing site) live at [docs.skin.yimingzhanshen.cn](https://docs.skin.yimingzhanshen.cn/deploy). Coming from blessing-skin-server? See the [migration guide](https://docs.skin.yimingzhanshen.cn/migration) — check first, rehearse, then switch, with rollback.
 
 ## Features
 

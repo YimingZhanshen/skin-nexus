@@ -6,34 +6,34 @@
 
 <img src="docs/assets/logo.svg" width="140" alt="SkinNexus 像素枢纽 N 标识">
 
-> 给 Minecraft 玩家管理角色形象的网站程序——自己架设，账号、皮肤、密码都在你自己手里。
+> 自托管的 Minecraft 玩家账号与皮肤站：玩家在这里注册、换装，账号和数据都在你自己手里。
 
 [![CI](https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml) [![release](https://img.shields.io/badge/release-v0.6.0-blue)](https://github.com/YimingZhanshen/skin-nexus/releases/tag/v0.6.0) [![license](https://img.shields.io/badge/license-AGPL--3.0-green)](LICENSE)
 
-[它是什么](#它是什么) · [比老站好在哪](#比老站好在哪) · [部署](#部署) · [功能](#功能) · [文档](https://docs.skin.yimingzhanshen.cn/) · [许可](#许可)
+[它是什么](#它是什么) · [比 blessing 好在哪](#比-blessing-好在哪) · [部署](#部署) · [功能](#功能) · [文档](https://docs.skin.yimingzhanshen.cn/) · [许可](#许可)
 
 </div>
 
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/-老站搬家·不丢账号不丢皮肤-2ea44f?style=for-the-badge" alt="老站搬家：不丢账号、不丢皮肤">
-  <img src="https://img.shields.io/badge/-发现漏洞·自己修当天发-b0453a?style=for-the-badge" alt="发现漏洞：自己修、当天发新版">
-  <img src="https://img.shields.io/badge/-启动器登录·免密一键进服-1d76db?style=for-the-badge" alt="启动器登录：免密一键进服">
-  <img src="https://img.shields.io/badge/-架站简单·升级不丢数据-6f42c1?style=for-the-badge" alt="架站简单：升级不丢数据">
+  <img src="https://img.shields.io/badge/-玩家账号·管得住-2ea44f?style=for-the-badge" alt="玩家账号管得住">
+  <img src="https://img.shields.io/badge/-皮肤披风·比正版还自由-1d76db?style=for-the-badge" alt="皮肤披风比正版还自由">
+  <img src="https://img.shields.io/badge/-从_blessing_搬家·不丢账号不丢皮肤-6f42c1?style=for-the-badge" alt="从 blessing 搬家不丢账号不丢皮肤">
+  <img src="https://img.shields.io/badge/-漏洞自己修·升级不丢数据-b0453a?style=for-the-badge" alt="漏洞自己修，升级不丢数据">
 </p>
 
 ## 它是什么
 
-**SkinNexus 是一个给 Minecraft 玩家管理「游戏形象」的网站。** 玩家在网页上上传皮肤和披风、给角色换装、逛皮肤库挑形象，然后用启动器免密登录直接进游戏服务器。网站架在你自己的服务器上——玩家的账号、皮肤、密码全部存在你自己的机器里。
+**SkinNexus 是给 Minecraft 服务器用的「玩家账号 + 皮肤」站。** 国内开服一般不开正版验证——大部分玩家用的是离线版；可关了验证，外挂和「封了换个号再来」就成了家常便饭。所以服主会搭一个皮肤站当玩家的账号体系：玩家在站上注册、管理皮肤和披风，用启动器登录进服。这样一来服主有了统一的玩家档案，封禁和管理都有处可查，玩家也得到一套比正版还自由的换肤、换披风体验。
 
-**blessing-skin-server（圈内常叫 bs 或老站）是这个品类里最老牌的程序。** 你现在玩的皮肤站，大概率就是它架的。它生态最大、教程最多，但技术底子是十年前的 PHP——出安全漏洞常常等不到官方修复，功能也很多年没有大更新。
+**blessing-skin-server（简称 bs）是这个品类里最老牌、用得最广的程序**，市面上大多数皮肤站都是它架的。它生态最大、教程最多，但技术底子是十年前的 PHP——出安全漏洞常常等不到官方修复，功能也很多年没有大更新。
 
-**SkinNexus 就是为老站用户做的「新一代替代」。** 最重要的一件事：从老站搬过来**什么都不丢**——账号、皮肤披风、玩家在游戏里的身份、老密码一样不少，玩家几乎感觉不到换过站。搬完之后，下面这些是实打实的改变。
+**SkinNexus 就是为 blessing 用户做的「新一代替代」。** 最重要的一件事：从 blessing 搬过来**什么都不丢**——账号、皮肤披风、玩家在游戏里的身份、老密码一样不少，玩家几乎感觉不到换过站。搬完之后，下面这些是实打实的改变。
 
-## 比老站好在哪
+## 比 blessing 好在哪
 
-| 你可能遇到过的坑 | 老站 blessing-skin-server | SkinNexus |
+| 你可能遇到过的坑 | blessing-skin-server（bs） | SkinNexus |
 |---|---|---|
 | 技术太老，出漏洞没人修 | 十年前的 PHP 底子，只能等官方 | 新技术重写，漏洞自己修、当天发新版 |
 | 换站怕丢数据 | — | 账号 / 皮肤 / 游戏身份 / 旧密码全保留 |
@@ -68,7 +68,7 @@ docker compose -f docker-compose.quickstart.yml up -d
 1. 用了 Nginx / 宝塔这类反向代理的话，记得转发 `X-Forwarded-Proto` 和 `X-Forwarded-For` 两个请求头（照抄[部署文档](https://docs.skin.yimingzhanshen.cn/deploy)即可），否则网址识别和登录保护会出问题。
 2. 备份签名密钥：数据卷里的 `/data/sign-key.pem`。丢了它，玩家已下载的皮肤图会全部验签失败。
 
-更多姿势（外部数据库、裸机部署、迁移老站）都在 [docs.skin.yimingzhanshen.cn](https://docs.skin.yimingzhanshen.cn/deploy)；从 blessing-skin-server 搬家看[迁移指南](https://docs.skin.yimingzhanshen.cn/migration)（先预检、再预演、后搬家，可回滚）。
+更多姿势（外部数据库、裸机部署、旧站迁移）都在 [docs.skin.yimingzhanshen.cn](https://docs.skin.yimingzhanshen.cn/deploy)；从 blessing-skin-server 搬家看[迁移指南](https://docs.skin.yimingzhanshen.cn/migration)（先预检、再预演、后搬家，可回滚）。
 
 ## 功能
 
