@@ -6,23 +6,43 @@
 
 <img src="docs/assets/logo.svg" width="140" alt="SkinNexus pixel hub N mark">
 
-> A self-hosted Minecraft skin server. Accounts, texture files and the signing key stay on your own machine.
+> A website program for managing Minecraft character looks — self-hosted, so accounts, skins and passwords all stay on your own machine.
 
 [![CI](https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml) [![release](https://img.shields.io/badge/release-v0.6.0-blue)](https://github.com/YimingZhanshen/skin-nexus/releases/tag/v0.6.0) [![license](https://img.shields.io/badge/license-AGPL--3.0-green)](LICENSE)
 
-[Deploy](#deploy) · [Features](#features) · [Docs](https://docs.skin.yimingzhanshen.cn/) · [Contributing](CONTRIBUTING.md) · [License](#license)
+[What is this](#what-is-this) · [Why switch](#why-switch) · [Deploy](#deploy) · [Features](#features) · [Docs](https://docs.skin.yimingzhanshen.cn/) · [License](#license)
 
 </div>
 
 ---
 
-One Go binary + Vue 3, on MySQL / MariaDB / PostgreSQL / SQLite. Players upload and manage skins and capes in the browser and join servers through launcher passwordless login — no Mojang account required.
+<p align="center">
+  <img src="https://img.shields.io/badge/-move_from_bs--lose_nothing-2ea44f?style=for-the-badge" alt="Move from bs: lose nothing">
+  <img src="https://img.shields.io/badge/-security_fixes--ship_same_day-b0453a?style=for-the-badge" alt="Security fixes ship the same day">
+  <img src="https://img.shields.io/badge/-launcher_login--no_password-1d76db?style=for-the-badge" alt="Launcher login without passwords">
+  <img src="https://img.shields.io/badge/-easy_deploy--safe_upgrades-6f42c1?style=for-the-badge" alt="Easy deploys, safe upgrades">
+</p>
 
-Built as a **blessing-skin-server alternative**: the protocol layer stays compatible with [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) and its plugin ecosystem, so a legacy site migrates losslessly — primary keys preserved, player UUIDs unchanged, old password hashes still verifiable. A real production site has been migrated and cut over: 67 users / 61 textures, zero rows lost.
+## What is this
 
-**→ Everything else lives at [docs.skin.yimingzhanshen.cn](https://docs.skin.yimingzhanshen.cn/)** — deploy, migration, plugin/theme specs, compatibility matrix, launcher API. This README is the doorway, the docs site is the house.
+**SkinNexus is a website where Minecraft players manage their character looks.** Players upload skins and capes in the browser, dress up their characters, browse a shared skin library, then join game servers through their launcher — no password typing. The site runs on your own server, so player accounts, skins and passwords all live on your own machine.
 
-Current release v0.6.0 (2026-11-12); `main` holds the completed next cycle and tagging is the operator's call. Iteration history: [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
+**blessing-skin-server (nicknamed "bs" in the community) is the oldest program of this kind.** The skin site you play on is very likely built with it. It has the biggest ecosystem and the most tutorials, but its foundation is ten-year-old PHP — when a security hole appears, users often wait forever for an official fix, and features have barely moved for years.
+
+**SkinNexus is a modern replacement, built for people coming from the old site.** The most important thing: moving over loses **nothing** — accounts, skins and capes, in-game identities and old passwords all carry over, and players will barely notice the switch. After the move, here is what actually changes.
+
+## Why switch
+
+| Pain you may know | Old site (blessing-skin-server) | SkinNexus |
+|---|---|---|
+| Aging tech, nobody fixes holes | Ten-year-old PHP, waiting on upstream | Modern rewrite — we fix and ship ourselves |
+| Fear of losing data on migration | — | Accounts / skins / identities / old passwords preserved |
+| Launcher passwordless login is a chore | Needs an extra login add-on | Built in — works right after setup |
+| One bad skin hurts everyone | Delete-and-pray, closets break too | Reference count first, evidence kept, then delete |
+| Players can't find your site | Pages unreadable to search engines | Readable by search engines and AI assistants |
+| Deploy and maintenance are heavy | A pile of PHP plumbing | Two commands to run, upgrades never touch data |
+
+Measured on a small 2-core / 3.5 GB server: skin images answered 5,182 requests per second, the landing page 600 per second, zero errors. Per-cell comparison evidence: [competitor analysis](https://docs.skin.yimingzhanshen.cn/competitor-analysis).
 
 ## Deploy
 
@@ -41,27 +61,23 @@ EOF
 docker compose -f docker-compose.quickstart.yml up -d
 ```
 
-Open `http://<host>:8080/setup` and fill in the site name, admin account, skin domains and the `SKIN_SETUP_TOKEN` above — on an empty database whoever submits that form becomes the super admin, so the step asks for a value only the operator has. Upgrades are `docker compose pull && docker compose up -d`; data volumes are never touched.
-
-Beyond the quickstart: external databases, bare binary, reverse proxy, backup — [deploy docs](https://docs.skin.yimingzhanshen.cn/deploy). Migrating from blessing-skin-server — [migration guide](https://docs.skin.yimingzhanshen.cn/migration) (`preflight → dry-run → import`, rollback available).
+Open `http://<host>:8080/setup` and fill in the site name, admin account, skin domains and the `SKIN_SETUP_TOKEN` above — on an empty database whoever submits that form becomes the super admin, so the step asks for a value only you have. Upgrades are `docker compose pull && docker compose up -d`; data is never touched.
 
 Two things before going live:
 
-1. The reverse proxy must forward `X-Forwarded-Proto` and `X-Forwarded-For` — otherwise scheme detection breaks and the whole site shares one rate-limit bucket.
-2. Back up the signing key (`skin-data` volume, `/data/sign-key.pem`). Losing it invalidates the signature of every texture already served.
+1. If you use a reverse proxy (Nginx, BaoTa, …), forward `X-Forwarded-Proto` and `X-Forwarded-For` (copy the config from the [deploy docs](https://docs.skin.yimingzhanshen.cn/deploy)) — otherwise address detection and login protection misbehave.
+2. Back up the signing key (`/data/sign-key.pem` inside the `skin-data` volume). Lose it and every skin image players have downloaded fails verification.
+
+More options (external databases, bare-metal, migrating from an old site) live at [docs.skin.yimingzhanshen.cn](https://docs.skin.yimingzhanshen.cn/deploy). Coming from blessing-skin-server? See the [migration guide](https://docs.skin.yimingzhanshen.cn/migration) — check first, rehearse, then switch, with rollback.
 
 ## Features
 
-- **For players** — skin & cape uploads (drag-and-drop, 3D preview, HD skins keep native resolution), provenance (original / derivative / repost), private uploads, closet & character management, shareable skin-library detail pages, reports with an in-site inbox, OAuth app and device management.
-- **For operators** — admin panel (users / characters / textures / invite codes / runtime status / self-diagnostics), announcements, custom CSS/JS, theme packs and a theme market (Ed25519-verified, hot install/uninstall), bans at three layers, auth rate limiting with lockout, SMTP password reset + email verification, audit trail. Sessions and launcher tokens are stored as digests — reading the database is not holding a usable login.
-- **Protocols** — full Yggdrasil endpoint set (authlib-injector works out of the box), built-in OIDC passwordless login (device code flow, no sidecar), MUA Union member-site module (off by default = zero surface), CustomSkinAPI / USM / legacy routes, Mojang premium fallback, server-rendered avatars & previews, launcher Bearer API, skin import (Mojang / legacy site, single and batch).
-- **Content & extensions** — zh-CN / en, zero-build theme packs (`theme.json` + CSS), signed plugin platform (goja host: config, namespaced data, route tiers, events, guards, iframe UI), SEO (server-rendered pages, sitemap, robots, llms.txt, per-page meta + JSON-LD).
+- **For players** — upload skins/capes in the browser (drag-and-drop, 3D preview), dress up characters, browse the skin library, keep favourites, report bad content, manage login devices.
+- **For site owners** — manage players and content, publish announcements, restyle the site with one click (theme packs, live install/uninstall), ban troublemakers and block password guessing, password reset / email verification, a full activity trail. Player login credentials are stored as fingerprints only — stealing the database does not hand over usable logins.
+- **For game servers** — works out of the box with authlib-injector launchers; passwordless login built in (no extra add-ons); join the MUA Union to interoperate with other skin sites; premium-account fallback, legacy formats, batch skin import.
+- **Front door & extensions** — Chinese/English, build-free theming, plugin platform, search-engine and AI optimization (players can actually find you).
 
-Measured on a 2-core / 3.5 GB production VPS: landing ~600 RPS, texture delivery 5182 RPS, Yggdrasil metadata 2365 RPS, zero errors.
-
-## Why this one
-
-Server-rendered SEO, shareable texture detail URLs, a closed texture lifecycle, and an error contract enforced by the build — no comparison project has all four. Per-cell source evidence (`file:line`, snapshot 2026-11-01): [`docs/competitor-analysis.md`](https://docs.skin.yimingzhanshen.cn/competitor-analysis).
+Under the hood: one Go binary + Vue 3, with a choice of MySQL / MariaDB / PostgreSQL / SQLite.
 
 ## Documentation
 
@@ -76,9 +92,9 @@ Server-rendered SEO, shareable texture detail URLs, a closed texture lifecycle, 
 | Integrate a launcher | [docs.skin.yimingzhanshen.cn/launcher-api](https://docs.skin.yimingzhanshen.cn/launcher-api) |
 | Browse the knowledge handbook | [docs.skin.yimingzhanshen.cn/handbook](https://docs.skin.yimingzhanshen.cn/handbook/) |
 
-Repo-level docs: [`docs/deploy.md`](docs/deploy.md) · [`docs/build.md`](docs/build.md) · [`docs/migration.md`](docs/migration.md) · [`docs/CHANGELOG.md`](docs/CHANGELOG.md). Most detailed documentation is Chinese-first.
+Current release v0.6.0; iteration history in [`docs/CHANGELOG.md`](docs/CHANGELOG.md). Most detailed documentation is Chinese-first.
 
-## Frozen compatibility contracts
+## Frozen compatibility contracts (for developers)
 
 Before changing any of these, read the iron rules in [`AGENTS.md`](AGENTS.md) and run the matching contract tests:
 
