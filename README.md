@@ -36,18 +36,20 @@
 | Pain you may know | blessing-skin-server (bs) | SkinNexus |
 |---|---|---|
 | Typing `/login` after joining | AuthMe-style in-game auth, clunky | Sign in at the launcher — join directly |
-| Aging tech, nobody fixes holes | Ten-year-old PHP, waiting on upstream | Modern rewrite — we fix and ship ourselves |
+| Aging tech, nobody fixes holes | A decade of PHP, fixes come when upstream ships | Modern rewrite — we fix and ship ourselves |
 | Fear of losing data on migration | — | Accounts / skins / identities / old passwords preserved |
 | Passwordless login is a chore | Needs an extra login add-on | Built in — works right after setup |
-| One bad skin hurts everyone | Delete-and-pray, closets break too | Reference count first, evidence kept, then delete |
-| Players can't find your site | Pages unreadable to search engines | Readable by search engines and AI assistants |
+| One bad skin hurts everyone | Report takedowns skip ref-counts, closets break too | Reference count first, evidence kept, then delete |
+| Players can't find your site | Default pages unreadable to search engines | Readable by search engines and AI assistants |
 | Deploy and maintenance are heavy | A pile of PHP plumbing | Two commands to run, upgrades never touch data |
 
 Measured on a small 2-core / 3.5 GB server: skin images answered 5,182 requests per second, the landing page 600 per second, zero errors. Per-cell comparison evidence: [competitor analysis](https://docs.skin.yimingzhanshen.cn/competitor-analysis).
 
+**Just want to try it?** [Jump to Deploy](#deploy) — the commands only stand up a fresh site and never touch your existing blessing-skin-server data. Still evaluating? Read the "rehearsal" part of the [migration guide](https://docs.skin.yimingzhanshen.cn/migration) first — read-only, zero risk.
+
 ## Deploy
 
-Images are on GHCR (public, no `docker login` needed). No source checkout required:
+Images are on GHCR (public, no `docker login` needed), no source checkout required — and the process never touches your existing blessing-skin-server data (moving over is a separate later step, read-only against the old site):
 
 ```bash
 mkdir skin-nexus && cd skin-nexus
@@ -73,12 +75,12 @@ More options (external databases, bare-metal, migrating your existing site) live
 
 ## Features
 
-- **For players** — upload skins/capes in the browser (drag-and-drop, 3D preview), dress up characters, browse the skin library, keep favourites, report bad content, manage login devices.
-- **For site owners** — manage players and content, publish announcements, restyle the site with one click (theme packs, live install/uninstall), ban troublemakers and block password guessing, password reset / email verification, a full activity trail. Player login credentials are stored as fingerprints only — stealing the database does not hand over usable logins.
-- **For game servers** — works out of the box with authlib-injector launchers; passwordless login built in (no extra add-ons); join the MUA Union to interoperate with other skin sites; premium-account fallback, legacy formats, batch skin import.
-- **Front door & extensions** — Chinese/English, build-free theming, plugin platform, search-engine and AI optimization (players can actually find you).
+- **Players** — upload skins/capes (drag-and-drop, 3D preview), dress up characters, browse the skin library, report and favourite.
+- **Owners** — manage players and content, bans and brute-force protection, invite codes, announcements, one-click theming, password reset / email verification, activity trail. Login credentials are stored as fingerprints only — stealing the database does not hand over usable logins.
+- **Game servers** — works out of the box with mainstream launchers, passwordless login built in, MUA Union interop, premium-account fallback, batch skin import.
+- **Extensions** — Chinese/English, build-free theming (theme packs), plugin platform, search-engine and AI visibility.
 
-Under the hood: one Go binary + Vue 3, with a choice of MySQL / MariaDB / PostgreSQL / SQLite.
+Full feature list: [docs site](https://docs.skin.yimingzhanshen.cn/). Under the hood: one Go binary + Vue 3, with a choice of MySQL / MariaDB / PostgreSQL / SQLite.
 
 ## Documentation
 
@@ -95,14 +97,9 @@ Under the hood: one Go binary + Vue 3, with a choice of MySQL / MariaDB / Postgr
 
 Current release v0.6.0; iteration history in [`docs/CHANGELOG.md`](docs/CHANGELOG.md). Most detailed documentation is Chinese-first.
 
-## Frozen compatibility contracts (for developers)
+## Compatibility promise
 
-Before changing any of these, read the iron rules in [`AGENTS.md`](AGENTS.md) and run the matching contract tests:
-
-1. The original semantics of `/api/yggdrasil/**` (204 lists, `{error,errorMessage}` bodies, millisecond timestamps, strict PEM)
-2. Zero player-UUID drift (the `OfflinePlayer:` md5 variant; renaming never recomputes)
-3. Persisted data stays isomorphic to blessing-skin-server storage conventions and directly migratable
-4. The `internal/union` wire contract and the `internal/plugin` hook contract are frozen
+"Moving over loses nothing" is backed by four long-frozen contracts: the original semantics of `/api/yggdrasil/**`, zero player-UUID drift, persisted data isomorphic to blessing-skin-server conventions (directly migratable), and the frozen `internal/union` / `internal/plugin` contracts. Before touching any of these, read the iron rules in [`AGENTS.md`](AGENTS.md) and run the matching contract tests.
 
 ## License
 
