@@ -6,7 +6,7 @@
 
 <img src="docs/assets/logo.svg" width="140" alt="SkinNexus pixel hub N mark">
 
-> The self-hosted player accounts and skins site for Minecraft: players register and customize here — accounts and data all stay on your own machine.
+> The self-hosted external-login and player-management site for Minecraft: players sign in at the launcher and join straight away — identities, skins and management all stay in your hands.
 
 [![CI](https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml) [![release](https://img.shields.io/badge/release-v0.6.0-blue)](https://github.com/YimingZhanshen/skin-nexus/releases/tag/v0.6.0) [![license](https://img.shields.io/badge/license-AGPL--3.0-green)](LICENSE)
 
@@ -17,7 +17,7 @@
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/-player_accounts--under_control-2ea44f?style=for-the-badge" alt="Player accounts under control">
+  <img src="https://img.shields.io/badge/-external_login--no_login_command-2ea44f?style=for-the-badge" alt="External login: no login command">
   <img src="https://img.shields.io/badge/-skins_and_capes--freer_than_premium-1d76db?style=for-the-badge" alt="Skins and capes freer than premium">
   <img src="https://img.shields.io/badge/-move_from_blessing--lose_nothing-6f42c1?style=for-the-badge" alt="Move from blessing: lose nothing">
   <img src="https://img.shields.io/badge/-fix_holes_yourself--safe_upgrades-b0453a?style=for-the-badge" alt="Fix holes yourself, safe upgrades">
@@ -25,19 +25,20 @@
 
 ## What is this
 
-**SkinNexus is a player-accounts-and-skins site for Minecraft servers.** Most community servers run without premium verification — their players use offline launchers. But with verification off, cheaters and banned players who just hop to a new account become everyday problems. So server owners run a skin site as their player account system: players register, manage skins and capes, and join the server through their launcher with that account. The owner gets one place to look up, manage and ban players; players get skin and cape freedom beyond what premium accounts offer.
+**SkinNexus is an external-login and player-management site for Minecraft servers, in one place.** Most community servers run without premium verification — players are mostly on offline launchers, and even premium players get no skins on such servers. The old options were making players type `/login` after joining (the AuthMe way — clunky) or having players wrestle with skin mods. A skin site catches all of it at once: players sign in at the launcher with their site account and join directly, skins and capes just work; the owner manages player profiles, bans and invite codes in one console — **identity, skins and management in one place**.
 
-**blessing-skin-server (short: bs) is the oldest and most widely used program of this kind** — most skin sites out there are built on it. It has the biggest ecosystem and the most tutorials, but its foundation is ten-year-old PHP — when a security hole appears, users often wait forever for an official fix, and features have barely moved for years.
+**blessing-skin-server (short: bs) is the oldest and most widely used program of this kind** — most skin sites out there are built on it. But its login-and-management story is mostly assembled from add-on plugins, and its foundation is ten-year-old PHP — when a security hole appears, users often wait forever for an official fix, and features have barely moved for years.
 
-**SkinNexus is a modern replacement, built for people coming from blessing.** The most important thing: moving over loses **nothing** — accounts, skins and capes, in-game identities and old passwords all carry over, and players will barely notice the switch. After the move, here is what actually changes.
+**SkinNexus makes all of this built-in, first-class.** External login (launcher passwordless included), player management and skin serving work out of the box. Moving from blessing loses **nothing** — accounts, skins and capes, in-game identities and old passwords all carry over, and players will barely notice the switch. After the move, here is what actually changes.
 
 ## Why switch
 
 | Pain you may know | blessing-skin-server (bs) | SkinNexus |
 |---|---|---|
+| Typing `/login` after joining | AuthMe-style in-game auth, clunky | Sign in at the launcher — join directly |
 | Aging tech, nobody fixes holes | Ten-year-old PHP, waiting on upstream | Modern rewrite — we fix and ship ourselves |
 | Fear of losing data on migration | — | Accounts / skins / identities / old passwords preserved |
-| Launcher passwordless login is a chore | Needs an extra login add-on | Built in — works right after setup |
+| Passwordless login is a chore | Needs an extra login add-on | Built in — works right after setup |
 | One bad skin hurts everyone | Delete-and-pray, closets break too | Reference count first, evidence kept, then delete |
 | Players can't find your site | Pages unreadable to search engines | Readable by search engines and AI assistants |
 | Deploy and maintenance are heavy | A pile of PHP plumbing | Two commands to run, upgrades never touch data |
