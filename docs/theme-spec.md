@@ -298,7 +298,7 @@ SPA 经 `web/src/style.css` `@import` 引入，SSR 两页 `//go:embed` 注入 `<
 `.auth-split/.auth-scene/.auth-pane`（登录/注册/找回/重置的分栏场景布局，≤860px 塌缩）、
 `.user-chip`（侧栏底部用户卡）、`.nav-item .nav-ico`（图标导航，活动态朱砂左条）、
 `.page-head`（页面标题行）。已适配主题：azure-glass / ember-forge / verdigris-atelier
-（源码在分发仓库 themes/<id>/）。
+（源码在分发仓库 themes/&lt;id&gt;/）。
 
 **红线不变**：logo（N 字牌）为品牌资产，任何主题不得改其配色；变色须全品牌资产统一并由站主终审。
 

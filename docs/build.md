@@ -138,7 +138,7 @@ cd server && go build ./... && go vet ./... && go test ./...   # 后端改动自
 cd web && npm ci && npm run build                              # 前端改动自检
 ```
 
-改动 Yggdrasil 面必须额外跑 `go test ./internal/ygg/` 且不动契约断言；改动 union 包前先读该包 doc 注的冻结区说明（[`AGENTS.md`](../AGENTS.md) 铁律 1/6）。
+改动 Yggdrasil 面必须额外跑 `go test ./internal/ygg/` 且不动契约断言；改动 union 包前先读该包 doc 注的冻结区说明（[`AGENTS.md`](https://github.com/YimingZhanshen/skin-nexus/blob/main/AGENTS.md) 铁律 1/6）。
 
 
 ## 插件平台自检

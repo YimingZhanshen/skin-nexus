@@ -3,8 +3,8 @@
 面向桌面启动器的账号/角色管理接口，由官方插件 `launcher-api` 提供。
 规范正文与 OpenAPI 在插件仓库：
 
-- <https://github.com/YimingZhanshen/skin-nexus-plugins/blob/main/plugins/launcher-api/LAUNCHER-API.md>
-- <https://github.com/YimingZhanshen/skin-nexus-plugins/blob/main/plugins/launcher-api/openapi.yaml>
+- &lt;https://github.com/YimingZhanshen/skin-nexus-plugins/blob/main/plugins/launcher-api/LAUNCHER-API.md&gt;
+- &lt;https://github.com/YimingZhanshen/skin-nexus-plugins/blob/main/plugins/launcher-api/openapi.yaml&gt;
 
 基址 = `https://<站点>/api/plugins/launcher-api/v1`。`GET <基址>/meta` 公开，其余端点
 `Authorization: Bearer <token>`。

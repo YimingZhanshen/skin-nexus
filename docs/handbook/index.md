@@ -5,9 +5,9 @@
 > 发现与代码不符之处请开 Issue。
 >
 > 三条使用约定：
-> 1. **契约与部署以主目录为准**：环境变量表见 [`../deploy.md`]({% link deploy.md %})，
->    迁移步骤见 [`../migration.md`]({% link migration.md %})，插件/主题规范见
->    [`../plugin-spec.md`]({% link plugin-spec.md %}) / [`../theme-spec.md`]({% link theme-spec.md %})。
+> 1. **契约与部署以主目录为准**：环境变量表见 [`../deploy.md`](../deploy.md)，
+>    迁移步骤见 [`../migration.md`](../migration.md)，插件/主题规范见
+>    [`../plugin-spec.md`](../plugin-spec.md) / [`../theme-spec.md`](../theme-spec.md)。
 >    本手册讲「实现是怎么长的」，主目录讲「对外承诺什么」。
 > 2. **mermaid 图**：仓库页面直接渲染；文档站需主题支持（换 just-the-docs 后可视化）。
 > 3. 页首「本文引用的文件」链接钉在快照 commit 上，长期有效但行号以快照为准。

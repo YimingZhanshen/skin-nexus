@@ -353,7 +353,7 @@ Yggdrasil 使用独立 legacy 错误形状：
 }
 ```
 
-#### GET `/api/yggdrasil/sessionserver/session/minecraft/profile/{uuid}`
+#### GET `/api/yggdrasil/sessionserver/session/minecraft/profile/\{uuid\}`
 
 | 项目 | 说明 |
 |---|---|
@@ -609,7 +609,7 @@ Web API 面向浏览器 SPA，使用 Cookie 会话认证。除纹理文件外，
 }
 ```
 
-#### POST `/api/v1/skinlib/{tid}/like`
+#### POST `/api/v1/skinlib/\{tid\}/like`
 
 | 项目 | 说明 |
 |---|---|
@@ -619,7 +619,7 @@ Web API 面向浏览器 SPA，使用 Cookie 会话认证。除纹理文件外，
 | tid 无效 | 400 |
 | 纹理不存在 | 404 |
 
-#### DELETE `/api/v1/skinlib/{tid}/like`
+#### DELETE `/api/v1/skinlib/\{tid\}/like`
 
 | 项目 | 说明 |
 |---|---|
@@ -628,7 +628,7 @@ Web API 面向浏览器 SPA，使用 Cookie 会话认证。除纹理文件外，
 | 未登录 | 401 |
 | 未收藏过 | 404 |
 
-#### PATCH `/api/v1/skinlib/{tid}`
+#### PATCH `/api/v1/skinlib/\{tid\}`
 
 | 项目 | 说明 |
 |---|---|
@@ -701,7 +701,7 @@ Web API 面向浏览器 SPA，使用 Cookie 会话认证。除纹理文件外，
 
 ### SkinNexus 公开 API
 
-#### GET `/api/public/v1/players/byname/{name}`
+#### GET `/api/public/v1/players/byname/\{name\}`
 
 | 项目 | 说明 |
 |---|---|
@@ -725,7 +725,7 @@ Web API 面向浏览器 SPA，使用 Cookie 会话认证。除纹理文件外，
 
 `skins.default` 与 `skins.slim` 根据模型字段选择其一；`cape` 存在时才返回。
 
-#### GET `/api/public/v1/players/byuuid/{uuid}`
+#### GET `/api/public/v1/players/byuuid/\{uuid\}`
 
 | 项目 | 说明 |
 |---|---|

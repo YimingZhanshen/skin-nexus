@@ -11,7 +11,7 @@
 
 ## 0. 官方市场投稿（推荐）
 
-官方插件源码统一在 <https://github.com/YimingZhanshen/skin-nexus-plugins>：
+官方插件源码统一在 &lt;https://github.com/YimingZhanshen/skin-nexus-plugins&gt;：
 
 1. 在 `plugins/<name>/`（插件）或 `themes/<id>/`（主题）添加源码与 `market.json`；
 2. 向该仓库提 PR —— CI 只运行 `skin-plugin lint`（无密钥），校验 manifest、
@@ -159,7 +159,7 @@ go run ./cmd/skin-plugin verify-registry \
 
 ## 5. 发布到 GitHub Pages
 
-官方市场仓库是 <https://github.com/YimingZhanshen/skin-nexus-plugins>，目录：
+官方市场仓库是 &lt;https://github.com/YimingZhanshen/skin-nexus-plugins&gt;，目录：
 
 ```
 plugins/<name>/                 # 插件源码（PR 投稿）

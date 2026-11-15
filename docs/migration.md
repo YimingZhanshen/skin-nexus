@@ -203,7 +203,7 @@ mysql -N -e "SELECT v FROM skin_nexus.options WHERE k='union_member_key'"
    `BAD-NAME` 丢弃；抽样 `cmp` 老站/目标同名文件逐字节一致：
 
    ```bash
-   cmp /老站/storage/textures/<hash> /目标/data/textures/<hash> && echo MATCH
+   cmp /老站/storage/textures/&lt;hash&gt; /目标/data/textures/&lt;hash&gt; && echo MATCH
    ```
 
    preflight 清单里的问题文件若未修复，切流后**必须手工补拷**（改名/修复后按内容

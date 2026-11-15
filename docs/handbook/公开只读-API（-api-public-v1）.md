@@ -371,7 +371,7 @@ classDiagram
 - [server/internal/publicapi/publicapi.go:148-176](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/publicapi/publicapi.go#L148-L176)
 - [server/internal/webapi/skinlib.go:66-88](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/webapi/skinlib.go#L66-L88)
 
-### 4. `/api/public/v1/players/byuuid/{uuid}` 与 `/textures/{hash}` 的区别？
+### 4. `/api/public/v1/players/byuuid/\{uuid\}` 与 `/textures/\{hash\}` 的区别？
 - `/api/public/v1/players/byuuid/{uuid}` 返回 JSON 元数据，包括玩家 ID、名称、皮肤模型前缀和纹理 URL；
 - `/textures/{hash}` 返回二进制纹理文件（通常为 `image/png`），是公开只读 API 返回值中 URL 指向的实际资源；
 - 二者不是同一资源：前者是元数据，后者是内容。

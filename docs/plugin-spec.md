@@ -484,7 +484,7 @@ skin.jobs.cancelRequested(id); // 只读；job 步内也可调用（步不是 ad
 完整官方插件（12 个：config-greeter / nav-links / player-notes / texture-cdn /
 lifecycle-log / signup-guard / texture-provenance / signup-survey / avatar-cdn /
 name-policy / launcher-api / skin-importer）的源码与签名市场在独立公开仓库：
-<https://github.com/YimingZhanshen/skin-nexus-plugins>。
+&lt;https://github.com/YimingZhanshen/skin-nexus-plugins&gt;。
 
 投稿流程：插件仓库提 PR → CI `skin-plugin lint`（无密钥）→ 维护者评审合并 →
 CI 环境密钥签名并更新 registry/Pages → 主站市场 10 分钟内可见。

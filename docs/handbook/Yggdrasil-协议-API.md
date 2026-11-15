@@ -313,7 +313,7 @@ curl -i "https://your-domain/api/yggdrasil/sessionserver/session/minecraft/hasJo
 - [http.go:514-540](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/ygg/http.go#L514-L540)
 - [service.go:623-664](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/ygg/service.go#L623-L664)
 
-### 玩家资料：`GET /api/yggdrasil/sessionserver/session/minecraft/profile/{uuid}`
+### 玩家资料：`GET /api/yggdrasil/sessionserver/session/minecraft/profile/\{uuid\}`
 按 UUID 返回玩家 Profile，包含 textures 与 uploadableTextures。
 
 | 项目 | 说明 |
@@ -363,7 +363,7 @@ curl -X POST "https://your-domain/api/yggdrasil/api/profiles/minecraft" \
 - [http.go:580-617](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/ygg/http.go#L580-L617)
 - [service.go:700-720](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/ygg/service.go#L700-L720)
 
-### 按名称查询玩家：`GET /api/yggdrasil/api/users/profiles/minecraft/{name}`
+### 按名称查询玩家：`GET /api/yggdrasil/api/users/profiles/minecraft/\{name\}`
 返回单个玩家的 UUID 与名称。
 
 | 项目 | 说明 |

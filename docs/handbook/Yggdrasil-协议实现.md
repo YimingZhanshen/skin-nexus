@@ -244,7 +244,7 @@ sequenceDiagram
 - [server/internal/ygg/http.go:540-620](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/ygg/http.go#L540-L620)
 - [server/internal/ygg/fallback.go:120-180](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/ygg/fallback.go#L120-L180)
 
-### profile/{uuid}
+### profile/\{uuid\}
 路径参数：
 - `uuid`：任意 UUID 拼写。
 

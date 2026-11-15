@@ -231,7 +231,7 @@ flowchart TD
   }
   ```
 
-#### PUT /api/admin/v1/users/{id}/password
+#### PUT /api/admin/v1/users/\{id\}/password
 - **作用**：强制重置用户密码；同步使旧令牌失效，并触发 OIDC 授权撤销钩子。
 - **管理员权限**：任意管理员。
 - **请求体**
@@ -242,7 +242,7 @@ flowchart TD
   ```
 - **成功响应**：`{ "ok": true }`
 
-#### PUT /api/admin/v1/users/{id}/email
+#### PUT /api/admin/v1/users/\{id\}/email
 - **作用**：设置或清空邮箱。
 - **管理员权限**：任意管理员。
 - **请求体**
@@ -252,7 +252,7 @@ flowchart TD
   }
   ```
 
-#### PUT /api/admin/v1/users/{id}/nickname
+#### PUT /api/admin/v1/users/\{id\}/nickname
 - **作用**：设置昵称，校验长度与字符集，并要求唯一性。
 - **管理员权限**：任意管理员。
 - **请求体**
@@ -262,7 +262,7 @@ flowchart TD
   }
   ```
 
-#### PUT /api/admin/v1/users/{id}/verification
+#### PUT /api/admin/v1/users/\{id\}/verification
 - **作用**：切换邮箱验证状态。
 - **管理员权限**：任意管理员。
 - **请求体**
@@ -272,7 +272,7 @@ flowchart TD
   }
   ```
 
-#### PUT /api/admin/v1/users/{id}/permission
+#### PUT /api/admin/v1/users/\{id\}/permission
 - **作用**：修改用户权限，支持封禁、解封、授予管理员。
 - **管理员权限**：必须为超级管理员 Web 会话；机器令牌直接拒绝。
 - **请求体**
@@ -286,7 +286,7 @@ flowchart TD
   - `0`：普通。
   - `1`：管理员；要求调用方为超级管理员。
 
-#### DELETE /api/admin/v1/users/{id}
+#### DELETE /api/admin/v1/users/\{id\}
 - **作用**：删除用户及其工作凭证；不删除纹理文件。
 - **管理员权限**：任意管理员。
 - **约束**
@@ -315,7 +315,7 @@ flowchart TD
   }
   ```
 
-#### PUT /api/admin/v1/players/{pid}/name
+#### PUT /api/admin/v1/players/\{pid\}/name
 - **作用**：重命名玩家，保持 UUID 零漂移。
 - **管理员权限**：任意管理员。
 - **请求体**
@@ -326,7 +326,7 @@ flowchart TD
   ```
 - **成功响应**：`{ "ok": true, "uuid": "字符串" }`
 
-#### PUT /api/admin/v1/players/{pid}/owner
+#### PUT /api/admin/v1/players/\{pid\}/owner
 - **作用**：转移玩家所有权；旧拥有者的 launcher 选择会被失效。
 - **管理员权限**：任意管理员。
 - **请求体**
@@ -337,7 +337,7 @@ flowchart TD
   ```
 - **幂等语义**：若新拥有者与旧拥有者相同，返回 `unchanged: true`。
 
-#### PUT /api/admin/v1/players/{pid}/textures
+#### PUT /api/admin/v1/players/\{pid\}/textures
 - **作用**：挂载或卸载纹理，`textureId` 为 0 表示清空。
 - **管理员权限**：任意管理员。
 - **请求体**
@@ -348,7 +348,7 @@ flowchart TD
   }
   ```
 
-#### DELETE /api/admin/v1/players/{pid}
+#### DELETE /api/admin/v1/players/\{pid\}
 - **作用**：删除角色；共享纹理保留。
 - **管理员权限**：任意管理员。
 - **成功响应**：`{ "ok": true }`
@@ -385,7 +385,7 @@ flowchart TD
   }
   ```
 
-#### POST /api/admin/v1/reports/{id}/resolve
+#### POST /api/admin/v1/reports/\{id\}/resolve
 - **作用**：处理举报。
 - **管理员权限**：任意管理员。
 - **请求体**
@@ -400,7 +400,7 @@ flowchart TD
   - `hide`：对纹理执行封禁，隐藏并通知纹理所有者。
 - **成功响应**：`{ "ok": true }`
 
-#### PUT /api/admin/v1/textures/{tid}/moderation
+#### PUT /api/admin/v1/textures/\{tid\}/moderation
 - **作用**：解除纹理违规审核限制；恢复发布权，但不自动重新公开。
 - **管理员权限**：任意管理员。
 - **请求体**
@@ -410,12 +410,12 @@ flowchart TD
   }
   ```
 
-#### POST /api/admin/v1/textures/{tid}/strike
+#### POST /api/admin/v1/textures/\{tid\}/strike
 - **作用**：管理员主动封禁纹理，无需已有举报。
 - **管理员权限**：任意管理员。
 - **成功响应**：`{ "ok": true }`
 
-#### DELETE /api/admin/v1/textures/{tid}
+#### DELETE /api/admin/v1/textures/\{tid\}
 - **作用**：彻底删除纹理；可强制解绑仍在使用的角色、衣橱和头像。
 - **管理员权限**：任意管理员。
 - **查询参数**：`reason`、`force`。
@@ -572,11 +572,11 @@ flowchart TD
   }
   ```
 
-#### GET /api/admin/v1/plugins/{name}/config
+#### GET /api/admin/v1/plugins/\{name\}/config
 - **作用**：查看插件配置视图。
 - **管理员权限**：任意管理员。
 
-#### PUT /api/admin/v1/plugins/{name}/config
+#### PUT /api/admin/v1/plugins/\{name\}/config
 - **作用**：保存插件配置。
 - **管理员权限**：必须为超级管理员 Web 会话；机器令牌拒绝。
 - **请求体**
@@ -586,7 +586,7 @@ flowchart TD
   }
   ```
 
-#### POST /api/admin/v1/plugins/{name}/{action}
+#### POST /api/admin/v1/plugins/\{name\}/\{action\}
 - **作用**：启用、禁用或重载插件。
 - **管理员权限**：必须为超级管理员 Web 会话。
 - **路径参数**：`name`、`action ∈ enable|disable|reload`。
@@ -601,11 +601,11 @@ flowchart TD
   }
   ```
 
-#### POST /api/admin/v1/plugins/{name}/rollback
+#### POST /api/admin/v1/plugins/\{name\}/rollback
 - **作用**：回滚插件到上一个版本。
 - **管理员权限**：必须为超级管理员 Web 会话。
 
-#### DELETE /api/admin/v1/plugins/{name}?purge=1
+#### DELETE /api/admin/v1/plugins/\{name\}?purge=1
 - **作用**：卸载插件；`purge=1` 时清理数据。
 - **管理员权限**：必须为超级管理员 Web 会话。
 
@@ -676,16 +676,16 @@ flowchart TD
   }
   ```
 
-#### GET /api/admin/v1/jobs/{id}
+#### GET /api/admin/v1/jobs/\{id\}
 - **作用**：查看单个任务详情。
 - **管理员权限**：任意管理员。
 
-#### POST /api/admin/v1/jobs/{id}/cancel
+#### POST /api/admin/v1/jobs/\{id\}/cancel
 - **作用**：取消任务。
 - **管理员权限**：任意管理员。
 - **成功响应**：`{ "ok": true }`
 
-#### POST /api/admin/v1/jobs/{id}/resume
+#### POST /api/admin/v1/jobs/\{id\}/resume
 - **作用**：恢复任务。
 - **管理员权限**：任意管理员。
 - **成功响应**：`{ "ok": true }`
@@ -771,12 +771,12 @@ flowchart TD
   }
   ```
 
-#### PUT /api/admin/v1/union/blacklist/{id}/invalidate
+#### PUT /api/admin/v1/union/blacklist/\{id\}/invalidate
 - **作用**：释放黑名单条目；记录保留但不再封禁。
 - **管理员权限**：任意管理员。
 - **响应体**：透传上游结果。
 
-#### DELETE /api/admin/v1/union/blacklist/{id}
+#### DELETE /api/admin/v1/union/blacklist/\{id\}
 - **作用**：彻底删除黑名单记录；不可逆。
 - **管理员权限**：任意管理员。
 - **响应体**：透传上游结果。
@@ -835,7 +835,7 @@ flowchart TD
 
 #### GET /api/admin/v1/oidc/clients
 #### POST /api/admin/v1/oidc/clients
-#### DELETE /api/admin/v1/oidc/clients/{id}
+#### DELETE /api/admin/v1/oidc/clients/\{id\}
 - **作用**：管理 OIDC 客户端；删除共享 launcher 客户端由 `sharedClientID` 保护。
 - **管理员权限**：任意管理员。
 
