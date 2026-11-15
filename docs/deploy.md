@@ -4,6 +4,21 @@
 > 且 GitHub Actions 每次 push main 都会自动构建生产镜像推到 GHCR，部署机**只拉不编**。
 > 从老站迁数据见 [migration.md](migration.md)；源码构建细节见 [build.md](build.md)。
 
+**本手册怎么读**：只想快点跑起来 → 抄 [§2.1](#_2-1-准备-compose-文件) 的 quickstart 四行 `.env` 就够；
+接外部库/调参数 → [§2.2](#_2-2-选择数据库-同一份文件二选一) + [§2.3](#_2-3-环境变量)（全量变量表）；
+出问题 → [§2.7](#_2-7-日志与排错) 排错表；反代/CDN → [§三](#三、nginx-反代-前置-https-证书)；
+老站迁数据 → [§四](#四、从老站迁移)；无 Docker → [§五](#五、备选-源码构建-systemd-无-docker-环境)。
+表里放不下的深说（为什么这么设计、踩过的坑）都收进折叠块，**可以先不读**。
+
+| 章节 | 内容 |
+|---|---|
+| [一](#一、部署方式选择) 部署方式 | Docker Compose（推荐）还是裸二进制 |
+| [二](#二、docker-compose-部署-主线) Compose 主线 | 准备 → 选库 → 环境变量 → 启动验收 → 升级 → 备份 → 排错 → 宝塔 |
+| [三](#三、nginx-反代-前置-https-证书) 反代与 CDN | Nginx 必传头、安全头/CORS 归属、宝塔 WAF 跨域坑、CDN 真实 IP |
+| [四](#四、从老站迁移) 迁移 | Docker 下的 migrate 入口（详见 migration.md） |
+| [五](#五、备选-源码构建-systemd-无-docker-环境) 源码 + systemd | 无 Docker 环境的完整单元示例 |
+| [六](#六、运维周期检查) 运维周期 | 自检清单、依赖更新节奏、季度 15 分钟自检 |
+
 ## 一、部署方式选择
 
 | 方式 | 适合 | 说明 |
@@ -165,16 +180,40 @@ app 进程能看到哪些变量，取决于 compose 文件里 `environment:` 段
 | 变量 | 必填性 | 默认 | 说明 |
 |---|---|---|---|
 | `SKIN_SITE_NAME` | 面板真源 | `SkinNexus` | 站点名（面板可改） |
-| `SKIN_TRUSTED_PROXIES` | 可选 | 空（= loopback + RFC1918 全信任） | 逗号分隔的 CIDR 列表，指定**哪些对端可以声称** `X-Forwarded-For`。留空沿用历史行为（同机 nginx / docker bridge 场景不用改）；一旦配置，只有列出的网段被信任，其余对端来的 XFF 一律不信。写错（非 CIDR）直接启动失败，而不是悄悄放宽信任——认证限流与审计里的 IP 全靠这条。**这条是「替换」不是「追加」**：列了清单，loopback 就不再自动可信，所以同机 nginx 必须把 `127.0.0.1/32,::1/128` 一起列上。只按「我的反代是 Cloudflare」去列 CF 公网段而真实对端是本机，`clientIP()` 会退回对端地址、每个访客都塌成同一个 IP：注册的每 IP 上限第三个人就被挡，认证/找回密码/邮箱验证那几只 `ip:` 限流桶全站共用一个，审计与 `users.ip` 一律记成对端地址。CDN 场景的常规做法是**不设这个变量**，改开面板「安全与限流 → CDN 加速开关」（见 §3 末） |
-| `SKIN_CSP_SCRIPT_EXTRA_SOURCES` | 可选 | 空（= 脚本只允许本站） | 逗号分隔的第三方脚本域名，追加到 CSP 的 `script-src`。在面板「自定义 JS」里粘贴 Google Tag Manager、Microsoft Clarity 这类统计代码时**必须**设它，否则脚本被浏览器当场拦下，控制台只留一条 CSP 违规。只接受 `https://host`、`http://host`、`host`、`https://*.host`（可带 `:端口`）；**不能有路径、空格、引号或分号**——分号正是 CSP 的分隔符，一个不是「源」的值等于替我们往响应头里写别的指令，这类值**直接启动失败**而不是静默忽略。例：`https://www.googletagmanager.com,https://www.clarity.ms`。**compose 部署还要确认 `environment:` 段透传了本键**（仓库两份示例都已带上），只写 `.env` 不会进容器 |
-| `SKIN_CSP_CONNECT_EXTRA_SOURCES` | 可选 | 空 | 同上，追加到 `connect-src`（XHR/fetch 允许连哪些源）。**只放脚本源不够**：Clarity 用 fetch 往 `https://www.clarity.ms` 上报，不放这里就会出现「脚本加载成功了但一条数据都没收到」。GTM 的 `gcollect` 走图片请求，`img-src` 本来就允许 https，通常不用加。启动日志会打印实际放行了哪些源，改完先 grep `csp:` 这一行确认生效 |
-| `SKIN_SETUP_TOKEN` | 可选 | 空（每次启动临时生成并打进日志） | 安装向导的一次性令牌。空库时 `/api/v1/setup` 谁先提交谁当超管，所以这一步要一个只有运维者拿得到的值：留空则本次启动随机生成并在日志里打印 `setup: ... install token "xxxxxxxxxx"`，`docker compose logs skin-nexus` 可见；自己定一个则跨重启不变。填错只回 403，不写任何数据；站点初始化后本变量不再起作用。**另一面也要知道**：随机源不可用时（`crypto/rand` 失败）既没有你的令牌也没有随机令牌，向导就是**裸开的**，此时唯一的提示是启动日志里那条 `setup: WARNING the install wizard is unguarded`——把站点暴露出去之前先 grep 这一行；自己设 `SKIN_SETUP_TOKEN` 就不依赖随机源 |
+| `SKIN_TRUSTED_PROXIES` | 可选 | 空（= loopback + RFC1918 全信任） | 哪些对端可以声称 `X-Forwarded-For`，逗号分隔 CIDR。**是替换不是追加**：同机 nginx 要把 `127.0.0.1/32,::1/128` 一起列上；写错直接启动失败。**CDN 场景不设本变量**，改开面板「安全与限流 → CDN 加速开关」（§三） |
+| `SKIN_CSP_SCRIPT_EXTRA_SOURCES` | 可选 | 空（脚本只允许本站） | 第三方脚本域名追加进 CSP `script-src`，逗号分隔。面板贴 GTM / Clarity 统计代码时**必须**设。只收 `https://host` 形态（可带端口、`*.` 通配）；带路径、空格、引号、分号**直接启动失败**。compose 部署还要在 `environment:` 段透传本键 |
+| `SKIN_CSP_CONNECT_EXTRA_SOURCES` | 可选 | 空 | 同上，追加进 `connect-src`。**只放脚本源不够**：Clarity 用 fetch 上报，不放行 `https://www.clarity.ms` 就会「脚本加载了但收不到数据」 |
+| `SKIN_SETUP_TOKEN` | 可选 | 空（每次启动随机生成并打日志） | 安装向导的一次性令牌；留空 = 随机值打在启动日志里，自己设 = 跨重启不变。填错只回 403，站点初始化后不再起作用 |
 | `SKIN_SERVER_NAME` | 面板真源 | `SkinNexus` | Yggdrasil 元数据里的服务器显示名（面板可改） |
 | `SKIN_SKIN_DOMAINS` | 面板真源 | 空 | 皮肤域白名单，逗号分隔；不接联盟填本站域名，接入 MUA Union 以联盟公布清单为准（改动会破坏联盟互认） |
-| `SKIN_INVITE_REQUIRED` | 面板真源 | `false` | 注册强制邀请码（等价老站必填语义）；面板「站点设置」可改 |
-| `SKIN_REQUIRE_VERIFICATION` | 面板真源 | `false` | 邮箱验证门（按 `email_verified` 判定），面板可热切。**2026-11-12 起它同时管两侧**：Minecraft 进服被拒，未验证账号在网页上也被拒（用户中心、上传、衣柜、角色、举报、通知、管理面板全部返回 `auth.email_verify_required`，皮肤库等公开浏览按游客照常可看）。开启后注册必须填邮箱（服务端与注册表单都要求），账号建好即自动发验证链接；宽限期由面板 `email_verify_grace_days` 决定，默认 0=立即执行（读不到或填非正数同样按 0），宽限期内网页功能照常。**只有 permission=2 的超管不受这道门限制**——邮件配错、地址写错、进了垃圾箱这三种情况下，能修 SMTP、能手工把人标记为已验证的只有这个人，把他一起锁死就没有人能开门了。开之前先看运行状态的「邮箱验证门（影响范围）」一行：它给出当前未验证账号数，以及「门开着但发信没配好」的红灯。迁移站尤其要看——从 blessing 导进来的账号 `email_verified` 基本都是 0，直接开门等于当场把老玩家全部挡在门外，正确顺序是先配好发信、把宽限期设成足够天数，再开门 |
-| `SKIN_INDEXNOW_ENABLED` | 面板真源 | `false` | IndexNow 收录通知开关（立即生效）。**默认关——开启等于把站点 URL 提交给微软 Bing 收录**：开启后，材质发布/删除/改公开性会把详情页 `/skinlib/{id}` 提交（每批 ≤10 条，失败只记日志不影响用户），并对外提供 `/{密钥}.txt` 校验文件；密钥没配好（`SKIN_INDEXNOW_KEY` 需 8-128 位字母数字连字符下划线）时开关形同虚设，一切照旧零外联 |
-| `SKIN_INDEXNOW_KEY` | 环境变量 | 空 | IndexNow 校验密钥（8-128 位 `[a-zA-Z0-9-_]`，随开启对外发布在 `/{密钥}.txt`）。留空或格式非法 = 通知不发送、校验文件不出门 |
+| `SKIN_INVITE_REQUIRED` | 面板真源 | `false` | 注册强制邀请码（等价老站必填语义） |
+| `SKIN_REQUIRE_VERIFICATION` | 面板真源 | `false` | 邮箱验证门（面板可热切），**2026-11-12 起同时管两侧**：Minecraft 进服与网页身份操作一起拦，公开浏览不受影响；**permission=2 超管豁免**（发信坏了总得有人能修）。开之前先看部署自检的「邮箱验证门」一行；**迁移站先配好发信、留足宽限期再开**（导进来的老账号默认全未验证） |
+| `SKIN_INDEXNOW_ENABLED` | 面板真源 | `false` | IndexNow 收录通知开关（立即生效）。**默认关——开启等于把站点 URL 提交给微软 Bing 收录**：材质发布/删除/改公开性时提交 `/skinlib/{id}`（每批 ≤10，失败只记日志），并对外提供 `/{密钥}.txt` 校验文件 |
+| `SKIN_INDEXNOW_KEY` | 环境变量 | 空 | IndexNow 校验密钥（8-128 位 `[a-zA-Z0-9-_]`）。留空或格式非法 = 不发送、校验文件不出门 |
+
+<details>
+<summary>上面五项的深说（信任边界 / CSP 细节 / 向导令牌的随机源 / 验证门行为）——可以先不读</summary>
+
+- **`SKIN_TRUSTED_PROXIES` 列错的代价**：只按「我的反代是 Cloudflare」列 CF 公网段而真实对端是本机，
+  `clientIP()` 会退回对端地址、每个访客塌成同一个 IP——注册每 IP 上限第三个人就被挡，认证/找回密码/
+  邮箱验证那几只 `ip:` 限流桶全站共用一个，审计与 `users.ip` 一律记成对端地址。
+- **`SKIN_CSP_*` 的值校验**：分号是 CSP 的分隔符，一个不叫「源」的值等于替我们往响应头里写别的指令，
+  所以这类值拒绝启动而不是静默忽略。例：`https://www.googletagmanager.com,https://www.clarity.ms`。
+  GTM 的 `gcollect` 走图片请求（`img-src` 本来就放行 https），通常不用加 connect 源。
+  启动日志会打印实际放行了哪些源，改完 grep `csp:` 这一行确认生效。
+- **「明明改了 .env，响应头一字没变」的头号原因**：compose 的 `.env` 只做变量插值，
+  app 看得到哪些变量取决于 `environment:` 段列了什么——自己维护 compose 的话两处都要写，
+  改完还得 `docker compose up -d` 重建容器（只 `pull` 不重建同样不生效）。
+- **`SKIN_SETUP_TOKEN` 的另一面**：随机源不可用时（`crypto/rand` 失败）既没有你的令牌也没有随机令牌，
+  向导是**裸开的**，唯一提示是启动日志里 `setup: WARNING the install wizard is unguarded`——
+  站点暴露出去之前先 grep 这一行；自己设 `SKIN_SETUP_TOKEN` 就不依赖随机源。空库时 `/api/v1/setup`
+  谁先提交谁当超管，这一步要一个只有运维者拿得到的值。
+- **`SKIN_REQUIRE_VERIFICATION` 的完整行为**：开启后注册必须填邮箱（服务端与注册表单都要求），
+  账号建好自动发验证链接；宽限期由面板 `email_verify_grace_days` 决定（默认 0=立即执行）。
+  拦截面覆盖用户中心、上传、衣柜、角色、举报、通知、管理面板（返回 `auth.email_verify_required`）。
+  旧版本向导留下的 `base_url` 夹在 `site_url` 与 `SKIN_BASE_URL` 之间生效（见 migration.md）。
+
+</details>
 
 **认证、限流与正版兜底**
 
@@ -361,6 +400,9 @@ docker compose pull && docker compose up -d    # 只换容器，卷不动，数�
 >
 > 命令幂等，可反复执行；大库可先 `--limit 500` 试一段。文件缺失或不可解码的材质只计数、不猜测。
 
+<details>
+<summary><b>升到「令牌只存摘要」的版本：这次升级不可回滚（升过 0.6.x 前必读）</b></summary>
+
 > **升到「会话与启动器令牌只存摘要」的版本：这一次升级不可回滚**。新版首次启动会在一个事务里把
 > `web_sessions.token`、`ygg_tokens.access_token`、`ygg_join_sessions.access_token`、
 > `oidc_refresh_tokens.token` 四处凭证列改写为 `hex(sha256(原值))`，并在同一事务里落一枚
@@ -381,6 +423,8 @@ docker compose pull && docker compose up -d    # 只换容器，卷不动，数�
 >
 > 「读到库不等于读到还能用的登录态」这句在**诊断模式开着时**有一个例外：明细行会按窗口内的原样存下
 > 令牌。它按固定的 24 小时单独抹掉、与上面这四处摘要无关，细节见 §2.7。
+
+</details>
 
 > **材质目录对账 `fsck`**（缺省只读）：报「有文件无行」的孤儿字节、「有行无文件」的悬空引用、
 > 只被墓碑引用的违规文件，以及 `AUTOINCREMENT` 之前留下的行 id 错配格。`--fix` 只 unlink
@@ -424,6 +468,9 @@ docker compose exec db sh -c 'exec mysqldump -uskin -p"$MYSQL_PASSWORD" skin_nex
 
 ### 2.7 日志与排错
 
+<details>
+<summary><b>诊断模式：面板里的临时开关（最长 24 小时自动关）</b></summary>
+
 > **诊断模式（不是环境变量，是面板里的临时开关）**。默认的通信日志是一条轻量摘要行；超管可以在
 > 面板「访问日志」里开一个**最长 24 小时、到期自动关闭**的诊断窗口（选项 `access_detail_until`），
 > 开着时同一请求另存一行明细：状态码、耗时、上游错误码、`User-Agent`/`X-Request-Id`、正文节选，
@@ -435,6 +482,8 @@ docker compose exec db sh -c 'exec mysqldump -uskin -p"$MYSQL_PASSWORD" skin_nex
 > 其余字段留着，那才是排查要看的），认不出的正文形状一律整段丢下不猜——认证与登录的请求体里本来就有口令，
 > 而正文跟的是保留期而不是那 24 小时。关掉窗口后明细不再新增，摘要行的"令牌不进日志"规则从头到尾没变。
 > 面板读取（`/api/admin/v1/access-log/details`）对所有管理员开放，开关只认超管的网页会话。
+
+</details>
 
 ```bash
 docker compose logs -f skin-nexus          # 应用日志

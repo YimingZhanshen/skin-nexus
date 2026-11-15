@@ -78,7 +78,7 @@ md 互链保留），README 双语挂链；竞品分析校正三处过期状态�
 
 **同日九轮（文档站迁 VitePress + Cloudflare Pages，域名定档）**：SSG 拍板 VitePress（与 web/ Vite 工具链同构），docs/ 内就地建站（`5f15feb`）——Pagefind 中文搜索（Intl.Segmenter）、mermaid 渲染、sitemap 与 llms.txt（AI 答案引擎入口）；清 Jekyll Liquid 标签、API 路径参数花括号防 attrs 误解析、正文裸标签实体化、死链逐条修（构建即闸，无 ignoreDeadLinks）。托管迁 Cloudflare Pages（Git 集成、构建触发收窄 docs/**），正式域 **docs.skin.yimingzhanshen.cn**（CF 管 TLS，绕开 GH Pages+橙云+LE 证书坑），README 双语已切链（`b90605d`）；旧 github.io 镜像暂存过渡。
 
-**同日十轮（首页项目介绍页 + 修 CHANGELOG 正文静默丢失）**：首页改 VitePress home 布局（hero + 六特性 + 文档导航 + 英文简介段，面向访客与 AI/搜索）。修 CHANGELOG 正文被整页吞掉的根因——正文里的 Vue 插值序列（`{{ ... }}` 在行内代码里也会被编译层当插值）导致内容静默丢失且构建照常成功；修正文 v-pre 包裹，给 buildEnd 加「空页即红」闸（变异证明过），首页导航链接改相对 md 过 check-docs。
+**同日十轮（首页项目介绍页 + 修 CHANGELOG 正文静默丢失）**：首页改 VitePress home 布局（hero + 六特性 + 文档导航 + 英文简介段，面向访客与 AI/搜索）。修 CHANGELOG 正文被整页吞掉的根因——正文里的 Vue 插值序列（<span v-pre>`{{ ... }}`</span> 在行内代码里也会被编译层当插值）导致内容静默丢失且构建照常成功；修正文 v-pre 包裹，给 buildEnd 加「空页即红」闸（变异证明过），首页导航链接改相对 md 过 check-docs。
 
 ## 2026-11-14 · v0.7.0 开发周期
 

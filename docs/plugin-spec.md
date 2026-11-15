@@ -7,6 +7,27 @@
 > 宿主实现：`server/internal/plugin/`（校验规则以代码为准，本规范与代码逐项对齐）。
 > 当前只有**单一插件 API 版本**（`hookApi: 2`）。项目尚无存量第三方生态，不维护旧版兼容层。
 
+**本规范怎么读**：第一次写插件 → [§2](#_2-安装-启用-停用-重载)（目录）→ [§3](#_3-plugin-json-字段)（清单）→
+[§4](#_4-权限声明)（权限）三节起步，要 UI 再进 [§8](#_8-ui-ui)；抄现成的 → [§11](#_11-示例与官方插件)
+的三个夹具与 12 个官方插件；直接让 AI 写 → [§13](#_13-给-ai-的提示词模板) 整段粘走。
+运行时深水（iframe bridge 方向规则、主题令牌注入时机）都折进折叠块，**出问题再读**。
+
+| 章节 | 内容 |
+|---|---|
+| [§1](#_1-信任模型与安全边界) 信任模型 | goja 非沙箱、超管网页会话、签名等级 |
+| [§2](#_2-安装-启用-停用-重载) 安装与生命周期 | 目录约定、重载语义、签名 bundle |
+| [§3](#_3-plugin-json-字段) plugin.json 字段 | 必填/选填、各项上限 |
+| [§4](#_4-权限声明) 权限声明 | 权限 ↔ hook/服务 对照表 |
+| [§5](#_5-配置-skin-config) 配置 | JSON Schema 子集、secret 字段 |
+| [§6](#_6-命名空间数据-skin-store) 命名空间数据 | kv/collection、限额、迁移 |
+| [§7](#_7-路由-skin-route-manifest-routes) 路由 | 五档位、CSRF、body 上限 |
+| [§8](#_8-ui-ui) UI | iframe 页面/插槽、bridge、宿主表单 |
+| [§9](#_9-事件与-guard) 事件与 guard | 目录、payload、onError 策略 |
+| [§10](#_10-基础-hook) 基础 hook | 过滤器、头像、内省、桥、出站、任务 |
+| [§11](#_11-示例与官方插件) 示例与官方插件 | 夹具、12 个官方插件、投稿 |
+| [§12](#_12-非目标与边界) 非目标与边界 | 不做什么、兼容策略 |
+| [§13](#_13-给-ai-的提示词模板) AI 提示词模板 | 整段粘给 LLM |
+
 ## 1. 信任模型与安全边界
 
 - **只装你信任的插件**。插件代码在**服务进程内**的 goja VM 中执行：没有网络、没有文件系统、没有定时器、
@@ -269,49 +290,68 @@ v2 的 UI 采用**固定插槽 + iframe/schema 页面**，不允许第三方直�
   **不带 `allow-same-origin`**，iframe 无法读取宿主 cookie/localStorage。
 - 资产 URL 自动追加 `?v=<插件版本>`，响应头为 `Cache-Control: public, max-age=0, must-revalidate`：
   升级插件后浏览器最多做一次 304 校验即可拿到新文件，不需要清缓存；升级时**必须递增版本号**。
-- iframe bridge（`postMessage`，信封 `{v:1, nonce, id, type, payload}`）：
-  - **方向不对称，写错会静默失效**：frame 被 `sandbox` 剥夺了同源身份，它的 origin 永远是 opaque（`"null"`），
-    所以**宿主→frame 只能用 `targetOrigin: "*"`**——把目标写成站点自己的源，浏览器比对的是「接收方的 origin」，
-    `"null"` 永远不匹配 `"https://站点"`，消息被丢弃且**不报错**（宿主侧看起来一切正常）。
-    反过来 frame→宿主可以用 init 里的 `origin`，因为宿主的源是真实的。
-    代价是规则：**凡经 `'*'` 出去的 payload 不得含凭据**，所以 `init` 不带 `csrf`——
-    宿主在代发 `request` 时自己加 `X-CSRF-Token`，frame 从来不需要持有它。
-  - 宿主→frame：`init`（plugin/src/origin/path/locale/user/theme）；`path` 是宿主当前 URL，便于 slot 识别上下文；
-    `theme` 提供 `{bg,panel,border,text,muted,accent,link,danger,ok,dark}`，插件页面应把它写入自己的 CSS 变量，
-    不要硬编码浅色文字/透明背景（iframe 不继承宿主样式）；页面型 iframe 的背景应与宿主卡片一致（`panel`），
-    输入框可用 `bg` 形成层次；
-    `init` 的投递时机是「frame 文档启动」（子页重新 `ready` 一次即再投一次，插件自己 reload 亦然），
-    **处理 `init` 的代码必须可重入**：列表与下拉要先清后建，别用 `appendChild` 追加——
-    追加写法在宿主重投握手时会把每一项渲染两遍（官方 skin-importer 1.1.0 就中过一次）；
-  - frame→宿主：`ready`、`resize`、`toast`、`navigate`、`confirm`、`request`。
-  - `resize` 的 `height` 必须是**内容高度**（不是 iframe 视口高度），并建议在 `ResizeObserver`/提交状态变化时上报；
-    宿主 clamp 80–2000，页面型 iframe 不再依赖固定 420/520 高度。
-  - `request` 由宿主代发到该插件路由，自动带 cookie/CSRF，返回 `{status, body}`。
-  - iframe 的 `ready` 用 `targetOrigin: "*"` 发给宿主即可（宿主按 `ev.source` 认 frame）；上面那条方向规则同样适用于它。
+- iframe bridge（`postMessage`，信封 `{v:1, nonce, id, type, payload}`）：**方向不对称，
+  写错会静默失效**——宿主→frame 只能用 `targetOrigin: "*"`，凡经 `'*'` 出去的 payload
+  不得含凭据（所以 `init` 不带 `csrf`，宿主代发 `request` 时自己加）。
+  消息目录、`init` 重入规则与 `resize`/`request` 语义见下方折叠块。
 - 插件 UI 基线：只用宿主 `theme` 令牌/`var(--...)`；必须有加载/空/错误三态；
   页面型 iframe 使用 `panel` 背景、`max-width` 760（管理页 1080）与 28px 内边距；
   h2 22px / 正文 15px / 次要文字 13px；按钮提交中禁用；移动端触控目标 ≥44px；
   不加载外部字体/CDN；图片 lazy；错误文案可翻译；宿主在 iframe 8s 未 `ready` 时显示重试层。
-- **主题在首帧就位，不等桥**：插件页的 HTML 由宿主发出，宿主会往 `</head>` 之前插两段 `<style>`——
-  先是当前主题的**根令牌**（`<style id="skin-theme-tokens">`，从主题样式表里抽出的 `:root`/`html`
-  自定义属性与 `color-scheme`，`@media` 包裹原样保留），再是把它们映射到 `--plugin-*` 的一段
-  （`<style id="skin-plugin-theme">`）。顺序是关键：两段都排在插件自己那段 `:root{--plugin-*:…}` 之后，
-  同特异性下后写的赢，于是第一帧就是站点当前的配色，不再出现「默认深色一闪、随后跳成主题」。
-  **只有令牌过来，主题的裸元素规则不过来**——`body{background-image:…}`、`h1,h2{font-family:…}`、
-  `input{font-size:…}` 这类写给宿主 DOM 的选择器不会作用到插件文档上，插件的字体、排版、装饰由自己决定。
-  桥里的 `init.theme` 照旧发送（`dark` 判定、语言、用户态仍然只有这条路能到），
-  所以**插件不要把 `--plugin-*` 写成自己的硬编码值来"固定外观"**：那正是被覆盖的那一层。
-  要自定义，请用自己的变量名（如 `--my-thing: var(--plugin-accent)`），或在 `:root` 里带上
-  更高的特异性。映射取的源令牌是 `--bg --panel --border --text --muted --accent --jade --danger --ok`
-  （链接取 `--jade`、成功色取 `--ok`），**主题必须把这些写在 `:root`/`html` 上**——写在 `body` 上的
-  令牌进不了插件页，那一页会先用插件默认值、等桥到达才纠正（就是这次要消掉的那一下）。
-  `color-scheme` 也别自己写：注入段排在插件那段之后，主题声明了就用主题的。
-  这段注入只在有主题时发生：没启用主题时插件文件**一字不改**地发出。
+- **主题在首帧就位，不等桥**：宿主往插件页 `</head>` 前插两段 `<style>`（主题根令牌 →
+  `--plugin-*` 映射），排在插件自己的 `:root` 之后、同特异性后写者赢，第一帧就是站点配色。
+  **只有令牌过来，主题的裸元素规则不过来**；插件不要把 `--plugin-*` 写成硬编码值来「固定外观」。
+  完整机制见下方折叠块。
 - 页面型 iframe 自带页面标题（h2），宿主不再重复渲染标题；插槽型 iframe 保持无标题。
 - SSR 详情页 slot 会自动追加宿主上下文查询参数：`?tid=<id>&hash=<texture-hash>`，
   slot 页面可直接从 `location.search` 读取（见 `texture-provenance`）。
 - slot 高度统一 clamp 80–600；`schema` 渲染面仍未开放，`PluginSlot` 会跳过非 iframe 声明。
 - 主题 `slots` 与插件 slot 独立；主题仍是管理员信任的 CSS/JS 面。
+
+<details>
+<summary>iframe bridge 深说（方向规则成因、消息目录、init 重入、resize/request 语义）——出问题再读</summary>
+
+- **方向不对称，写错会静默失效**：frame 被 `sandbox` 剥夺了同源身份，它的 origin 永远是 opaque（`"null"`），
+  所以**宿主→frame 只能用 `targetOrigin: "*"`**——把目标写成站点自己的源，浏览器比对的是「接收方的 origin」，
+  `"null"` 永远不匹配 `"https://站点"`，消息被丢弃且**不报错**（宿主侧看起来一切正常）。
+  反过来 frame→宿主可以用 init 里的 `origin`，因为宿主的源是真实的。
+  代价是规则：**凡经 `'*'` 出去的 payload 不得含凭据**，所以 `init` 不带 `csrf`——
+  宿主在代发 `request` 时自己加 `X-CSRF-Token`，frame 从来不需要持有它。
+- 宿主→frame：`init`（plugin/src/origin/path/locale/user/theme）；`path` 是宿主当前 URL，便于 slot 识别上下文；
+  `theme` 提供 `{bg,panel,border,text,muted,accent,link,danger,ok,dark}`，插件页面应把它写入自己的 CSS 变量，
+  不要硬编码浅色文字/透明背景（iframe 不继承宿主样式）；页面型 iframe 的背景应与宿主卡片一致（`panel`），
+  输入框可用 `bg` 形成层次；
+  `init` 的投递时机是「frame 文档启动」（子页重新 `ready` 一次即再投一次，插件自己 reload 亦然），
+  **处理 `init` 的代码必须可重入**：列表与下拉要先清后建，别用 `appendChild` 追加——
+  追加写法在宿主重投握手时会把每一项渲染两遍（官方 skin-importer 1.1.0 就中过一次）；
+- frame→宿主：`ready`、`resize`、`toast`、`navigate`、`confirm`、`request`。
+- `resize` 的 `height` 必须是**内容高度**（不是 iframe 视口高度），并建议在 `ResizeObserver`/提交状态变化时上报；
+  宿主 clamp 80–2000，页面型 iframe 不再依赖固定 420/520 高度。
+- `request` 由宿主代发到该插件路由，自动带 cookie/CSRF，返回 `{status, body}`。
+- iframe 的 `ready` 用 `targetOrigin: "*"` 发给宿主即可（宿主按 `ev.source` 认 frame）；上面那条方向规则同样适用于它。
+
+</details>
+
+<details>
+<summary>主题令牌注入深说（两段 style 的顺序、取哪九个令牌、没主题时的行为）——出问题再读</summary>
+
+**主题在首帧就位，不等桥**：插件页的 HTML 由宿主发出，宿主会往 `</head>` 之前插两段 `<style>`——
+先是当前主题的**根令牌**（`<style id="skin-theme-tokens">`，从主题样式表里抽出的 `:root`/`html`
+自定义属性与 `color-scheme`，`@media` 包裹原样保留），再是把它们映射到 `--plugin-*` 的一段
+（`<style id="skin-plugin-theme">`）。顺序是关键：两段都排在插件自己那段 `:root{--plugin-*:…}` 之后，
+同特异性下后写的赢，于是第一帧就是站点当前的配色，不再出现「默认深色一闪、随后跳成主题」。
+**只有令牌过来，主题的裸元素规则不过来**——`body{background-image:…}`、`h1,h2{font-family:…}`、
+`input{font-size:…}` 这类写给宿主 DOM 的选择器不会作用到插件文档上，插件的字体、排版、装饰由自己决定。
+桥里的 `init.theme` 照旧发送（`dark` 判定、语言、用户态仍然只有这条路能到），
+所以**插件不要把 `--plugin-*` 写成自己的硬编码值来"固定外观"**：那正是被覆盖的那一层。
+要自定义，请用自己的变量名（如 `--my-thing: var(--plugin-accent)`），或在 `:root` 里带上
+更高的特异性。映射取的源令牌是 `--bg --panel --border --text --muted --accent --jade --danger --ok`
+（链接取 `--jade`、成功色取 `--ok`），**主题必须把这些写在 `:root`/`html` 上**——写在 `body` 上的
+令牌进不了插件页，那一页会先用插件默认值、等桥到达才纠正（就是这次要消掉的那一下）。
+`color-scheme` 也别自己写：注入段排在插件那段之后，主题声明了就用主题的。
+这段注入只在有主题时发生：没启用主题时插件文件**一字不改**地发出。
+
+</details>
 
 ## 9. 事件与 guard
 
@@ -463,12 +503,20 @@ skin.jobs.cancelRequested(id); // 只读；job 步内也可调用（步不是 ad
   塞进一个 step 会触发 `net.rate_limited`。用 `delayMS` 拉开步距，长任务拆成多条记录级 step。
 - 每个 step 在插件专属 job VM 中执行（不占请求 VM 锁）；超时/异常按 `maxAttempts` 退避重试。
 - 取消在 step 之间生效（含排队中的任务）；`cancel` 后任务状态为 `cancelling/cancelled`，`resume` 可重新排队。
-  一个正在跑的长步不会被中断——宿主不能打断 Go 侧的 VM 调用，所以步内只能自己去看：
-  轮询 `skin.jobs.cancelRequested(jobId)`（本插件的 job 才返回 true，别人的 job 报 `jobs.not_found`），
-  看到 true 就把手上的一步收尾并 `return {done:true, ...}` 或带着 cursor 退出，下一步宿主就不再领取。
-  这是 `jobs.v1` 上的**加法**方法：老宿主没有它，跨宿主插件请先
-  `typeof skin.jobs.cancelRequested === 'function'` 再调用，不要指望它一定在。
+  **一个正在跑的长步不会被中断**——步内要感知取消就轮询 `skin.jobs.cancelRequested(jobId)`，
+  看到 true 收尾退出即可。细节见下方折叠块。
 - 仅管理员可提交/查看/取消/恢复；任务载荷与进度不对普通用户开放。
+
+<details>
+<summary>取消语义深说（为什么长步不会被打断、cancelRequested 的兼容写法）——出问题再读</summary>
+
+一个正在跑的长步不会被中断——宿主不能打断 Go 侧的 VM 调用，所以步内只能自己去看：
+轮询 `skin.jobs.cancelRequested(jobId)`（本插件的 job 才返回 true，别人的 job 报 `jobs.not_found`），
+看到 true 就把手上的一步收尾并 `return {done:true, ...}` 或带着 cursor 退出，下一步宿主就不再领取。
+这是 `jobs.v1` 上的**加法**方法：老宿主没有它，跨宿主插件请先
+`typeof skin.jobs.cancelRequested === 'function'` 再调用，不要指望它一定在。
+
+</details>
 
 ## 11. 示例与官方插件
 

@@ -3,11 +3,17 @@
 > 依据：2026-10-23 对线上 legacy 站点全量只读实测（报文留档于维护者本地，不随仓库分发）
 > 与上游源码级审计。图例：✅ 达成 / 🔧 实测后修复 / ⚠️ 缺口 / ➖ 不复刻。
 
+**本表怎么读**：四节从硬到软——[§1](#_1-yggdrasil-面-authlib-injector-硬契约) 是 authlib-injector
+硬契约，坏 = 皮肤站不可用；[§2](#_2-yggc-oidc-免密面-sjmcl-等社区启动器契约) 是社区启动器免密契约；
+[§3](#_3-兼容面) 是联盟与旧客户端兼容面；[§4](#_4-取舍与偏差-blessing-1-1-口径) 是与老站的
+**刻意差异与已知偏差**台账。表内只放结论，格子写「深说见下」的完整考据（含事故复盘）都在各表
+下方的折叠块里，**可以先不读**。
+
 ## 1. Yggdrasil 面（authlib-injector 硬契约）
 
 | 端点 | legacy 实测行为 | SkinNexus | 状态 |
 |---|---|---|---|
-| `GET /api/yggdrasil` 与 `/api/yggdrasil/` | meta + `feature.non_email_login` + `feature.openid_configuration_url` + skinDomains + PEM 公钥 | 同形；skinDomains 按旧站公式（配置 ∪ Union 成员站 ∪ site_url host ∪ 请求 host，2026-10-23 对齐）。**两种拼写各自注册**：不带斜杠才是规范地址（`X-Authlib-Injector-API-Location` 广告的就是它，启动器配置框里粘贴的也是它），而 Go 的 ServeMux 对 `{$}` 模式的不带斜杠形式会自己回一个 307——那条重定向上没有任何处理器头，跨源读它的浏览器直接按 CORS 失败处理。2026-11-09 补 | 🔧 |
+| `GET /api/yggdrasil` 与 `/api/yggdrasil/` | meta + `feature.non_email_login` + `feature.openid_configuration_url` + skinDomains + PEM 公钥 | 同形；skinDomains 按旧站公式（深说见下） | 🔧 |
 | `authserver/authenticate` | 单角色自动绑定 `selectedProfile`；token 为 JWT | 同形 | 🔧 |
 | `authserver/validate` / `invalidate` / `signout` | 恒 204 | 同 | ✅ |
 | `authserver/refresh` | 旧 token 立废；支持 `selectedProfile` 选角 | 同（选角解析修复于 2026-10-23） | 🔧 |
@@ -18,6 +24,16 @@
 | `api/profiles/minecraft/{name}` 别名、`minecraftservices/publickeys` | 旧站 404 | 同样 404（平价） | ➖ |
 
 JWT access token 实测形状：`aud="2"（shared_client_id）、sub=uid、scopes[Select,Server.Join]、selectedProfile=<uuid 字符串>、jti、无 iss`。
+
+<details>
+<summary>§1 表注：meta 端点的 skinDomains 公式与「两种拼写各自注册」——可以先不读</summary>
+
+- **skinDomains 公式**：按旧站公式（配置 ∪ Union 成员站 ∪ site_url host ∪ 请求 host，2026-10-23 对齐）。
+- **两种拼写各自注册**：不带斜杠才是规范地址（`X-Authlib-Injector-API-Location` 广告的就是它，
+  启动器配置框里粘贴的也是它），而 Go 的 ServeMux 对 `{$}` 模式的不带斜杠形式会自己回一个 307——
+  那条重定向上没有任何处理器头，跨源读它的浏览器直接按 CORS 失败处理。2026-11-09 补
+
+</details>
 
 ## 2. yggc / OIDC 免密面（SJMCL 等社区启动器契约）
 
@@ -37,12 +53,85 @@ JWT access token 实测形状：`aud="2"（shared_client_id）、sub=uid、scope
 |---|---|---|---|
 | `GET /{player}.json`（CustomSkinAPI R1） | 200 | 同形 | ✅ |
 | `GET /usm/{player}.json`、`/skin\|cape/{player}.png` | 旧站 404（插件未装） | 已实现（超集） | ✅ |
-| 联盟 hub 的浏览器端成员站取名 | hub 页面用访客的浏览器跨源读 `bs_root + /api/yggdrasil` 的 `meta.serverName`，再读 `/api/union/member` 的 `enabledFeatures` 决定按钮能否用；两条 fetch 共用一个 catch，任一条挂掉成员站就显示成「✕ 代号」且禁用 | 两个端点都要在**不带斜杠**的规范地址上直接返回 200 并带**恰好一个** `Access-Control-Allow-Origin`。hub 侧的成员清单里 53 个站都**不存** `name` 字段，名称全靠这条跨源读取回填，所以它坏了等于站名在联盟里消失。2026-11-09 修前半（`{$}` 的裸 307 不带 CORS）。后半同日实测：反代若整块 `add_header Access-Control-Allow-Origin *`，同一个响应就出现两个值，浏览器连 200 一起丢弃（控制台 `multiple values '*, *'` + `net::ERR_FAILED`），站名同样是空——`/api/union/member/oauth2/` 那条带凭据的更是重复值与 `*` 双踩。真凶是**宝塔网站防火墙的「跨域设置」**（它只在请求带 `Origin` 时注入，`nginx -T` 里搜不到），关掉后计数变成 `1/1/1/0`、hub 当场回填站名。修法与验收见 [`deploy.md`](deploy.md) 的「CORS 头」小节。hub 上 ECNU 与 nekoplay 至今仍是这个坏法 | ✅ |
-| 成员站列表里的「站名」列（本站页面） | 插件让**访客浏览器**逐个读成员站 `/api/yggdrasil` 取 `meta.serverName` 回填（yggdrasil-connect servers.twig:22-33），读到什么显示什么，读不到就空着 | 本站的 CSP 是 `connect-src 'self'`，那种跨源读在离开浏览器前就被拦死，所以改由**本站后台**读：`union.MemberNames` 复用插件/主题市场那套受控出站（只连公网地址、拒 IP 字面量、禁重定向、只放 `80/443`、限响应体、每主限速），URL 只取清单里的 scheme + host，路径固定为我们自己的 `/api/yggdrasil`。名字后台补（24h 正缓存、30min 负缓存、同一时刻只跑一轮），打开页面那一瞬不等待，所以首屏可能只显示地址，下一次就有名字。地址行始终保留。不想让服务器外呼的站长可关：面板 `union_resolve_names` 或 `SKIN_UNION_RESOLVE_NAMES=false`，关掉后连已读到的名字也不再显示 | ✅ |
-| 联盟安全级别（SL） | `POST {hub}/code` 用成员钥匙换本站代号，再 `GET {hub}/backend/{code}/security/level`，响应体是裸数字；玩家页每次看页都跑两跳、不缓存，失败 `abort(500)` 而前端不查 `response.ok`，徽章于是空白（UnionController.php:30-42 + union.twig:177-190） | `GET /api/v1/union/security-level` 走同样两跳，`SL3` 绿、其余黄。差别在：结果缓存 10 分钟（失败 1 分钟后重试），上游失败明确报 502 并在页上写「暂时读不到」——`SL0` 是一个真实结论（未接入联合黑名单），拿它当兜底会冤枉站长 | ✅ |
-| 角色改名 / 玩家自删的 hub 通告 | 核心事件 `PlayerProfileUpdated`、`PlayerWillBeDeleted` 各发一次 `PUT /profile/{uuid}`、`DELETE /profile/{uuid}`（bootstrap.php:97-119），失败只写日志；插件与核心都没有任何定时对账 | 同样三条腿（建 / 改名 / 删）都由 `account.Service` 通告，覆盖玩家自服务、管理面板直连存储、以及插件经账号桥发起的改名；uuid 不重算（改名零漂移铁律）。失败写审计 `union_sync_{create,rename,delete}_failed`，面板「同步角色数据」可手动收敛 | ✅ |
-| 联盟自助诊断（管理面板） | 管理员点一次 `POST {hub}/diagnose`（10s），hub 把它**回探本站**那一跳的证据原样带回：`healthy`、`delay`、`timestamp`、`tls_handshake`（GnuTLS 调试轨迹全文）、`status_code`、`headers`、`body`。弹窗把这些**平铺**成一张表，只有成功/失败两态，导出是一份硬编码中文的 HTML（config.twig:115-159） | 同一跳、同一形状（wire 未动，`POST /diagnose` + 空 JSON 体 + 成员钥匙头都有测试钉住）。差别在三处，都是刻意的：① **按腿分家**——`status` 为 ok 时那四个键描述的是 hub 回探本站，为 error 时描述的是 hub 对我们这一跳的答复；平铺读会产出「双向连通正常」下面挂着 `状态码 200` 与一段响应头这种自相矛盾的表（老插件即如此）。② **本站那一跳由本站自己观测**：TLS 版本与套件、对端证书到期日与剩余天数、以及 hub `Date` 头与本地钟的偏差，判据直接复用入站验签的 `VerifyPastSkew`/`VerifyFutureSkew`，所以面板不可能再说「时钟没问题」而隔壁正在拒收 hub 回调。③ **三态**（通过/注意/失败）+ 失败原因给一个稳定 token（`http_key` 与 `dns` 的修法完全不同，老插件只留一句 exception 文本），GnuTLS 全文折进「原始内容」，摘要只留版本、最后保留的套件与断言行数。导出多一份机器可读 JSON（解释过的腿 + hub 原样载荷） | ✅ |
-| `enabledFeatures` 能力声明 | hello 里按 `option('require_verification')` 与 `option('invitation_codes_for_union_enabled')` 追加两项；后者由邀请码插件的启用/停用直接写 true/false（MUAlliance/invitation-codes callbacks.php:23-28），语义就是「本站注册要不要邀请码」 | `unionBlacklist` 一直有；`emailVerification`、`invitationCodesForUnion`、`unionOAuth2` 现按请求读 `require_verification` / `invite_required` / `union_enable_oauth2`，与老站一样改完即生效，不缓存成启动时的快照 | ✅ |
+| 联盟 hub 的浏览器端成员站取名 | hub 用访客浏览器跨源读成员站元数据回填站名（深说见下） | 规范地址直返 200 + 恰好一个 ACAO，缺一不可（深说见下） | ✅ |
+| 成员站列表里的「站名」列（本站页面） | 插件让访客浏览器逐个读成员站回填（深说见下） | 改由本站后台受控出站读取回填，可关（深说见下） | ✅ |
+| 联盟安全级别（SL） | 玩家页每次看页跑两跳、不缓存（深说见下） | 同两跳 + 10 分钟缓存 + 三态语义（深说见下） | ✅ |
+| 角色改名 / 玩家自删的 hub 通告 | 两个核心事件各发一次 PUT/DELETE，失败只写日志（深说见下） | 同样三条腿由 `account.Service` 通告，失败留审计 + 面板收敛（深说见下） | ✅ |
+| 联盟自助诊断（管理面板） | 一跳回探、证据平铺一张表、两态（深说见下） | 同一跳同一形状，按腿分家 + 三态 + JSON 导出（深说见下） | ✅ |
+| `enabledFeatures` 能力声明 | hello 按两个 option 追加，启用状态直接写 true/false（深说见下） | 四项按请求读 option，改完即生效不缓存（深说见下） | ✅ |
+
+<details>
+<summary>§3 表注：六行的 legacy 行为与我方实现全量考据——可以先不读</summary>
+
+**联盟 hub 的浏览器端成员站取名**
+
+- legacy：hub 页面用访客的浏览器跨源读 `bs_root + /api/yggdrasil` 的 `meta.serverName`，
+  再读 `/api/union/member` 的 `enabledFeatures` 决定按钮能否用；两条 fetch 共用一个 catch，
+  任一条挂掉成员站就显示成「✕ 代号」且禁用。
+- SkinNexus：两个端点都要在**不带斜杠**的规范地址上直接返回 200 并带**恰好一个**
+  `Access-Control-Allow-Origin`。hub 侧的成员清单里 53 个站都**不存** `name` 字段，
+  名称全靠这条跨源读取回填，所以它坏了等于站名在联盟里消失。2026-11-09 修前半
+  （`{$}` 的裸 307 不带 CORS）。后半同日实测：反代若整块 `add_header Access-Control-Allow-Origin *`，
+  同一个响应就出现两个值，浏览器连 200 一起丢弃（控制台 `multiple values '*, *'` + `net::ERR_FAILED`），
+  站名同样是空——`/api/union/member/oauth2/` 那条带凭据的更是重复值与 `*` 双踩。真凶是
+  **宝塔网站防火墙的「跨域设置」**（它只在请求带 `Origin` 时注入，`nginx -T` 里搜不到），
+  关掉后计数变成 `1/1/1/0`、hub 当场回填站名。修法与验收见 [`deploy.md`](deploy.md) 的「CORS 头」小节。
+  hub 上 ECNU 与 nekoplay 至今仍是这个坏法。
+
+**成员站列表里的「站名」列（本站页面）**
+
+- legacy：插件让**访客浏览器**逐个读成员站 `/api/yggdrasil` 取 `meta.serverName` 回填
+  （yggdrasil-connect servers.twig:22-33），读到什么显示什么，读不到就空着。
+- SkinNexus：本站的 CSP 是 `connect-src 'self'`，那种跨源读在离开浏览器前就被拦死，
+  所以改由**本站后台**读：`union.MemberNames` 复用插件/主题市场那套受控出站（只连公网地址、
+  拒 IP 字面量、禁重定向、只放 `80/443`、限响应体、每主限速），URL 只取清单里的 scheme + host，
+  路径固定为我们自己的 `/api/yggdrasil`。名字后台补（24h 正缓存、30min 负缓存、同一时刻只跑一轮），
+  打开页面那一瞬不等待，所以首屏可能只显示地址，下一次就有名字。地址行始终保留。
+  不想让服务器外呼的站长可关：面板 `union_resolve_names` 或 `SKIN_UNION_RESOLVE_NAMES=false`，
+  关掉后连已读到的名字也不再显示。
+
+**联盟安全级别（SL）**
+
+- legacy：`POST {hub}/code` 用成员钥匙换本站代号，再 `GET {hub}/backend/{code}/security/level`，
+  响应体是裸数字；玩家页每次看页都跑两跳、不缓存，失败 `abort(500)` 而前端不查 `response.ok`，
+  徽章于是空白（UnionController.php:30-42 + union.twig:177-190）。
+- SkinNexus：`GET /api/v1/union/security-level` 走同样两跳，`SL3` 绿、其余黄。差别在：
+  结果缓存 10 分钟（失败 1 分钟后重试），上游失败明确报 502 并在页上写「暂时读不到」——
+  `SL0` 是一个真实结论（未接入联合黑名单），拿它当兜底会冤枉站长。
+
+**角色改名 / 玩家自删的 hub 通告**
+
+- legacy：核心事件 `PlayerProfileUpdated`、`PlayerWillBeDeleted` 各发一次 `PUT /profile/{uuid}`、
+  `DELETE /profile/{uuid}`（bootstrap.php:97-119），失败只写日志；插件与核心都没有任何定时对账。
+- SkinNexus：同样三条腿（建 / 改名 / 删）都由 `account.Service` 通告，覆盖玩家自服务、
+  管理面板直连存储、以及插件经账号桥发起的改名；uuid 不重算（改名零漂移铁律）。失败写审计
+  `union_sync_{create,rename,delete}_failed`，面板「同步角色数据」可手动收敛。
+
+**联盟自助诊断（管理面板）**
+
+- legacy：管理员点一次 `POST {hub}/diagnose`（10s），hub 把它**回探本站**那一跳的证据原样带回：
+  `healthy`、`delay`、`timestamp`、`tls_handshake`（GnuTLS 调试轨迹全文）、`status_code`、`headers`、`body`。
+  弹窗把这些**平铺**成一张表，只有成功/失败两态，导出是一份硬编码中文的 HTML（config.twig:115-159）。
+- SkinNexus：同一跳、同一形状（wire 未动，`POST /diagnose` + 空 JSON 体 + 成员钥匙头都有测试钉住）。
+  差别在三处，都是刻意的：① **按腿分家**——`status` 为 ok 时那四个键描述的是 hub 回探本站，
+  为 error 时描述的是 hub 对我们这一跳的答复；平铺读会产出「双向连通正常」下面挂着 `状态码 200`
+  与一段响应头这种自相矛盾的表（老插件即如此）。② **本站那一跳由本站自己观测**：TLS 版本与套件、
+  对端证书到期日与剩余天数、以及 hub `Date` 头与本地钟的偏差，判据直接复用入站验签的
+  `VerifyPastSkew`/`VerifyFutureSkew`，所以面板不可能再说「时钟没问题」而隔壁正在拒收 hub 回调。
+  ③ **三态**（通过/注意/失败）+ 失败原因给一个稳定 token（`http_key` 与 `dns` 的修法完全不同，
+  老插件只留一句 exception 文本），GnuTLS 全文折进「原始内容」，摘要只留版本、最后保留的套件与断言行数。
+  导出多一份机器可读 JSON（解释过的腿 + hub 原样载荷）。
+
+**`enabledFeatures` 能力声明**
+
+- legacy：hello 里按 `option('require_verification')` 与 `option('invitation_codes_for_union_enabled')`
+  追加两项；后者由邀请码插件的启用/停用直接写 true/false（MUAlliance/invitation-codes callbacks.php:23-28），
+  语义就是「本站注册要不要邀请码」。
+- SkinNexus：`unionBlacklist` 一直有；`emailVerification`、`invitationCodesForUnion`、`unionOAuth2`
+  现按请求读 `require_verification` / `invite_required` / `union_enable_oauth2`，与老站一样改完即生效，
+  不缓存成启动时的快照。
+
+</details>
 
 ## 4. 取舍与偏差（blessing 1:1 口径）
 
@@ -52,20 +141,94 @@ JWT access token 实测形状：`aud="2"（shared_client_id）、sub=uid、scope
 
 | 项 | 状态 | 说明 |
 |---|---|---|
-| 邮箱验证门 | 🔧 语义（2026-11-12 起管两侧） | `email_verified` 字段、发信验证链路与 join 门禁就位（面板 `require_verification`，默认关；`email_verify_grace_days` 给新号宽限期）。这道门现在**同时拦网页**：宽限一过，未验证账号的用户中心、上传、衣柜、角色、举报、通知与管理面板一律 `auth.email_verify_required`(403)，公开浏览按游客照常；只有 permission=2 的超管不受限，因为修发信与人工标记已验证都只能由他做。**行为变化要记账**：已经在用这道门的站点升级后，未验证的老账号会从「能逛网页、只在服务器门口被拒」变成「网页也被拒」，而 blessing 迁移进来的账号 `email_verified` 基本都是 0——上线顺序必须是先看运行状态里的未验证计数、再配好发信、再设宽限、最后开门。迁移本身仍不带验证状态，人工代设仍是唯一途径 |
-| `uploadableTextures` 按能力位裁剪 | 🔧 取舍 | 本站恒答 `skin,cape`（`server/internal/ygg/models.go:103`），且与事实一致——上传不按类型设限（`type` 只校验 `skin\|cape`）。老站可按用户能力逐位裁剪，前提是有按位能力位；本站 `permission` 是整型档位（0 普通 / >0 管理员 / -1 封禁，`server/internal/store/web.go:151`），要做「站长关掉披风上传」得先重做权限模型，不属兼容缺口 |
+| 邮箱验证门 | 🔧 语义（2026-11-12 起管两侧） | 网页侧 403 门就位；开门顺序必须是「看未验证计数 → 配发信 → 设宽限 → 开门」（深说见下） |
+| `uploadableTextures` 按能力位裁剪 | 🔧 取舍 | 恒答 `skin,cape`，与不按类型设限的上传一致；按位裁剪要先重做权限模型，不算缺口（深说见下） |
 | 纹理广场 · OAuth 社交登录 · API PAT 面 · 积分商城 · 2FA · 验证码 · `/api` 根装饰 | ➖ 超出兼容范围 | 老站的增强面，不在「协议与数据可直迁」的口径内（站内通知另见下） |
-| 站内通知 | 🔧 语义 | 老站是逐用户站内信 + 永不过期的链接；我方是**处置决定的留痕收件箱**（举报成立/驳回、材质下架与解除违规、封禁与解禁），90 天保留、拉取式未读角标，不做评论/@ 等社交流 |
-| 删除材质后已下发的纹理 URL | 🔧 取舍 | `/textures/{hash}` 只查磁盘、不校验行与可见性，且响应是 `max-age=31536000, immutable`。删除保证**源站停止供源**并保留取证记录，不保证浏览器/中间缓存/CDN 上的旧副本失效（hash 即 URL，无法主动失效）。加每请求 DB 校验会推翻纹理分发的性能模型，故不做 |
-| 私有材质的渲染面 | 🔧 偏差备案（2026-11-04 起） | 老站的头像/渲染路由不查可见性，`/avatar/{tid}` 与详情页 WebGL 用的 `/texture-render/{hash}` 谁都能拿（tid 可枚举）。我方现在按「作者本人或管理员」放行，私有渲染回 `private, no-store` + `Vary: Cookie` + `X-Robots-Tag: noindex`。**行为变化要记账**：以前发出去的私有头像/渲染直链现在对匿名访客是 404，被 CDN 缓存过的旧副本仍会存活到过期（与上面「删除材质后已下发的纹理 URL」同一局限）。按内容地址直取原始文件的 `/textures/{hash}` 与 `/avatar/{hash}` 不变——那是能力地址模型，不是可枚举入口 |
-| 新站初始化 | 🔧 偏差备案（2026-11-04 起） | 老站空库直接开注册，谁先到谁当管理员。我方未初始化时启动生成一次性安装令牌打进日志，`POST /api/v1/setup` 必须带它（`SKIN_SETUP_TOKEN` 可固定），占位与建号同事务、并发只有一个超管。装好之后端点永久 404，向导是一扇门不是开关 |
-| 全站安全响应头 | 🔧 取舍（2026-11-04 起） | 页面与 API 统一带 CSP/`X-Frame-Options: DENY`/`Referrer-Policy`/`Permissions-Policy`。CSP 刻意允许 `script/style 'unsafe-inline'`：站长自定义 CSS/JS、主题包、插件包都是这个能力的使用者，nonce 化等于砍掉三项功能。`/plugin-assets/` 是唯一允许被本站 iframe 的前缀（`SAMEORIGIN` + `frame-ancestors 'self'`），其余一律拒绝被嵌；插件/主题 HTML 文档另带 `Sandbox: allow-scripts allow-forms`，落到不透明源里拿不到 cookie。反代在站点前时以站点自身响应为准，覆盖需反代显式改写 |
-| 违规内容地址的解禁面 | 🔧 取舍 | 判定违规（`moderation='violation'`）后彻底删除的材质，其内容地址进墓碑并被上传收口点拒绝，任何人都传不回来，私有导入也一样（私有副本可穿，放行等于留后门）。**撤销误判只有数据侧一途**：面板不提供墓碑视图，因为解禁必须指明是谁撤销了谁的判定，而那需要整套处置历史界面而非一个按钮。老站没有等价物（它根本没有彻底删除） |
-| 行 id 不复用 | 🔧 偏差备案 | `textures/users/players` 的行 id 会被举报、墓碑、衣柜长期按 id 引用，回收即错配。SQLite 靠 `AUTOINCREMENT`（新装走 DDL，已装库在启动时幂等重建）；MySQL `AUTO_INCREMENT`、PostgreSQL `BIGSERIAL` 本就不回退。**MariaDB 的 InnoDB 计数器不持久化**，重启后按 `MAX(id)+1` 重算，理论上仍可回收——本机无 docker，未复现，只备案 |
+| 站内通知 | 🔧 语义 | 我方是处置决定的留痕收件箱：90 天保留、拉取式未读角标，不做评论/@ 等社交流 |
+| 删除材质后已下发的纹理 URL | 🔧 取舍 | 删除保证源站停供 + 留证，**不保证**旧缓存副本失效——hash 即 URL，无法主动失效（深说见下） |
+| 私有材质的渲染面 | 🔧 偏差备案（2026-11-04 起） | 私有渲染仅作者/管理员可取；旧直链对匿名访客变 404（深说见下） |
+| 新站初始化 | 🔧 偏差备案（2026-11-04 起） | 一次性安装令牌 + `POST /api/v1/setup`；装好永久 404，向导是一扇门不是开关（深说见下） |
+| 全站安全响应头 | 🔧 取舍（2026-11-04 起） | CSP/防嵌/Referrer/Permissions 全带；CSP 刻意允许 `unsafe-inline` 保住三项自定义能力（深说见下） |
+| 违规内容地址的解禁面 | 🔧 取舍 | 违规彻底删除进墓碑，上传收口拒绝回传，私有导入也拦；解禁只有数据侧一途（深说见下） |
+| 行 id 不复用 | 🔧 偏差备案 | 四引擎保 id 单调；MariaDB InnoDB 计数器理论可回收，未复现只备案（深说见下） |
 | 「换肤必须先入柜」 | ➖ 不复刻 | 拍板：那是老站 UI 流程而非数据约束，强加会破坏已验收的 setSkin 直连；衣柜按收藏集合上线 |
 | 认证限流返回 429 | 🔧 偏差备案 | legacy 契约从未定义限流；只追加 TooManyRequests，冻结的错误体形状不变，阈值面板可调 |
-| 老站 `password` 列为空的账号 | 🔧 偏差备案（2026-11-07 起） | 老站的摘要比较里，「未计算的 method」返回空串，碰上 `password` 列也是空串时**相等即通过**——空密码列等于任何密码都能登录。本站现在一律先拒空摘要（`server/internal/auth/password.go` 的 `verifyLegacyOne`，断言在 `server/internal/auth/empty_stored_test.go`）。**行为变化要记账**：`password` 列为空的迁移行不再能用任何密码登录，需走找回密码或由管理员代设；这与「空密码可登录」的老站行为是刻意偏差，那条行为本身是个洞不是兼容面 |
-| `skinDomains` 带端口条目 | 🔧 偏差备案（2026-11-09 起） | authlib-injector 一类客户端把纹理主机与 `URI.getHost()` 比对，而 `getHost()` **不含端口**，所以列表里 `site.invalid:8443` 这种条目永远匹配不上——账号能登、皮肤静默不加载。本站现在为每个带显式端口的条目**同时发布去端口孪生**（`server/internal/ygg/http.go` 的 `portlessTwin`，测试 `skindomains_test.go`）。**只增不改**：已发布的条目一字不动、位置不变（孪生追加在快照之后），无端口的部署输出一模一样；能看见差异的是 `skinDomains` 数组变长这一件事 |
-| `skinDomains` 条目的大小写 | 🔧 偏差备案（2026-11-13 起） | 客户端判白名单用 `String.equals` / `endsWith` / `startsWith`，**全部大小写敏感**，而它从纹理 URL 里读主机用的 `URI.getHost()` 保留 URL 原本的大小写（`SkinWhitelistTransformUnit.java:65-69,94`）——配置写 `Example.COM`、纹理从 `https://example.com/…` 出，就一条都匹配不上：账号能登、皮肤静默不加载。本站现在为每个条目**同时发布小写孪生**（`server/internal/ygg/http.go` 的 `domainSpellings`，测试 `skindomains_case_test.go`）。**只增不改**：已发布的条目一字不动，只在小写形式不同时多发一条，全小写的部署输出一模一样；刻意不折叠，因为折叠会删掉大小写混合的纹理主机今天还能命中的那条。同轮把联盟服务器列表交给面板前先归一 `bs_root`（`union.CanonicalRoot`：小写 scheme/host、去凭据/查询/片段、去尾部 `/authserver`、保路径与端口），一个站的多种拼写不再渲染成重复行与重复 Vue 键 |
-| `uploadableTextures` 属性的签名 | 🔧 已知偏差（取证 2026-11-07） | 本站每条 property 都签（`textures` 与 `signatures.textures` 成对），**唯独 `uploadableTextures` 不签**——值恒为 `skin,cape`，与本站不按类型设限的上传策略一致，所以它不携带任何需要证明的授权信息。参考实现的两侧（yggdrasil-connect `Profile.php:90-96`、AsterYggdrasil `properties.rs:66-71`）是逐条签所有 property。要不要补齐到"每条都签"，属客户端可见的 wire 面变更：先要确认现网启动器在校验签名集时对**多出来的签名**怎么处理，不在无人值守里改。出处：仓库外 `analysis/g10-e3-protocol-surface.md` |
+| 老站 `password` 列为空的账号 | 🔧 偏差备案（2026-11-07 起） | 空摘要一律先拒；空密码列不再能用任何密码登录，需找回密码或管理员代设（深说见下） |
+| `skinDomains` 带端口条目 | 🔧 偏差备案（2026-11-09 起） | 为带端口条目追加去端口孪生（只增不改）；无端口部署输出一模一样（深说见下） |
+| `skinDomains` 条目的大小写 | 🔧 偏差备案（2026-11-13 起） | 为条目追加小写孪生（只增不改）；另归一 `bs_root` 消重复行（深说见下） |
+| `uploadableTextures` 属性的签名 | 🔧 已知偏差（取证 2026-11-07） | 唯独该 property 不签（恒值无授权信息）；补齐属客户端可见 wire 面变更，不动（深说见下） |
 | `api/profiles/minecraft/{name}` 别名、`minecraftservices/publickeys` | ➖ 不复刻 | 旧站自身 404，平价即可 |
+
+<details>
+<summary>§4 表注：各项的完整行为描述、背景与「行为变化要记账」——升级/迁移前读这里</summary>
+
+- **邮箱验证门**：`email_verified` 字段、发信验证链路与 join 门禁就位（面板 `require_verification`，
+  默认关；`email_verify_grace_days` 给新号宽限期）。这道门现在**同时拦网页**：宽限一过，
+  未验证账号的用户中心、上传、衣柜、角色、举报、通知与管理面板一律 `auth.email_verify_required`(403)，
+  公开浏览按游客照常；只有 permission=2 的超管不受限，因为修发信与人工标记已验证都只能由他做。
+  **行为变化要记账**：已经在用这道门的站点升级后，未验证的老账号会从「能逛网页、只在服务器门口被拒」
+  变成「网页也被拒」，而 blessing 迁移进来的账号 `email_verified` 基本都是 0——上线顺序必须是
+  先看运行状态里的未验证计数、再配好发信、再设宽限、最后开门。迁移本身仍不带验证状态，
+  人工代设仍是唯一途径。
+- **`uploadableTextures` 按能力位裁剪**：本站恒答 `skin,cape`（`server/internal/ygg/models.go:103`），
+  且与事实一致——上传不按类型设限（`type` 只校验 `skin|cape`）。老站可按用户能力逐位裁剪，
+  前提是有按位能力位；本站 `permission` 是整型档位（0 普通 / >0 管理员 / -1 封禁，
+  `server/internal/store/web.go:151`），要做「站长关掉披风上传」得先重做权限模型，不属兼容缺口。
+- **站内通知**：老站是逐用户站内信 + 永不过期的链接；我方是**处置决定的留痕收件箱**
+  （举报成立/驳回、材质下架与解除违规、封禁与解禁），90 天保留、拉取式未读角标，
+  不做评论/@ 等社交流。
+- **删除材质后已下发的纹理 URL**：`/textures/{hash}` 只查磁盘、不校验行与可见性，
+  且响应是 `max-age=31536000, immutable`。删除保证**源站停止供源**并保留取证记录，
+  不保证浏览器/中间缓存/CDN 上的旧副本失效（hash 即 URL，无法主动失效）。
+  加每请求 DB 校验会推翻纹理分发的性能模型，故不做。
+- **私有材质的渲染面**：老站的头像/渲染路由不查可见性，`/avatar/{tid}` 与详情页 WebGL 用的
+  `/texture-render/{hash}` 谁都能拿（tid 可枚举）。我方现在按「作者本人或管理员」放行，
+  私有渲染回 `private, no-store` + `Vary: Cookie` + `X-Robots-Tag: noindex`。
+  **行为变化要记账**：以前发出去的私有头像/渲染直链现在对匿名访客是 404，被 CDN 缓存过的旧副本
+  仍会存活到过期（与上面「删除材质后已下发的纹理 URL」同一局限）。按内容地址直取原始文件的
+  `/textures/{hash}` 与 `/avatar/{hash}` 不变——那是能力地址模型，不是可枚举入口。
+- **新站初始化**：老站空库直接开注册，谁先到谁当管理员。我方未初始化时启动生成一次性安装令牌
+  打进日志，`POST /api/v1/setup` 必须带它（`SKIN_SETUP_TOKEN` 可固定），占位与建号同事务、
+  并发只有一个超管。装好之后端点永久 404，向导是一扇门不是开关。
+- **全站安全响应头**：页面与 API 统一带 CSP/`X-Frame-Options: DENY`/`Referrer-Policy`/`Permissions-Policy`。
+  CSP 刻意允许 `script/style 'unsafe-inline'`：站长自定义 CSS/JS、主题包、插件包都是这个能力的使用者，
+  nonce 化等于砍掉三项功能。`/plugin-assets/` 是唯一允许被本站 iframe 的前缀（`SAMEORIGIN` +
+  `frame-ancestors 'self'`），其余一律拒绝被嵌；插件/主题 HTML 文档另带 `Sandbox: allow-scripts allow-forms`，
+  落到不透明源里拿不到 cookie。反代在站点前时以站点自身响应为准，覆盖需反代显式改写。
+- **违规内容地址的解禁面**：判定违规（`moderation='violation'`）后彻底删除的材质，其内容地址进墓碑
+  并被上传收口点拒绝，任何人都传不回来，私有导入也一样（私有副本可穿，放行等于留后门）。
+  **撤销误判只有数据侧一途**：面板不提供墓碑视图，因为解禁必须指明是谁撤销了谁的判定，
+  而那需要整套处置历史界面而非一个按钮。老站没有等价物（它根本没有彻底删除）。
+- **行 id 不复用**：`textures/users/players` 的行 id 会被举报、墓碑、衣柜长期按 id 引用，
+  回收即错配。SQLite 靠 `AUTOINCREMENT`（新装走 DDL，已装库在启动时幂等重建）；
+  MySQL `AUTO_INCREMENT`、PostgreSQL `BIGSERIAL` 本就不回退。**MariaDB 的 InnoDB 计数器不持久化**，
+  重启后按 `MAX(id)+1` 重算，理论上仍可回收——本机无 docker，未复现，只备案。
+- **老站 `password` 列为空的账号**：老站的摘要比较里，「未计算的 method」返回空串，
+  碰上 `password` 列也是空串时**相等即通过**——空密码列等于任何密码都能登录。本站现在一律先拒
+  空摘要（`server/internal/auth/password.go` 的 `verifyLegacyOne`，断言在
+  `server/internal/auth/empty_stored_test.go`）。**行为变化要记账**：`password` 列为空的迁移行
+  不再能用任何密码登录，需走找回密码或由管理员代设；这与「空密码可登录」的老站行为是刻意偏差，
+  那条行为本身是个洞不是兼容面。
+- **`skinDomains` 带端口条目**：authlib-injector 一类客户端把纹理主机与 `URI.getHost()` 比对，
+  而 `getHost()` **不含端口**，所以列表里 `site.invalid:8443` 这种条目永远匹配不上——
+  账号能登、皮肤静默不加载。本站现在为每个带显式端口的条目**同时发布去端口孪生**
+  （`server/internal/ygg/http.go` 的 `portlessTwin`，测试 `skindomains_test.go`）。**只增不改**：
+  已发布的条目一字不动、位置不变（孪生追加在快照之后），无端口的部署输出一模一样；
+  能看见差异的是 `skinDomains` 数组变长这一件事。
+- **`skinDomains` 条目的大小写**：客户端判白名单用 `String.equals` / `endsWith` / `startsWith`，
+  **全部大小写敏感**，而它从纹理 URL 里读主机用的 `URI.getHost()` 保留 URL 原本的大小写
+  （`SkinWhitelistTransformUnit.java:65-69,94`）——配置写 `Example.COM`、纹理从
+  `https://example.com/…` 出，就一条都匹配不上：账号能登、皮肤静默不加载。本站现在为每个条目
+  **同时发布小写孪生**（`server/internal/ygg/http.go` 的 `domainSpellings`，测试
+  `skindomains_case_test.go`）。**只增不改**：已发布的条目一字不动，只在小写形式不同时多发一条，
+  全小写的部署输出一模一样；刻意不折叠，因为折叠会删掉大小写混合的纹理主机今天还能命中的那条。
+  同轮把联盟服务器列表交给面板前先归一 `bs_root`（`union.CanonicalRoot`：小写 scheme/host、
+  去凭据/查询/片段、去尾部 `/authserver`、保路径与端口），一个站的多种拼写不再渲染成重复行与重复 Vue 键。
+- **`uploadableTextures` 属性的签名**：本站每条 property 都签（`textures` 与 `signatures.textures`
+  成对），**唯独 `uploadableTextures` 不签**——值恒为 `skin,cape`，与本站不按类型设限的上传策略一致，
+  所以它不携带任何需要证明的授权信息。参考实现的两侧（yggdrasil-connect `Profile.php:90-96`、
+  AsterYggdrasil `properties.rs:66-71`）是逐条签所有 property。要不要补齐到"每条都签"，
+  属客户端可见的 wire 面变更：先要确认现网启动器在校验签名集时对**多出来的签名**怎么处理，
+  不在无人值守里改。出处：仓库外 `analysis/g10-e3-protocol-surface.md`。
+
+</details>

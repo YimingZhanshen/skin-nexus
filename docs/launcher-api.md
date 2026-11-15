@@ -9,6 +9,10 @@
 基址 = `https://<站点>/api/plugins/launcher-api/v1`。`GET <基址>/meta` 公开，其余端点
 `Authorization: Bearer <token>`。
 
+**本页怎么读**：写启动器的人先看[登录流程](#启动器登录流程)（4 步）→
+[能力](#能力)（能调什么）→ [服务端要求](#服务端要求)（宿主版本与权限门槛）；
+端点/字段/错误码全量以规范正文为准，本页只是入口与摘要。
+
 ## 启动器登录流程
 
 1. 启动器用现有的 **Yggdrasil Connect OIDC 设备码流程**（client `2`，scope 含
