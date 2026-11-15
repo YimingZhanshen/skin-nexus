@@ -197,7 +197,7 @@ export default withMermaid(
     },
     // sitemap 无可靠现成插件，buildEnd 十几行自生成（cleanUrls 口径）
     async buildEnd({ outDir }) {
-      const { readdirSync, statSync, writeFileSync } = await import('node:fs')
+      const { readdirSync, statSync, writeFileSync, readFileSync } = await import('node:fs')
       const { join, relative } = await import('node:path')
       const urls: string[] = []
       const walk = (d: string) => {
@@ -216,6 +216,23 @@ export default withMermaid(
         join(outDir, 'sitemap.xml'),
         `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`,
       )
+      // 空页即红：正文里的 {{ }} 会被 Vue 当插值整页吞掉而构建照常成功——
+      // 这类静默失败必须有闸钉住。
+      const empty: string[] = []
+      const scan = (d: string) => {
+        for (const e of readdirSync(d)) {
+          const p = join(d, e)
+          if (statSync(p).isDirectory()) scan(p)
+          else if (e.endsWith('.html')) {
+            const html = readFileSync(p, 'utf8')
+            if (/class="vp-doc[^"]*"[^>]*><\/div>/.test(html)) empty.push(p)
+          }
+        }
+      }
+      scan(outDir)
+      if (empty.length) {
+        throw new Error('empty page bodies (Vue interpolation ate the content?): ' + empty.join(', '))
+      }
     },
   }),
   { mermaid: {} },

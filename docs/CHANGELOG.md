@@ -342,7 +342,7 @@ SQLite rig 验收，**生产站与演示站零操作**；不发版（tag 仍 v0.
   `jobs/store.go` 的 Resume 收 `cancelled`/`cancelling`，按钮却只认 `paused`/`failed`，
   等于**已取消的任务只能看着、不能重启**。现在真机走完 running→取消→恢复→done 一整圈。
   ② **英文管理面板那一屏**：设置面板约 40 条说明是写死的中文串，前端直接
-  `{{ s.description }}` 渲染，英文界面整屏中文；改成后端只发键、前端 `t()` 渲染。
+  <span v-pre>`{{ s.description }}`</span> 渲染，英文界面整屏中文；改成后端只发键、前端 `t()` 渲染。
   ③ **明细 `upstream_code`**：本地起一个只回 500 的假 hub，把 `union_api_root` 指过去再开
   诊断窗——读到 `hub.500`（4 ms）；关掉假 hub 重放，读到 `transport`（0 ms）。
   这两条在面板展开行里逐字读到，列名与 `{n} ms` 都是英文。
@@ -1420,7 +1420,7 @@ hub 侧站名**仍然空**，控制台换了一条新失败——`Access-Control
     `escapeParameter` 的转义不完全。本仓库**从未开启该选项**（`web/src/i18n.js` 的 `createI18n` 只有
     legacy/locale/fallbackLocale/messages），且**全仓没有 `srcdoc`**——插件界面是 `:src` URL 加载
     （`web/src/components/plugin/PluginFrame.vue:203`）；翻译结果只走文本插值（`web/src/components/ToastHub.vue:41`
-    `{{ x.message }}`），带进来的服务端参数（角色名、计数）由 Vue 转义。`v-html` 的几处分别是硬编码品牌 SVG、
+    <span v-pre>`{{ x.message }}`</span>），带进来的服务端参数（角色名、计数）由 Vue 转义。`v-html` 的几处分别是硬编码品牌 SVG、
     来自 `navIcons` 常量表的图标路径、以及 markdown-it + DOMPurify 之后的公告/详情正文。
     升到 11 仍按计划做（PR #5），但动机是 `npm audit` 的 4 个 high，不是这几条 advisory。
   - `go-chi/chi` 的 X-Forwarded-For 伪造（Moderate）：`server/go.mod:21` 标 `// indirect`，全仓零 import；
