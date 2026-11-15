@@ -170,14 +170,14 @@ function envBlockKeys(text, label, stripHash = false) {
   return [...new Set([...m[1].matchAll(/(SKIN_[A-Z0-9_]+)=/g)].map((x) => x[1]))]
 }
 const readme = readFileSync(join(root, 'README.md'), 'utf8')
-const readmeEn = readFileSync(join(root, 'README.en.md'), 'utf8')
+const readmeZh = readFileSync(join(root, 'README.zh.md'), 'utf8')
 const quickYml = readFileSync(join(root, 'docker-compose.quickstart.yml'), 'utf8')
-const zhKeys = envBlockKeys(readme, 'README.md')
-const enKeys = envBlockKeys(readmeEn, 'README.en.md')
+const zhKeys = envBlockKeys(readmeZh, 'README.zh.md')
+const enKeys = envBlockKeys(readme, 'README.md')
 const ymlKeys = envBlockKeys(quickYml, 'docker-compose.quickstart.yml (header comment)', true)
-if (zhKeys.length < 4) fail(`README.md's quick start lists only ${zhKeys.length} variables — the parser is blind`)
+if (zhKeys.length < 4) fail(`README.zh.md's quick start lists only ${zhKeys.length} variables — the parser is blind`)
 const keySet = (arr) => [...arr].sort().join(',')
-if (keySet(zhKeys) !== keySet(enKeys)) fail(`README.md and README.en.md promise different quick-start variables: ${keySet(zhKeys)} vs ${keySet(enKeys)}`)
+if (keySet(zhKeys) !== keySet(enKeys)) fail(`README.md and README.zh.md promise different quick-start variables: ${keySet(enKeys)} vs ${keySet(zhKeys)}`)
 if (keySet(zhKeys) !== keySet(ymlKeys)) {
   fail(`docker-compose.quickstart.yml's own header lists ${keySet(ymlKeys)} but the READMEs say ${keySet(zhKeys)} — one of the two is stale instructions`)
 }

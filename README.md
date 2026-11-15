@@ -1,6 +1,8 @@
 # SkinNexus / 肤枢
 
-<p align="center"><img src="docs/assets/logo.svg" width="140" alt="SkinNexus 像素枢纽 N 标识"></p>
+[中文](README.zh.md)
+
+<p align="center"><img src="docs/assets/logo.svg" width="140" alt="SkinNexus pixel hub N mark"></p>
 
 <p align="center">
   <a href="https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml"><img src="https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -8,17 +10,17 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-green" alt="AGPL-3.0"></a>
 </p>
 
-自托管的 Minecraft 皮肤站。玩家在网页上传管理皮肤与披风，用启动器免密登录直接进服；站长自己跑，账号、纹理文件和签名密钥都在自己机器上。
+A self-hosted Minecraft skin station. Players upload and manage skins and capes in the browser and join servers through launcher passwordless login; the operator runs it themselves — accounts, texture files and the signing key stay on their own machine.
 
-Go 单二进制 + Vue 3，数据库可选 MySQL / MariaDB / PostgreSQL / SQLite，AGPL-3.0。协议层兼容 [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) 及其插件生态，可以从老站无损迁移：主键保留、玩家 UUID 不变、旧密码算式继续可用。已在一套真实生产环境完成迁移与切流，67 用户 / 61 纹理零丢行。
+One Go binary + Vue 3, on MySQL, MariaDB, PostgreSQL or SQLite — AGPL-3.0. The protocol layer is compatible with [blessing-skin-server](https://github.com/bs-community/blessing-skin-server) and its plugin ecosystem, so a legacy site can be migrated losslessly: primary keys preserved, player UUIDs unchanged, old password hashes still verifiable. A real production site has been migrated and cut over — 67 users / 61 textures, zero rows lost.
 
-当前版本 v0.6.0（2026-11-12 发布）；`main` 已完成下一个开发周期（W0–W7：技术债清查、
-可观测/结构闸、可感知功能、前端重构、全站视觉翻修），打 tag 由站长拍板。
-迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)。
+Current release v0.6.0 (2026-11-12); `main` has completed the next development cycle (W0–W7:
+tech-debt sweep, observability/structure gates, user-facing features, frontend refactor, full visual
+overhaul); tagging is the operator's call. Iteration history lives in [`docs/CHANGELOG.md`](docs/CHANGELOG.md) (Chinese).
 
-## 部署
+## Deploy
 
-镜像在 GHCR（public，不需要 `docker login`），下面这段不用克隆源码：
+Images are on GHCR (public, no `docker login` needed). This does not require cloning the source:
 
 ```bash
 mkdir skin-nexus && cd skin-nexus
@@ -33,83 +35,86 @@ EOF
 docker compose -f docker-compose.quickstart.yml up -d
 ```
 
-打开 `http://<主机>:8080/setup`，填站点名、管理员账号、皮肤域，以及上面那个 `SKIN_SETUP_TOKEN`
-（空库时谁先提交这张表单谁就是超管，所以先要一个只有你拿得到的值；没设的话它会每次启动随机生成，
-在 `docker compose logs skin-nexus` 那行 install token 里）。以后升级就是
-`docker compose pull && docker compose up -d`，数据卷不动。
+Open `http://<host>:8080/setup` and fill in the site name, admin account, skin domains and the
+`SKIN_SETUP_TOKEN` above — on an empty database whoever submits that form becomes the super admin, so
+the step asks for a value only the operator has. Leave it unset and the site mints a fresh one on every
+start and prints it on the `docker compose logs skin-nexus` install-token line. Upgrades are
+`docker compose pull && docker compose up -d`; data volumes are never touched.
 
-已有外部数据库（MySQL / MariaDB / PostgreSQL）、或想跑一个文件库（SQLite）、裸二进制与源码构建：见 [`docs/deploy.md`](docs/deploy.md) 与 [`docs/build.md`](docs/build.md)。
-从老站迁数据：[`docs/migration.md`](docs/migration.md)（`preflight → dry-run → import`，小站通常 10 分钟，可回滚）。
+An external database (MySQL / MariaDB / PostgreSQL), a single-file SQLite database, a bare binary or a source build: [`docs/deploy.md`](docs/deploy.md) and [`docs/build.md`](docs/build.md).
+Migrating from a legacy site: [`docs/migration.md`](docs/migration.md) (`preflight → dry-run → import`, rollback available).
 
-上线前有两件事必须做：
+Two things are required before going live:
 
-1. 反向代理透传 `X-Forwarded-Proto` 与 `X-Forwarded-For`，否则协议判断错误、全站共用一个限流桶。
-2. 备份签名密钥（Docker 在 `skin-data` 卷的 `/data/sign-key.pem`）。丢了它，已下发皮肤的签名全部失效。
+1. The reverse proxy must forward `X-Forwarded-Proto` and `X-Forwarded-For`, otherwise scheme detection breaks and the whole site shares one rate-limit bucket.
+2. Back up the signing key (in the `skin-data` volume at `/data/sign-key.pem`). Losing it invalidates the signatures of every texture already served.
 
-## 功能
+## Features
 
-**玩家**：注册登录（可开邀请码准入）、上传皮肤与披风（拖放、进度、3D 预览、高清皮保留原生分辨率）、材质名称与来源标注（原创/二创/转载，后两者必须填原始发布地址）、Markdown 描述、私密上传、衣柜与角色管理、设为头像、皮肤库筛选排序与单品详情页、点赞入柜、举报、站内通知、授权应用与设备管理、账号注销。
+**Players**: registration and login (invite-code gating optional), skin and cape uploads (drag-and-drop, progress, 3D preview, HD skins keep native resolution), texture name and provenance (original / derivative / repost, the last two require the upstream URL), Markdown descriptions, private uploads, closet and character management, set-as-avatar, skin library with filters and a shareable detail page, likes that add to the closet, reports, an in-site inbox for moderation and account decisions, OAuth app and device management, account deletion.
 
-**站长**：管理面板（概览、用户/角色/材质、邀请码、站点设置、运行状态、自助诊断）、公告与自定义 CSS/JS、主题包与主题市场（Ed25519 验签，安装卸载热生效）、本地主题包上传、自定义页脚、封禁（登录 / 认证 / `hasJoined` 三层）、认证限流与失败锁定、SMTP 找回密码与邮箱验证（单次链接令牌 + 可设宽限期的验证门禁，宽限一过进服与网页的身份操作一起拦下、公开浏览照常；验证落地页点击才消费令牌，防邮件客户端预取烧令牌；信件双语 + HTML/纯文本双份、色带跟主题、发信显示名缺省站点名；发信失败落审计并进运行状态计数，瞬断自动重试一次）、站内通知（举报处置、材质下架与解禁、封禁与解禁）、登录与服务器通信日志（保留 90 天；超管可临时开 ≤24h 的诊断窗口，把同一次请求的状态码/耗时/白名单请求头/正文节选与令牌原文多写一行明细）、操作审计；会话与启动器令牌在库内只存摘要，读到库不等于读到还能用的登录态——诊断明细里的令牌原文是这条的唯一例外，且按固定的 24h 短时钟抹掉，不跟 90 天的日志保留期走。
+**Operators**: admin panel (overview, users / characters / textures, invite codes, site settings, runtime status, self-diagnostics), announcements and custom CSS/JS, theme packs and a theme market (Ed25519-verified, install and uninstall take effect without a restart), local theme uploads, configurable footer, bans enforced at three layers (login / authenticate / `hasJoined`), authentication rate limiting with lockout, SMTP password reset and email verification (single-use link token plus a configurable grace period, and once it lapses the join gate and the site's own identity operations are both refused while public browsing stays open; the verification landing page consumes the token only on click so mail-client prefetch cannot burn it; letters are bilingual with HTML + plain-text parts, a theme-tinted band and the site name as sender display name; failed sends are audited and counted on the runtime status page, with one automatic retry on transient failures), an in-site notification centre (report outcomes, texture takedowns and lifted verdicts, bans and un-bans), login and server communication logs (kept for 90 days; a super admin can open a temporary diagnostic window of up to 24 hours, which writes one extra detail row for the same request — status code, duration, allow-listed request headers, a body excerpt and the token itself), audit trail. Sessions and launcher tokens are stored in the database as digests only, so reading the database is not the same as holding a usable login; the token text inside a diagnostic detail row is the one exception to that rule, and it is wiped on its own fixed 24-hour clock rather than the 90-day log retention.
 
-**协议与集成**：Yggdrasil 全端点（authlib-injector 零改配置）、OIDC 免密登录（设备码 + refresh 轮换，不需要外挂 Janus）、MUA Union 成员站模块（三头验签入站、角色生命周期同步、跨站绑定与 UUID 修正、成员站名与安全级别徽章、按两条腿分区的自助诊断——本站出站的 TLS/证书/时钟差与 hub 回探本站的证据各自成段；默认关闭 = 零暴露面）、CustomSkinAPI / USM / legacy 裸 PNG / 公开只读 API、Mojang 正版兜底（本地未命中时回源官方，出站地址防护 + 面板热开关）、服务端头像与预览渲染、启动器 Bearer API（`launcher-api` 插件）、皮肤导入（`skin-importer` 插件，支持 Mojang 与老站单条/批量导入）。
+**Protocols and integration**: full Yggdrasil endpoint set (authlib-injector works without configuration changes), built-in OIDC passwordless login (device code flow + refresh rotation, no Janus sidecar), MUA Union member-site module (three-header signature verification inbound, player lifecycle sync, cross-site binding and UUID repair, peer site names and a security-level badge, self-diagnosis split by the two legs — our own outbound TLS, certificate and clock offset versus what the hub reported when probing us; off by default = zero surface), CustomSkinAPI / USM / legacy raw PNG / public read-only API, Mojang premium fallback (origin query when local lookup misses, with outbound address protection and a hot toggle in the panel), server-side avatar and preview rendering, a launcher Bearer API (`launcher-api` plugin), skin import (`skin-importer` plugin, single and batch from Mojang or a legacy site).
 
-**内容与扩展**：中英双语（语言包可扩展）、主题包体系（零构建：`theme.json` + CSS + 可选 JS）、签名插件平台（goja 宿主：配置/密钥、命名空间数据、三档路由、事件与 guard、iframe UI）、SEO（落地页与皮肤详情页服务端渲染、`sitemap.xml`、`robots.txt`、`llms.txt`、逐页 meta/OG 与 JSON-LD）。
+**Content and extensions**: zh-CN / en (language packs are extensible), theme pack system (no build step: `theme.json` + CSS + optional JS), signed plugin platform (goja host: config/secrets, namespaced data, three route tiers, events and guards, iframe UI), SEO (server-rendered landing and texture detail pages, `sitemap.xml`, `robots.txt`, `llms.txt`, per-page meta/OG and JSON-LD).
 
-## 截图
+## Screenshots
 
 <p align="center">
-  <img src="docs/assets/showcase/landing.jpg" alt="落地页" width="100%">
+  <img src="docs/assets/showcase/landing.jpg" alt="Landing page" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/assets/showcase/skinlib.jpg" alt="皮肤库" width="49%">
-  <img src="docs/assets/showcase/market.jpg" alt="插件市场" width="49%">
+  <img src="docs/assets/showcase/skinlib.jpg" alt="Skin library" width="49%">
+  <img src="docs/assets/showcase/market.jpg" alt="Plugin market" width="49%">
 </p>
 
-> 截图来自真实生产实例，站名与敏感配置已替换，皮肤与昵称取自公开皮肤库。
+> Screenshots come from a real production instance; site name and sensitive configuration are replaced, skins and nicknames come from the public library.
 
-## 与同类项目的差异
+## How it differs
 
-服务端渲染的 SEO 体系、皮肤详情页 URL、材质生命周期闭环、带机器门禁的错误契约——对照的四个项目这四项都没有全部做到。逐格证据（对方仓库的 `文件:行`，2026-11-01 快照）在 [`docs/competitor-analysis.md`](docs/competitor-analysis.md)，这里只放结论：
+Server-rendered SEO, shareable texture detail URLs, a closed texture lifecycle, and an error contract enforced by the build — none of the four comparison projects has all four. Per-cell evidence (`file:line` in their repositories, snapshot 2026-11-01) is in [`docs/competitor-analysis.md`](docs/competitor-analysis.md); this is only the summary:
 
 <details>
-<summary><b>对照 blessing-skin-server / element-skin / vSkin</b></summary>
+<summary><b>Against blessing-skin-server / element-skin / vSkin</b></summary>
 
-| 能力 | SkinNexus | blessing | element-skin | vSkin |
+| Capability | SkinNexus | blessing | element-skin | vSkin |
 |---|---|---|---|---|
-| SEO（sitemap / robots / 逐页 meta·OG·JSON-LD） | ✅ | ⚠️ 仅逐页 title | ❌ | ❌ |
-| 服务端渲染内容页（免 JS 可收录） | ✅ 首页 + 详情页 | ⚠️ Twig 壳 | ❌ SPA | ❌ SPA |
-| 皮肤库单品页（可分享 URL） | ✅ | ✅ | ❌ 弹窗 | ❌ |
-| OIDC 免密登录 | ✅ 内置 | ⚠️ 需 Janus 外挂 | ⚠️ discovery 不全 | ⚠️ 细节弱 |
-| 材质生命周期（像素定模型 / 违规禁公开 / 删除留证） | ✅ | ⚠️ 举报删文件跳过引用计数 | ❌ 删除后文件永久留盘 | ❌ 删除不计数 |
-| 错误契约（稳定 code + 构建门禁） | ✅ | ❌ 粗粒度整数 code | ⚠️ 有码无门禁 | ❌ 只有人话 |
-| CI 质量闸（覆盖率 / 多引擎集成矩阵） | ⚠️ 地板 45% + MySQL/MariaDB/PG/SQLite 六组合 | ⚠️ 传 Codecov 不设阈值 | ✅ 硬阈值 90% | ❌ 无 CI |
-| 部署形态 | Go 单二进制 / Docker | PHP 8.1（已 EOL）+ Laravel 10 | Go + PostgreSQL + Redis | FastAPI + SQLite |
+| SEO (sitemap / robots / per-page meta·OG·JSON-LD) | ✅ | ⚠️ title only | ❌ | ❌ |
+| Server-rendered content pages (indexable without JS) | ✅ landing + detail | ⚠️ Twig shell | ❌ SPA | ❌ SPA |
+| Skin library detail page (shareable URL) | ✅ | ✅ | ❌ modal | ❌ |
+| OIDC passwordless login | ✅ built in | ⚠️ needs Janus | ⚠️ discovery under-announces | ⚠️ weak details |
+| Texture lifecycle (pixels decide model / violations block re-publish / audited delete with evidence) | ✅ | ⚠️ report delete skips the reference count | ❌ files stay forever | ❌ delete does not count |
+| Error contract (stable code + build gate) | ✅ | ❌ coarse int codes | ⚠️ codes, no gate | ❌ prose only |
+| CI gates (coverage / multi-engine integration matrix) | ⚠️ floor 45% + MySQL/MariaDB/PG/SQLite, six combinations | ⚠️ Codecov, no threshold | ✅ hard 90% | ❌ no CI |
+| Deployment shape | Go binary / Docker | PHP 8.1 (EOL) + Laravel 10 | Go + PostgreSQL + Redis | FastAPI + SQLite |
 
 </details>
 
-同一台 2 核 / 3.5 GB 生产 VPS 的实测：落地页约 600 RPS、纹理分发 5182 RPS、Yggdrasil 元数据 2365 RPS，零错误。
+Measured on one 2-core / 3.5 GB production VPS: landing ~600 RPS, texture delivery 5182 RPS, Yggdrasil metadata 2365 RPS, zero errors.
 
-## 文档
+## Documentation
 
-- 部署运维 [`docs/deploy.md`](docs/deploy.md) · 构建与 CI [`docs/build.md`](docs/build.md) · 迁移 [`docs/migration.md`](docs/migration.md)
-- 兼容基线 [`docs/compat-matrix.md`](docs/compat-matrix.md) · 启动器 API [`docs/launcher-api.md`](docs/launcher-api.md)
-- 主题包 [`docs/theme-spec.md`](docs/theme-spec.md) · 插件 [`docs/plugin-spec.md`](docs/plugin-spec.md) · 发布与签名 [`docs/plugin-publishing.md`](docs/plugin-publishing.md)
-- 竞品取证 [`docs/competitor-analysis.md`](docs/competitor-analysis.md) · 迭代历史 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
-- 在线 Wiki（仓库内生成文档的对外镜像，含架构与协议详解）[YimingZhanshen/skin-nexus/wiki](https://github.com/YimingZhanshen/skin-nexus/wiki)
-- 贡献 [`CONTRIBUTING.md`](CONTRIBUTING.md) · 治理 [`GOVERNANCE.md`](GOVERNANCE.md) · 漏洞报告 [`SECURITY.md`](SECURITY.md) · 行为准则 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) · 无障碍 [`ACCESSIBILITY.md`](ACCESSIBILITY.md) · 仓库协作说明 [`AGENTS.md`](AGENTS.md)
+- Deployment and operations [`docs/deploy.md`](docs/deploy.md) · build and CI [`docs/build.md`](docs/build.md) · migration [`docs/migration.md`](docs/migration.md)
+- Compatibility baseline [`docs/compat-matrix.md`](docs/compat-matrix.md) · launcher API [`docs/launcher-api.md`](docs/launcher-api.md)
+- Theme packs [`docs/theme-spec.md`](docs/theme-spec.md) · plugins [`docs/plugin-spec.md`](docs/plugin-spec.md) · publishing and signing [`docs/plugin-publishing.md`](docs/plugin-publishing.md)
+- Competitor evidence [`docs/competitor-analysis.md`](docs/competitor-analysis.md) · iteration history [`docs/CHANGELOG.md`](docs/CHANGELOG.md)
+- Online wiki (mirror of the docs generated in this repository, with architecture and protocol deep dives) [YimingZhanshen/skin-nexus/wiki](https://github.com/YimingZhanshen/skin-nexus/wiki)
+- Contributing [`CONTRIBUTING.md`](CONTRIBUTING.md) · governance [`GOVERNANCE.md`](GOVERNANCE.md) · vulnerability reporting [`SECURITY.md`](SECURITY.md) · code of conduct [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) · accessibility [`ACCESSIBILITY.md`](ACCESSIBILITY.md) · repository collaboration notes [`AGENTS.md`](AGENTS.md)
 
-## 兼容契约
+Most detailed documentation is still Chinese-first.
 
-改动以下任一项之前，先读 [`AGENTS.md`](AGENTS.md) 的铁律并跑对应契约测试：
+## Frozen compatibility contracts
 
-1. `/api/yggdrasil/**` 的原语义（204 清单、错误体 `{error,errorMessage}`、毫秒时间戳、PEM 格式）
-2. 玩家 UUID 零漂移（`OfflinePlayer:` md5 变体，改名不重算）
-3. 持久化数据与 blessing-skin-server 存储约定同构、可直迁
-4. `internal/union` 的 wire 契约与 `internal/plugin` 的 hook 合约冻结
+Before changing any of these, read the iron rules in [`AGENTS.md`](AGENTS.md) and run the matching contract tests:
 
-## 许可
+1. The original semantics of `/api/yggdrasil/**` (204 list, `{error,errorMessage}` bodies, millisecond timestamps, strict PEM format)
+2. Zero player-UUID drift (the `OfflinePlayer:` md5 variant; renaming never recomputes)
+3. Persisted data stays isomorphic to blessing-skin-server storage conventions and directly migratable
+4. The `internal/union` wire contract and the `internal/plugin` hook contract are frozen
 
-AGPL-3.0（见 [`LICENSE`](LICENSE)）。`Copyright (c) 2026 YMZS (YimingZhanshen) and SkinNexus contributors`。
-翻译、主题包、代码与文档贡献都欢迎；治理为 BDFL，日常改动走 PR。
+## License
+
+AGPL-3.0 (see [`LICENSE`](LICENSE)). `Copyright (c) 2026 YMZS (YimingZhanshen) and SkinNexus contributors`.
+Translations, theme packs, code and documentation contributions are welcome; governance is BDFL and changes go through PRs.

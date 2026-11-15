@@ -100,7 +100,7 @@ func TestVersionLiteralsAgree(t *testing.T) {
 		{".github/workflows/ci.yml", `BUILD_VERSION=([0-9]+\.[0-9]+\.[0-9]+)`, 1},
 		{"CITATION.cff", `(?m)^version:\s*"([0-9]+\.[0-9]+\.[0-9]+)"`, 1},
 		{"README.md", `v([0-9]+\.[0-9]+\.[0-9]+)`, 2},    // badge + status line
-		{"README.en.md", `v([0-9]+\.[0-9]+\.[0-9]+)`, 2}, // badge + status line
+		{"README.zh.md", `v([0-9]+\.[0-9]+\.[0-9]+)`, 2}, // badge + status line
 		{".github/ISSUE_TEMPLATE/bug_report.yml", `v([0-9]+\.[0-9]+\.[0-9]+)`, 1},
 	}
 
@@ -137,7 +137,7 @@ func TestVersionGateSeesEverySource(t *testing.T) {
 	seen := map[string]int{}
 
 	re := regexp.MustCompile(`v?([0-9]+\.[0-9]+\.[0-9]+)`)
-	for _, rel := range []string{"Dockerfile", ".github/workflows/ci.yml", "CITATION.cff", "README.md", "README.en.md", ".github/ISSUE_TEMPLATE/bug_report.yml"} {
+	for _, rel := range []string{"Dockerfile", ".github/workflows/ci.yml", "CITATION.cff", "README.md", "README.zh.md", ".github/ISSUE_TEMPLATE/bug_report.yml"} {
 		body := readRepoFile(t, root, rel)
 		n := 0
 		for _, m := range re.FindAllStringSubmatch(body, -1) {
