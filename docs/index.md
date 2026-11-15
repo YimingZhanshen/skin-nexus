@@ -19,6 +19,10 @@ A documentation centre for SkinNexus, a self-hosted Minecraft skin server
 - [主题规范 / Theme spec]({% link theme-spec.md %})
 - [启动器 API / Launcher API]({% link launcher-api.md %})
 
+## 知识手册（架构与模块）/ Handbook
+
+- [知识手册总览（80 篇，含架构图）/ Handbook index]({% link handbook/index.md %})
+
 ## 其他 / More
 
 - [兼容矩阵 / Compatibility matrix]({% link compat-matrix.md %})
