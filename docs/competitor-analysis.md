@@ -1,6 +1,7 @@
 # 竞品源码分析
 
-> 快照口径：2026-11-01。方法：浅克隆到工作区外的 `refs/`（不入库），子代理按维度深读 + 第一手 grep
+> 快照口径：2026-11-01 正文取证；2026-11-09 覆盖率复测；**2026-11-15 状态行校正并增补重量级
+> （chrly / HRPAuth / PigeonSkin）**。方法：浅克隆到工作区外的 `refs/`（不入库），子代理按维度深读 + 第一手 grep
 > 复核，**每一格给「对方仓库内的文件:行」**；未找到写 `NOT FOUND`，不猜。凡「README 宣称 ≠ 源码实证」
 > 均单独标注。对手最后提交日期见下表——仓库当前不活跃不等于结论失效，但引用前仍应重新取证。
 >
@@ -10,6 +11,9 @@
 > | [vSkin](https://github.com/iJunecn/vSkin) | Python FastAPI + Vue 3 + SQLite | GPL-3.0 | 2026-05-29（基本停更） |
 > | [blessing-skin-server](https://github.com/blessing-skin/blessing-skin-server) | PHP Laravel + MySQL | MIT | 2026-03-30 |
 > | [Drasl](https://github.com/Unmojang/Drasl) | Go + SQLite/MySQL | GPL-3.0 | 2026-11-01 |
+> | [chrly（Ely.by 皮肤系统）](https://github.com/elyby/chrly) | Go + Redis | Apache-2.0 | 2024-07-09（维护趋缓，生态仍在役） |
+> | [HRPAuth](https://github.com/CoreMatch/HRPAuth) | Go + MySQL + Redis | AGPL-3.0 | 2026-11-13 |
+> | [PigeonSkin-Server](https://github.com/Pigeon-Server/PigeonSkin-Server) | 见仓（Cloudflare 免费服务方案） | 未取证 | 见仓 |
 > | [LittleSkin premium-verification](https://github.com/xuckee/premium-verification) 等生态件 | PHP | AGPL/GPL | 见仓 |
 >
 > 许可证边界：本文只吸收**概念与公开协议事实**，禁止复制、翻译改写 GPL/AGPL 竞品源码、译文或测试
@@ -18,19 +22,21 @@
 > 与 blessing-skin-server 的**协议兼容**事实（老站实测、迁移对账）不在本文范围内，见
 > [`compat-matrix.md`](compat-matrix.md) 与 [`migration.md`](migration.md)。
 
-## 1. 总判断（2026-11-01）
+## 1. 总判断（2026-11-01，2026-11-15 校正）
 
-五个仓库在**功能面上没有一家同时具备**：SEO 服务端渲染体系、启动器深链兼容、材质生命周期闭环
+对比的各仓库在**功能面上没有一家同时具备**：SEO 服务端渲染体系、启动器深链兼容、材质生命周期闭环
 （像素定模型 → 违规处置 → 引用清点后彻底删除并留证）、签名插件市场与任务运行器。我方四项皆有，
 差距不在功能列表，而在**可发布性与契约完整性**——本轮（质量闸与本地化轮）正是对着这一点做的，
 对照依据见下表「错误契约 / 覆盖率 / 公共配置」三行。
 
-真实缺口按量级排：**对象存储与 CDN 刷新**（五家全无，属生态级缺口，我方以 `immutable` + 可改写
-URL 的插件 filter 换取 5182 RPS 的纹理分发，代价记在 `compat-matrix.md` §4）＞
-**邮箱验证流 + 站内通知中心**（element-skin 两项齐备；blessing 有通知中心、验证链接却永不过期，
-我方只有找回密码邮件）＞
-**不挂 authlib-injector 的接入面**（services / discovery / certificates 族，Drasl 整族挂载）。
+真实缺口（品类维度）按量级排：**对象存储与 CDN 刷新**（各家全无，属生态级缺口，我方以 `immutable`
++ 可改写 URL 的插件 filter 换取 5182 RPS 的纹理分发，代价记在 `compat-matrix.md` §4）＞
+**账号安全深度**（MFA：TOTP / WebAuthn·passkey / 邮箱二要素 / 恢复密钥——HRPAuth 一家拉满且经
+源码核验，其余各家与我方都停在「密码 + 邮箱验证」层面，见 §2.4）＞
+**不挂 authlib-injector 的接入面**（services / discovery / certificates 族，Drasl 整族挂载；
+chrly 的 `/textures/signed` 与 HRPAuth-Spigot 是同一方向的另一种形态，见 §2.4）。
 判为**伪需求**的：签名密钥轮换、像素级材质 hash、three.js 全景首页、换 PostgreSQL/Redis 栈。
+此前列为缺口的「邮箱验证流 + 站内通知中心」已于 2026-11-02 落地（§2.3，两行均已翻绿）。
 
 ## 2. 横向能力矩阵
 
@@ -70,9 +76,9 @@ URL 的插件 filter 换取 5182 RPS 的纹理分发，代价记在 `compat-matr
 
 | 能力 | SkinNexus | element-skin | vSkin | blessing | Drasl |
 |---|---|---|---|---|---|
-| 邮箱验证流（发信 + 校验路由） | ❌ 只有 `email_verified` 标志与进服门禁，**无发信、无 /verify** | ✅ Redis 8 位码 + TTL 300s（`internal/service/verification/verification.go:100-121`），重发限流 5 次/15 分钟（`rate_limit.go:16-34`） | ✅ SQLite 码 + TTL 300（`database_module/modules/verification.py:10-15`、`utils/email_utils.py:24`） | ⚠️ 有，但**验证链接永不过期**：`URL::signedRoute(..., null, false)`（`app/Listeners/SendEmailVerification.php:15`），重发限制只存 session（`UserController.php:148-152`） | ❌ 改用邀请码注册（`main.go:673-722`） |
+| 邮箱验证流（发信 + 校验路由） | ✅ 发信 + 链接点击消费 + 宽限期 + 两侧验证门（`webapi/email_verify.go`、`internal/verifygate/`；2026-11-02 落地） | ✅ Redis 8 位码 + TTL 300s（`internal/service/verification/verification.go:100-121`），重发限流 5 次/15 分钟（`rate_limit.go:16-34`） | ✅ SQLite 码 + TTL 300（`database_module/modules/verification.py:10-15`、`utils/email_utils.py:24`） | ⚠️ 有，但**验证链接永不过期**：`URL::signedRoute(..., null, false)`（`app/Listeners/SendEmailVerification.php:15`），重发限制只存 session（`UserController.php:148-152`） | ❌ 改用邀请码注册（`main.go:673-722`） |
 | 找回密码令牌强度 | ✅ 单次消费、DB 时钟比较过期、只存 SHA-256 摘要、多种失败合并为一个码（`webapi/password.go:121,204-246`；`store/password_reset.go:45-53`） | 未取证 | 未取证 | ✅ 1 小时过期 + 每 IP 缓存节流（`AuthController.php:270-294`） | 未取证 |
-| 站内通知中心 | ❌ 无表无路由（只有瞬时 toast） | ✅ notices + receipts + targets 三表（`internal/database/schema.go:158-198`），读详情即标已读 | ❌ | ✅ `notifications` 表 + SiteMessage（`app/Notifications/SiteMessage.php`、`NotificationsController.php:13-56`） | ❌ |
+| 站内通知中心 | ✅ 通知表 + 通知页 + 未读筛选（`webapi/notifications.go`、`web/src/pages/NotificationsPage.vue`；2026-11-02 落地） | ✅ notices + receipts + targets 三表（`internal/database/schema.go:158-198`），读详情即标已读 | ❌ | ✅ `notifications` 表 + SiteMessage（`app/Notifications/SiteMessage.php`、`NotificationsController.php:13-56`） | ❌ |
 | 皮肤库检索 | ⚠️ 关键词只 LIKE `description`、2 种排序（`store/skinlib.go:103-129`）；无标签 | ✅ hash/名称/上传者 + 2 排序 + 游标分页（`database/texture/library.go:41-101`） | ❌ 只有 page/limit，`ORDER BY created_at DESC`（`routers/site_routes.py:225-255`） | ⚠️ filter/keyword/uploader + **任意 sort 列直接进 `orderBy`**（`SkinlibController.php:69-71`）——列名来自请求，靠 `Texture` 的列白名单兜底 | 未取证 |
 | 服务端渲染内容页 | ✅ 首页 + 详情页 + `llms.txt` + sitemap（`cmd/skin-nexus/texturepage.go`、`landing.go`、`main.go:1079-1118`） | ❌ SPA 壳 | ❌ SPA 壳 | ⚠️ Twig 壳，正文客户端渲染 | ⚠️ Go 模板整页（`front.go`），但 SEO 结构未取证 |
 | 服务端材质渲染 | ✅ Go 立方体光栅，输出带版本号（`avatargen.RenderVersion`，`avatargen.go:37-44`） | ❌ 只有客户端 WebGL（`package.json:32-33`） | ⚠️ 头像有服务端截脸（`utils/image_utils.py:114-144`），预览仍走 WebGL | ✅ 独立包 `blessing/texture-renderer` + WebP 协商 + 渲染缓存（`TextureController.php:61-79`） | 未取证 |
@@ -80,6 +86,27 @@ URL 的插件 filter 换取 5182 RPS 的纹理分发，代价记在 `compat-matr
 | 正版（微软/Mojang）账号绑定 | ❌ 仅 `internal/auth/authsource.go` 接口占位，且该文件当前无人引用 | 未取证（本次矩阵未覆盖其 provider 侧） | ⚠️ 只接 Microsoft OAuth 登录，不做「正版资格」校验 | —（老站无此概念） | ❌ **无 MSA/XBL/XSTS**：只有 Yggdrasil 风格 `/authenticate`，MSA 仅作回源服务器配置出现（`config_test.go:202`） |
 | 正版资格校验（第三方生态件） | — | — | — | — | 参考 LittleSkin `premium-verification`：一次性 MSA→XBL→XSTS→entitlement，落 `premium(uid,pid,uuid)`，**不保存任何令牌**（`src/Providers/PremiumProvider.php:58-142`、`callbacks.php:16-24`）；Heimdall 侧 90 天周期性重验（`Configuration.java:32-36`） |
 | `/publickeys` + `POST /player/certificates` | ❌ 未挂（单一签名密钥 + metadata 里的 `signaturePublickey`，authlib-injector 口径） | 未取证 | 未取证 | ❌ | ✅ 整族挂载 `main.go:454-470`（实现 `services.go:171-293,546`）。**注意消费方**：authlib-injector 对这两者都用本地实现回应——`/publickeys` 取元数据里的 key（`httpd/PublickeysFilter.java:40-61`），profile key 用本地生成的假密钥对（`httpd/ProfileKeyFilter.java:48-82`），因此真正的消费者是**不挂 agent 的原生客户端**（`-Dminecraft.api.*.host`），不是老启动器 |
+
+### 2.4 重量级补录（2026-11-15，源码一手取证）
+
+11-01 矩阵只覆盖了五个仓库，缺了真实世界在役的重量级。本节补录三家，**只记本次实际取证的维度**，
+未查的维度不写格子（沿用「未取证 ≠ 对方没有」口径）。
+
+| 维度 | SkinNexus | chrly（Ely.by 皮肤系统） | HRPAuth（含 HA 生态） |
+|---|---|---|---|
+| 纹理签名 | ✅ 自签（`ygg/models.go` AssembleTextures + Signer），公钥走元数据 `signaturePublickey` | ✅ 独立 `signer/` 包（`signer/signer.go`）+ `/textures/signed/{username}`（Ely.by Server Skins System，游戏服务端直发签名 profile）+ 公钥 DER/PEM 双端点（`http/skinsystem.go`） | —（Yggdrasil 面在兄弟仓） |
+| Mojang 兜底/代理 | ✅ `ygg_mojang_fallback`（authlib 口径回源） | ✅ 原生代理 + worker 模式 Mojang UUID 解析（`api/mojang/mojang.go`、README Worker mode） | — |
+| 账号安全深度 | 密码（12 旧算式 + argon2id）+ 邮箱验证 + 失败锁定 | —（账号面在 Ely.by 主站） | ✅ **全家桶**：TOTP / WebAuthn·passkey / 邮箱二要素 / 恢复密钥 / 验证码（`services/webauthn_service.go` 等，源码核验） |
+| API 契约治理 | 错误码目录 + AST 闸；launcher 面有 openapi.yaml | — | ✅ 契约先行：HA-Contract 集中 OpenAPI + 错误码表，多服务共用 |
+| 发布工程 | GHCR 镜像 + 三引擎 CI | Docker 镜像 | ✅ 6 平台预编译二进制 + 多架构 manifest list + `deploy-manifest.yaml` 按 digest 钉死 + 配置模板渲染 |
+| 旧客户端兼容 | ✅ legacy/usm/CustomSkinAPI 兼容路由 | ✅ `/skins?name=`、`/cloaks?name=` 旧版 URL 形状 | — |
+| 游戏服务端接入 | 无（launcher-api 插件在案） | ✅ `/textures/signed` 供服务端 API 直发 | ✅ HRPAuth-Spigot（Velocity 插件绑定身份） |
+
+- **定位差异**：chrly 是「皮肤系统单件」（轻量、Redis、专精纹理与签名）；HRPAuth 是「认证核心 +
+  OAuth2 授权中心」，Yggdrasil/皮肤面拆在兄弟仓（HRPAuth-Yggdrasil-API / HASkinLib / HASkinProxy，
+  本次未读源码，仅按其 README 声明计）。两家的强项恰好落在 §1 的第二、第三条品类缺口上。
+- **PigeonSkin-Server**：新入场者（Cloudflare 免费服务方案，中文定位「新一代皮肤站系统」），
+  已在通用搜索结果中占位；未深读（见仓）。
 
 ## 3. 取舍与不做清单（含理由）
 
