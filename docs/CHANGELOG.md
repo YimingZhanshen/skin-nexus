@@ -65,6 +65,15 @@ C2 用量预算闸前提否证经拍板关账不设。补扫 plugins-dist 渠道
 发布/删除/改公开性事件批量提交 ≤10 条/次、失败只记日志零外联（关闭时），env 同批改齐两份 compose 与
 deploy.md 变量表。
 
+**同日七轮（推广基建：让搜索引擎与站长找得到我们）**：README 英文转主、中文移 `README.zh.md`
+互链切语言（`69b27e9`，check-docs 与 version 闸文件名引用同批更新）；仓库 Description 与 README
+首句换真实搜索词（`c9893ba`）、topics 增 blessing-skin-alternative / minecraft-skin-server；
+**迁移演示夹具** `demo/legacy`（`3b604b6`）：全虚构老站数据（3 用户/3 角色/4 纹理/4 UUID 映射 +
+孤儿行清洗演示），preflight → dry-run → import 全流程本地实测，旧密码 Yggdrasil 登录 200、
+UUID 零漂移读数在案；**文档站上线 GitHub Pages**（`ee4d429`）：Jekyll 渲染 `docs/`（sitemap +
+md 互链保留），README 双语挂链；竞品分析校正三处过期状态行并补录 chrly / HRPAuth / PigeonSkin
+三家重量级（`bfff63b`，缺口清单换为仍站着的三条：对象存储/CDN、账号安全深度、服务端接入面）。
+
 ## 2026-11-14 · v0.7.0 开发周期
 
 W0–W7 八波推进（技术债清查 → 可观测/结构闸 → 功能/重构 → 视觉翻修 → 收尾）。六组主线：
