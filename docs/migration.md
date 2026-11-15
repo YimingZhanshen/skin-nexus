@@ -37,17 +37,8 @@
       手动执行 DDL 的两个必炸点见下方折叠块
 - [ ] 手上有老站 `.env`（必填：`PWD_METHOD`/`PASSWORD_METHODS`；`SALT` 缺省=空盐合法，`APP_URL` 仅展示）与老站纹理目录 `storage/textures/` 的读权限
 - [ ] 老站数据库只读账号（或 mysqldump 快照）——import 对老库只做查询，但仍建议只读凭据兜底
-- [ ] **老站表变体预检**（魔改/老版本插件会缺列，缺列会在 import 中止报 `Unknown column`）：
-
-      ```bash
-      mysql -N -e "SHOW COLUMNS FROM legacy.uuid"          # 应含 pid 列；没有则：
-      # mysql -e "ALTER TABLE legacy.uuid ADD COLUMN pid INT NOT NULL DEFAULT 0;"
-      mysql -N -e "SHOW COLUMNS FROM legacy.invitation_codes"  # 应含 description；没有则：
-      # mysql -e "ALTER TABLE legacy.invitation_codes ADD COLUMN description VARCHAR(255) NULL;"
-      ```
-
-      （`uuid.pid` 是部分插件变体才有的列、`description` 是 fork/魔改版扩展列——
-      import 的查询固定要这两列）
+- [ ] **老站表变体预检**（魔改/老版本插件会缺列，缺列会在 import 中止报 `Unknown column`）——
+      逐条跑下方「变体预检命令」，缺列就按注释补列
 - [ ] 目标机磁盘余量 ≥ 纹理目录体积 × 2（备份 + 拷贝各一份）
 - [ ] 目标纹理目录（`SKIN_TEXTURES_DIR`，compose 默认 `/data/textures`）可写
 - [ ] **若老站有非 bcrypt/argon2 的弱哈希用户**（preflight 哈希分布可查）：准备把老站
@@ -55,6 +46,16 @@
       否则这些用户**无法登录**（按 .env 盐链逐个试验证，支持 12 种公式；bcrypt/argon2 PHC 格式不依赖）。
       文件解析失败的形态见下方折叠块
 - [ ] 已读完本文 §三「切流断言」与 §六「切流到正式域名」（含签名钥步骤）
+
+**变体预检命令**（`uuid.pid` 是部分插件变体才有的列、`description` 是 fork/魔改版扩展列——
+import 的查询固定要这两列）：
+
+```bash
+mysql -N -e "SHOW COLUMNS FROM legacy.uuid"          # 应含 pid 列；没有则：
+# mysql -e "ALTER TABLE legacy.uuid ADD COLUMN pid INT NOT NULL DEFAULT 0;"
+mysql -N -e "SHOW COLUMNS FROM legacy.invitation_codes"  # 应含 description；没有则：
+# mysql -e "ALTER TABLE legacy.invitation_codes ADD COLUMN description VARCHAR(255) NULL;"
+```
 
 <details>
 <summary>checklist 两个坑的深说（手动 DDL 必炸点 / SKIN_LEGACY_ENV 失败形态）——可以先不读</summary>
