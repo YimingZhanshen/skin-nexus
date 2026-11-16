@@ -13,10 +13,10 @@
     "markdown-it": "^15.0.3",
     "skinview3d": "^3.2.0",
     "vue": "^3.5.45",
-    "vue-i18n": "^11.4.18"
+    "vue-i18n": "^11.4.19"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^6.0.10",
-    "vite": "^8.3.6"
+    "@vitejs/plugin-vue": "^6.0.11",
+    "vite": "^8.3.8"
   }
 }
