@@ -234,7 +234,7 @@ var texDetailTmpl = template.Must(template.New("texdetail").Funcs(tmplFuncs).Par
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="/">
-        <img src="/favicon.svg" alt="" />
+        <img src="/favicon.svg" alt="{{.SiteName}}" />
         <span>{{.SiteName}}</span>
       </a>
       <nav class="topnav" aria-label="{{t .Lang "page.topnav"}}">
