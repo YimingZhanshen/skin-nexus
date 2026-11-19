@@ -152,8 +152,9 @@ func (m *Mysql) UserPasswordAlgo(ctx context.Context, uid int64) (string, error)
 	return algo, err
 }
 
-// UserPlayerLimit returns the per-user character limit (review P1: the
-// column was written at register/setup but never enforced anywhere).
+// UserPlayerLimit returns the per-user character limit. Enforced on create:
+// internal/account CreatePlayer compares the current count against this value
+// and answers player.limit when it would be exceeded.
 func (m *Mysql) UserPlayerLimit(ctx context.Context, uid int64) (int, error) {
 	var n int
 	err := m.db.QueryRowContext(ctx,

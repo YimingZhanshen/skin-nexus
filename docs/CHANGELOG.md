@@ -9,6 +9,33 @@ description: "SkinNexus 变更日志：按日期倒序的迭代历史，只记�
 > 相称——只记「改了什么 / 为什么 / 行为变化」，验证过程一句话。开发细节见对应 commit；
 > README 状态行只留一句话摘要。
 
+## 2026-11-19 · 文档状态对账（手册基线纠偏）
+
+站长提出「不许出现文档说没实现、其实已实现」。全仓 100 篇 md 里的状态类断言（未实现 / 尚未 /
+不支持 / 已知限制）逐条回代码取证，改 11 处。
+
+- **反向错误（说没做、其实做了）**：玩家上限早已在建角时强制（`internal/account/players.go`
+  超限回 `player.limit`），手册与 `store/web.go` 的注释都还写着「never enforced」；面板「联盟」页的
+  健康状态与 HTML/JSON 诊断导出、访问日志明细的首次展开拉取，管理面板篇与审计篇仍列为「尚未」。
+- **正向错误（写了、其实没有）**：监控篇把「邮件队列积压」列为关键指标（发信是同步 SMTP，没有队列），
+  又说指标要靠「自行增加 metrics exporter」——零依赖 `GET /metrics` 已内置、`SKIN_METRICS` 默认关
+  （关闭时回 404），`/healthz` 也早回 `version` 与 `uptime_seconds`；`deploy.md` 一处把面板的 CDN
+  开关写成 `SKIN_CDN_*` 环境变量（该前缀不存在）。
+- **会烧人的描述**：手册把 `SKIN_MOJANG_FALLBACK` 写成「Mojang 回源地址」并给了 URL 示例——它其实是
+  布尔，照手册填 URL 等于把正版兜底关掉；`SKIN_PLUGIN_SECRET_KEY` 写成「插件签名密钥」（实为插件私密
+  配置的 AES-256-GCM 主密钥，需一并备份）。两键按 `deploy.md` 真源改写，并补上手册缺的 `SKIN_METRICS`
+  与 IndexNow 两键。
+- **口径与自相矛盾**：手册基线声明由「快照 2026-11-15」改成实际钉住的 `797ae1a`（v0.6.0 / 11-12）并
+  声明基线后能力以本文件为准；事件总线「不支持取消」加限定（通用事件不可取消，任务步内可自查
+  `skin.jobs.cancelRequested`）；迁移编号「五位前缀」改四位；站点设置把 CSP 两键移出「面板键」表
+  （env-only、非法值启动即失败），并标明该表只覆盖 43 个面板键中最常调整的 15 项。
+- **已核实、不动**：`migrate` CLI 仍只有 `preflight`/`uuid`/`import`（"apply" 是 import 的文义，不是
+  缺失动作）；任务队列确无删除端点；插件 schema 渲染、JWKS 单 key、ugctext 无敏感词表、`hookApi`
+  固定 2、面板无 purge 卸载入口、用户管理无批量勾选——这些「未实现」仍然成立。
+
+验证：check-docs（19 文件 / 53 环境变量双向）+ check-a11y + gofmt/vet/build 全绿，VitePress 92 页
+构建无死链。
+
 ## 2026-11-16 · 品牌图 alt 补描述性文本
 
 必应站长工具报「img 缺 alt」。逐面实抓排查：可爬渲染面（首页/皮肤库/材质页/SPA 壳）没有缺 alt
