@@ -33,8 +33,16 @@ description: "SkinNexus 变更日志：按日期倒序的迭代历史，只记�
   缺失动作）；任务队列确无删除端点；插件 schema 渲染、JWKS 单 key、ugctext 无敏感词表、`hookApi`
   固定 2、面板无 purge 卸载入口、用户管理无批量勾选——这些「未实现」仍然成立。
 
+- **依赖（dependabot #17 / #18，minor+patch 政策内）**：`pgx 5.12.0→5.13.0`（修畸形服务端响应在 `Rows.Values`
+  的 panic 与连接失败后的不安全重试）、`zitadel/oidc 3.51.17→3.52.0`、`x/crypto 0.58.0→0.59.0`、
+  `modernc.org/sqlite 1.61.1→1.62.0`；前端 `vue-i18n 11.4.18→11.4.19`（`sanitizeTranslatedHtml` 安全修复）、
+  `vite 8.3.6→8.3.8`、`@vitejs/plugin-vue 6.0.10→6.0.11`。vue-i18n 那条改的是翻译串里 HTML 的净化规则，
+  本站 `v-html` 只用于品牌 SVG 与图标、不渲染词条，行为面不受影响。
+
 验证：check-docs（19 文件 / 53 环境变量双向）+ check-a11y + gofmt/vet/build 全绿，VitePress 92 页
-构建无死链。
+构建无死链；合并两 PR 后复跑 `go build`/`vet`/`go test -count=1`（全绿）+ SQLite 真库集成腿 +
+`npm ci`（0 vulnerabilities）与 `npm run build` 全绿，五道自写闸（locales/a11y/modal-chrome/
+theme-contract/docs）逐条绿。
 
 ## 2026-11-16 · 品牌图 alt 补描述性文本
 
