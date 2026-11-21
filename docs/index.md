@@ -33,6 +33,15 @@ features:
     details: 首页与材质详情页服务端渲染，sitemap 与 llms.txt 齐备；本站文档即部署在 Cloudflare Pages 的 VitePress 站点。
 ---
 
+## 35 秒看完它
+
+<video controls preload="metadata" poster="/promo/skinnexus-tour-poster.png">
+  <source src="/promo/skinnexus-tour.mp4" type="video/mp4">
+</video>
+
+五段各演一件事：登录一次直接进服、面板内置部署自检、违规处置的引用清点、拖拽上传换肤、迁移的只读预演。
+字幕已烧录，无音轨——界面里的文案与代码同源，性能数字只在文字里给，不做成画面。
+
 ## 文档导航
 
 - [部署运维](deploy.md) —— Docker 或裸二进制上线、环境变量全表、反代与备份

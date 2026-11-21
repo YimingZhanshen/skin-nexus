@@ -17,7 +17,10 @@
 ---
 
 <p align="center">
-  <img src="docs/assets/hero-launcher-join.png" width="1000" alt="SkinNexus 启动器场景：登录一次后进服确认出现，无需输入密码直接进服">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/hero-join-flow.png">
+    <img src="docs/assets/hero-join-flow.gif" width="1000" alt="动画：启动器界面显示账号已登录，点击进服后直接进入服务器，全程不输密码">
+  </picture>
 </p>
 
 <p align="center">
@@ -46,8 +49,9 @@
 | 一件皮肤出问题连累大家 | 举报处置跳过引用清点，收藏跟着遭殃 | 先清点引用、留证，再删 |
 | 玩家搜不到你的站 | 默认形态对搜索引擎不友好 | 搜索引擎、AI 助手都读得懂 |
 | 部署运维费劲 | PHP 环境一堆讲究 | 两条命令起站，升级不动数据 |
-| 封禁换个名字就复活 | 站内登录按账号拒绝 | 账号级封禁：站内与 Yggdrasil 进服都拒，改名也复活不了 |
+| 封禁换个名字就复活 | 裸站只在站内登录拒绝；进服面要靠 Yggdrasil 插件补 | 账号级封禁：站内与 Yggdrasil 进服都拒，改名也复活不了 |
 | 正版玩家进服皮肤变 Steve | — | Mojang 兜底默认开：本地未命中就查 Mojang 官方 sessionserver |
+| 站半坏不坏，没人告诉你 | 无内置面板自检 | 面板内置部署自检：八项逐条检查，每一项直接给人话修复步骤 |
 
 一台 2 核 / 3.5GB 的小服务器实测：皮肤图片每秒响应 5182 次、首页每秒 600 次访问，全程零错误。逐格对比证据见 [竞品分析](https://docs.skin.yimingzhanshen.cn/competitor-analysis)。
 
@@ -87,9 +91,18 @@ docker compose -f docker-compose.quickstart.yml up -d
 - **扩展**——中英双语、免构建换肤（主题包）、插件平台、搜索引擎与 AI 可见性。
 
 <p align="center">
-  <img src="docs/assets/feature-login-closeup.png" width="286" alt="外置登录近景：账号已登录，一次点击进服，不用重输密码">
-  <img src="docs/assets/feature-migration-report.png" width="286" alt="迁移报告：users、textures、uuid_map、衣柜逐行保留，UUID 零漂移">
-  <img src="docs/assets/feature-mojang-fallback.png" width="286" alt="管理面板注释：Mojang 官方兜底开关，引线指向由此生效的皮肤">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/card-diag-check.png">
+    <img src="docs/assets/card-diag-check.gif" width="286" alt="动画：管理面板重新执行部署自检，八项依次落为正常、需注意、有问题徽标，并从失败项发出测试邮件">
+  </picture>
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/card-refcount-block.png">
+    <img src="docs/assets/card-refcount-block.gif" width="286" alt="动画：彻底删除被拒绝，因为仍有角色、衣柜和头像指向该材质；改为下架并保留处置证据">
+  </picture>
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/card-upload-skin.png">
+    <img src="docs/assets/card-upload-skin.gif" width="286" alt="动画：把 PNG 拖进上传区，本地预览与上传进度出现，文件随即落到材质列表首行">
+  </picture>
 </p>
 
 完整功能清单见[文档站](https://docs.skin.yimingzhanshen.cn/)。技术上：Go 单二进制 + Vue 3，数据库 MySQL / MariaDB / PostgreSQL / SQLite 四选一。
