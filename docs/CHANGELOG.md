@@ -9,6 +9,27 @@ description: "SkinNexus 变更日志：按日期倒序的迭代历史，只记�
 > 相称——只记「改了什么 / 为什么 / 行为变化」，验证过程一句话。开发细节见对应 commit；
 > README 状态行只留一句话摘要。
 
+## 2026-11-21 · README 视觉素材与 og:image
+
+README 此前只有文字与徽章、缺视觉主图，文档站 og:image 一直留空（config 注释「品牌视觉素材留站长定」），
+本轮用 stageshow 产出的实拍素材补齐两者。
+
+- README 双语接入主图（登录直进服场景，1000×480）与三张特性卡（外置登录近景 / 迁移报告 / Mojang 兜底，
+  各 400×300），落 `docs/assets/`，八条 alt 中英各一套、全部描述性非空。
+- 对照表补两行（中英行集一致、保持三列）：账号级封禁（站内与 Yggdrasil 进服都拒，改名不复活）；
+  Mojang 兜底默认开。bs 格按源码取证填写——`RejectBannedUser` 按 `users.permission` 拒绝站内登录，
+  故写「站内登录按账号拒绝」而非「—」；皮肤兜底经查 bs 核心与 blessing-skin-plugins 均无
+  sessionserver 查询，才写「—」。
+- `README.zh.md` 首句补中文长尾词（我的世界皮肤站 / 外置登录 / Yggdrasil / 免 /login / blessing 迁移）。
+- 文档站 og:image 上线：`docs/public/og-image.png`（1200×630），config 全站注入
+  og:image / width / height + twitter:image，twitter:card 升 `summary_large_image`；
+  同图就位 `web/public/og-image.png`（主站面板 `seo_og_image` 指向即生效）。
+
+验证：check-docs（19 文件 / 53 环境变量双向）+ check-a11y + theme-contract + modal-chrome +
+diag-model 12/12 + check-locales（126 码×2）全绿；VitePress 构建无死链，dist 含 og-image.png
+与 summary_large_image；gh api markdown 渲染 README：12 张 img 全带 alt、5 个本地资源引用齐全；
+五张素材经 stageshow film 静拍全部 no-issues-detected。
+
 ## 2026-11-19 · 文档状态对账（手册基线纠偏）
 
 站长提出「不许出现文档说没实现、其实已实现」。全仓 100 篇 md 里的状态类断言（未实现 / 尚未 /
