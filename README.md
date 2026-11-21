@@ -17,6 +17,10 @@
 ---
 
 <p align="center">
+  <img src="docs/assets/hero-launcher-join.png" width="1000" alt="Signed in once at the launcher, join confirmed, straight into the server, no password typed">
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/-login_once--join_like_premium-2ea44f?style=for-the-badge" alt="Login once, join like premium">
   <img src="https://img.shields.io/badge/-skins_and_capes--freer_than_premium-1d76db?style=for-the-badge" alt="Skins and capes freer than premium">
   <img src="https://img.shields.io/badge/-move_from_blessing--lose_nothing-6f42c1?style=for-the-badge" alt="Move from blessing: lose nothing">
@@ -42,6 +46,8 @@
 | One bad skin hurts everyone | Report takedowns skip ref-counts, closets break too | Reference count first, evidence kept, then delete |
 | Players can't find your site | Default pages unreadable to search engines | Readable by search engines and AI assistants |
 | Deploy and maintenance are heavy | A pile of PHP plumbing | Two commands to run, upgrades never touch data |
+| Bans that die when the player renames | Site login refused per account | Account-level ban: refused on site and at Yggdrasil join; renaming does not revive it |
+| Premium players whose skin turns to Steve | — | Mojang fallback on by default: a local miss queries Mojang's official sessionserver |
 
 Measured on a small 2-core / 3.5 GB server: skin images answered 5,182 requests per second, the landing page 600 per second, zero errors. Per-cell comparison evidence: [competitor analysis](https://docs.skin.yimingzhanshen.cn/competitor-analysis).
 
@@ -79,6 +85,12 @@ More options (external databases, bare-metal, migrating your existing site) live
 - **Owners** — manage players and content, bans and brute-force protection, invite codes, announcements, one-click theming, password reset / email verification, activity trail. Login credentials are stored as fingerprints only — stealing the database does not hand over usable logins.
 - **Game servers** — works out of the box with mainstream launchers, passwordless login built in, MUA Union interop, premium-account fallback, batch skin import.
 - **Extensions** — Chinese/English, build-free theming (theme packs), plugin platform, search-engine and AI visibility.
+
+<p align="center">
+  <img src="docs/assets/feature-login-closeup.png" width="286" alt="Close-up of the external-login prompt: the account is signed in, one click joins the server, no password to retype">
+  <img src="docs/assets/feature-migration-report.png" width="286" alt="Migration report: users, textures, uuid_map and closet rows preserved, UUID zero drift">
+  <img src="docs/assets/feature-mojang-fallback.png" width="286" alt="Admin settings annotation: the Mojang fallback toggle, with a leader line to the skin it brought into effect">
+</p>
 
 Full feature list: [docs site](https://docs.skin.yimingzhanshen.cn/). Under the hood: one Go binary + Vue 3, with a choice of MySQL / MariaDB / PostgreSQL / SQLite.
 

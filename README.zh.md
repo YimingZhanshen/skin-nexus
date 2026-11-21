@@ -6,7 +6,7 @@
 
 <img src="docs/assets/logo.svg" width="140" alt="SkinNexus 像素枢纽 N 标识">
 
-> 自托管的 Minecraft 外置登录与玩家管理站：启动器登录直接进服，身份、皮肤、管理都在你自己手里。
+> 自托管的 Minecraft 我的世界皮肤站与外置登录（Yggdrasil）服务：启动器登录一次直接进服，免游戏内 /login 密码，皮肤披风随登录生效；身份、皮肤、管理都在你自己手里，从 blessing-skin-server 迁移不丢数据。
 
 [![CI](https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/YimingZhanshen/skin-nexus/actions/workflows/ci.yml) [![release](https://img.shields.io/badge/release-v0.6.0-blue)](https://github.com/YimingZhanshen/skin-nexus/releases/tag/v0.6.0) [![license](https://img.shields.io/badge/license-AGPL--3.0-green)](LICENSE)
 
@@ -15,6 +15,10 @@
 </div>
 
 ---
+
+<p align="center">
+  <img src="docs/assets/hero-launcher-join.png" width="1000" alt="SkinNexus 启动器场景：登录一次后进服确认出现，无需输入密码直接进服">
+</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/-登录一次·像正版直进服-2ea44f?style=for-the-badge" alt="登录一次：像正版一样直接进服">
@@ -42,6 +46,8 @@
 | 一件皮肤出问题连累大家 | 举报处置跳过引用清点，收藏跟着遭殃 | 先清点引用、留证，再删 |
 | 玩家搜不到你的站 | 默认形态对搜索引擎不友好 | 搜索引擎、AI 助手都读得懂 |
 | 部署运维费劲 | PHP 环境一堆讲究 | 两条命令起站，升级不动数据 |
+| 封禁换个名字就复活 | 站内登录按账号拒绝 | 账号级封禁：站内与 Yggdrasil 进服都拒，改名也复活不了 |
+| 正版玩家进服皮肤变 Steve | — | Mojang 兜底默认开：本地未命中就查 Mojang 官方 sessionserver |
 
 一台 2 核 / 3.5GB 的小服务器实测：皮肤图片每秒响应 5182 次、首页每秒 600 次访问，全程零错误。逐格对比证据见 [竞品分析](https://docs.skin.yimingzhanshen.cn/competitor-analysis)。
 
@@ -79,6 +85,12 @@ docker compose -f docker-compose.quickstart.yml up -d
 - **站长**——玩家与内容管理、封禁与防撞库、邀请码、公告、一键换主题、找回密码 / 邮箱验证、操作记录；登录凭证只存「指纹」，拖走数据库也拿不到能用的登录态。
 - **接游戏**——主流启动器开箱即用、免密登录内置、MUA 联盟互通、正版账号兜底、皮肤批量导入。
 - **扩展**——中英双语、免构建换肤（主题包）、插件平台、搜索引擎与 AI 可见性。
+
+<p align="center">
+  <img src="docs/assets/feature-login-closeup.png" width="286" alt="外置登录近景：账号已登录，一次点击进服，不用重输密码">
+  <img src="docs/assets/feature-migration-report.png" width="286" alt="迁移报告：users、textures、uuid_map、衣柜逐行保留，UUID 零漂移">
+  <img src="docs/assets/feature-mojang-fallback.png" width="286" alt="管理面板注释：Mojang 官方兜底开关，引线指向由此生效的皮肤">
+</p>
 
 完整功能清单见[文档站](https://docs.skin.yimingzhanshen.cn/)。技术上：Go 单二进制 + Vue 3，数据库 MySQL / MariaDB / PostgreSQL / SQLite 四选一。
 
