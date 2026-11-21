@@ -20,10 +20,15 @@ export default withMermaid(
     lastUpdated: true,
     head: [
       ['link', { rel: 'sitemap', type: 'application/xml', href: '/sitemap.xml' }],
+      ['meta', { property: 'og:image', content: HOST + '/og-image.png' }],
+      ['meta', { property: 'og:image:width', content: '1200' }],
+      ['meta', { property: 'og:image:height', content: '630' }],
+      ['meta', { name: 'twitter:image', content: HOST + '/og-image.png' }],
     ],
     // GEO/AEO：每页补 OG/Twitter meta；首页挂 SoftwareApplication+Organization
     // JSON-LD；手册 FAQ 页挂 FAQPage JSON-LD（问题/答案与页面可见问答逐条对齐，
-    // 搜索引擎要求标记内容与可见内容一致）。无 og:image——品牌视觉素材留站长定。
+    // 搜索引擎要求标记内容与可见内容一致）。og:image 全站一张 = /og-image.png
+    //（1200×630，public/ 根路径），Twitter 卡升 summary_large_image。
     transformHead({ pageData, title, description }) {
       const rel = pageData.relativePath.replace(/\.md$/, '').replace(/(^|\/)index$/, '$1')
       const url = HOST + '/' + rel
@@ -37,7 +42,7 @@ export default withMermaid(
         ['meta', { property: 'og:site_name', content: 'SkinNexus 文档' }],
         ['meta', { property: 'og:type', content: 'website' }],
         ['meta', { property: 'og:locale', content: 'zh_CN' }],
-        ['meta', { name: 'twitter:card', content: 'summary' }],
+        ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
       ]
       if (pageData.relativePath === 'index.md') {
         head.push([
