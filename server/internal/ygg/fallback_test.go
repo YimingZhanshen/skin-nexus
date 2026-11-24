@@ -2,6 +2,7 @@ package ygg
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -232,6 +233,34 @@ func TestIsPublicIP(t *testing.T) {
 }
 
 // ---- handler-level wiring ----
+
+func TestHasJoinedFallbackFailsClosedForLocalAccountDenial(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		permission int
+		lookupErr  error
+	}{
+		{name: "banned", permission: -1},
+		{name: "permission lookup failure", lookupErr: errors.New("permission lookup failed")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			api, st := newTestAPI(t)
+			st.permissions[1] = tc.permission
+			st.permissionErr = tc.lookupErr
+			stub := newStubMojang(t, okJSON)
+			api.SetFallback(stub.fallback())
+
+			rec := do(t, api.Handler(), http.MethodGet,
+				"/api/yggdrasil/sessionserver/session/minecraft/hasJoined?username=Steve&serverId=abc", "", nil)
+			if rec.Code != http.StatusNoContent {
+				t.Fatalf("denied local account hasJoined = %d %s, want 204", rec.Code, rec.Body.String())
+			}
+			if hits := stub.hits.Load(); hits != 0 {
+				t.Fatalf("denied local account consulted official fallback %d times", hits)
+			}
+		})
+	}
+}
 
 func TestProfileFallbackViaHandler(t *testing.T) {
 	api, _ := newTestAPI(t)

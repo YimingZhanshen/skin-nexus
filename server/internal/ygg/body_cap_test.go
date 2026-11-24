@@ -47,6 +47,66 @@ func TestYggJSONHandlersRejectOversizedBodies(t *testing.T) {
 	}
 }
 
+func TestYggBodyCapChecksCompleteBody(t *testing.T) {
+	api, _ := newTestAPI(t)
+	const path = "/api/yggdrasil/authserver/validate"
+	cases := []struct {
+		name          string
+		body          string
+		contentLength int64
+		want          int
+	}{
+		{
+			name:          "declared length at cap with trailing whitespace",
+			body:          `{}` + strings.Repeat(" ", (64<<10)-2),
+			contentLength: 64 << 10,
+			want:          http.StatusForbidden,
+		},
+		{
+			name:          "unknown length at cap with trailing whitespace",
+			body:          `{}` + strings.Repeat(" ", (64<<10)-2),
+			contentLength: -1,
+			want:          http.StatusForbidden,
+		},
+		{
+			name:          "declared length over cap rejects before decode",
+			body:          `{}`,
+			contentLength: (64 << 10) + 1,
+			want:          http.StatusRequestEntityTooLarge,
+		},
+		{
+			name:          "known length trailing whitespace over cap",
+			body:          `{}` + strings.Repeat(" ", 64<<10),
+			contentLength: (64 << 10) + 2,
+			want:          http.StatusRequestEntityTooLarge,
+		},
+		{
+			name:          "unknown length trailing whitespace over cap",
+			body:          `{}` + strings.Repeat(" ", 64<<10),
+			contentLength: -1,
+			want:          http.StatusRequestEntityTooLarge,
+		},
+		{
+			name:          "unknown length extra content over cap",
+			body:          `{}` + strings.Repeat("x", 64<<10),
+			contentLength: -1,
+			want:          http.StatusRequestEntityTooLarge,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(tc.body))
+			req.ContentLength = tc.contentLength
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			api.Handler().ServeHTTP(rec, req)
+			if rec.Code != tc.want {
+				t.Fatalf("body length %d (Content-Length %d) = %d %s, want %d", len(tc.body), tc.contentLength, rec.Code, rec.Body.String(), tc.want)
+			}
+		})
+	}
+}
+
 type countingBodyReader struct {
 	r io.Reader
 	n int

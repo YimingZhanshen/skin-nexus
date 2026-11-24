@@ -361,23 +361,19 @@ func (b *Backend) handleUserSetPermission(w http.ResponseWriter, r *http.Request
 	// The notice fires on the transition, not on every write: re-saving the
 	// same permission must not add another row to the inbox.
 	prevPerm, prevErr := b.Store.UserPermission(r.Context(), id)
-	if err := b.Store.SetUserPermission(r.Context(), id, perm); err != nil {
-		writeStoreErr(w, err, i18n.MsgEmailTaken, "that email is already used by another account")
-		return
-	}
-	// A ban is only complete once opaque tokens, both OIDC token families and
-	// every player's join session are revoked. Run this for every ban write so a
-	// retry can finish a previous partial attempt; never answer success when the
-	// transactional revoke failed. permission=-1 already fails authenticate/join
-	// closed through the store projection while this operation is in progress.
 	if perm == -1 {
-		if err := b.Store.RevokeUserAccess(r.Context(), id); err != nil {
+		// The permission write and all credential-family revocations commit or
+		// roll back together. Never report a partial ban as successful.
+		if err := b.Store.BanUser(r.Context(), id); err != nil {
 			detail := map[string]any{"target": id, "permission": perm, "error": err.Error()}
 			b.Store.InsertAudit(r.Context(), actorUID(r), "admin_user_permission_update_access_revoke_failed", detail)
 			slog.Warn("admin ban: access revoke failed", "uid", id, "error", err)
 			writeStoreErr(w, err, i18n.MsgEmailTaken, "that email is already used by another account")
 			return
 		}
+	} else if err := b.Store.SetUserPermission(r.Context(), id, perm); err != nil {
+		writeStoreErr(w, err, i18n.MsgEmailTaken, "that email is already used by another account")
+		return
 	}
 	if prevErr == nil {
 		if perm == -1 && prevPerm != -1 {
@@ -393,7 +389,7 @@ func (b *Backend) handleUserSetPermission(w http.ResponseWriter, r *http.Request
 		}
 	}
 	// A demoted admin's session must die now. Bans already revoked opaque
-	// tokens in RevokeUserAccess; do not repeat that update for the same write.
+	// tokens in BanUser; do not repeat that update for the same write.
 	if perm < 1 && perm != -1 {
 		b.revokeUserTokens(r.Context(), actorUID(r), id, "admin_user_permission_update_token_revoke_failed", map[string]any{"permission": perm})
 	}

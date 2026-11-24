@@ -1,11 +1,13 @@
 package ygg
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -149,11 +151,21 @@ func checkJSON(r *http.Request, w http.ResponseWriter) bool {
 	return true
 }
 
-// limitYggJSONBody must be called immediately before every JSON Decode. The
-// overflow response stays on the legacy error envelope; under-cap malformed
-// bodies keep each handler's existing status and message.
-func limitYggJSONBody(w http.ResponseWriter, r *http.Request) {
+// decodeYggJSONBody reads the complete body through a hard cap before decoding
+// one value. Reading only until the first JSON value ends would let trailing
+// whitespace or extra content bypass the limit. The overflow response stays on
+// the legacy error envelope; under-cap malformed bodies keep each handler's
+// existing status and message.
+func decodeYggJSONBody(w http.ResponseWriter, r *http.Request, v any) error {
+	if r.ContentLength > maxYggJSONBodyBytes {
+		return &http.MaxBytesError{Limit: maxYggJSONBodyBytes}
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxYggJSONBodyBytes)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+	return json.NewDecoder(bytes.NewReader(body)).Decode(v)
 }
 
 func yggBodyTooLarge(err error) bool {
@@ -324,8 +336,7 @@ func (a *API) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
 		ClientToken string `json:"clientToken"`
 		RequestUser bool   `json:"requestUser"`
 	}
-	limitYggJSONBody(w, r)
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeYggJSONBody(w, r, &req); err != nil {
 		if yggBodyTooLarge(err) {
 			writeYggBodyTooLarge(w)
 			return
@@ -397,8 +408,7 @@ func (a *API) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		RequestUser     bool            `json:"requestUser"`
 		SelectedProfile json.RawMessage `json:"selectedProfile"`
 	}
-	limitYggJSONBody(w, r)
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeYggJSONBody(w, r, &req); err != nil {
 		if yggBodyTooLarge(err) {
 			writeYggBodyTooLarge(w)
 			return
@@ -450,8 +460,7 @@ func (a *API) handleValidate(w http.ResponseWriter, r *http.Request) {
 		AccessToken string `json:"accessToken"`
 		ClientToken string `json:"clientToken"`
 	}
-	limitYggJSONBody(w, r)
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeYggJSONBody(w, r, &req); err != nil {
 		if yggBodyTooLarge(err) {
 			writeYggBodyTooLarge(w)
 			return
@@ -478,8 +487,7 @@ func (a *API) handleInvalidate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		AccessToken string `json:"accessToken"`
 	}
-	limitYggJSONBody(w, r)
-	if err := json.NewDecoder(r.Body).Decode(&req); yggBodyTooLarge(err) {
+	if err := decodeYggJSONBody(w, r, &req); yggBodyTooLarge(err) {
 		writeYggBodyTooLarge(w)
 		return
 	}
@@ -495,8 +503,7 @@ func (a *API) handleSignout(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	limitYggJSONBody(w, r)
-	if err := json.NewDecoder(r.Body).Decode(&req); yggBodyTooLarge(err) {
+	if err := decodeYggJSONBody(w, r, &req); yggBodyTooLarge(err) {
 		writeYggBodyTooLarge(w)
 		return
 	}
@@ -521,8 +528,7 @@ func (a *API) handleJoin(w http.ResponseWriter, r *http.Request) {
 		SelectedProfile json.RawMessage `json:"selectedProfile"`
 		ServerID        string          `json:"serverId"`
 	}
-	limitYggJSONBody(w, r)
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeYggJSONBody(w, r, &req); err != nil {
 		if yggBodyTooLarge(err) {
 			writeYggBodyTooLarge(w)
 			return
@@ -592,20 +598,24 @@ func (a *API) handleHasJoined(w http.ResponseWriter, r *http.Request) {
 	name, sid := q.Get("username"), q.Get("serverId")
 	p, err := a.svc.HasJoined(r.Context(), name, sid, q.Get("ip"))
 	if err != nil {
-		// A2 fallback: no local join record → ask the official sessionserver
-		// before answering 204 (Mojang confirms joins it recorded itself —
-		// official-account players on authlib-injector servers).
-		if body, ok := a.fallback.hasJoined(r.Context(), name, sid, q.Get("ip")); ok {
-			a.accessLog(r, accesslog.Entry{Kind: accesslog.YggHasJoined,
-				Outcome: accesslog.OutcomeOK, Who: name,
-				Detail: "src=official serverId=" + sid})
-			writeFallbackProfile(w, body)
-			return
+		// A local policy denial is not a session miss: never ask the official
+		// server to override it. Only genuine local misses may use fallback.
+		if !errors.Is(err, ErrAccessDenied) {
+			// A2 fallback: no local join record → ask the official sessionserver
+			// before answering 204 (Mojang confirms joins it recorded itself —
+			// official-account players on authlib-injector servers).
+			if body, ok := a.fallback.hasJoined(r.Context(), name, sid, q.Get("ip")); ok {
+				a.accessLog(r, accesslog.Entry{Kind: accesslog.YggHasJoined,
+					Outcome: accesslog.OutcomeOK, Who: name,
+					Detail: "src=official serverId=" + sid})
+				writeFallbackProfile(w, body)
+				return
+			}
 		}
 		a.accessLog(r, accesslog.Entry{Kind: accesslog.YggHasJoined,
 			Outcome: accesslog.OutcomeMiss, Who: name,
 			Detail: "src=none serverId=" + sid})
-		noContent(w) // unknown / expired / mismatch: 204, never 4xx
+		noContent(w) // unknown / expired / mismatch / denied: 204, never 4xx
 		return
 	}
 	a.accessLog(r, accesslog.Entry{Kind: accesslog.YggHasJoined,
@@ -658,8 +668,7 @@ func (a *API) handleLookupBulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var names []string
-	limitYggJSONBody(w, r)
-	if err := json.NewDecoder(r.Body).Decode(&names); err != nil {
+	if err := decodeYggJSONBody(w, r, &names); err != nil {
 		if yggBodyTooLarge(err) {
 			writeYggBodyTooLarge(w)
 			return

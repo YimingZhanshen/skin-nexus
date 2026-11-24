@@ -16,19 +16,21 @@ import (
 // ---- in-memory store for contract tests ----
 
 type memStore struct {
-	users   map[string]User // by identifier
-	byID    map[int64]User
-	players map[string]Player // by name
-	byUUID  map[string]Player
-	tokens  map[string]Token
-	joins   []JoinSession
+	users         map[string]User // by identifier
+	byID          map[int64]User
+	players       map[string]Player // by name
+	byUUID        map[string]Player
+	tokens        map[string]Token
+	joins         []JoinSession
+	permissions   map[int64]int
+	permissionErr error
 }
 
 func newMemStore() *memStore {
 	return &memStore{
 		users: map[string]User{}, byID: map[int64]User{},
 		players: map[string]Player{}, byUUID: map[string]Player{},
-		tokens: map[string]Token{},
+		tokens: map[string]Token{}, permissions: map[int64]int{},
 	}
 }
 
@@ -46,6 +48,13 @@ func (m *memStore) UserByIdentifier(_ context.Context, ident string) (User, erro
 		return User{}, errors.New("no user")
 	}
 	return u, nil
+}
+
+func (m *memStore) UserPermission(_ context.Context, userID int64) (int, error) {
+	if m.permissionErr != nil {
+		return 0, m.permissionErr
+	}
+	return m.permissions[userID], nil
 }
 
 func (m *memStore) VerifyPassword(_ context.Context, userID int64, password string) (bool, error) {

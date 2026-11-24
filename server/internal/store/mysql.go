@@ -276,6 +276,25 @@ func invalidateUserTokens(ctx context.Context, db sqlExecer, uid int64) error {
 	return err
 }
 
+// BanUser commits the permission change and every credential revocation in one
+// transaction. A failed revoke therefore leaves both the permission and all
+// credentials exactly as they were before the request.
+func (m *Mysql) BanUser(ctx context.Context, uid int64) error {
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET permission = -1 WHERE id = ?`, uid); err != nil {
+		return err
+	}
+	if err := revokeUserAccess(ctx, tx, uid, m.now().UTC()); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // RevokeUserAccess invalidates every credential family that can authorize a
 // banned account and removes all of its short-lived join sessions. The updates
 // share one transaction: a failed join-session delete must not leave a caller
@@ -287,26 +306,31 @@ func (m *Mysql) RevokeUserAccess(ctx context.Context, uid int64) error {
 	}
 	defer tx.Rollback()
 
-	if err := invalidateUserTokens(ctx, tx, uid); err != nil {
+	if err := revokeUserAccess(ctx, tx, uid, m.now().UTC()); err != nil {
 		return err
 	}
-	if err := revokeUserAccessTokens(ctx, tx, uid, m.now().UTC()); err != nil {
+	return tx.Commit()
+}
+
+func revokeUserAccess(ctx context.Context, db sqlExecer, uid int64, now time.Time) error {
+	if err := invalidateUserTokens(ctx, db, uid); err != nil {
 		return err
 	}
-	if err := revokeUserRefreshTokens(ctx, tx, uid); err != nil {
+	if err := revokeUserAccessTokens(ctx, db, uid, now); err != nil {
+		return err
+	}
+	if err := revokeUserRefreshTokens(ctx, db, uid); err != nil {
 		return err
 	}
 	// players has no uuid column; uuid_map is the persisted player identity.
 	// The join therefore covers every character owned by uid without relying on
 	// a MySQL-only DELETE ... JOIN shape.
-	if _, err := tx.ExecContext(ctx,
+	_, err := db.ExecContext(ctx,
 		`DELETE FROM ygg_join_sessions WHERE uuid IN (
 			SELECT u.uuid FROM uuid_map u
 			JOIN players p ON p.id = u.player_id
-			WHERE p.uid = ?)`, uid); err != nil {
-		return err
-	}
-	return tx.Commit()
+			WHERE p.uid = ?)`, uid)
+	return err
 }
 
 // PruneUserTokens implements ygg.TokenPruner (ygg_tokens_limit, 2026-10-24
