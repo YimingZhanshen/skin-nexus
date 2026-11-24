@@ -25,6 +25,9 @@ type Config struct {
 	// when a deletion is requested so later configuration changes cannot shorten
 	// an already-promised grace period.
 	DeletionGracePeriod time.Duration
+	// ExportLimits defaults to the documented hard caps. Fields may only lower
+	// them; zero, negative, or raised values resolve to the hard cap.
+	ExportLimits store.SAExportLimits
 	// Verifier is the narrow Yggdrasil extension used only by S3 routes.
 	Verifier *ygg.API
 	// OnEventError is an additional metric/alert hook. Event persistence is

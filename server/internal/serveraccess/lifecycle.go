@@ -1,6 +1,7 @@
 package serveraccess
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -86,12 +87,22 @@ type saExportDocument struct {
 
 func (c *control) tenantExport(w http.ResponseWriter, r *http.Request) {
 	who := saCaller(r)
-	tenant, err := c.cfg.Store.SATenantByID(r.Context(), who.TenantID)
+	limits := store.ResolveSAExportLimits(c.cfg.ExportLimits)
+	data, err := c.cfg.Store.SAExportData(r.Context(), who.TenantID, limits)
 	if err != nil {
-		writeSAStoreError(w, err)
+		if errors.Is(err, store.ErrSAExportTooLarge) {
+			var limitErr *store.SAExportLimitError
+			if errors.As(err, &limitErr) {
+				writeSAError(w, http.StatusRequestEntityTooLarge, i18n.MsgServerAccessExportTooLarge, limitErr.Error())
+			} else {
+				writeSAError(w, http.StatusRequestEntityTooLarge, i18n.MsgServerAccessExportTooLarge, "Tenant export exceeds its explicit size limit")
+			}
+		} else {
+			writeSAStoreError(w, err)
+		}
 		return
 	}
-	servers, err := c.cfg.Store.ListSAServersForExport(r.Context(), who.TenantID)
+	tenant, err := c.cfg.Store.SATenantByID(r.Context(), who.TenantID)
 	if err != nil {
 		writeSAStoreError(w, err)
 		return
@@ -103,32 +114,12 @@ func (c *control) tenantExport(w http.ResponseWriter, r *http.Request) {
 			ID: tenant.ID, Name: tenant.Name, Status: tenant.Status, ServerLimit: tenant.ServerLimit,
 			CreatedAt: tenant.CreatedAt, DeletionRequestedAt: tenant.DeletionRequestedAt, DeletionDueAt: tenant.DeletionDueAt,
 		},
-		Servers: make([]saExportServer, 0, len(servers)),
+		Servers: make([]saExportServer, 0, len(data.Servers)),
 	}
-	for _, server := range servers {
-		policy, err := c.cfg.Store.SAServerPolicy(r.Context(), who.TenantID, server.ID)
-		if err != nil {
-			writeSAStoreError(w, err)
-			return
-		}
-		whitelist, err := c.cfg.Store.ListSAServerWhitelistForExport(r.Context(), who.TenantID, server.ID)
-		if err != nil {
-			writeSAStoreError(w, err)
-			return
-		}
-		bans, err := c.cfg.Store.ListSAServerBansForExport(r.Context(), who.TenantID, server.ID)
-		if err != nil {
-			writeSAStoreError(w, err)
-			return
-		}
-		events, err := c.cfg.Store.ListSAOwnerJoinEventsForExport(r.Context(), who.TenantID, server.ID)
-		if err != nil {
-			writeSAStoreError(w, err)
-			return
-		}
-		credentials, err := c.cfg.Store.ListSAServerCredentials(r.Context(), who.TenantID, server.ID)
-		if err != nil {
-			writeSAStoreError(w, err)
+	for _, server := range data.Servers {
+		policy, ok := data.Policies[server.ID]
+		if !ok {
+			writeSAStoreError(w, store.ErrNotFound)
 			return
 		}
 		item := saExportServer{
@@ -139,24 +130,24 @@ func (c *control) tenantExport(w http.ResponseWriter, r *http.Request) {
 				VerifyRateLimit: policy.VerifyRateLimit, VerifyBurst: policy.VerifyBurst, MaxConcurrent: policy.MaxConcurrent,
 				WhitelistLimit: policy.WhitelistLimit, EventRetentionDays: policy.EventRetentionDays,
 			},
-			Whitelist:   make([]saExportWhitelist, 0, len(whitelist)),
-			Bans:        make([]saExportBan, 0, len(bans)),
-			Events:      make([]saExportEvent, 0, len(events)),
-			Credentials: make([]saExportCredential, 0, len(credentials)),
+			Whitelist:   make([]saExportWhitelist, 0, len(data.Whitelist[server.ID])),
+			Bans:        make([]saExportBan, 0, len(data.Bans[server.ID])),
+			Events:      make([]saExportEvent, 0, len(data.Events[server.ID])),
+			Credentials: make([]saExportCredential, 0, len(data.Credentials[server.ID])),
 		}
-		for _, row := range whitelist {
+		for _, row := range data.Whitelist[server.ID] {
 			item.Whitelist = append(item.Whitelist, saExportWhitelist{UID: row.UID, Note: row.Note, CreatedAt: row.CreatedAt})
 		}
-		for _, row := range bans {
+		for _, row := range data.Bans[server.ID] {
 			item.Bans = append(item.Bans, saExportBan{UID: row.UID, Reason: row.Reason, ExpiresAt: saTimePointer(row.ExpiresAt), CreatedAt: row.CreatedAt})
 		}
-		for _, row := range events {
+		for _, row := range data.Events[server.ID] {
 			item.Events = append(item.Events, saExportEvent{
 				ID: row.ID, CreatedAt: row.CreatedAt, Outcome: row.Outcome,
 				ReasonCode: row.ReasonCode, DurationMS: row.DurationMS, SourceMode: row.SourceMode,
 			})
 		}
-		for _, row := range credentials {
+		for _, row := range data.Credentials[server.ID] {
 			item.Credentials = append(item.Credentials, saExportCredential{
 				ID: row.ID, Mode: row.Mode, Status: row.Status, CreatedAt: row.CreatedAt,
 				LastUsedAt: saTimePointer(row.LastUsedAt), ExpiresAt: saTimePointer(row.ExpiresAt),
@@ -164,12 +155,38 @@ func (c *control) tenantExport(w http.ResponseWriter, r *http.Request) {
 		}
 		document.Servers = append(document.Servers, item)
 	}
+	writer := &saExportByteWriter{remaining: limits.MaxBytes, limit: limits.MaxBytes}
+	if err := json.NewEncoder(writer).Encode(document); err != nil {
+		if errors.Is(err, store.ErrSAExportTooLarge) {
+			writeSAError(w, http.StatusRequestEntityTooLarge, i18n.MsgServerAccessExportTooLarge,
+				fmt.Sprintf("bytes exceeds export limit of %d", limits.MaxBytes))
+		} else {
+			writeSAStoreError(w, err)
+		}
+		return
+	}
+	// The encoder above writes into a bounded buffer, not the HTTP response.
+	// Copy only after the complete document is known to fit.
 	c.cfg.Store.InsertAudit(r.Context(), who.UID, "serveraccess_tenant_export", map[string]any{"tenantId": who.TenantID})
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="serveraccess-tenant-%d.json"`, who.TenantID))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(document)
+	_, _ = w.Write(writer.Bytes())
+}
+
+type saExportByteWriter struct {
+	bytes.Buffer
+	remaining int
+	limit     int
+}
+
+func (w *saExportByteWriter) Write(p []byte) (int, error) {
+	if len(p) > w.remaining {
+		return 0, &store.SAExportLimitError{Collection: "bytes", Limit: int64(w.limit)}
+	}
+	w.remaining -= len(p)
+	return w.Buffer.Write(p)
 }
 
 func (c *control) tenantDeleteRequest(w http.ResponseWriter, r *http.Request) {

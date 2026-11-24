@@ -205,6 +205,189 @@ func TestServerAccessAPITenantExportUsesStrictFieldAllowlist(t *testing.T) {
 	}
 }
 
+func TestServerAccessAPITenantExportRowLimitsReturnExplicit413(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		limits store.SAExportLimits
+		seed   func(*testing.T, *saFixture)
+	}{
+		{"servers", store.SAExportLimits{MaxServers: 1}, func(t *testing.T, f *saFixture) {
+			if _, err := f.st.CreateSAServer(context.Background(), f.tenant, "srv_export_over", "over"); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"whitelist", store.SAExportLimits{MaxWhitelist: 1}, func(t *testing.T, f *saFixture) {
+			for i := int64(0); i < 2; i++ {
+				if err := f.st.AddSAServerWhitelist(context.Background(), f.tenant, f.server, 1000+i, "note", f.owner); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}},
+		{"bans", store.SAExportLimits{MaxBans: 1}, func(t *testing.T, f *saFixture) {
+			for i := int64(0); i < 2; i++ {
+				if err := f.st.AddSAServerBan(context.Background(), f.tenant, f.server, 1000+i, "reason", sql.NullTime{}, f.owner); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}},
+		{"events", store.SAExportLimits{MaxEvents: 1}, func(t *testing.T, f *saFixture) {
+			for i := 0; i < 2; i++ {
+				if err := f.st.InsertSAJoinEvent(context.Background(), store.SAJoinEvent{
+					TenantID: f.tenant, ServerID: f.server, Outcome: "allow", ReasonCode: "local_session", SourceMode: "header",
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}},
+		{"credentials", store.SAExportLimits{MaxCredentials: 1}, func(t *testing.T, f *saFixture) {
+			for i := 0; i < 2; i++ {
+				if _, err := f.st.CreateSAServerCredential(context.Background(), f.tenant, f.server, store.SACredential{
+					Mode: "header", SecretHash: strings.Repeat(string(rune('a'+i)), 64), Scopes: `["verify:join"]`, Status: "active",
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newSAFixture(t)
+			tc.seed(t, f)
+			stack := NewStack(Config{Enabled: true, Store: f.st, Now: f.stack.cfg.Now, ExportLimits: tc.limits})
+			f.h = stack.Gate(stack.Handler())
+			rec := f.request(t, f.owner, http.MethodGet, "/api/serveraccess/v1/tenants/me/export", "", "")
+			if rec.Code != http.StatusRequestEntityTooLarge {
+				t.Fatalf("export over %s limit = %d %s, want 413", tc.name, rec.Code, rec.Body.String())
+			}
+			var body struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if body.Code != "serveraccess.export_too_large" || !strings.Contains(body.Message, tc.name) || !strings.Contains(body.Message, "limit") {
+				t.Fatalf("413 body = %s, want explicit collection and limit", rec.Body.String())
+			}
+			if got := rec.Header().Get("Content-Disposition"); got != "" {
+				t.Fatalf("413 Content-Disposition = %q, want no attachment", got)
+			}
+			var audits int
+			if err := f.st.DB().QueryRowContext(context.Background(), `SELECT COUNT(*) FROM audit_log WHERE action='serveraccess_tenant_export'`).Scan(&audits); err != nil {
+				t.Fatal(err)
+			}
+			if audits != 0 {
+				t.Fatalf("rejected export audits = %d, want 0", audits)
+			}
+		})
+	}
+}
+
+func TestServerAccessAPITenantExportByteLimitExactBoundary(t *testing.T) {
+	f := newSAFixture(t)
+	path := "/api/serveraccess/v1/tenants/me/export"
+	baseline := f.request(t, f.owner, http.MethodGet, path, "", "")
+	if baseline.Code != http.StatusOK {
+		t.Fatalf("baseline export = %d %s", baseline.Code, baseline.Body.String())
+	}
+	for _, tc := range []struct {
+		name string
+		max  int
+		want int
+	}{
+		{"exact", baseline.Body.Len(), http.StatusOK},
+		{"one byte over", baseline.Body.Len() - 1, http.StatusRequestEntityTooLarge},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stack := NewStack(Config{Enabled: true, Store: f.st, Now: f.stack.cfg.Now, ExportLimits: store.SAExportLimits{MaxBytes: tc.max}})
+			f.h = stack.Gate(stack.Handler())
+			rec := f.request(t, f.owner, http.MethodGet, path, "", "")
+			if rec.Code != tc.want {
+				t.Fatalf("export byte limit %d = %d %s, want %d", tc.max, rec.Code, rec.Body.String(), tc.want)
+			}
+			if tc.want == http.StatusRequestEntityTooLarge {
+				if !strings.Contains(rec.Body.String(), "bytes") || rec.Header().Get("Content-Disposition") != "" {
+					t.Fatalf("byte overflow response = %s headers=%v", rec.Body.String(), rec.Header())
+				}
+			}
+		})
+	}
+}
+
+func TestServerAccessAPITenantExportBatchesMultipleServersWithoutMixingRows(t *testing.T) {
+	f := newSAFixture(t)
+	ctx := context.Background()
+	second, err := f.st.CreateSAServer(ctx, f.tenant, "srv_export_second", "second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, serverID := range []int64{f.server, second.ID} {
+		uid := int64(2000 + i)
+		if err := f.st.AddSAServerWhitelist(ctx, f.tenant, serverID, uid, fmt.Sprintf("note-%d", i), f.owner); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.st.AddSAServerBan(ctx, f.tenant, serverID, uid, fmt.Sprintf("reason-%d", i), sql.NullTime{}, f.owner); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.st.CreateSAServerCredential(ctx, f.tenant, serverID, store.SACredential{
+			Mode: "header", SecretHash: strings.Repeat(string(rune('c'+i)), 64), Scopes: `["verify:join"]`, Status: "active",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.st.InsertSAJoinEvent(ctx, store.SAJoinEvent{
+			TenantID: f.tenant, ServerID: serverID, Outcome: "allow", ReasonCode: fmt.Sprintf("reason-%d", i), SourceMode: "header",
+			PlayerName: "PrivatePlayer", UUID: "private-uuid", RequestID: "private-request",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec := f.request(t, f.owner, http.MethodGet, "/api/serveraccess/v1/tenants/me/export", "", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("multi-server export = %d %s", rec.Code, rec.Body.String())
+	}
+	var document struct {
+		Servers []struct {
+			ID        int64 `json:"id"`
+			Whitelist []struct {
+				UID int64 `json:"uid"`
+			} `json:"whitelist"`
+			Bans []struct {
+				Reason string `json:"reason"`
+			} `json:"bans"`
+			Events []struct {
+				ReasonCode string `json:"reasonCode"`
+			} `json:"events"`
+			Credentials []struct {
+				ID int64 `json:"id"`
+			} `json:"credentials"`
+		} `json:"servers"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &document); err != nil {
+		t.Fatal(err)
+	}
+	if len(document.Servers) != 2 {
+		t.Fatalf("servers = %+v, want 2", document.Servers)
+	}
+	for _, server := range document.Servers {
+		i := int64(0)
+		if server.ID == second.ID {
+			i = 1
+		} else if server.ID != f.server {
+			t.Fatalf("unexpected export server %d", server.ID)
+		}
+		if len(server.Whitelist) != 1 || len(server.Bans) != 1 || len(server.Events) != 1 || len(server.Credentials) != 1 {
+			t.Fatalf("server %d rows = %+v, want one of each", server.ID, server)
+		}
+		if server.Whitelist[0].UID != int64(2000+i) || server.Bans[0].Reason != fmt.Sprintf("reason-%d", i) || server.Events[0].ReasonCode != fmt.Sprintf("reason-%d", i) {
+			t.Fatalf("server %d rows mixed: %+v", server.ID, server)
+		}
+	}
+	for _, forbidden := range []string{"PrivatePlayer", "private-uuid", "private-request", "playerName", "requestId", "secretHash", "scopes"} {
+		if strings.Contains(rec.Body.String(), forbidden) {
+			t.Fatalf("multi-server export leaked %q", forbidden)
+		}
+	}
+}
+
 func TestServerAccessAPIDeleteRequestAtomicallySuspendsAndRevokes(t *testing.T) {
 	f := newSAFixture(t)
 	ctx := context.Background()

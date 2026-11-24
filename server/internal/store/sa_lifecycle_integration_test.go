@@ -10,6 +10,14 @@ import (
 	"time"
 )
 
+func TestIntegrationServerAccessDeletionSerializesCredentialWrites(t *testing.T) {
+	saExerciseDeletionCredentialRace(t, openTestStore(t))
+}
+
+func TestIntegrationServerAccessDeletionReplayRejectsCredentialWrites(t *testing.T) {
+	saExerciseDeletionCredentialReplay(t, openTestStore(t))
+}
+
 func TestIntegrationServerAccessLifecycleMigrationAndScopedCascade(t *testing.T) {
 	m := openTestStore(t)
 	ctx := context.Background()

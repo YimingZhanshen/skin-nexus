@@ -178,6 +178,7 @@
       "invalid": "服务器接入参数不合法",
       "conflict": "该服务器接入资源已存在或状态冲突",
       "quota_exceeded": "服务器数量或白名单配额已用尽",
+      "export_too_large": "租户导出超过明确的条数或字节上限",
       "last_owner": "租户必须至少保留一名所有者",
       "invite_invalid": "邀请无效、已过期或已被使用",
       "not_implemented": "导出功能尚未实现"

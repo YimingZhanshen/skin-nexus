@@ -178,6 +178,7 @@
       "invalid": "The server-access parameters are invalid",
       "conflict": "The server-access resource already exists or its state conflicts",
       "quota_exceeded": "The server or whitelist quota has been reached",
+      "export_too_large": "The tenant export exceeds its explicit row or byte limit",
       "last_owner": "A tenant must retain at least one owner",
       "invite_invalid": "The invitation is invalid, expired, or already used",
       "not_implemented": "Export is not implemented yet"

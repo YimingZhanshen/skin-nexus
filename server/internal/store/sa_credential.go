@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"time"
+
+	"skin-nexus/server/internal/dbx"
+	"skin-nexus/server/internal/dialect"
 )
 
 const saCredentialSelect = `SELECT c.id,s.tenant_id,c.server_id,c.mode,c.secret_hash,c.scopes,c.status,c.expires_at,c.last_used_at,c.created_at
@@ -20,10 +23,18 @@ func scanSACredential(s rowScanner) (SACredential, error) {
 }
 
 func (m *Mysql) CreateSAServerCredential(ctx context.Context, tenantID, serverID int64, c SACredential) (int64, error) {
-	id, err := m.db.InsertReturningID(ctx,
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	if err := saLockCredentialWriteScope(ctx, tx, tenantID, serverID, 0); err != nil {
+		return 0, err
+	}
+	id, err := tx.InsertReturningID(ctx,
 		`INSERT INTO sa_server_credentials (server_id,mode,secret_hash,scopes,status,expires_at,created_at)
 		 SELECT ?,?,?,?,?,?,? FROM sa_servers s JOIN sa_tenants t ON t.id=s.tenant_id
-		 WHERE s.id=? AND s.tenant_id=? AND t.status='active' AND t.deleted_at IS NULL`,
+		 WHERE s.id=? AND s.tenant_id=? AND s.status='active' AND t.status='active' AND t.deleted_at IS NULL`,
 		serverID, c.Mode, c.SecretHash, c.Scopes, c.Status, c.ExpiresAt, m.now().UTC(), serverID, tenantID)
 	if errors.Is(err, sql.ErrNoRows) || (id == 0 && err == nil) {
 		return 0, ErrNotFound
@@ -31,7 +42,10 @@ func (m *Mysql) CreateSAServerCredential(ctx context.Context, tenantID, serverID
 	if isDupKey(err) {
 		return 0, ErrDuplicate
 	}
-	return id, err
+	if err != nil {
+		return 0, err
+	}
+	return id, tx.Commit()
 }
 
 func (m *Mysql) ListSAServerCredentials(ctx context.Context, tenantID, serverID int64) ([]SACredential, error) {
@@ -108,6 +122,9 @@ func (m *Mysql) RotateSAServerCredential(ctx context.Context, tenantID, serverID
 		return 0, err
 	}
 	defer tx.Rollback()
+	if err := saLockCredentialWriteScope(ctx, tx, tenantID, serverID, oldID); err != nil {
+		return 0, err
+	}
 	res, err := tx.ExecContext(ctx,
 		`UPDATE sa_server_credentials SET expires_at=CASE
 		   WHEN expires_at IS NULL OR expires_at>? THEN ? ELSE expires_at END
@@ -124,7 +141,7 @@ func (m *Mysql) RotateSAServerCredential(ctx context.Context, tenantID, serverID
 	id, err := tx.InsertReturningID(ctx,
 		`INSERT INTO sa_server_credentials (server_id,mode,secret_hash,scopes,status,expires_at,created_at)
 		 SELECT ?,?,?,?,?,?,? FROM sa_servers s JOIN sa_tenants t ON t.id=s.tenant_id
-		 WHERE s.id=? AND s.tenant_id=? AND t.status='active' AND t.deleted_at IS NULL`,
+		 WHERE s.id=? AND s.tenant_id=? AND s.status='active' AND t.status='active' AND t.deleted_at IS NULL`,
 		serverID, fresh.Mode, fresh.SecretHash, fresh.Scopes, fresh.Status, fresh.ExpiresAt, now.UTC(), serverID, tenantID)
 	if errors.Is(err, sql.ErrNoRows) || (id == 0 && err == nil) {
 		return 0, ErrNotFound
@@ -136,6 +153,59 @@ func (m *Mysql) RotateSAServerCredential(ctx context.Context, tenantID, serverID
 		return 0, err
 	}
 	return id, tx.Commit()
+}
+
+// saLockCredentialWriteScope serializes credential writes with tenant deletion.
+// PostgreSQL/MySQL lock rows in tenant -> server -> credential order; SQLite
+// no-op writes acquire its equivalent single-writer lock before each status read.
+func saLockCredentialWriteScope(ctx context.Context, tx *dbx.Tx, tenantID, serverID, credentialID int64) error {
+	tenantStatus, _, err := saLockTenantRow(ctx, tx, tenantID)
+	if err != nil {
+		return err
+	}
+	if tenantStatus != "active" {
+		return ErrNotFound
+	}
+	if tx.Engine() == dialect.SQLite {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE sa_servers SET name=name WHERE id=? AND tenant_id=?`, serverID, tenantID); err != nil {
+			return err
+		}
+	}
+	var serverStatus string
+	err = tx.QueryRowContext(ctx,
+		`SELECT status FROM sa_servers WHERE id=? AND tenant_id=?`+tx.Engine().LockSQL(), serverID, tenantID).Scan(&serverStatus)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if serverStatus != "active" {
+		return ErrNotFound
+	}
+	if credentialID == 0 {
+		return nil
+	}
+	if tx.Engine() == dialect.SQLite {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE sa_server_credentials SET status=status WHERE id=? AND server_id=?`, credentialID, serverID); err != nil {
+			return err
+		}
+	}
+	var credentialStatus string
+	err = tx.QueryRowContext(ctx,
+		`SELECT status FROM sa_server_credentials WHERE id=? AND server_id=?`+tx.Engine().LockSQL(), credentialID, serverID).Scan(&credentialStatus)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if credentialStatus != "active" {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (m *Mysql) RevokeSAServerCredential(ctx context.Context, tenantID, serverID, credentialID int64, now time.Time) error {

@@ -11,8 +11,8 @@ description: "SkinNexus 变更日志：按日期倒序的迭代历史，只记�
 
 ## 2026-11-24 · 租户数据导出与宽限期删除（同轮）
 
-- 新增 owner/admin 租户 JSON 附件导出，按字段白名单返回租户、服务器/策略、白名单、封禁、owner 可见进服事件与凭据元数据；不返回邮箱、IP、token、secret/hash、邀请或全局用户/玩家/纹理，审计不记录导出内容。
-- 新增 owner 删除请求：在一个事务内把租户置为 `deleting`、暂停全部服务器、吊销全部凭据并固定截止时间；`SKIN_SERVERACCESS_DELETION_GRACE_HOURS` 默认 168 小时，修改配置不改变已请求的期限。
+- 新增 owner/admin 租户 JSON 附件导出，按字段白名单返回租户、服务器/策略、白名单、封禁、owner 可见进服事件与凭据元数据；不返回邮箱、IP、token、secret/hash、邀请或全局用户/玩家/纹理，审计不记录导出内容。非空租户固定 6 条批量数据查询；首版对服务器、白名单、封禁、事件、凭据元数据与最终 JSON 字节执行硬上限，超限明确返回 413，不静默截断。
+- 新增 owner 删除请求：在一个事务内把租户置为 `deleting`、暂停全部服务器、吊销全部凭据并固定截止时间；`SKIN_SERVERACCESS_DELETION_GRACE_HOURS` 默认 168 小时，修改配置不改变已请求的期限。凭据创建/轮换与删除共享 tenant 行锁，并按 tenant、server、credential 顺序加锁，删除重放不会延长期限或留下活跃凭据。
 - 新增平台超管到期删除：未请求或未到期返回 409，到期后事务执行既有 `sa_*` 级联，重复删除返回 404；全局用户、玩家和纹理保留。删除中的租户与服务器不能被重新启用。
 - 三引擎加法迁移 `0036_serveraccess_lifecycle.sql` 新增独立 `deletion_requested_at` / `deletion_due_at`，不复用 `deleted_at`；模块关闭时新路由统一 404。
 
