@@ -10,14 +10,15 @@ import (
 	"skin-nexus/server/internal/store"
 )
 
-// serverAccessOptionReader is deliberately read-only. Slice S1 assembly can
-// resolve the panel switch but cannot write options or any module table.
+// serverAccessOptionReader is deliberately read-only. Assembly can resolve
+// the panel switch but cannot write options or any module table.
 type serverAccessOptionReader interface {
 	GetOption(context.Context, string) (string, bool, error)
 }
 
 // serverAccessStack mirrors Union's always-assembled, hot-gated lifecycle. The
-// inner Stack owns the atomic request gate and has no DB, key or worker deps.
+// inner Stack owns the atomic request gate; its store reference stays inert
+// until the gate opens and no keys or workers are created during assembly.
 type serverAccessStack struct {
 	stack *serveraccess.Stack
 }

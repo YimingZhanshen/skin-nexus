@@ -397,6 +397,27 @@ func TestServerAccessScopedDeletesRetainGlobalUsers(t *testing.T) {
 	}
 }
 
+type saZeroResult struct{}
+
+func (saZeroResult) LastInsertId() (int64, error) { return 0, nil }
+func (saZeroResult) RowsAffected() (int64, error) { return 0, nil }
+
+func TestSAUpdateAffectedDistinguishesNoOpFromMissingScope(t *testing.T) {
+	if err := saUpdateAffected(saZeroResult{}, nil, func() (bool, error) { return true, nil }); err != nil {
+		t.Fatalf("scoped no-op update err = %v", err)
+	}
+	if err := saUpdateAffected(saZeroResult{}, nil, func() (bool, error) { return false, nil }); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing scoped update err = %v", err)
+	}
+	lookupErr := errors.New("lookup")
+	if err := saUpdateAffected(saZeroResult{}, nil, func() (bool, error) { return false, lookupErr }); !errors.Is(err, lookupErr) {
+		t.Fatalf("lookup failure = %v, want original error", err)
+	}
+	if err := saUpdateAffected(saZeroResult{}, lookupErr, func() (bool, error) { t.Fatal("lookup called after write failure"); return false, nil }); !errors.Is(err, lookupErr) {
+		t.Fatalf("write failure = %v, want original error", err)
+	}
+}
+
 func saTestHash(secret string) string {
 	sum := sha256.Sum256([]byte(secret))
 	return hex.EncodeToString(sum[:])

@@ -77,13 +77,17 @@ func (m *Mysql) DeleteSATenant(ctx context.Context, tenantID int64) error {
 func (m *Mysql) UpdateSATenantStatus(ctx context.Context, tenantID int64, status string) error {
 	res, err := m.db.ExecContext(ctx,
 		`UPDATE sa_tenants SET status=? WHERE id=? AND deleted_at IS NULL`, status, tenantID)
-	return saAffected(res, err)
+	return saUpdateAffected(res, err, func() (bool, error) {
+		return m.saExists(ctx, `SELECT 1 FROM sa_tenants WHERE id=? AND deleted_at IS NULL`, tenantID)
+	})
 }
 
 func (m *Mysql) UpdateSATenantQuota(ctx context.Context, tenantID int64, serverLimit int) error {
 	res, err := m.db.ExecContext(ctx,
 		`UPDATE sa_tenants SET server_limit=? WHERE id=? AND deleted_at IS NULL`, serverLimit, tenantID)
-	return saAffected(res, err)
+	return saUpdateAffected(res, err, func() (bool, error) {
+		return m.saExists(ctx, `SELECT 1 FROM sa_tenants WHERE id=? AND deleted_at IS NULL`, tenantID)
+	})
 }
 
 func (m *Mysql) AddSATenantMember(ctx context.Context, tenantID, uid int64, role string) error {
@@ -99,7 +103,9 @@ func (m *Mysql) AddSATenantMember(ctx context.Context, tenantID, uid int64, role
 func (m *Mysql) UpdateSATenantMemberRole(ctx context.Context, tenantID, uid int64, role string) error {
 	res, err := m.db.ExecContext(ctx,
 		`UPDATE sa_tenant_members SET role=? WHERE tenant_id=? AND uid=?`, role, tenantID, uid)
-	return saAffected(res, err)
+	return saUpdateAffected(res, err, func() (bool, error) {
+		return m.saExists(ctx, `SELECT 1 FROM sa_tenant_members WHERE tenant_id=? AND uid=?`, tenantID, uid)
+	})
 }
 
 func (m *Mysql) RemoveSATenantMember(ctx context.Context, tenantID, uid int64) error {
@@ -369,7 +375,9 @@ func (m *Mysql) ListSAServers(ctx context.Context, tenantID int64, status string
 func (m *Mysql) UpdateSAServer(ctx context.Context, tenantID, serverID int64, name, status string) error {
 	res, err := m.db.ExecContext(ctx,
 		`UPDATE sa_servers SET name=?,status=? WHERE tenant_id=? AND id=?`, name, status, tenantID, serverID)
-	return saAffected(res, err)
+	return saUpdateAffected(res, err, func() (bool, error) {
+		return m.saExists(ctx, `SELECT 1 FROM sa_servers WHERE tenant_id=? AND id=?`, tenantID, serverID)
+	})
 }
 
 func (m *Mysql) DeleteSAServer(ctx context.Context, tenantID, serverID int64) error {
@@ -460,6 +468,38 @@ func saAffected(res sql.Result, err error) error {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (m *Mysql) saExists(ctx context.Context, query string, args ...any) (bool, error) {
+	var one int
+	err := m.db.QueryRowContext(ctx, query, args...).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// saUpdateAffected preserves idempotent updates on MySQL, whose default
+// clientFoundRows=false reports zero for a scoped row whose value did not
+// change. A zero result is therefore resolved by a scoped existence read;
+// DELETE paths continue to use saAffected so replay still returns not-found.
+func saUpdateAffected(res sql.Result, err error, exists func() (bool, error)) error {
+	if err != nil {
+		return err
+	}
+	if n, affectedErr := res.RowsAffected(); affectedErr != nil {
+		return affectedErr
+	} else if n == 1 {
+		return nil
+	}
+	ok, lookupErr := exists()
+	if lookupErr != nil {
+		return lookupErr
+	}
+	if !ok {
 		return ErrNotFound
 	}
 	return nil

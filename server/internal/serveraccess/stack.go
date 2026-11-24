@@ -5,8 +5,9 @@ import (
 	"sync/atomic"
 )
 
-// Stack owns the live module gate. It has no store, key material or workers:
-// disabling the module cannot write data, generate credentials or start work.
+// Stack owns the live module gate and immutable control-plane dependencies.
+// It generates no keys and starts no workers at assembly; a disabled gate
+// prevents every request from reaching the store.
 type Stack struct {
 	on  atomic.Bool
 	cfg Config

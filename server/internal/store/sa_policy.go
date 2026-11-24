@@ -32,7 +32,9 @@ func (m *Mysql) UpdateSAServerPolicy(ctx context.Context, tenantID, serverID int
 		 WHERE server_id=? AND server_id IN (SELECT id FROM sa_servers WHERE id=? AND tenant_id=?)`,
 		p.WhitelistEnabled, p.PremiumFallbackEnabled, p.VerifyRateLimit, p.VerifyBurst,
 		p.MaxConcurrent, p.WhitelistLimit, p.EventRetentionDays, serverID, serverID, tenantID)
-	return saAffected(res, err)
+	return saUpdateAffected(res, err, func() (bool, error) {
+		return m.saExists(ctx, `SELECT 1 FROM sa_server_policies WHERE server_id=? AND server_id IN (SELECT id FROM sa_servers WHERE id=? AND tenant_id=?)`, serverID, serverID, tenantID)
+	})
 }
 
 func (m *Mysql) AddSAServerWhitelist(ctx context.Context, tenantID, serverID, uid int64, note string, createdBy int64) error {
