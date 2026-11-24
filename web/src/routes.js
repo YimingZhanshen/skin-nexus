@@ -21,6 +21,7 @@ export const viewURLs = {
   myreports: '/user/reports',
   apps: '/user/apps',
   union: '/user/union',
+  servers: '/servers',
   admin: '/admin',
 }
 
@@ -38,5 +39,6 @@ export const legacyRoutes = {
   '/user/notifications': 'notifications',
   '/user/reports': 'myreports',
   '/user/union': 'union',
+  '/servers': 'servers',
   '/admin': 'admin',
 }

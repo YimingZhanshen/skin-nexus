@@ -89,6 +89,10 @@ type Backend struct {
 	// device pages on it: without the flag those pages are offered but answer
 	// 404. main wires cfg.OIDCEnabled — same source as the provider mount.
 	OIDCEnabled bool
+	// ServerAccessEnabled reports the live optional-module gate. The SPA uses
+	// this public capability to show /servers as unavailable while still
+	// serving its shell; nil keeps the default-off behavior.
+	ServerAccessEnabled func() bool
 	// Appearance supplies the public footer config (nil = default credit).
 	Appearance *appearance.Engine
 	// ThemePalette / ThemeID bake the active theme into outgoing mail (nil =
@@ -596,9 +600,10 @@ func (b *Backend) handleSiteConfig(w http.ResponseWriter, r *http.Request) {
 		// The help page states the email-verification step only when the gate is
 		// actually on; without this it would either guess or stay silent on the
 		// one reason a player gets refused at the door.
-		"verify_gate_enabled": b.Ygg != nil && b.Ygg.VerificationRequired(r.Context()),
-		"oidc_enabled":        b.OIDCEnabled,
-		"footer":              footer,
+		"verify_gate_enabled":  b.Ygg != nil && b.Ygg.VerificationRequired(r.Context()),
+		"oidc_enabled":         b.OIDCEnabled,
+		"serveraccess_enabled": b.ServerAccessEnabled != nil && b.ServerAccessEnabled(),
+		"footer":               footer,
 	})
 }
 

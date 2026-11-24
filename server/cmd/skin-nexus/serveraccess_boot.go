@@ -79,9 +79,10 @@ func (s *serverAccessStack) guard(next http.Handler) http.Handler {
 	})
 }
 
-// mountServerAccess claims every module prefix before the SPA catch-all. The
-// same guarded handler serves verification and control routes; unknown paths
-// remain ordinary module 404s and never fall through to the SPA.
+// mountServerAccess claims every module API prefix before the SPA catch-all.
+// The exact /servers owner portal deliberately falls through in both gate
+// states so the SPA can explain default-off unavailability. The SPA's known-path
+// check rejects unknown descendants, and all disabled module APIs stay non-SPA 404s.
 func mountServerAccess(root *http.ServeMux, s *serverAccessStack) {
 	notFound := s.guard(http.NotFoundHandler())
 	root.Handle("/api/serveraccess", notFound)
@@ -90,6 +91,4 @@ func mountServerAccess(root *http.ServeMux, s *serverAccessStack) {
 	root.Handle("/api/admin/v1/serveraccess/", s.guard(s.stack.Handler()))
 	root.Handle("/v", notFound)
 	root.Handle("/v/", s.guard(s.stack.Handler()))
-	root.Handle("/servers", notFound)
-	root.Handle("/servers/", notFound)
 }

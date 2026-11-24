@@ -20,6 +20,7 @@ const AuthorizedAppsPage = asyncPage(() => import('./pages/AuthorizedAppsPage.vu
 const NotificationsPage = asyncPage(() => import('./pages/NotificationsPage.vue'))
 const MyReportsPage = asyncPage(() => import('./pages/MyReportsPage.vue'))
 const UnionBindPage = asyncPage(() => import('./pages/UnionBindPage.vue'))
+const ServersPage = asyncPage(() => import('./pages/ServersPage.vue'))
 const SetupPage = asyncPage(() => import('./pages/SetupPage.vue'))
 const DashboardPage = asyncPage(() => import('./pages/DashboardPage.vue'))
 const ClosetPage = asyncPage(() => import('./pages/ClosetPage.vue'))
@@ -50,7 +51,7 @@ const { t, locale } = useI18n()
 const {
   siteConf, confLoaded, normalizeFooter,
   siteFooter, siteName, inviteFieldShown, inviteIsRequired,
-  mailEnabled, verifyGateEnabled, emailFieldShown, unionEnabled, oidcEnabled,
+  mailEnabled, verifyGateEnabled, emailFieldShown, unionEnabled, oidcEnabled, serverAccessEnabled,
 } = useSiteConfig()
 
 // Session state and the two sign-in guards live with the auth flow; App keeps
@@ -122,6 +123,7 @@ const navIcons = {
   profile: '<path d="M3 5h18v14H3zM7 9h4M7 13h8M7 17h6"/>',
   apps: '<path d="M14 7a4 4 0 1 1 3 6.9L12 18l-3 3-2-2 3-3-4.1-5A4 4 0 0 1 14 7z"/>',
   union: '<path d="M12 3a9 9 0 1 0 9 9M12 3a9 9 0 0 1 9 9M12 8a4 4 0 1 0 4 4"/>',
+  servers: '<path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/>',
   notifications: '<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/>',
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7v.5M12 17h.01"/>',
   myreports: '<path d="M5 21V4l14 3-3 5 3 5-14 3"/>',
@@ -150,6 +152,7 @@ const navGroups = computed(() => {
       ...(oidcEnabled.value ? [{ id: 'apps', labelKey: 'nav.apps', icon: navIcons.apps }] : []),
       { id: 'help', labelKey: 'nav.help', icon: navIcons.help },
       ...(unionEnabled.value ? [{ id: 'union', labelKey: 'nav.union', icon: navIcons.union }] : []),
+      ...(serverAccessEnabled.value ? [{ id: 'servers', labelKey: 'nav.servers', icon: navIcons.servers }] : []),
       ...pluginItems,
     ],
   }]
@@ -353,6 +356,11 @@ provide('authState', {
 // because the verdict is the server's: after a resend, an address change or a
 // successful exchange, the shell has to stop treating the player as blocked
 // without a reload.
+function onSettingsChanged(key, value) {
+  if (key === 'serveraccess_enabled') {
+    siteConf.value = { ...siteConf.value, serveraccess_enabled: value === '1' }
+  }
+}
 async function doLogout() {
   try {
     await api.logout()
@@ -489,8 +497,9 @@ onMounted(() => {
           <AuthorizedAppsPage v-else-if="view === 'apps'" :oidc-enabled="oidcEnabled" />
           <HelpPage v-else-if="view === 'help'" />
           <UnionBindPage v-else-if="view === 'union'" />
+          <ServersPage v-else-if="view === 'servers'" :enabled="serverAccessEnabled" />
           <PluginPage v-else-if="view === 'ext'" :path="extPath" />
-          <AdminPanel v-else-if="view === 'admin'" :user="user" :site-conf="siteConf" :conf-loaded="confLoaded" />
+          <AdminPanel v-else-if="view === 'admin'" :user="user" :site-conf="siteConf" :conf-loaded="confLoaded" @settings-changed="onSettingsChanged" />
         </main>
       </div>
     </template>

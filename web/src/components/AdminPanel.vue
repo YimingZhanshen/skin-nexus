@@ -14,6 +14,7 @@ import SettingsView from './admin/SettingsView.vue'
 import StatusView from './admin/StatusView.vue'
 import UnionView from './admin/UnionView.vue'
 import AccessLogsView from './admin/AccessLogsView.vue'
+import ServerAccessAdminView from './admin/ServerAccessAdminView.vue'
 import ReportsView from './admin/ReportsView.vue'
 import TexturesView from './admin/TexturesView.vue'
 import ClosetView from './admin/ClosetView.vue'
@@ -53,6 +54,7 @@ const nav = [
   { id: 'settings', labelKey: 'admin.navSettings', comp: SettingsView, icon: adminIcons.settings },
   { id: 'status', labelKey: 'admin.navStatus', comp: StatusView, icon: adminIcons.status },
   { id: 'access', labelKey: 'admin.navAccess', comp: AccessLogsView, icon: adminIcons.access },
+  { id: 'serveraccess', labelKey: 'adminServerAccess.title', comp: ServerAccessAdminView, icon: adminIcons.status },
   { id: 'reports', labelKey: 'admin.navReports', comp: ReportsView, icon: adminIcons.reports },
   { id: 'textures', labelKey: 'admin.navTextures', comp: TexturesView, icon: adminIcons.textures },
   { id: 'closet', labelKey: 'admin.navCloset', comp: ClosetView, icon: adminIcons.closet },
@@ -69,6 +71,7 @@ const props = defineProps({
   siteConf: { type: Object, default: () => ({}) },
   confLoaded: { type: Boolean, default: false },
 })
+const emit = defineEmits(['settings-changed'])
 const current = ref('dashboard')
 const menuOpen = ref(false)
 const currentLabel = computed(() => {
@@ -85,10 +88,12 @@ const myPerm = ref(Number(props.user && props.user.permission) || 0)
 const flags = ref({
   invite_required: props.confLoaded ? !!props.siteConf.invite_required : false,
   union_enabled: props.confLoaded ? !!props.siteConf.union_enabled : false,
+  serveraccess_enabled: props.confLoaded ? !!props.siteConf.serveraccess_enabled : false,
 })
 const visibleNav = computed(() => nav.filter((n) =>
   (n.id !== 'invitation' || flags.value.invite_required) &&
-  (n.id !== 'union' || flags.value.union_enabled)
+  (n.id !== 'union' || flags.value.union_enabled) &&
+  (n.id !== 'serveraccess' || (flags.value.serveraccess_enabled && myPerm.value === 2))
 ))
 
 async function loadFlags() {
@@ -102,6 +107,8 @@ async function loadFlags() {
 function onSettingsChanged(key, value) {
   if (key === 'invite_required') flags.value.invite_required = value === '1'
   if (key === 'union_enabled') flags.value.union_enabled = value === '1'
+  if (key === 'serveraccess_enabled') flags.value.serveraccess_enabled = value === '1'
+  emit('settings-changed', key, value)
   if (!visibleNav.value.some((n) => n.id === current.value)) go('dashboard')
 }
 
@@ -138,6 +145,12 @@ function applyAdminPath(p) {
     return
   }
   const item = nav.find((n) => n.id === rest)
+  if (item?.id === 'serveraccess' && !visibleNav.value.some((n) => n.id === item.id)) {
+    currentPlugin.value = ''
+    current.value = 'dashboard'
+    currentComp.value = DashboardView
+    return
+  }
   currentPlugin.value = ''
   current.value = item ? item.id : 'dashboard'
   currentComp.value = item ? item.comp : DashboardView

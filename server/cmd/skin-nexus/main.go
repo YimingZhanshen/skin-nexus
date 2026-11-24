@@ -547,6 +547,9 @@ func main() {
 	// The SPA gates its authorized-apps/device pages on this flag; without it
 	// those nav entries lead to a 404 whenever OIDC is off.
 	backend.OIDCEnabled = cfg.OIDCEnabled
+	// The owner portal shell stays reachable while the module is off, but its
+	// unavailable state and navigation must follow the live gate.
+	backend.ServerAccessEnabled = sastack.Enabled
 	// The wizard is the one endpoint that answers before anyone exists. Guard it
 	// while it is still open, and say the token out loud in the log so the
 	// operator — the only person reading that log — can complete the install.
@@ -1299,7 +1302,7 @@ func isKnownSPAPath(p string, uiPath func(string) bool) bool {
 	}
 	switch p {
 	case "index.html", "login", "register", "forgot-password", "reset-password", "email-verify", "device",
-		"setup", "skinlib", "help", "user/skinlib", "user/closet", "user/profile",
+		"setup", "skinlib", "help", "servers", "user/skinlib", "user/closet", "user/profile",
 		"user/players", "user/dashboard":
 		return true
 	}

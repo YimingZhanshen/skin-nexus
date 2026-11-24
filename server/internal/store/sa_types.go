@@ -107,6 +107,25 @@ type SAJoinEvent struct {
 	CreatedAt     time.Time     `json:"createdAt"`
 }
 
+// SAPlayerIdentity is the complete owner-facing result of a player lookup.
+// Texture, profile, email and permission data never cross this boundary.
+type SAPlayerIdentity struct {
+	UID  int64  `json:"uid"`
+	Name string `json:"name"`
+	UUID string `json:"uuid"`
+}
+
+// SAOwnerJoinEvent is the allowlisted timeline projection. Keeping a separate
+// type prevents a future store field from becoming an accidental owner API leak.
+type SAOwnerJoinEvent struct {
+	ID         int64     `json:"id"`
+	CreatedAt  time.Time `json:"createdAt"`
+	Outcome    string    `json:"outcome"`
+	ReasonCode string    `json:"reasonCode"`
+	DurationMS int64     `json:"durationMs"`
+	SourceMode string    `json:"sourceMode"`
+}
+
 // TrustLevel derives the S3 trust label from the persisted source mode. Both
 // supported modes prove possession of a credential only; neither is attested.
 func (e SAJoinEvent) TrustLevel() string {

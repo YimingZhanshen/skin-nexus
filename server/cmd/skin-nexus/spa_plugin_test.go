@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -52,6 +53,12 @@ func TestSPARoutesAgreeWithAppMaps(t *testing.T) {
 	urls := objectField(text, "viewURLs", 1)       // the URLs the app writes
 	if len(routes) < 5 || len(urls) < 5 {
 		t.Fatalf("parsed %d legacyRoutes / %d viewURLs entries — the extractor is broken", len(routes), len(urls))
+	}
+	if !slices.Contains(routes, "/servers") || !slices.Contains(urls, "/servers") {
+		t.Fatalf("owner portal must agree in both app maps: legacy=%v urls=%v", routes, urls)
+	}
+	if !isKnownSPAPath("servers", nil) {
+		t.Fatal("owner portal deep link is not shell-known — /servers would 404 before the SPA loads")
 	}
 	for _, u := range routes {
 		if !isKnownSPAPath(strings.TrimPrefix(u, "/"), nil) {

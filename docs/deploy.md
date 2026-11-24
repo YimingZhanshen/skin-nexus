@@ -278,7 +278,16 @@ app 进程能看到哪些变量，取决于 compose 文件里 `environment:` 段
 
 | 变量 | 必填性 | 默认（源码 / 镜像内） | 说明 |
 |---|---|---|---|
-| `SKIN_SERVERACCESS_ENABLED` | 面板真源 | `false` | 服务器接入模块开关；面板 `serveraccess_enabled` 优先且热生效。关闭时模块子树统一 404；开启后提供租户/服务器/成员/邀请控制面、按服凭证与白名单/封禁策略、平台紧急管理，以及 URL secret / Bearer Header 两种 `hasJoined` 验证入口。进服事件与验证配额持久化；服主前端、验证代理二进制、导出/注销与公测运维不属于当前实现 |
+| `SKIN_SERVERACCESS_ENABLED` | 面板真源 | `false` | 服务器接入模块开关；面板 `serveraccess_enabled` 优先且热生效。关闭时所有模块 API 统一 404，`/servers` 仍提供 SPA 壳并明确显示模块不可用；开启后提供独立 `/servers` 服主门户、租户/服务器/成员/邀请控制面、按服凭证与白名单/封禁策略、进服事件、平台状态/配额/紧急管理，以及 URL secret / Bearer Header 两种 `hasJoined` 验证入口。进服事件与验证配额持久化；验证代理二进制、导出/注销与公测运维不属于当前实现 |
+
+**服主门户接口**
+
+`/servers` 使用普通网页会话，不接受管理员令牌；租户 owner/admin 可写，viewer 只读。以下两个只读端点同样要求有效的租户成员会话：
+
+- `GET /api/serveraccess/v1/servers/{id}/events?before={event_id}&size={1..200}`：按 `id DESC` 游标分页，默认最近 24 小时。`before` 为上一页最后一个事件 id；响应包含 `events`、`nextBefore`、`hasMore`。每条事件只暴露 `id`、`createdAt`、`outcome`、`reasonCode`、`durationMs`、`sourceMode`，不返回玩家身份、IP、邮箱、令牌、全局角色或皮肤。可用 RFC3339 的 `from`/`to` 缩小时间范围，最长为 366 天。
+- `GET /api/serveraccess/v1/players/lookup?q={name-or-uuid}`：按角色名（不区分大小写）或 32 位 UUID 精确解析，成功只返回 `{uid,name,uuid}`，未找到返回 404。该端点不返回邮箱、IP 或全局资料。
+
+服务器 id 始终从当前成员租户解析；跨租户服务器返回 404。模块关闭时上述 API 均返回 404；`/servers` 不受模块门禁拦截，仍返回 SPA 壳并显示明确的不可用状态。未知 `/servers/` 子路径仍为 404，不退化成 SPA 页面。
 
 **服务器接入验证与凭证运维**
 

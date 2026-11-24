@@ -490,3 +490,141 @@ func TestServerAccessAPIResponseIsJSON(t *testing.T) {
 		t.Fatalf("tenant response = %d %q %s", rec.Code, rec.Header().Get("Content-Type"), rec.Body.String())
 	}
 }
+
+func TestServerAccessAPIOwnerEventsAreScopedMinimalAndCursorPaged(t *testing.T) {
+	f := newSAFixture(t)
+	from, to := f.now.Add(-time.Minute), f.now.Add(time.Minute)
+	for i, outcome := range []string{"allow", "deny", "allow"} {
+		event := store.SAJoinEvent{
+			TenantID: f.tenant, ServerID: f.server, UID: sql.NullInt64{Int64: f.outsider, Valid: true},
+			UUID: "0123456789abcdef0123456789abcdef", PlayerName: "PrivatePlayer",
+			Outcome: outcome, ReasonCode: "fixture_reason", SourceMode: "url_secret", DurationMS: int64(i + 1),
+			RequestID: fmt.Sprintf("event-request-%d", i),
+		}
+		if err := f.st.InsertSAJoinEvent(context.Background(), event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.st.InsertSAJoinEvent(context.Background(), store.SAJoinEvent{
+		TenantID: f.otherTenant, ServerID: f.otherServer, Outcome: "allow", ReasonCode: "other_tenant",
+		SourceMode: "header", RequestID: "other-tenant-request",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	path := fmt.Sprintf("/api/serveraccess/v1/servers/%d/events?size=2&from=%s&to=%s", f.server,
+		from.Format(time.RFC3339), to.Format(time.RFC3339))
+	rec := f.request(t, f.viewer, "GET", path, "", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("viewer events = %d %s, want 200", rec.Code, rec.Body.String())
+	}
+	var first struct {
+		Events     []map[string]any `json:"events"`
+		NextBefore int64            `json:"nextBefore"`
+		HasMore    bool             `json:"hasMore"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &first); err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Events) != 2 || !first.HasMore || first.NextBefore <= 0 {
+		t.Fatalf("first event page = %s", rec.Body.String())
+	}
+	if first.Events[0]["id"] == first.Events[1]["id"] {
+		t.Fatalf("event cursor did not advance: %s", rec.Body.String())
+	}
+	// The cursor is an id, so pages must follow descending insertion order
+	// rather than a timestamp order that can skip concurrently committed rows.
+	if first.Events[0]["durationMs"] != float64(3) || first.Events[1]["durationMs"] != float64(2) {
+		t.Fatalf("event page is not in descending id order: %s", rec.Body.String())
+	}
+	for _, event := range first.Events {
+		if len(event) != 6 {
+			t.Fatalf("owner event exposed fields beyond the timeline contract: %#v", event)
+		}
+		for _, key := range []string{"id", "createdAt", "outcome", "reasonCode", "durationMs", "sourceMode"} {
+			if _, ok := event[key]; !ok {
+				t.Fatalf("owner event missing %s: %#v", key, event)
+			}
+		}
+	}
+	for _, forbidden := range []string{"PrivatePlayer", "outsider@example.com", "uid", "uuid", "requestId", "joinSessionId", "tenantId", "serverId"} {
+		if strings.Contains(rec.Body.String(), forbidden) {
+			t.Fatalf("owner events leaked %q: %s", forbidden, rec.Body.String())
+		}
+	}
+	second := f.request(t, f.owner, "GET", fmt.Sprintf("%s&before=%d", path, first.NextBefore), "", "")
+	var next struct {
+		Events     []map[string]any `json:"events"`
+		NextBefore int64            `json:"nextBefore"`
+		HasMore    bool             `json:"hasMore"`
+	}
+	if err := json.Unmarshal(second.Body.Bytes(), &next); err != nil {
+		t.Fatal(err)
+	}
+	if second.Code != http.StatusOK || len(next.Events) != 1 || next.HasMore || next.NextBefore != 0 {
+		t.Fatalf("second event page = %d %s", second.Code, second.Body.String())
+	}
+	for _, old := range first.Events {
+		if old["id"] == next.Events[0]["id"] {
+			t.Fatalf("cursor page repeated an event: %s", second.Body.String())
+		}
+	}
+	for _, tc := range []struct {
+		uid  int64
+		path string
+		want int
+	}{
+		{0, path, 401},
+		{f.legacyAdmin, path, 403},
+		{f.owner, fmt.Sprintf("/api/serveraccess/v1/servers/%d/events", f.otherServer), 404},
+		{f.owner, fmt.Sprintf("/api/serveraccess/v1/servers/%d/events?size=201", f.server), 200},
+		{f.owner, fmt.Sprintf("/api/serveraccess/v1/servers/%d/events?before=-1", f.server), 400},
+		{f.owner, fmt.Sprintf("/api/serveraccess/v1/servers/%d/events?from=not-a-time", f.server), 400},
+	} {
+		if got := f.request(t, tc.uid, "GET", tc.path, "", ""); got.Code != tc.want {
+			t.Errorf("GET %s as %d = %d %s, want %d", tc.path, tc.uid, got.Code, got.Body.String(), tc.want)
+		}
+	}
+}
+
+func TestServerAccessAPIPlayerLookupUsesOwnerSessionAndReturnsOnlyIdentity(t *testing.T) {
+	f := newSAFixture(t)
+	_, uuid, err := f.st.CreatePlayer(context.Background(), f.outsider, "LookupPlayer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf(`{"uid":%d,"name":"LookupPlayer","uuid":%q}`, f.outsider, uuid)
+	for _, q := range []string{"LookupPlayer", "lookupplayer", uuid} {
+		rec := f.request(t, f.viewer, "GET", "/api/serveraccess/v1/players/lookup?q="+q, "", "")
+		if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != want {
+			t.Fatalf("lookup %q = %d %s, want 200 %s", q, rec.Code, rec.Body.String(), want)
+		}
+	}
+	for _, tc := range []struct {
+		uid  int64
+		path string
+		want int
+	}{
+		{0, "/api/serveraccess/v1/players/lookup?q=LookupPlayer", 401},
+		{f.legacyAdmin, "/api/serveraccess/v1/players/lookup?q=LookupPlayer", 403},
+		{f.owner, "/api/serveraccess/v1/players/lookup?q=MissingPlayer", 404},
+		{f.owner, "/api/serveraccess/v1/players/lookup", 400},
+		{f.owner, "/api/serveraccess/v1/players/lookup?q=" + strings.Repeat("x", 65), 400},
+	} {
+		if rec := f.request(t, tc.uid, "GET", tc.path, "", ""); rec.Code != tc.want {
+			t.Errorf("GET %s as %d = %d %s, want %d", tc.path, tc.uid, rec.Code, rec.Body.String(), tc.want)
+		}
+	}
+}
+
+func TestServerAccessAPIS4ReadsRespectDisabledGate(t *testing.T) {
+	f := newSAFixture(t)
+	f.stack.SetEnabled(false)
+	for _, path := range []string{
+		fmt.Sprintf("/api/serveraccess/v1/servers/%d/events", f.server),
+		"/api/serveraccess/v1/players/lookup?q=LookupPlayer",
+	} {
+		if rec := f.request(t, f.owner, "GET", path, "", ""); rec.Code != http.StatusNotFound {
+			t.Fatalf("disabled GET %s = %d %s, want 404", path, rec.Code, rec.Body.String())
+		}
+	}
+}

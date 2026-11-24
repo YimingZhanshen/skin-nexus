@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"time"
@@ -60,16 +61,29 @@ func (m *Mysql) saJoinEventScopeExists(ctx context.Context, tenantID, serverID i
 }
 
 func (m *Mysql) ListSAJoinEvents(ctx context.Context, tenantID, serverID int64, from, to time.Time, limit int) ([]SAJoinEvent, error) {
+	return m.ListSAJoinEventsPage(ctx, tenantID, serverID, from, to, 0, limit)
+}
+
+// ListSAJoinEventsPage reads a stable descending id cursor within a tenant/server
+// scope. Callers request one extra row to derive hasMore without a count query.
+func (m *Mysql) ListSAJoinEventsPage(ctx context.Context, tenantID, serverID int64, from, to time.Time, before int64, limit int) ([]SAJoinEvent, error) {
 	if limit <= 0 {
 		limit = 100
 	}
 	if limit > 500 {
 		limit = 500
 	}
-	rows, err := m.db.QueryContext(ctx,
-		`SELECT `+saJoinEventColumns+` FROM sa_join_events e JOIN sa_servers s ON s.id=e.server_id
-		 WHERE s.tenant_id=? AND e.server_id=? AND e.created_at>=? AND e.created_at<=?
-		 ORDER BY e.created_at DESC,e.id DESC LIMIT ?`, tenantID, serverID, from.UTC(), to.UTC(), limit)
+	query := `SELECT ` + saJoinEventColumns + ` FROM sa_join_events e JOIN sa_servers s ON s.id=e.server_id
+		 WHERE s.tenant_id=? AND e.server_id=? AND e.created_at>=? AND e.created_at<=?`
+	args := []any{tenantID, serverID, from.UTC(), to.UTC()}
+	if before > 0 {
+		query += ` AND e.id<?`
+		args = append(args, before)
+	}
+	// The public cursor is an id, so ordering by timestamp as well could skip
+	// rows when concurrent transactions commit out of timestamp order.
+	query += ` ORDER BY e.id DESC LIMIT ?`
+	rows, err := m.db.QueryContext(ctx, query, append(args, limit)...)
 	if err != nil {
 		return nil, err
 	}
@@ -83,6 +97,27 @@ func (m *Mysql) ListSAJoinEvents(ctx context.Context, tenantID, serverID int64, 
 		out = append(out, event)
 	}
 	return out, rows.Err()
+}
+
+// LookupSAPlayer resolves only the identity needed by whitelist/ban forms. It
+// deliberately avoids the global player/profile projection and its texture joins.
+func (m *Mysql) LookupSAPlayer(ctx context.Context, query string) (SAPlayerIdentity, error) {
+	query = strings.TrimSpace(query)
+	where, value := m.db.Dialect().CIEquals("p.name"), query
+	if len(query) == 32 {
+		if _, err := hex.DecodeString(query); err == nil {
+			where, value = "u.uuid = ?", strings.ToLower(query)
+		}
+	}
+	var player SAPlayerIdentity
+	err := m.db.QueryRowContext(ctx,
+		`SELECT p.uid,p.name,COALESCE(u.uuid,'') FROM players p
+		 LEFT JOIN uuid_map u ON u.player_id=p.id WHERE `+where+` LIMIT 1`, value).
+		Scan(&player.UID, &player.Name, &player.UUID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return SAPlayerIdentity{}, ErrNotFound
+	}
+	return player, err
 }
 
 // AdmitSAQuota atomically increments one server/window/counter and decides

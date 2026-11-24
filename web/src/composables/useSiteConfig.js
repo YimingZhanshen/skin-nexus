@@ -25,7 +25,7 @@ export function useSiteConfig() {
 
   const siteConf = ref({
     site_name: '', invite_required: false, mail_configured: false,
-    verify_gate_enabled: false, union_enabled: false, oidc_enabled: false, max_upload_kb: 0,
+    verify_gate_enabled: false, union_enabled: false, oidc_enabled: false, serveraccess_enabled: false, max_upload_kb: 0,
     footer: defaultFooter(),
   })
   const confLoaded = ref(false)
@@ -48,10 +48,11 @@ export function useSiteConfig() {
   // The authorized-apps and device pages talk to /api/v1/oidc/*, which only
   // exists when the OIDC provider is mounted. Offer the entries only then.
   const oidcEnabled = computed(() => confLoaded.value && siteConf.value.oidc_enabled)
+  const serverAccessEnabled = computed(() => confLoaded.value && siteConf.value.serveraccess_enabled)
 
   return {
     siteConf, confLoaded, defaultFooter, normalizeFooter,
     siteFooter, siteName, inviteFieldShown, inviteIsRequired,
-    mailEnabled, verifyGateEnabled, emailFieldShown, unionEnabled, oidcEnabled,
+    mailEnabled, verifyGateEnabled, emailFieldShown, unionEnabled, oidcEnabled, serverAccessEnabled,
   }
 }

@@ -59,6 +59,12 @@ func TestServerAccessRoutesPreemptSpaCatchAll(t *testing.T) {
 	root := http.NewServeMux()
 	mountServerAccess(root, s)
 	root.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Model the real SPA known-path check: only the exact owner portal is
+		// served; unknown descendants must not receive the application shell.
+		if r.URL.Path != "/servers" {
+			http.NotFound(w, r)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("SPA"))
 	})
@@ -71,8 +77,6 @@ func TestServerAccessRoutesPreemptSpaCatchAll(t *testing.T) {
 		"/api/admin/v1/serveraccess/tenants",
 		"/v",
 		"/v/secret/sessionserver/session/minecraft/hasJoined",
-		"/servers",
-		"/servers/",
 	}
 	for _, path := range paths {
 		rec := httptest.NewRecorder()
@@ -82,6 +86,25 @@ func TestServerAccessRoutesPreemptSpaCatchAll(t *testing.T) {
 		}
 		if rec.Header().Get("Cache-Control") != "no-store" || rec.Header().Get("Referrer-Policy") != "no-referrer" {
 			t.Errorf("disabled GET %s security headers = %v", path, rec.Header())
+		}
+	}
+
+	// The owner portal is a normal SPA route in both states. When the module is
+	// off it must load far enough to explain that the feature is unavailable;
+	// only the module APIs are gated. Unknown descendants remain real 404s.
+	for _, path := range []string{"/servers/", "/servers/unknown"} {
+		rec := httptest.NewRecorder()
+		root.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), "SPA") {
+			t.Errorf("disabled GET %s = %d %q, want non-SPA 404", path, rec.Code, rec.Body.String())
+		}
+	}
+	for _, enabled := range []bool{false, true} {
+		s.setEnabled(context.Background(), enabled)
+		rec := httptest.NewRecorder()
+		root.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/servers", nil))
+		if rec.Code != http.StatusOK || rec.Body.String() != "SPA" {
+			t.Errorf("enabled=%v GET /servers = %d %q, want SPA shell", enabled, rec.Code, rec.Body.String())
 		}
 	}
 
@@ -142,5 +165,8 @@ func TestMainWiresServerAccessAssemblyHotToggleAndRoutes(t *testing.T) {
 	}
 	if !strings.Contains(src, `"serveraccess_enabled":`) || !strings.Contains(src, "boolStr(cfg.ServerAccessEnabled)") {
 		t.Fatal("main.go does not expose the env fallback in settings defaults")
+	}
+	if !strings.Contains(src, "backend.ServerAccessEnabled = sastack.Enabled") {
+		t.Fatal("main.go does not publish the live server-access capability to the SPA")
 	}
 }
