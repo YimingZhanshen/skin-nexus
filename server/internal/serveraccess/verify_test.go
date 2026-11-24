@@ -221,6 +221,104 @@ func TestServerAccessWhitelistUnknownPlayerDeniesFallback(t *testing.T) {
 	}
 }
 
+func TestServerAccessWhitelistKnownPlayerMissDeniesFallback(t *testing.T) {
+	f := newVerifyFixture(t)
+	f.credential(t, "url_secret")
+	if _, _, err := f.st.CreatePlayer(context.Background(), f.owner, "Alice"); err != nil {
+		t.Fatal(err)
+	}
+	enabled := true
+	if err := f.st.UpdateSAServerOwnerPolicy(context.Background(), f.tenant, f.server, &enabled, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.AddSAServerWhitelist(context.Background(), f.tenant, f.server, f.owner, "allowed", f.owner); err != nil {
+		t.Fatal(err)
+	}
+	rec := f.verify(t, "url_secret", "Alice", "server-id", "")
+	if rec.Code != http.StatusNoContent || rec.Body.Len() != 0 || f.fallback != 0 {
+		t.Fatalf("known whitelist miss = %d %s fallback=%d", rec.Code, rec.Body.String(), f.fallback)
+	}
+	events, err := f.st.ListSAJoinEvents(context.Background(), f.tenant, f.server, f.now.Add(-time.Minute), f.now.Add(time.Minute), 20)
+	if err != nil || len(events) != 1 || events[0].ReasonCode != "session_not_found" || events[0].UID.Int64 != f.owner {
+		t.Fatalf("known whitelist miss event = %+v, %v", events, err)
+	}
+}
+
+func TestServerAccessLocalHitDoesNotReadGlobalFallbackOption(t *testing.T) {
+	f := newVerifyFixture(t)
+	f.credential(t, "url_secret")
+	f.playerAndJoin(t)
+	if _, err := f.st.DB().Exec(`DROP TABLE options`); err != nil {
+		t.Fatal(err)
+	}
+	rec := f.verify(t, "url_secret", "Alice", "server-id", "203.0.113.8")
+	if rec.Code != http.StatusOK || f.fallback != 0 {
+		t.Fatalf("local hit with fallback option fault = %d %s fallback=%d", rec.Code, rec.Body.String(), f.fallback)
+	}
+	events, err := f.st.ListSAJoinEvents(context.Background(), f.tenant, f.server, f.now.Add(-time.Minute), f.now.Add(time.Minute), 20)
+	if err != nil || len(events) != 1 || events[0].ReasonCode != "local_session" {
+		t.Fatalf("local hit event = %+v, %v", events, err)
+	}
+}
+
+func TestServerAccessFallbackEventUsesOfficialIdentityWithoutLocalUID(t *testing.T) {
+	const officialUUID = "fedcba9876543210fedcba9876543210"
+	for _, tc := range []struct {
+		name, username, officialName string
+		localPlayer                  bool
+	}{
+		{name: "unknown player", username: "Unknown", officialName: "OfficialUnknown"},
+		{name: "known local miss", username: "Alice", officialName: "OfficialAlice", localPlayer: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newVerifyFixture(t)
+			f.credential(t, "url_secret")
+			if tc.localPlayer {
+				if _, _, err := f.st.CreatePlayer(context.Background(), f.owner, "Alice"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			body := `{"id":"` + officialUUID + `","name":"` + tc.officialName + `"}`
+			f.api.SetFallback(&ygg.Fallback{BaseURL: "https://official.example", Enabled: func(context.Context) bool { return true }, Client: &http.Client{Transport: verifyFallback(func(*http.Request) (*http.Response, error) {
+				return verifyFallbackResponse(body), nil
+			})}})
+			rec := f.verify(t, "url_secret", tc.username, "server-id", "")
+			if rec.Code != http.StatusOK || rec.Body.String() != body {
+				t.Fatalf("official response = %d %s", rec.Code, rec.Body.String())
+			}
+			events, err := f.st.ListSAJoinEvents(context.Background(), f.tenant, f.server, f.now.Add(-time.Minute), f.now.Add(time.Minute), 20)
+			if err != nil || len(events) != 1 {
+				t.Fatalf("fallback events = %+v, %v", events, err)
+			}
+			event := events[0]
+			if event.UUID != officialUUID || event.PlayerName != tc.officialName || event.UID.Valid || event.ReasonCode != "official_fallback" {
+				t.Fatalf("official fallback identity = %+v", event)
+			}
+		})
+	}
+}
+
+func TestServerAccessFallbackRejectsMalformedOfficialIdentity(t *testing.T) {
+	for _, body := range []string{
+		`{"id":"not-a-uuid","name":"Official"}`,
+		`{"id":{"unexpected":"object"},"name":"Official"}`,
+	} {
+		f := newVerifyFixture(t)
+		f.credential(t, "url_secret")
+		f.api.SetFallback(&ygg.Fallback{BaseURL: "https://official.example", Enabled: func(context.Context) bool { return true }, Client: &http.Client{Transport: verifyFallback(func(*http.Request) (*http.Response, error) {
+			return verifyFallbackResponse(body), nil
+		})}})
+		rec := f.verify(t, "url_secret", "Unknown", "server-id", "")
+		if rec.Code != http.StatusNoContent || rec.Body.Len() != 0 {
+			t.Fatalf("malformed official identity = %d %s", rec.Code, rec.Body.String())
+		}
+		events, err := f.st.ListSAJoinEvents(context.Background(), f.tenant, f.server, f.now.Add(-time.Minute), f.now.Add(time.Minute), 20)
+		if err != nil || len(events) != 1 || events[0].ReasonCode != "session_not_found" || events[0].UUID != "" || events[0].UID.Valid {
+			t.Fatalf("malformed official identity event = %+v, %v", events, err)
+		}
+	}
+}
+
 func TestServerAccessFallbackRequiresTrueMissAndBothSwitches(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -278,7 +376,7 @@ func TestServerAccessFaultAndInvalidArgumentsNeverFallBack(t *testing.T) {
 	}{
 		{name: "join database fault", drop: "ygg_join_sessions", username: "Alice", reason: "store_fault"},
 		{name: "policy database fault", drop: "sa_server_bans", username: "Alice", reason: "policy_fault"},
-		{name: "fallback option database fault", drop: "options", username: "Alice", reason: "policy_fault"},
+		{name: "fallback option database fault", drop: "options", username: "Unknown", reason: "policy_fault"},
 		{name: "invalid arguments", username: "", reason: "invalid_arguments"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

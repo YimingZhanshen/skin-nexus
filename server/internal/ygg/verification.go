@@ -21,6 +21,10 @@ var ErrStoreFault = errors.New("ygg: verification store fault")
 type VerificationIdentity struct {
 	Player   *Player
 	Username string
+	// OfficialUUID and OfficialName are populated only from a successful
+	// official fallback. They never imply a local UID or an explicit binding.
+	OfficialUUID string
+	OfficialName string
 }
 
 // VerificationDecision is the complete pre-session policy result. Fallback is
@@ -35,6 +39,14 @@ type VerificationDecision struct {
 // about tenants, credentials or serveraccess storage.
 type VerificationPolicy interface {
 	Evaluate(ctx context.Context, identity VerificationIdentity) (VerificationDecision, error)
+}
+
+// VerificationFallbackPolicy optionally resolves dynamic fallback gates after a
+// true local session miss. Policies without this seam use the decision's static
+// AllowFallback result; serveraccess implements it so option-store faults cannot
+// block a local hit.
+type VerificationFallbackPolicy interface {
+	ResolveFallback(ctx context.Context, identity VerificationIdentity) (bool, error)
 }
 
 // VerificationResult carries wire-neutral event facts. Profile is either a
@@ -97,11 +109,11 @@ func (s *Service) ScopedHasJoined(ctx context.Context, username, serverID, serve
 	}
 
 	if player == nil {
-		return s.scopedMiss(ctx, username, serverID, serverIP, decision, result)
+		return s.scopedMiss(ctx, username, serverID, serverIP, decision, result, policy)
 	}
 	join, err := s.scopedLiveJoin(ctx, *player, serverID, serverIP)
 	if errors.Is(err, ErrSessionNotFound) {
-		return s.scopedMiss(ctx, username, serverID, serverIP, decision, result)
+		return s.scopedMiss(ctx, username, serverID, serverIP, decision, result, policy)
 	}
 	if err != nil {
 		result.Outcome, result.ReasonCode = "error", "store_fault"
@@ -125,17 +137,50 @@ func (s *Service) ScopedHasJoined(ctx context.Context, username, serverID, serve
 	return result, nil
 }
 
-func (s *Service) scopedMiss(ctx context.Context, username, serverID, serverIP string, decision VerificationDecision, result VerificationResult) (VerificationResult, error) {
+func (s *Service) scopedMiss(ctx context.Context, username, serverID, serverIP string, decision VerificationDecision, result VerificationResult, policy VerificationPolicy) (VerificationResult, error) {
 	result.Outcome, result.ReasonCode, result.Source = "miss", "session_not_found", "none"
 	if !decision.AllowFallback || s.scopedFallback == nil {
 		return result, ErrSessionNotFound
+	}
+	if dynamic, ok := policy.(VerificationFallbackPolicy); ok {
+		allowed, err := dynamic.ResolveFallback(ctx, result.Identity)
+		if err != nil {
+			result.Outcome, result.ReasonCode = "error", "policy_fault"
+			return result, fmt.Errorf("%w: fallback policy: %v", ErrStoreFault, err)
+		}
+		if !allowed {
+			return result, ErrSessionNotFound
+		}
 	}
 	body, ok := s.scopedFallback(ctx, username, serverID, serverIP)
 	if !ok {
 		return result, ErrSessionNotFound
 	}
+	officialUUID, officialName, ok := parseOfficialIdentity(body)
+	if !ok {
+		return result, ErrSessionNotFound
+	}
+	result.Identity.OfficialUUID, result.Identity.OfficialName = officialUUID, officialName
 	result.Profile, result.Outcome, result.ReasonCode, result.Source = body, "allow", "official_fallback", "official"
 	return result, nil
+}
+
+// parseOfficialIdentity reads event facts without rewriting the official body.
+// A malformed identity is a miss even if the body passed the fallback's generic
+// JSON probe; no local UID is inferred from either official field.
+func parseOfficialIdentity(body []byte) (uuid, name string, ok bool) {
+	var profile struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(body, &profile); err != nil || profile.Name == "" {
+		return "", "", false
+	}
+	uuid = NormalizeUUID(profile.ID)
+	if len(uuid) != 32 || !isLowerHex(uuid) {
+		return "", "", false
+	}
+	return uuid, profile.Name, true
 }
 
 func (s *Service) scopedLiveJoin(ctx context.Context, player Player, serverID, serverIP string) (JoinSession, error) {

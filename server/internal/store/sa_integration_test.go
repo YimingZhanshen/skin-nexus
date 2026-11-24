@@ -64,7 +64,7 @@ func TestIntegrationServerAccessVerificationPersistence(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			errs[i] = m.IncrementSAQuota(ctx, server.ID, now, "verify", now.Add(time.Minute))
+			_, _, errs[i] = m.AdmitSAQuota(ctx, server.ID, now, "verify", workers, now)
 		}(i)
 	}
 	close(start)

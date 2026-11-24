@@ -85,44 +85,45 @@ func (m *Mysql) ListSAJoinEvents(ctx context.Context, tenantID, serverID int64, 
 	return out, rows.Err()
 }
 
-// IncrementSAQuota atomically increments one server/window/counter. Expired
-// rows for that exact window are removed before the upsert; the database, not
-// process memory, serializes competing increments.
-func (m *Mysql) IncrementSAQuota(ctx context.Context, serverID int64, windowStart time.Time, counter string, expiresAt time.Time) error {
-	counter = saCounter(counter)
-	windowStart, expiresAt = windowStart.UTC(), expiresAt.UTC()
-	tx, err := m.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
+// AdmitSAQuota atomically increments one server/window/counter and decides
+// admission from that same increment. The caller supplies one UTC snapshot for
+// both the window and expiry comparison; no second read or clock sample can
+// attribute another request's increment to this one.
+func (m *Mysql) AdmitSAQuota(ctx context.Context, serverID int64, windowStart time.Time, counter string, limit int, now time.Time) (int64, bool, error) {
+	windowStart, now = windowStart.UTC(), now.UTC()
+	expiresAt := windowStart.Add(time.Minute)
+	query, returning := m.db.Dialect().AtomicCounterIncrement(
+		"sa_quota_usage", []string{"server_id", "window_start", "counter"}, "value", "expires_at")
+	args := []any{serverID, windowStart, saCounter(counter), expiresAt, now, expiresAt}
+	var used int64
+	if returning {
+		if err := m.db.QueryRowContext(ctx, query, args...).Scan(&used); err != nil {
+			return 0, false, err
+		}
+	} else {
+		res, err := m.db.ExecContext(ctx, query, args...)
+		if err != nil {
+			return 0, false, err
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return 0, false, err
+		}
+		if affected == 1 {
+			// A fresh insert starts at one and has no AUTO_INCREMENT id from
+			// which LAST_INSERT_ID could report the counter value.
+			used = 1
+		} else {
+			used, err = res.LastInsertId()
+			if err != nil {
+				return 0, false, err
+			}
+		}
 	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM sa_quota_usage WHERE server_id=? AND window_start=? AND counter=? AND expires_at<=?`,
-		serverID, windowStart, counter, m.now().UTC()); err != nil {
-		return err
+	if used <= 0 {
+		return 0, false, errors.New("store: atomic quota increment returned no count")
 	}
-	query, err := tx.Engine().Upsert("sa_quota_usage",
-		[]string{"server_id", "window_start", "counter", "expires_at", "value"},
-		[]string{"server_id", "window_start", "counter"}, nil)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, query, serverID, windowStart, counter, expiresAt, 0); err != nil {
-		return err
-	}
-	// Insert at zero, then increment in the same transaction. The dialect upsert
-	// serializes first writers; every contender performs this current-row update.
-	res, err := tx.ExecContext(ctx,
-		`UPDATE sa_quota_usage SET value=value+1,expires_at=?
-		 WHERE server_id=? AND window_start=? AND counter=? AND expires_at>?`,
-		expiresAt, serverID, windowStart, counter, m.now().UTC())
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
-	}
-	return tx.Commit()
+	return used, used <= int64(limit), nil
 }
 
 func (m *Mysql) ReadSAQuota(ctx context.Context, serverID int64, windowStart time.Time, counter string) (int64, error) {

@@ -24,8 +24,7 @@ type verificationStore interface {
 	TouchSACredential(context.Context, int64, int64, int64, time.Time) error
 	SAWhitelistMember(context.Context, int64, int64, int64) (bool, error)
 	SAActiveBan(context.Context, int64, int64, int64, time.Time) (bool, error)
-	IncrementSAQuota(context.Context, int64, time.Time, string, time.Time) error
-	ReadSAQuota(context.Context, int64, time.Time, string) (int64, error)
+	AdmitSAQuota(context.Context, int64, time.Time, string, int, time.Time) (int64, bool, error)
 	InsertSAJoinEvent(context.Context, store.SAJoinEvent) error
 	GetOption(context.Context, string) (string, bool, error)
 }
@@ -64,24 +63,14 @@ func (p *requestPolicy) Evaluate(ctx context.Context, identity ygg.VerificationI
 		}
 	}
 	window := p.now.UTC().Truncate(time.Minute)
-	if err := p.store.IncrementSAQuota(ctx, p.server.ID, window, "verify", window.Add(time.Minute)); err != nil {
-		return ygg.VerificationDecision{}, err
-	}
-	used, err := p.store.ReadSAQuota(ctx, p.server.ID, window, "verify")
+	_, allowed, err := p.store.AdmitSAQuota(ctx, p.server.ID, window, "verify", p.policy.VerifyRateLimit, p.now)
 	if err != nil {
 		return ygg.VerificationDecision{}, err
 	}
-	if used > int64(p.policy.VerifyRateLimit) {
+	if !allowed {
 		return ygg.VerificationDecision{ReasonCode: "quota_exceeded"}, nil
 	}
-	fallback := false
-	if p.policy.PremiumFallbackEnabled {
-		var err error
-		fallback, err = saGlobalFallback(ctx, p.store)
-		if err != nil {
-			return ygg.VerificationDecision{}, err
-		}
-	}
+	fallback := p.policy.PremiumFallbackEnabled && !p.policy.WhitelistEnabled
 	// Concurrency is checked after bans, whitelist and quota, and the slot is
 	// held until the verification callback so it also bounds official fallback.
 	if p.acquire != nil {
@@ -91,6 +80,13 @@ func (p *requestPolicy) Evaluate(ctx context.Context, identity ygg.VerificationI
 		}
 	}
 	return ygg.VerificationDecision{Allow: true, AllowFallback: fallback, ReasonCode: "allowed"}, nil
+}
+
+func (p *requestPolicy) ResolveFallback(ctx context.Context, _ ygg.VerificationIdentity) (bool, error) {
+	if !p.policy.PremiumFallbackEnabled || p.policy.WhitelistEnabled {
+		return false, nil
+	}
+	return saGlobalFallback(ctx, p.store)
 }
 
 func saGlobalFallback(ctx context.Context, st verificationStore) (bool, error) {
@@ -184,9 +180,7 @@ func (v *verifier) handler(w http.ResponseWriter, r *http.Request) {
 			requestPolicy.release()
 			requestPolicy.release = nil
 		}
-		if result.Identity.Player != nil {
-			requestPolicy.identity = result.Identity
-		}
+		requestPolicy.identity = result.Identity
 		v.observe(r, credential, mode, requestID, requestPolicy.identity, result, started)
 	}).ServeHTTP(w, r)
 }
@@ -248,7 +242,10 @@ func (v *verifier) observe(r *http.Request, credential store.SACredential, mode,
 		JoinSessionID: sql.NullInt64{Int64: result.JoinSessionID, Valid: result.JoinSessionID > 0},
 		UUID:          saPlayerUUID(identity), PlayerName: saText(identity.Username, 64), Outcome: result.Outcome,
 		ReasonCode: result.ReasonCode, SourceMode: mode, DurationMS: v.now().Sub(started).Milliseconds(), RequestID: requestID}
-	if identity.Player != nil {
+	if identity.OfficialUUID != "" {
+		event.UUID = identity.OfficialUUID
+		event.PlayerName = saText(identity.OfficialName, 64)
+	} else if identity.Player != nil {
 		event.UID = sql.NullInt64{Int64: identity.Player.UID, Valid: identity.Player.UID > 0}
 		if event.UUID == "" {
 			event.UUID = identity.Player.UUID
@@ -305,4 +302,5 @@ func (v *verifier) routes(mux *http.ServeMux) {
 	mux.Handle("GET /api/serveraccess/v1/servers/{public_id}/hasJoined", http.HandlerFunc(v.handler))
 }
 
+var _ ygg.VerificationFallbackPolicy = (*requestPolicy)(nil)
 var _ ygg.VerificationPolicy = (*requestPolicy)(nil)

@@ -274,11 +274,39 @@ app 进程能看到哪些变量，取决于 compose 文件里 `environment:` 段
 | `SKIN_UNION_QUERYEMAIL_MODE` | 面板真源 | `full` | 联盟邮箱查询应答：`full` = 返回邮箱、`off` = 403 拒绝；其他值按 `off` 处理（fail-closed） |
 | `SKIN_UNION_RESOLVE_NAMES` | 面板真源 | `true` | 是否由本站后台向各成员站的 `/api/yggdrasil` 读取站名（hub 不存站名）。读取只走受控出站（公网地址、禁重定向、固定单一路径、限响应体），且不在请求路径上等待；设为 `false` 后连已读到的名字也不再显示。面板项 `union_resolve_names` 热生效 |
 
-**服务器接入模块**（当前仅骨架；真源在「管理 → 站点设置」）
+**服务器接入模块**（控制面与可信验证链已实现，默认关闭；真源在「管理 → 站点设置」）
 
 | 变量 | 必填性 | 默认（源码 / 镜像内） | 说明 |
 |---|---|---|---|
-| `SKIN_SERVERACCESS_ENABLED` | 面板真源 | `false` | 服务器接入模块开关；面板 `serveraccess_enabled` 优先且热生效。关闭时模块子树统一 404；开启后仅提供健康检查与空服务器列表，不开放控制面或验证策略 |
+| `SKIN_SERVERACCESS_ENABLED` | 面板真源 | `false` | 服务器接入模块开关；面板 `serveraccess_enabled` 优先且热生效。关闭时模块子树统一 404；开启后提供租户/服务器/成员/邀请控制面、按服凭证与白名单/封禁策略、平台紧急管理，以及 URL secret / Bearer Header 两种 `hasJoined` 验证入口。进服事件与验证配额持久化；服主前端、验证代理二进制、导出/注销与公测运维不属于当前实现 |
+
+**服务器接入验证与凭证运维**
+
+当前实现提供两个标准 `hasJoined` 入口，成功返回本地签名 profile 或官方原样响应，拒绝/未命中/故障返回空 204：
+
+- URL secret：`GET /v/<secret>/sessionserver/session/minecraft/hasJoined`，secret 只放在独立路径段。
+- Bearer Header：`GET /api/serveraccess/v1/servers/<public_id>/hasJoined`，请求头为 `Authorization: Bearer <secret>`。
+
+凭证只展示一次，数据库只存 SHA-256 摘要。白名单按本地账号 `uid` 执行；`whitelist_enabled=true` 时完全禁用官方 fallback，已知玩家没有本地 join session 与未知玩家一样拒绝，不按昵称认领官方身份。未开启白名单时，官方 fallback 只在真实本地 miss、按服开关与平台全局开关均开启、且既有 Yggdrasil fallback 开关也开启时回源；官方 identity 用于事件，但未显式绑定时事件 `uid` 必须为空。
+
+**`/v/` 路径本身就是凭据，运维边界比普通页面更严格：**
+
+| 层 | 当前部署必须满足 |
+|---|---|
+| 应用 | 验证响应带 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`；应用日志只写固定路由标签，不记录原始 path/query、Authorization 或 body |
+| Nginx / 宝塔反代 | 对 `/v/` 关闭缓存（`proxy_cache off`）与访问日志（`access_log off`）；若必须留访问日志，只记状态、耗时、字节数，不启用带 `$request`/`$uri`/`$args` 的格式。禁止 rewrite、`return` 或错误页重定向到带原 URL 的 `Location` |
+| WAF / 入侵检测 | 禁止采集完整请求 URL/path/query、Authorization 与 body；拦截页、告警通知和工单导出不得回显 secret path |
+| CDN / 网关 | `/v/` 全部绕过缓存，不记录完整 URL，不做跨域/规范化重定向；边缘错误页不得回显原路径 |
+| APM / tracing | 将路由归一为固定标签 `serveraccess.verify`；关闭 raw URL/path/query/header/body 采集，secret 不得进入 span 名称、tag、异常文本或指标标签 |
+
+对外只允许 TLS（HTTPS）；不要给 secret 加 query 参数，也不要把带 secret 的 URL 放进 Referer、页面链接、工单、聊天记录或监控截图。反代不要覆盖应用已下发的 `Cache-Control` 与 `Referrer-Policy`。MC/authlib 调试日志、端侧配置和抓包仍可能暴露 URL，因此泄漏后按下面的流程立即吊销，不能只靠删除某一层日志。
+
+**凭证轮换与紧急吊销：**
+
+1. 在模块控制面为对应服务器创建 `url_secret` 或 `header` 凭证，或对现有凭证调用 `POST /api/serveraccess/v1/servers/{id}/credentials/{cid}/rotate`（JSON body 为 `{"mode":"url_secret"}` 或 `{"mode":"header"}`）。响应中的明文 secret 只出现一次。
+2. 把新 API root 配置到 authlib-injector，或把新 secret 配置到验证代理的 Bearer Header；先用新配置验证进服，再处理旧配置。轮换默认保留 24 小时重叠窗口。
+3. 新配置确认可用后，调用 `POST /api/serveraccess/v1/servers/{id}/credentials/{cid}/revoke` 吊销旧凭证；重叠期结束旧凭证也会自动失效。
+4. 若 secret 已泄漏，跳过重叠等待，立即吊销旧凭证并换新；同时检查各层日志/追踪/缓存并按事件处置流程清理已采集的副本。URL secret 与 Header secret 都按同一凭据纪律处理。
 
 **联盟入站的部署形状（不是待办，是约束）**
 

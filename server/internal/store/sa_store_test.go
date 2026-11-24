@@ -813,7 +813,7 @@ func TestServerAccessVerificationEventsAndAtomicQuota(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			errs[i] = st.IncrementSAQuota(ctx, server.ID, now, "verify", now.Add(time.Minute))
+			_, _, errs[i] = st.AdmitSAQuota(ctx, server.ID, now, "verify", workers, now)
 		}(i)
 	}
 	close(start)
@@ -828,6 +828,93 @@ func TestServerAccessVerificationEventsAndAtomicQuota(t *testing.T) {
 	}
 	if got, err := st.ReadSAQuota(ctx, server.ID, now.Add(time.Minute), "verify"); err != nil || got != 0 {
 		t.Fatalf("new window quota = %d, %v", got, err)
+	}
+}
+
+func TestServerAccessQuotaAdmissionReturnsItsOwnIncrement(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	tenant, _ := st.CreateSATenant(ctx, "quota-own-increment", 2)
+	server, _ := st.CreateSAServer(ctx, tenant, "srv_quota_own_increment", "quota")
+	window := time.Now().UTC().Truncate(time.Minute)
+	firstUsed, firstAllowed, err := st.AdmitSAQuota(ctx, server.ID, window, "verify", 1, window.Add(10*time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondUsed, secondAllowed, err := st.AdmitSAQuota(ctx, server.ID, window, "verify", 1, window.Add(20*time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstUsed != 1 || !firstAllowed || secondUsed != 2 || secondAllowed {
+		t.Fatalf("admissions = first(%d,%v) second(%d,%v)", firstUsed, firstAllowed, secondUsed, secondAllowed)
+	}
+}
+
+func TestServerAccessQuotaAdmissionConcurrentLimit(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	tenant, _ := st.CreateSATenant(ctx, "quota-admission", 2)
+	server, _ := st.CreateSAServer(ctx, tenant, "srv_quota_admission", "quota")
+	window := time.Now().UTC().Truncate(time.Minute)
+	const workers, limit = 12, 5
+	start := make(chan struct{})
+	allowedResults := make([]bool, workers)
+	errs := make([]error, workers)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			_, allowedResults[i], errs[i] = st.AdmitSAQuota(ctx, server.ID, window, "verify", limit, window.Add(30*time.Second))
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	allowed := 0
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("caller %d: %v", i, err)
+		}
+		if allowedResults[i] {
+			allowed++
+		}
+	}
+	if allowed != limit {
+		t.Fatalf("concurrent admissions = %d, want %d", allowed, limit)
+	}
+	if got, err := st.ReadSAQuota(ctx, server.ID, window, "verify"); err != nil || got != workers {
+		t.Fatalf("quota = %d, %v, want %d", got, err, workers)
+	}
+}
+
+func TestServerAccessQuotaAdmissionMinuteBoundaryUsesOneSnapshot(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	tenant, _ := st.CreateSATenant(ctx, "quota-boundary", 2)
+	server, _ := st.CreateSAServer(ctx, tenant, "srv_quota_boundary", "quota")
+	window := time.Now().UTC().Truncate(time.Minute)
+	st.now = func() time.Time {
+		t.Fatal("quota admission must use the supplied snapshot")
+		return window
+	}
+	for _, tc := range []struct {
+		name        string
+		window, now time.Time
+		wantUsed    int64
+		wantAllowed bool
+	}{
+		{name: "last millisecond of minute", window: window, now: window.Add(time.Minute - time.Millisecond), wantUsed: 1, wantAllowed: true},
+		{name: "limit exceeded", window: window, now: window.Add(time.Minute - time.Millisecond), wantUsed: 2, wantAllowed: false},
+		{name: "next minute", window: window.Add(time.Minute), now: window.Add(time.Minute), wantUsed: 1, wantAllowed: true},
+		{name: "expired old window resets", window: window, now: window.Add(2 * time.Minute), wantUsed: 1, wantAllowed: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			used, allowed, err := st.AdmitSAQuota(ctx, server.ID, tc.window, "verify", 1, tc.now)
+			if err != nil || used != tc.wantUsed || allowed != tc.wantAllowed {
+				t.Fatalf("admission = (%d, %v, %v), want (%d, %v)", used, allowed, err, tc.wantUsed, tc.wantAllowed)
+			}
+		})
 	}
 }
 
