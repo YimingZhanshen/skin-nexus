@@ -688,6 +688,28 @@ func TestServerAccessPolicyWhitelistBanConstraintsAndScope(t *testing.T) {
 	}
 }
 
+func TestServerAccessDeletingTenantRejectsNewCredentials(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	tenant, _ := st.CreateSATenant(ctx, "deleting-credential", 2)
+	server, err := st.CreateSAServer(ctx, tenant, "srv_deleting_credential", "deleting")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.RequestSATenantDeletion(ctx, tenant, DefaultSATenantDeletionGrace, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateSAServerCredential(ctx, tenant, server.ID, SACredential{
+		Mode: "header", SecretHash: saTestHash("late-secret"), Scopes: `["verify:join"]`, Status: "active",
+	}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("create credential on deleting tenant = %v, want not found", err)
+	}
+	rows, err := st.ListSAServerCredentials(ctx, tenant, server.ID)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("late credential rows = %+v %v, want none", rows, err)
+	}
+}
+
 func TestServerAccessScopedDeletesRetainGlobalUsers(t *testing.T) {
 	st := openSQLiteStore(t)
 	ctx := context.Background()

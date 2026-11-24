@@ -93,7 +93,8 @@ type Config struct {
 
 	// Optional server-access module. Off by default; the panel option wins over
 	// this environment fallback and can toggle the request gate without restart.
-	ServerAccessEnabled bool // SKIN_SERVERACCESS_ENABLED
+	ServerAccessEnabled            bool // SKIN_SERVERACCESS_ENABLED
+	ServerAccessDeletionGraceHours int  // SKIN_SERVERACCESS_DELETION_GRACE_HOURS (default 168)
 
 	// Phase 3 (docker-first): unified data root + schema bootstrap.
 	DataDir         string // SKIN_DATA_DIR — textures/keys/themes live under it
@@ -177,6 +178,14 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	serverAccessDeletionGraceHours := 168
+	if raw := strings.TrimSpace(os.Getenv("SKIN_SERVERACCESS_DELETION_GRACE_HOURS")); raw != "" {
+		hours, parseErr := strconv.Atoi(raw)
+		if parseErr != nil || hours < 1 || hours > 8760 {
+			return nil, fmt.Errorf("config: SKIN_SERVERACCESS_DELETION_GRACE_HOURS must be an integer between 1 and 8760")
+		}
+		serverAccessDeletionGraceHours = hours
+	}
 	c := &Config{
 		Listen:         getenv("SKIN_LISTEN", ":8080"),
 		BaseURL:        strings.TrimRight(getenv("SKIN_BASE_URL", "http://localhost:8080"), "/"),
@@ -215,7 +224,8 @@ func Load() (*Config, error) {
 		UnionHubOrigin:         getenv("SKIN_UNION_HUB_ORIGIN", "https://skin.mualliance.ltd"),
 		UnionResolveNames:      getenv("SKIN_UNION_RESOLVE_NAMES", "true") == "true",
 
-		ServerAccessEnabled: serverAccessEnabled,
+		ServerAccessEnabled:            serverAccessEnabled,
+		ServerAccessDeletionGraceHours: serverAccessDeletionGraceHours,
 
 		DataDir:         dataDir,
 		ThemesDir:       getenv("SKIN_THEMES_DIR", filepath.Join(dataDir, "themes")),

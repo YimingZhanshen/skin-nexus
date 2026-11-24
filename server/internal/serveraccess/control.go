@@ -38,6 +38,8 @@ func (s *Stack) controlHandler() http.Handler {
 		writeSAJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	mux.Handle("GET /api/serveraccess/v1/tenants/me", c.owner(http.HandlerFunc(c.tenantMe)))
+	mux.Handle("GET /api/serveraccess/v1/tenants/me/export", c.owner(http.HandlerFunc(c.tenantExport), "admin", "owner"))
+	mux.Handle("POST /api/serveraccess/v1/tenants/me/delete-request", c.owner(http.HandlerFunc(c.tenantDeleteRequest), "owner"))
 	mux.Handle("GET /api/serveraccess/v1/tenants/me/members", c.owner(http.HandlerFunc(c.members)))
 	mux.Handle("POST /api/serveraccess/v1/tenants/me/members/invite", c.owner(http.HandlerFunc(c.invite), "owner"))
 	mux.Handle("DELETE /api/serveraccess/v1/tenants/me/members/{uid}", c.owner(http.HandlerFunc(c.removeMember), "owner"))
@@ -65,6 +67,7 @@ func (s *Stack) controlHandler() http.Handler {
 	mux.Handle("GET /api/admin/v1/serveraccess/tenants", c.platform(http.HandlerFunc(c.platformTenants)))
 	mux.Handle("GET /api/admin/v1/serveraccess/servers", c.platform(http.HandlerFunc(c.platformServers)))
 	mux.Handle("PATCH /api/admin/v1/serveraccess/tenants/{id}", c.platform(http.HandlerFunc(c.platformTenantUpdate)))
+	mux.Handle("POST /api/admin/v1/serveraccess/tenants/{id}/delete", c.platform(http.HandlerFunc(c.platformTenantDelete)))
 	mux.Handle("PATCH /api/admin/v1/serveraccess/servers/{id}", c.platform(http.HandlerFunc(c.platformServerUpdate)))
 	mux.Handle("POST /api/admin/v1/serveraccess/servers/{id}/credentials/{cid}/revoke", c.platform(http.HandlerFunc(c.platformRevoke)))
 	mux.Handle("GET /api/admin/v1/serveraccess/fallback", c.platform(http.HandlerFunc(c.platformFallback)))
@@ -213,6 +216,8 @@ func writeSAStoreError(w http.ResponseWriter, err error) {
 		writeSAError(w, http.StatusForbidden, i18n.MsgServerAccessForbidden, "Action not allowed")
 	case errors.Is(err, store.ErrDuplicate):
 		writeSAError(w, http.StatusConflict, i18n.MsgServerAccessConflict, "Resource already exists")
+	case errors.Is(err, store.ErrDeletionInProgress):
+		writeSAError(w, http.StatusConflict, i18n.MsgServerAccessConflict, "Tenant deletion is already in progress")
 	case errors.Is(err, store.ErrQuota):
 		writeSAError(w, http.StatusConflict, i18n.MsgServerAccessQuota, "Server quota exceeded")
 	case errors.Is(err, store.ErrLastOwner):

@@ -22,9 +22,10 @@ func scanSACredential(s rowScanner) (SACredential, error) {
 func (m *Mysql) CreateSAServerCredential(ctx context.Context, tenantID, serverID int64, c SACredential) (int64, error) {
 	id, err := m.db.InsertReturningID(ctx,
 		`INSERT INTO sa_server_credentials (server_id,mode,secret_hash,scopes,status,expires_at,created_at)
-		 SELECT ?,?,?,?,?,?,? FROM sa_servers WHERE id=? AND tenant_id=?`,
+		 SELECT ?,?,?,?,?,?,? FROM sa_servers s JOIN sa_tenants t ON t.id=s.tenant_id
+		 WHERE s.id=? AND s.tenant_id=? AND t.status='active' AND t.deleted_at IS NULL`,
 		serverID, c.Mode, c.SecretHash, c.Scopes, c.Status, c.ExpiresAt, m.now().UTC(), serverID, tenantID)
-	if id == 0 && err == nil {
+	if errors.Is(err, sql.ErrNoRows) || (id == 0 && err == nil) {
 		return 0, ErrNotFound
 	}
 	if isDupKey(err) {
@@ -111,7 +112,8 @@ func (m *Mysql) RotateSAServerCredential(ctx context.Context, tenantID, serverID
 		`UPDATE sa_server_credentials SET expires_at=CASE
 		   WHEN expires_at IS NULL OR expires_at>? THEN ? ELSE expires_at END
 		 WHERE id=? AND server_id=? AND status='active'
-		   AND server_id IN (SELECT id FROM sa_servers WHERE id=? AND tenant_id=?)`,
+		   AND server_id IN (SELECT s.id FROM sa_servers s JOIN sa_tenants t ON t.id=s.tenant_id
+		     WHERE s.id=? AND s.tenant_id=? AND t.status='active' AND t.deleted_at IS NULL)`,
 		now.Add(overlap).UTC(), now.Add(overlap).UTC(), oldID, serverID, serverID, tenantID)
 	if err != nil {
 		return 0, err
@@ -121,9 +123,10 @@ func (m *Mysql) RotateSAServerCredential(ctx context.Context, tenantID, serverID
 	}
 	id, err := tx.InsertReturningID(ctx,
 		`INSERT INTO sa_server_credentials (server_id,mode,secret_hash,scopes,status,expires_at,created_at)
-		 SELECT ?,?,?,?,?,?,? FROM sa_servers WHERE id=? AND tenant_id=?`,
+		 SELECT ?,?,?,?,?,?,? FROM sa_servers s JOIN sa_tenants t ON t.id=s.tenant_id
+		 WHERE s.id=? AND s.tenant_id=? AND t.status='active' AND t.deleted_at IS NULL`,
 		serverID, fresh.Mode, fresh.SecretHash, fresh.Scopes, fresh.Status, fresh.ExpiresAt, now.UTC(), serverID, tenantID)
-	if id == 0 && err == nil {
+	if errors.Is(err, sql.ErrNoRows) || (id == 0 && err == nil) {
 		return 0, ErrNotFound
 	}
 	if isDupKey(err) {

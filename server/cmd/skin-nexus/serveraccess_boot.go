@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"skin-nexus/server/internal/accesslog"
 	"skin-nexus/server/internal/config"
@@ -76,7 +77,11 @@ func newServerAccessStack(st serverAccessOptionReader, db *store.Mysql, cfg *con
 			}
 		}
 	}
-	s.stack = serveraccess.NewStack(serveraccess.Config{Enabled: enabled, Store: db})
+	grace := time.Duration(0)
+	if cfg != nil && cfg.ServerAccessDeletionGraceHours > 0 {
+		grace = time.Duration(cfg.ServerAccessDeletionGraceHours) * time.Hour
+	}
+	s.stack = serveraccess.NewStack(serveraccess.Config{Enabled: enabled, Store: db, DeletionGracePeriod: grace})
 	return s
 }
 

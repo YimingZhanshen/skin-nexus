@@ -7,17 +7,21 @@ import (
 )
 
 var (
-	ErrLastOwner = errors.New("store: last tenant owner")
-	ErrQuota     = errors.New("store: server access quota exceeded")
+	ErrLastOwner          = errors.New("store: last tenant owner")
+	ErrQuota              = errors.New("store: server access quota exceeded")
+	ErrDeletionNotDue     = errors.New("store: tenant deletion is not due")
+	ErrDeletionInProgress = errors.New("store: tenant deletion is in progress")
 )
 
 type SATenant struct {
-	ID          int64        `json:"id"`
-	Name        string       `json:"name"`
-	Status      string       `json:"status"`
-	ServerLimit int          `json:"serverLimit"`
-	CreatedAt   time.Time    `json:"createdAt"`
-	DeletedAt   sql.NullTime `json:"deletedAt,omitempty"`
+	ID                  int64        `json:"id"`
+	Name                string       `json:"name"`
+	Status              string       `json:"status"`
+	ServerLimit         int          `json:"serverLimit"`
+	CreatedAt           time.Time    `json:"createdAt"`
+	DeletedAt           sql.NullTime `json:"deletedAt,omitempty"`
+	DeletionRequestedAt *time.Time   `json:"deletionRequestedAt"`
+	DeletionDueAt       *time.Time   `json:"deletionDueAt"`
 }
 
 type SATenantMember struct {

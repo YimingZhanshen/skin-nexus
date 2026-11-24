@@ -202,10 +202,19 @@ func (m *Mysql) AddSAServerWhitelist(ctx context.Context, tenantID, serverID, ui
 }
 
 func (m *Mysql) ListSAServerWhitelist(ctx context.Context, tenantID, serverID int64) ([]SAServerWhitelist, error) {
-	rows, err := m.db.QueryContext(ctx,
-		`SELECT w.id,w.server_id,w.uid,w.note,w.created_by,w.created_at
+	return m.listSAServerWhitelist(ctx, tenantID, serverID, 5000)
+}
+
+func (m *Mysql) listSAServerWhitelist(ctx context.Context, tenantID, serverID int64, limit int) ([]SAServerWhitelist, error) {
+	q := `SELECT w.id,w.server_id,w.uid,w.note,w.created_by,w.created_at
 		 FROM sa_server_whitelist w JOIN sa_servers s ON s.id=w.server_id
-		 WHERE s.tenant_id=? AND w.server_id=? ORDER BY w.id DESC LIMIT 5000`, tenantID, serverID)
+		 WHERE s.tenant_id=? AND w.server_id=? ORDER BY w.id DESC`
+	args := []any{tenantID, serverID}
+	if limit > 0 {
+		q += ` LIMIT ?`
+		args = append(args, limit)
+	}
+	rows, err := m.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -247,10 +256,19 @@ func (m *Mysql) AddSAServerBan(ctx context.Context, tenantID, serverID, uid int6
 }
 
 func (m *Mysql) ListSAServerBans(ctx context.Context, tenantID, serverID int64) ([]SAServerBan, error) {
-	rows, err := m.db.QueryContext(ctx,
-		`SELECT b.id,b.server_id,b.uid,b.reason,b.expires_at,b.created_by,b.created_at
+	return m.listSAServerBans(ctx, tenantID, serverID, 5000)
+}
+
+func (m *Mysql) listSAServerBans(ctx context.Context, tenantID, serverID int64, limit int) ([]SAServerBan, error) {
+	q := `SELECT b.id,b.server_id,b.uid,b.reason,b.expires_at,b.created_by,b.created_at
 		 FROM sa_server_bans b JOIN sa_servers s ON s.id=b.server_id
-		 WHERE s.tenant_id=? AND b.server_id=? ORDER BY b.id DESC LIMIT 5000`, tenantID, serverID)
+		 WHERE s.tenant_id=? AND b.server_id=? ORDER BY b.id DESC`
+	args := []any{tenantID, serverID}
+	if limit > 0 {
+		q += ` LIMIT ?`
+		args = append(args, limit)
+	}
+	rows, err := m.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

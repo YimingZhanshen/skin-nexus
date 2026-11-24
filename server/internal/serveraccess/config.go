@@ -21,6 +21,10 @@ type Config struct {
 	InviteTTL       time.Duration
 	CredentialTTL   time.Duration
 	RotationOverlap time.Duration
+	// DeletionGracePeriod defaults to seven days when zero. The value is fixed
+	// when a deletion is requested so later configuration changes cannot shorten
+	// an already-promised grace period.
+	DeletionGracePeriod time.Duration
 	// Verifier is the narrow Yggdrasil extension used only by S3 routes.
 	Verifier *ygg.API
 	// OnEventError is an additional metric/alert hook. Event persistence is

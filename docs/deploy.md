@@ -278,14 +278,18 @@ app 进程能看到哪些变量，取决于 compose 文件里 `environment:` 段
 
 | 变量 | 必填性 | 默认（源码 / 镜像内） | 说明 |
 |---|---|---|---|
-| `SKIN_SERVERACCESS_ENABLED` | 面板真源 | `false` | 服务器接入模块开关；面板 `serveraccess_enabled` 优先且热生效。关闭时所有模块 API 统一 404，`/servers` 仍提供 SPA 壳并明确显示模块不可用；开启后提供独立 `/servers` 服主门户、租户/服务器/成员/邀请控制面、按服凭证与白名单/封禁策略、进服事件、平台状态/配额/紧急管理，以及 URL secret / Bearer Header 两种 `hasJoined` 验证入口。进服事件与验证配额持久化；可选 `verify-proxy` 独立子命令、按服 fallback 熔断和按 `EventRetentionDays` 的事件清理也已实现；导出/注销与公测运维不属于当前实现 |
+| `SKIN_SERVERACCESS_ENABLED` | 面板真源 | `false` | 服务器接入模块开关；面板 `serveraccess_enabled` 优先且热生效。关闭时所有模块 API 统一 404，`/servers` 仍提供 SPA 壳并明确显示模块不可用；开启后提供独立 `/servers` 服主门户、租户/服务器/成员/邀请控制面、按服凭证与白名单/封禁策略、进服事件、平台状态/配额/紧急管理，以及 URL secret / Bearer Header 两种 `hasJoined` 验证入口。进服事件与验证配额持久化；可选 `verify-proxy` 独立子命令、按服 fallback 熔断、按 `EventRetentionDays` 的事件清理、字段白名单导出与宽限期删除均已实现 |
+| `SKIN_SERVERACCESS_DELETION_GRACE_HOURS` | 可选 | `168` | 租户删除请求的宽限期小时数，允许 1–8760。请求发生时把截止时间写入 `deletion_due_at`，之后修改配置不会缩短已承诺的期限；平台超管只能在截止时间到达后执行物理删除 |
 
 **服主门户接口**
 
-`/servers` 使用普通网页会话，不接受管理员令牌；租户 owner/admin 可写，viewer 只读。以下两个只读端点同样要求有效的租户成员会话：
+`/servers` 使用普通网页会话，不接受管理员令牌；租户 owner/admin 可写，viewer 只读。以下端点要求有效的租户成员会话：
 
 - `GET /api/serveraccess/v1/servers/{id}/events?before={event_id}&size={1..200}`：按 `id DESC` 游标分页，默认最近 24 小时。`before` 为上一页最后一个事件 id；响应包含 `events`、`nextBefore`、`hasMore`。每条事件只暴露 `id`、`createdAt`、`outcome`、`reasonCode`、`durationMs`、`sourceMode`，不返回玩家身份、IP、邮箱、令牌、全局角色或皮肤。可用 RFC3339 的 `from`/`to` 缩小时间范围，最长为 366 天。
 - `GET /api/serveraccess/v1/players/lookup?q={name-or-uuid}`：按角色名（不区分大小写）或 32 位 UUID 精确解析，成功只返回 `{uid,name,uuid}`，未找到返回 404。该端点不返回邮箱、IP 或全局资料。
+- `GET /api/serveraccess/v1/tenants/me/export`：owner/admin 可下载当前成员租户的 JSON 附件。仅包含租户元数据、服务器与策略、白名单 uid/note/时间、封禁 uid/reason/expiry/时间、owner 可见进服事件，以及凭据 id/mode/status/created/last_used/expires；不包含邮箱、IP、token、secret/hash、全局用户/玩家/纹理或邀请数据。审计只记录租户 id，不记录导出内容。
+- `POST /api/serveraccess/v1/tenants/me/delete-request`：仅 owner。原子把租户置为 `deleting`、暂停全部服务器、吊销全部凭据并固定删除截止时间；默认宽限期 7 天。viewer/admin 返回 403。
+- `POST /api/admin/v1/serveraccess/tenants/{id}/delete`：仅 permission=2 网页超管会话。租户未请求删除或截止时间未到时返回 409；到期后在事务内执行既有 `sa_*` 级联删除，重复删除返回 404。全局用户、玩家和纹理始终保留。
 
 服务器 id 始终从当前成员租户解析；跨租户服务器返回 404。模块关闭时上述 API 均返回 404；`/servers` 不受模块门禁拦截，仍返回 SPA 壳并显示明确的不可用状态。未知 `/servers/` 子路径仍为 404，不退化成 SPA 页面。
 

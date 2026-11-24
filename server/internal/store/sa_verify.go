@@ -99,6 +99,28 @@ func (m *Mysql) ListSAJoinEventsPage(ctx context.Context, tenantID, serverID int
 	return out, rows.Err()
 }
 
+// ListSAOwnerJoinEventsForExport reads only the owner timeline allowlist. It
+// deliberately avoids loading player identity, request ids, or raw event scope.
+func (m *Mysql) ListSAOwnerJoinEventsForExport(ctx context.Context, tenantID, serverID int64) ([]SAOwnerJoinEvent, error) {
+	rows, err := m.db.QueryContext(ctx,
+		`SELECT e.id,e.created_at,e.outcome,e.reason_code,e.source_mode,e.duration_ms
+		 FROM sa_join_events e JOIN sa_servers s ON s.id=e.server_id
+		 WHERE s.tenant_id=? AND e.server_id=? ORDER BY e.id DESC`, tenantID, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]SAOwnerJoinEvent, 0)
+	for rows.Next() {
+		var event SAOwnerJoinEvent
+		if err := rows.Scan(&event.ID, &event.CreatedAt, &event.Outcome, &event.ReasonCode, &event.SourceMode, &event.DurationMS); err != nil {
+			return nil, err
+		}
+		out = append(out, event)
+	}
+	return out, rows.Err()
+}
+
 // SAEventRetentionPolicies returns every live tenant's per-server policy,
 // including suspended/disabled servers: emergency governance must not make old
 // verification evidence immortal.

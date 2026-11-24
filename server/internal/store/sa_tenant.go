@@ -27,17 +27,29 @@ func (m *Mysql) CreateSATenant(ctx context.Context, name string, serverLimit int
 
 func (m *Mysql) SATenantByID(ctx context.Context, tenantID int64) (SATenant, error) {
 	return scanSATenant(m.db.QueryRowContext(ctx,
-		`SELECT id,name,status,server_limit,created_at,deleted_at FROM sa_tenants
+		`SELECT id,name,status,server_limit,created_at,deleted_at,deletion_requested_at,deletion_due_at FROM sa_tenants
 		 WHERE id=? AND deleted_at IS NULL`, tenantID))
 }
 
 func scanSATenant(s rowScanner) (SATenant, error) {
 	var t SATenant
-	err := s.Scan(&t.ID, &t.Name, &t.Status, &t.ServerLimit, &t.CreatedAt, &t.DeletedAt)
+	var requested, due sql.NullTime
+	err := s.Scan(&t.ID, &t.Name, &t.Status, &t.ServerLimit, &t.CreatedAt, &t.DeletedAt, &requested, &due)
 	if errors.Is(err, sql.ErrNoRows) {
 		return SATenant{}, ErrNotFound
 	}
-	return t, err
+	if err != nil {
+		return SATenant{}, err
+	}
+	if requested.Valid {
+		value := requested.Time.UTC()
+		t.DeletionRequestedAt = &value
+	}
+	if due.Valid {
+		value := due.Time.UTC()
+		t.DeletionDueAt = &value
+	}
+	return t, nil
 }
 
 // PlatformSATenants is deliberately platform-only: owner handlers never call
@@ -49,7 +61,7 @@ func (m *Mysql) PlatformSATenants(ctx context.Context, q string, page, size int)
 		return nil, 0, err
 	}
 	rows, err := m.db.QueryContext(ctx,
-		`SELECT id,name,status,server_limit,created_at,deleted_at FROM sa_tenants
+		`SELECT id,name,status,server_limit,created_at,deleted_at,deletion_requested_at,deletion_due_at FROM sa_tenants
 		 WHERE deleted_at IS NULL`+where+` ORDER BY id DESC LIMIT ? OFFSET ?`,
 		append(args, size, dbx.Offset(page, size))...)
 	if err != nil {
@@ -70,18 +82,18 @@ func (m *Mysql) PlatformSATenants(ctx context.Context, q string, page, size int)
 // DeleteSATenant is a platform lifecycle primitive. Its tenant id is the
 // explicit resource scope; sa_* foreign keys cascade, global users do not.
 func (m *Mysql) DeleteSATenant(ctx context.Context, tenantID int64) error {
-	res, err := m.db.ExecContext(ctx, `DELETE FROM sa_tenants WHERE id=?`, tenantID)
-	return saAffected(res, err)
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := deleteSATenantTx(ctx, tx, tenantID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (m *Mysql) UpdateSATenantStatus(ctx context.Context, tenantID int64, status string) error {
-	if status != "active" {
-		res, err := m.db.ExecContext(ctx,
-			`UPDATE sa_tenants SET status=? WHERE id=? AND deleted_at IS NULL`, status, tenantID)
-		return saUpdateAffected(res, err, func() (bool, error) {
-			return m.saExists(ctx, `SELECT 1 FROM sa_tenants WHERE id=? AND deleted_at IS NULL`, tenantID)
-		})
-	}
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -90,6 +102,15 @@ func (m *Mysql) UpdateSATenantStatus(ctx context.Context, tenantID int64, status
 	current, _, err := saLockTenantRow(ctx, tx, tenantID)
 	if err != nil {
 		return err
+	}
+	if current == "deleting" {
+		return ErrDeletionInProgress
+	}
+	if status != "active" {
+		if _, err := tx.ExecContext(ctx, `UPDATE sa_tenants SET status=? WHERE id=?`, status, tenantID); err != nil {
+			return err
+		}
+		return tx.Commit()
 	}
 	if current == "active" {
 		return tx.Commit()
@@ -492,13 +513,22 @@ func scanSAServer(s rowScanner) (SAServer, error) {
 }
 
 func (m *Mysql) ListSAServers(ctx context.Context, tenantID int64, status string) ([]SAServer, error) {
+	return m.listSAServers(ctx, tenantID, status, 200)
+}
+
+func (m *Mysql) listSAServers(ctx context.Context, tenantID int64, status string, limit int) ([]SAServer, error) {
 	q := `SELECT id,tenant_id,public_id,name,status,source_mode,created_at FROM sa_servers WHERE tenant_id=?`
 	args := []any{tenantID}
 	if status != "" {
 		q += ` AND status=?`
 		args = append(args, status)
 	}
-	rows, err := m.db.QueryContext(ctx, q+` ORDER BY id DESC LIMIT 200`, args...)
+	q += ` ORDER BY id DESC`
+	if limit > 0 {
+		q += ` LIMIT ?`
+		args = append(args, limit)
+	}
+	rows, err := m.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -515,11 +545,36 @@ func (m *Mysql) ListSAServers(ctx context.Context, tenantID int64, status string
 }
 
 func (m *Mysql) UpdateSAServer(ctx context.Context, tenantID, serverID int64, name, status string) error {
-	res, err := m.db.ExecContext(ctx,
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	tenantStatus, _, err := saLockTenantRow(ctx, tx, tenantID)
+	if err != nil {
+		return err
+	}
+	if tenantStatus == "deleting" {
+		return ErrDeletionInProgress
+	}
+	res, err := tx.ExecContext(ctx,
 		`UPDATE sa_servers SET name=?,status=? WHERE tenant_id=? AND id=?`, name, status, tenantID, serverID)
-	return saUpdateAffected(res, err, func() (bool, error) {
-		return m.saExists(ctx, `SELECT 1 FROM sa_servers WHERE tenant_id=? AND id=?`, tenantID, serverID)
-	})
+	if err != nil {
+		return err
+	}
+	if n, affectedErr := res.RowsAffected(); affectedErr != nil {
+		return affectedErr
+	} else if n == 0 {
+		var one int
+		err := tx.QueryRowContext(ctx, `SELECT 1 FROM sa_servers WHERE tenant_id=? AND id=?`, tenantID, serverID).Scan(&one)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // UpdateSAServerOwner keeps platform suspension atomic with the owner write.

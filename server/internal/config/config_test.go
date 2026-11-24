@@ -120,6 +120,33 @@ func TestSMTPPortDefault(t *testing.T) {
 	}
 }
 
+func TestServerAccessDeletionGraceHours(t *testing.T) {
+	t.Setenv("SKIN_DATABASE_DSN", "u:p@tcp(localhost:3306)/x")
+	t.Setenv("SKIN_DATA_DIR", t.TempDir())
+	t.Setenv("SKIN_SERVERACCESS_DELETION_GRACE_HOURS", "")
+	loadGrace := func() int {
+		t.Helper()
+		c, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c.ServerAccessDeletionGraceHours
+	}
+	if got := loadGrace(); got != 168 {
+		t.Fatalf("default deletion grace = %d hours, want 168", got)
+	}
+	t.Setenv("SKIN_SERVERACCESS_DELETION_GRACE_HOURS", "48")
+	if got := loadGrace(); got != 48 {
+		t.Fatalf("configured deletion grace = %d hours, want 48", got)
+	}
+	for _, invalid := range []string{"0", "-1", "8761", "not-a-number"} {
+		t.Setenv("SKIN_SERVERACCESS_DELETION_GRACE_HOURS", invalid)
+		if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SKIN_SERVERACCESS_DELETION_GRACE_HOURS") {
+			t.Fatalf("invalid deletion grace %q must fail validation, got %v", invalid, err)
+		}
+	}
+}
+
 func TestServerAccessEnabledDefaultsOffAndValidatesEnv(t *testing.T) {
 	t.Setenv("SKIN_DATABASE_DSN", "u:p@tcp(localhost:3306)/x")
 	t.Setenv("SKIN_DATA_DIR", t.TempDir())

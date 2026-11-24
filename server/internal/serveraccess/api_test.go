@@ -24,6 +24,7 @@ type saFixture struct {
 	h           http.Handler
 	st          *store.Mysql
 	now         time.Time
+	clock       *time.Time
 	owner       int64
 	admin       int64
 	viewer      int64
@@ -47,7 +48,7 @@ func newSAFixture(t *testing.T) *saFixture {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC().Truncate(time.Second)
-	f := &saFixture{st: st, now: now}
+	f := &saFixture{st: st, now: now, clock: &now}
 	f.owner = saUser(t, st, "owner@example.com", "owner", 0)
 	f.admin = saUser(t, st, "admin@example.com", "admin", 0)
 	f.viewer = saUser(t, st, "viewer@example.com", "viewer", 0)
@@ -74,7 +75,7 @@ func newSAFixture(t *testing.T) *saFixture {
 		t.Fatal(err)
 	}
 	f.otherServer = otherCreated.ID
-	s := NewStack(Config{Enabled: true, Store: st, Now: func() time.Time { return now }})
+	s := NewStack(Config{Enabled: true, Store: st, Now: func() time.Time { return *f.clock }})
 	f.stack = s
 	f.h = s.Gate(s.Handler())
 	return f

@@ -9,6 +9,15 @@ description: "SkinNexus 变更日志：按日期倒序的迭代历史，只记�
 > 相称——只记「改了什么 / 为什么 / 行为变化」，验证过程一句话。开发细节见对应 commit；
 > README 状态行只留一句话摘要。
 
+## 2026-11-24 · 租户数据导出与宽限期删除（同轮）
+
+- 新增 owner/admin 租户 JSON 附件导出，按字段白名单返回租户、服务器/策略、白名单、封禁、owner 可见进服事件与凭据元数据；不返回邮箱、IP、token、secret/hash、邀请或全局用户/玩家/纹理，审计不记录导出内容。
+- 新增 owner 删除请求：在一个事务内把租户置为 `deleting`、暂停全部服务器、吊销全部凭据并固定截止时间；`SKIN_SERVERACCESS_DELETION_GRACE_HOURS` 默认 168 小时，修改配置不改变已请求的期限。
+- 新增平台超管到期删除：未请求或未到期返回 409，到期后事务执行既有 `sa_*` 级联，重复删除返回 404；全局用户、玩家和纹理保留。删除中的租户与服务器不能被重新启用。
+- 三引擎加法迁移 `0036_serveraccess_lifecycle.sql` 新增独立 `deletion_requested_at` / `deletion_due_at`，不复用 `deleted_at`；模块关闭时新路由统一 404。
+
+验证：S6a 红绿 API/store/migration/config 测试、SQLite 三引擎夹具集成、Go 全量 test/vet/build 与 locales/docs 闸通过。
+
 ## 2026-11-24 · 可选验证代理与治理加固（同轮）
 
 - 新增可选 `skin-nexus verify-proxy` 子命令：不连接数据库、不加载主站配置，只凭 public server id、upstream API root 与 Bearer credential 转发标准 `hasJoined`；S3/S4 不依赖它。

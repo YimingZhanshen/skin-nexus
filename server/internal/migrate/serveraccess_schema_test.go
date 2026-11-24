@@ -15,6 +15,7 @@ func TestServerAccessCoreSchemaShape(t *testing.T) {
 	wantColumns := map[string]bool{
 		"sa_tenants.id": true, "sa_tenants.name": true, "sa_tenants.status": true,
 		"sa_tenants.created_at": true, "sa_tenants.deleted_at": true,
+		"sa_tenants.deletion_requested_at": true, "sa_tenants.deletion_due_at": true,
 		"sa_tenant_members.tenant_id": true, "sa_tenant_members.uid": true,
 		"sa_tenant_members.role": true, "sa_tenant_members.created_at": true,
 		"sa_servers.id": true, "sa_servers.tenant_id": true, "sa_servers.public_id": true,
