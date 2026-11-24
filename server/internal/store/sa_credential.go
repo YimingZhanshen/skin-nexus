@@ -54,6 +54,39 @@ func (m *Mysql) ListSAServerCredentials(ctx context.Context, tenantID, serverID 
 	return out, rows.Err()
 }
 
+func (m *Mysql) platformSAServerCredentials(ctx context.Context, serverIDs []int64) (map[int64][]SACredentialSummary, error) {
+	placeholders, args := saIDPlaceholders(serverIDs)
+	rows, err := m.db.QueryContext(ctx,
+		`SELECT c.id,c.server_id,c.mode,c.status,c.last_used_at,c.expires_at
+		 FROM sa_server_credentials c WHERE c.server_id IN (`+placeholders+`) ORDER BY c.id DESC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[int64][]SACredentialSummary, len(serverIDs))
+	for rows.Next() {
+		var credential SACredential
+		if err := rows.Scan(&credential.ID, &credential.ServerID, &credential.Mode, &credential.Status, &credential.LastUsedAt, &credential.ExpiresAt); err != nil {
+			return nil, err
+		}
+		out[credential.ServerID] = append(out[credential.ServerID], summarizeSACredential(credential))
+	}
+	return out, rows.Err()
+}
+
+func summarizeSACredential(credential SACredential) SACredentialSummary {
+	summary := SACredentialSummary{ID: credential.ID, Mode: credential.Mode, Status: credential.Status}
+	if credential.LastUsedAt.Valid {
+		value := credential.LastUsedAt.Time
+		summary.LastUsedAt = &value
+	}
+	if credential.ExpiresAt.Valid {
+		value := credential.ExpiresAt.Time
+		summary.ExpiresAt = &value
+	}
+	return summary
+}
+
 // SACredentialBySecretHash is the machine-authentication lookup, not an owner
 // API. Tenant/server are derived from the credential row and active registry.
 func (m *Mysql) SACredentialBySecretHash(ctx context.Context, secretHash string, now time.Time) (SACredential, error) {

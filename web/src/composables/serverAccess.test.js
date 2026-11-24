@@ -176,6 +176,27 @@ test('platform view loads quotas and audit and applies emergency changes', async
   ])
 })
 
+test('platform credential revocation refreshes the server summaries used by selection', async () => {
+  let serverReads = 0
+  let auditReads = 0
+  let rows = [{ ...server, credentials: [{ id: 4, mode: 'header', status: 'active', lastUsedAt: null, expiresAt: null }] }]
+  const platform = useServerAccessPlatform({
+    platformTenants: async () => ({ tenants: [], total: 0 }),
+    platformServers: async () => { serverReads++; return { servers: rows, total: rows.length } },
+    platformFallback: async () => ({ enabled: true }),
+    platformAudit: async () => { auditReads++; return { audit: [], total: 0 } },
+    revokePlatformCredential: async (_id, credentialId) => {
+      rows = rows.map((row) => ({ ...row, credentials: row.credentials.map((item) => item.id === credentialId ? { ...item, status: 'revoked' } : item) }))
+      return { revoked: true }
+    },
+  })
+  await platform.load()
+  assert.equal(await platform.revokeCredential(9, 4), true)
+  assert.equal(serverReads, 2)
+  assert.equal(auditReads, 2)
+  assert.equal(platform.servers.value[0].credentials[0].status, 'revoked')
+})
+
 test('server quota patch sends only entered positive integer fields', () => {
   assert.deepEqual(buildServerQuotaPatch({ verifyRateLimit: '12', maxConcurrent: '', eventRetentionDays: 30 }), {
     patch: { verifyRateLimit: 12, eventRetentionDays: 30 }, valid: true,

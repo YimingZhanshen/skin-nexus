@@ -22,6 +22,10 @@ const quotaFields = [
 ]
 const revokeServer = shallowRef('')
 const revokeCredential = shallowRef('')
+const selectedRevokeServer = computed(() => platform.servers.value.find((row) => String(row.id) === revokeServer.value) || null)
+const selectedRevokeCredentials = computed(() => selectedRevokeServer.value?.credentials || [])
+const hasActiveRevokeCredentials = computed(() => selectedRevokeCredentials.value.some((credential) => credential.status === 'active'))
+const canRevokeSelected = computed(() => selectedRevokeCredentials.value.some((credential) => String(credential.id) === revokeCredential.value && credential.status === 'active'))
 const tenantSearch = shallowRef('')
 const serverSearch = shallowRef('')
 const auditSearch = shallowRef('')
@@ -34,12 +38,21 @@ watch(() => platform.tenants.value, (rows) => {
 watch(() => platform.servers.value, (rows) => {
   for (const row of rows) if (!serverQuotaDrafts.value[row.id]) serverQuotaDrafts.value[row.id] = {}
 }, { immediate: true })
+watch(revokeServer, () => { revokeCredential.value = '' })
 onMounted(() => platform.load())
 
 function statusLabel(status) {
   const key = `serverAccess.statusMap.${status}`
   const label = t(key)
   return label === key ? status : label
+}
+function policyState(enabled) {
+  return statusLabel(enabled ? 'active' : 'disabled')
+}
+function modeLabel(mode) {
+  const key = `serverAccess.sourceMode.${mode}`
+  const label = t(key)
+  return label === key ? mode : label
 }
 function auditLabel(action) {
   const key = `adminServerAccess.auditAction.${action}`
@@ -147,9 +160,14 @@ async function revoke() {
                 <button class="secondary small" :class="{ 'danger-outline': row.status !== 'suspended' }" :disabled="platform.busy.value" @click="toggleServer(row)">{{ row.status === 'suspended' ? t('adminServerAccess.activate') : t('adminServerAccess.suspend') }}</button>
                 <details class="quota-details">
                   <summary>{{ t('adminServerAccess.serverQuota') }}</summary>
+                  <dl class="policy-summary">
+                    <div><dt>{{ t('serverAccess.whitelist') }}</dt><dd>{{ policyState(row.policy?.whitelistEnabled) }}</dd></div>
+                    <div><dt>{{ t('serverAccess.premiumFallback') }}</dt><dd>{{ policyState(row.policy?.premiumFallbackEnabled) }}</dd></div>
+                  </dl>
                   <form class="quota-form" @submit.prevent="saveServerQuota(row)">
                     <label v-for="field in quotaFields" :key="field.key" :for="`sa-quota-${row.id}-${field.key}`">
-                      {{ t(`adminServerAccess.quotaFields.${field.label}`) }}
+                      <span>{{ t(`adminServerAccess.quotaFields.${field.label}`) }}</span>
+                      <span class="quota-current">{{ t('adminServerAccess.currentValue', { value: row.policy?.[field.key] ?? '—' }) }}</span>
                       <input :id="`sa-quota-${row.id}-${field.key}`" v-model="serverQuotaDrafts[row.id][field.key]" type="number" min="1" max="1000000" step="1" :placeholder="t('adminServerAccess.unchanged')" />
                     </label>
                     <button class="secondary small" :disabled="platform.busy.value">{{ t('adminServerAccess.saveQuota') }}</button>
@@ -169,12 +187,29 @@ async function revoke() {
       <h2>{{ t('adminServerAccess.credentialRevoke') }}</h2>
       <p class="muted">{{ t('adminServerAccess.revokeHint') }}</p>
       <form class="row search-row" @submit.prevent="revoke">
-        <label class="sr-only" for="sa-revoke-server">{{ t('adminServerAccess.server') }} ID</label>
-        <input id="sa-revoke-server" v-model="revokeServer" inputmode="numeric" :placeholder="`${t('adminServerAccess.server')} ID`" required />
-        <label class="sr-only" for="sa-revoke-credential">{{ t('adminServerAccess.credentialId') }}</label>
-        <input id="sa-revoke-credential" v-model="revokeCredential" inputmode="numeric" :placeholder="t('adminServerAccess.credentialId')" required />
-        <button class="danger-outline" :disabled="platform.busy.value">{{ t('adminServerAccess.revoke') }}</button>
+        <label for="sa-revoke-server">{{ t('adminServerAccess.server') }}</label>
+        <select id="sa-revoke-server" :value="revokeServer" :disabled="platform.busy.value" @change="revokeServer = $event.target.value">
+          <option value="" disabled>{{ t('adminServerAccess.selectServer') }}</option>
+          <option v-for="row in platform.servers.value" :key="row.id" :value="String(row.id)">#{{ row.id }} · {{ row.name }}</option>
+        </select>
+        <label for="sa-revoke-credential">{{ t('adminServerAccess.credential') }}</label>
+        <select id="sa-revoke-credential" :value="revokeCredential" :disabled="platform.busy.value || !hasActiveRevokeCredentials" @change="revokeCredential = $event.target.value">
+          <option value="">{{ t('adminServerAccess.selectCredential') }}</option>
+          <option v-for="credential in selectedRevokeCredentials" :key="credential.id" :value="String(credential.id)" :disabled="credential.status !== 'active'">#{{ credential.id }} · {{ modeLabel(credential.mode) }} · {{ statusLabel(credential.status) }}</option>
+        </select>
+        <button class="danger-outline" :disabled="platform.busy.value || !canRevokeSelected">{{ t('adminServerAccess.revoke') }}</button>
       </form>
+      <EmptyState v-if="selectedRevokeServer && !selectedRevokeCredentials.length" :text="t('adminServerAccess.noCredentials')" />
+      <div v-else-if="selectedRevokeServer" class="table-scroll">
+        <table>
+          <caption class="sr-only">{{ t('adminServerAccess.credentialSummaries') }}</caption>
+          <thead><tr><th scope="col">ID</th><th scope="col">{{ t('serverAccess.mode') }}</th><th scope="col">{{ t('serverAccess.status') }}</th><th scope="col">{{ t('serverAccess.lastUsedAt') }}</th><th scope="col">{{ t('serverAccess.expiresAt') }}</th></tr></thead>
+          <tbody><tr v-for="credential in selectedRevokeCredentials" :key="credential.id">
+            <td>{{ credential.id }}</td><td>{{ modeLabel(credential.mode) }}</td><td>{{ statusLabel(credential.status) }}</td>
+            <td>{{ credential.lastUsedAt || t('serverAccess.never') }}</td><td>{{ credential.expiresAt || '—' }}</td>
+          </tr></tbody>
+        </table>
+      </div>
     </section>
 
     <section class="card">
@@ -209,11 +244,15 @@ async function revoke() {
 .fallback-card { display: flex !important; flex-direction: column; }
 .check-row { display: flex; align-items: center; gap: var(--sp-2); }
 .search-row { margin: 0; flex-wrap: wrap; }
-.search-row input { flex: 1; min-width: 0; }
+.search-row input, .search-row select { flex: 1; min-width: 0; }
 .quota-row { margin: 0; }
 .quota-row input { width: var(--sp-8); }
 .server-actions { display: grid; gap: var(--sp-2); }
 .quota-details summary { cursor: pointer; font-size: var(--fs-s); }
+.policy-summary { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin: var(--sp-2) 0 0; }
+.policy-summary div { display: grid; gap: var(--sp-1); }
+.policy-summary dt, .quota-current { color: var(--muted); font-size: var(--fs-s); }
+.policy-summary dd { margin: 0; }
 .quota-form { display: grid; gap: var(--sp-2); margin-top: var(--sp-2); }
 .quota-form label { display: grid; gap: var(--sp-1); font-size: var(--fs-s); }
 .quota-form input { width: 100%; }

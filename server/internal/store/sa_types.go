@@ -72,6 +72,34 @@ type SAServerPolicy struct {
 	EventRetentionDays     int   `json:"eventRetentionDays"`
 }
 
+// SAServerPolicySummary is the platform list's read-only policy projection.
+// It deliberately excludes serverId because the enclosing server already has it.
+type SAServerPolicySummary struct {
+	WhitelistEnabled       bool `json:"whitelistEnabled"`
+	PremiumFallbackEnabled bool `json:"premiumFallbackEnabled"`
+	VerifyRateLimit        int  `json:"verifyRateLimit"`
+	VerifyBurst            int  `json:"verifyBurst"`
+	MaxConcurrent          int  `json:"maxConcurrent"`
+	WhitelistLimit         int  `json:"whitelistLimit"`
+	EventRetentionDays     int  `json:"eventRetentionDays"`
+}
+
+// SACredentialSummary contains selection and audit metadata only. Secret
+// hashes, scopes and creation metadata never enter the platform list response.
+type SACredentialSummary struct {
+	ID         int64      `json:"id"`
+	Mode       string     `json:"mode"`
+	Status     string     `json:"status"`
+	LastUsedAt *time.Time `json:"lastUsedAt"`
+	ExpiresAt  *time.Time `json:"expiresAt"`
+}
+
+type PlatformSAServer struct {
+	SAServer
+	Policy      SAServerPolicySummary `json:"policy"`
+	Credentials []SACredentialSummary `json:"credentials"`
+}
+
 type SAServerWhitelist struct {
 	ID        int64     `json:"id"`
 	ServerID  int64     `json:"-"`

@@ -571,7 +571,7 @@ func (m *Mysql) DeleteSAServer(ctx context.Context, tenantID, serverID int64) er
 	return saAffected(res, err)
 }
 
-func (m *Mysql) PlatformSAServers(ctx context.Context, q string, page, size int) ([]SAServer, int, error) {
+func (m *Mysql) PlatformSAServers(ctx context.Context, q string, page, size int) ([]PlatformSAServer, int, error) {
 	where, args := saSearch(`s.name`, q)
 	var total int
 	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sa_servers s`+where, args...).Scan(&total); err != nil {
@@ -585,15 +585,39 @@ func (m *Mysql) PlatformSAServers(ctx context.Context, q string, page, size int)
 		return nil, 0, err
 	}
 	defer rows.Close()
-	out := make([]SAServer, 0)
+	out := make([]PlatformSAServer, 0)
 	for rows.Next() {
 		v, err := scanSAServer(rows)
 		if err != nil {
 			return nil, 0, err
 		}
-		out = append(out, v)
+		out = append(out, PlatformSAServer{SAServer: v, Credentials: make([]SACredentialSummary, 0)})
 	}
-	return out, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	if len(out) == 0 {
+		return out, total, nil
+	}
+	serverIDs := make([]int64, len(out))
+	for i := range out {
+		serverIDs[i] = out[i].ID
+	}
+	policies, err := m.platformSAServerPolicies(ctx, serverIDs)
+	if err != nil {
+		return nil, 0, err
+	}
+	credentials, err := m.platformSAServerCredentials(ctx, serverIDs)
+	if err != nil {
+		return nil, 0, err
+	}
+	for i := range out {
+		out[i].Policy = policies[out[i].ID]
+		if summaries := credentials[out[i].ID]; len(summaries) > 0 {
+			out[i].Credentials = summaries
+		}
+	}
+	return out, total, nil
 }
 
 func (m *Mysql) PlatformSAServerByID(ctx context.Context, serverID int64) (SAServer, error) {

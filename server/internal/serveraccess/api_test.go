@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -404,6 +405,92 @@ func TestServerAccessAPIPlatformUpdatesFallbackAndAudit(t *testing.T) {
 	rec := f.request(t, f.super, "GET", "/api/admin/v1/serveraccess/audit", "", "")
 	if !strings.Contains(rec.Body.String(), "serveraccess_tenant_status_update") || !strings.Contains(rec.Body.String(), "serveraccess_fallback_update") {
 		t.Fatalf("audit missing actions: %s", rec.Body.String())
+	}
+}
+
+func TestServerAccessAPIPlatformServersExposeCurrentPolicyAndCredentialSummaries(t *testing.T) {
+	f := newSAFixture(t)
+	whitelist, fallback := true, false
+	if err := f.st.UpdateSAServerOwnerPolicy(context.Background(), f.tenant, f.server, &whitelist, &fallback); err != nil {
+		t.Fatal(err)
+	}
+	rate, burst, concurrent, whitelistLimit, retention := 41, 7, 3, 19, 14
+	if err := f.st.UpdateSAServerPlatformPolicy(context.Background(), f.tenant, f.server, &rate, &burst, &concurrent, &whitelistLimit, &retention); err != nil {
+		t.Fatal(err)
+	}
+	activeHash, revokedHash := strings.Repeat("e", 64), strings.Repeat("f", 64)
+	activeID, err := f.st.CreateSAServerCredential(context.Background(), f.tenant, f.server, store.SACredential{
+		Mode: "header", SecretHash: activeHash, Scopes: `["verify:join"]`, Status: "active",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.TouchSACredential(context.Background(), f.tenant, f.server, activeID, f.now); err != nil {
+		t.Fatal(err)
+	}
+	expires := f.now.Add(48 * time.Hour)
+	revokedID, err := f.st.CreateSAServerCredential(context.Background(), f.tenant, f.server, store.SACredential{
+		Mode: "url_secret", SecretHash: revokedHash, Scopes: `["verify:join"]`, Status: "revoked",
+		ExpiresAt: sql.NullTime{Time: expires, Valid: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := f.request(t, f.super, "GET", "/api/admin/v1/serveraccess/servers?page=1&size=20", "", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("platform servers = %d %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), activeHash) || strings.Contains(rec.Body.String(), revokedHash) ||
+		strings.Contains(rec.Body.String(), "secretHash") || strings.Contains(rec.Body.String(), `"secret"`) {
+		t.Fatalf("platform server list leaked credential material: %s", rec.Body.String())
+	}
+	var response struct {
+		Servers []struct {
+			ID          int64
+			Policy      map[string]any
+			Credentials []map[string]any
+		}
+		Total int
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Total != 2 || len(response.Servers) != 2 {
+		t.Fatalf("platform server page = %+v", response)
+	}
+	var got *struct {
+		ID          int64
+		Policy      map[string]any
+		Credentials []map[string]any
+	}
+	for i := range response.Servers {
+		if response.Servers[i].ID == f.server {
+			got = &response.Servers[i]
+		}
+	}
+	if got == nil {
+		t.Fatalf("platform server list omitted server %d: %s", f.server, rec.Body.String())
+	}
+	wantPolicy := map[string]any{
+		"whitelistEnabled": true, "premiumFallbackEnabled": false,
+		"verifyRateLimit": float64(41), "verifyBurst": float64(7), "maxConcurrent": float64(3),
+		"whitelistLimit": float64(19), "eventRetentionDays": float64(14),
+	}
+	if !reflect.DeepEqual(got.Policy, wantPolicy) {
+		t.Fatalf("platform policy = %#v, want %#v", got.Policy, wantPolicy)
+	}
+	wantCredentials := []map[string]any{
+		{"id": float64(revokedID), "mode": "url_secret", "status": "revoked", "lastUsedAt": nil, "expiresAt": expires.Format(time.RFC3339)},
+		{"id": float64(activeID), "mode": "header", "status": "active", "lastUsedAt": f.now.Format(time.RFC3339), "expiresAt": nil},
+	}
+	if !reflect.DeepEqual(got.Credentials, wantCredentials) {
+		t.Fatalf("platform credentials = %#v, want %#v", got.Credentials, wantCredentials)
+	}
+	for _, row := range response.Servers {
+		if row.ID == f.otherServer && row.Credentials == nil {
+			t.Fatal("server without credentials must return an empty summary list")
+		}
 	}
 }
 

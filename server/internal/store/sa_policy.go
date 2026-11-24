@@ -30,6 +30,38 @@ func (m *Mysql) SAServerPolicy(ctx context.Context, tenantID, serverID int64) (S
 		saPolicySelect+` WHERE s.tenant_id=? AND p.server_id=?`, tenantID, serverID))
 }
 
+func (m *Mysql) platformSAServerPolicies(ctx context.Context, serverIDs []int64) (map[int64]SAServerPolicySummary, error) {
+	placeholders, args := saIDPlaceholders(serverIDs)
+	rows, err := m.db.QueryContext(ctx, saPolicySelect+` WHERE p.server_id IN (`+placeholders+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[int64]SAServerPolicySummary, len(serverIDs))
+	for rows.Next() {
+		policy, err := scanSAPolicy(rows)
+		if err != nil {
+			return nil, err
+		}
+		out[policy.ServerID] = SAServerPolicySummary{
+			WhitelistEnabled: policy.WhitelistEnabled, PremiumFallbackEnabled: policy.PremiumFallbackEnabled,
+			VerifyRateLimit: policy.VerifyRateLimit, VerifyBurst: policy.VerifyBurst, MaxConcurrent: policy.MaxConcurrent,
+			WhitelistLimit: policy.WhitelistLimit, EventRetentionDays: policy.EventRetentionDays,
+		}
+	}
+	return out, rows.Err()
+}
+
+func saIDPlaceholders(ids []int64) (string, []any) {
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	return strings.Join(placeholders, ","), args
+}
+
 // UpdateSAServerOwnerPolicy writes only owner-controlled switches. Nil fields
 // are omitted, so neither a stale read nor a partial request can reset platform
 // quotas or the other owner switch.

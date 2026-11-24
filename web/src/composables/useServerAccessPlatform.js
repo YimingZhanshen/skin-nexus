@@ -125,6 +125,8 @@ export function useServerAccessPlatform(api) {
       const data = await api.setPlatformFallback(enabled)
       fallback.value = !!data.enabled
     }, loadAudit),
-    revokeCredential: (id, cid) => mutate(() => api.revokePlatformCredential(id, cid), loadAudit),
+    revokeCredential: (id, cid) => mutate(() => api.revokePlatformCredential(id, cid), async () => {
+      await Promise.all([loadServers(), loadAudit()])
+    }),
   }
 }
