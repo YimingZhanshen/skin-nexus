@@ -40,7 +40,6 @@ function statusLabel(status) {
       </dl>
       <div class="row detail-actions">
         <button class="secondary" @click="emit('credentials')">{{ t('serverAccess.openCredentials') }}</button>
-        <span class="muted">{{ t('serverAccess.exportUnavailable') }}</span>
       </div>
     </div>
     <ServerPolicyPanel :policy="detail.policy" :can-write="canWrite && detail.server.status !== 'suspended'" :busy="busy" @save="emit('update', $event)" />

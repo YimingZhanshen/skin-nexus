@@ -3,21 +3,21 @@
 import { fetchWithTimeout } from '../net.js'
 import { describe } from '../errors.js'
 
-async function request(method, path, body) {
+async function request(method, path, body, { blob = false } = {}) {
   const options = { method, credentials: 'same-origin', headers: {} }
   if (body !== undefined) {
     options.headers['Content-Type'] = 'application/json'
     options.body = JSON.stringify(body)
   }
   const response = await fetchWithTimeout(path, options, 20000)
-  const data = await response.json().catch(() => ({}))
   if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
     const error = new Error(describe(data, response.status))
     error.status = response.status
     error.data = data
     throw error
   }
-  return data
+  return blob ? response.blob() : response.json().catch(() => ({}))
 }
 
 const ownerBase = '/api/serveraccess/v1'
@@ -30,6 +30,8 @@ export const serverAccessApi = {
   inviteMember: (email, role) => request('POST', `${ownerBase}/tenants/me/members/invite`, { email, role }),
   removeMember: (uid) => request('DELETE', `${ownerBase}/tenants/me/members/${uid}`),
   revokeInvite: (id) => request('DELETE', `${ownerBase}/tenants/me/invites/${id}`),
+  exportTenant: () => request('GET', `${ownerBase}/tenants/me/export`, undefined, { blob: true }),
+  requestTenantDeletion: () => request('POST', `${ownerBase}/tenants/me/delete-request`, {}),
 
   servers: () => request('GET', `${ownerBase}/servers`),
   createServer: (name) => request('POST', `${ownerBase}/servers`, { name }),
@@ -59,6 +61,7 @@ export const serverAccessApi = {
   platformTenants: (page = 1, q = '') => request('GET', `${platformBase}/tenants?page=${page}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
   platformServers: (page = 1, q = '') => request('GET', `${platformBase}/servers?page=${page}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
   updatePlatformTenant: (id, body) => request('PATCH', `${platformBase}/tenants/${id}`, body),
+  deletePlatformTenant: (id) => request('POST', `${platformBase}/tenants/${id}/delete`, {}),
   updatePlatformServer: (id, body) => request('PATCH', `${platformBase}/servers/${id}`, body),
   revokePlatformCredential: (id, cid) => request('POST', `${platformBase}/servers/${id}/credentials/${cid}/revoke`, {}),
   platformFallback: () => request('GET', `${platformBase}/fallback`),

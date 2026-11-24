@@ -6,10 +6,22 @@ import { useServerWhitelist } from './useServerWhitelist.js'
 import { useServerBans } from './useServerBans.js'
 import { useServerEvents } from './useServerEvents.js'
 import { useServerCredentials } from './useServerCredentials.js'
-import { buildServerQuotaPatch, useServerAccessPlatform } from './useServerAccessPlatform.js'
+import { buildServerQuotaPatch, isTenantDeletionDue, useServerAccessPlatform } from './useServerAccessPlatform.js'
 
 const tenant = { id: 1, name: 'Example tenant', status: 'active', serverLimit: 5 }
 const server = { id: 9, publicId: 'srv_example', name: 'Example server', status: 'active', sourceMode: 'url_secret' }
+
+test('deletion due gating accepts only the exact deadline or later for a deleting tenant', () => {
+  const due = '2027-01-31T00:00:00Z'
+  const row = { status: 'deleting', deletionDueAt: due }
+  const atDeadline = Date.parse(due)
+  assert.equal(isTenantDeletionDue(row, atDeadline - 1), false)
+  assert.equal(isTenantDeletionDue(row, atDeadline), true)
+  assert.equal(isTenantDeletionDue(row, atDeadline + 1), true)
+  assert.equal(isTenantDeletionDue({ ...row, status: 'active' }, atDeadline), false)
+  assert.equal(isTenantDeletionDue({ ...row, deletionDueAt: null }, atDeadline), false)
+  assert.equal(isTenantDeletionDue({ ...row, deletionDueAt: 'invalid' }, atDeadline), false)
+})
 
 test('tenant portal loads membership and invitation state without hiding failures', async () => {
   const portal = useServerTenant({

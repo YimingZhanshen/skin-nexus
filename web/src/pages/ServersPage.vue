@@ -12,6 +12,7 @@ import ServerWhitelistPanel from '../components/serveraccess/ServerWhitelistPane
 import ServerBansPanel from '../components/serveraccess/ServerBansPanel.vue'
 import ServerEventsPanel from '../components/serveraccess/ServerEventsPanel.vue'
 import ServerCredentialDialog from '../components/serveraccess/ServerCredentialDialog.vue'
+import TenantLifecyclePanel from '../components/serveraccess/TenantLifecyclePanel.vue'
 import EmptyState from '../components/EmptyState.vue'
 
 const props = defineProps({ enabled: Boolean })
@@ -60,6 +61,7 @@ async function removeMember(uid) {
       </header>
       <p v-if="loading" class="muted" role="status">{{ t('common.loading') }}</p>
       <div v-if="error" class="error" role="alert">{{ error }} <button class="secondary small" @click="load">{{ t('common.retry') }}</button></div>
+      <TenantLifecyclePanel v-if="portal.tenant.value" :tenant="portal.tenant.value" :api="serverAccessApi" :can-export="canWrite" :can-delete="canManageMembers" :busy="portal.busy.value" @changed="load" />
       <ServerMembersPanel :members="portal.members.value" :invites="portal.invites.value" :busy="portal.busy.value" :can-manage-members="canManageMembers" :invite-token="inviteToken" @invite="invite" @remove-member="removeMember" @revoke-invite="portal.revokeInvite" @hide-invite="inviteToken = ''" />
       <div class="portal-grid">
         <ServerListPanel :servers="catalog.servers.value" :selected-id="selectedId" :used="catalog.servers.value.length" :limit="portal.tenant.value?.serverLimit || 0" :loading="catalog.loading.value" :busy="catalog.busy.value" :can-write="canWrite" :error="catalog.error.value" @select="catalog.select" @create="create" @update="(id, body) => catalog.update(id, body)" @retry="load" />

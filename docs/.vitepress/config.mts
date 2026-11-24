@@ -141,6 +141,7 @@ export default withMermaid(
           text: '契约与部署',
           items: [
             { text: '部署运维', link: '/deploy' },
+            { text: '服务器接入', link: '/server-access' },
             { text: '从 blessing-skin-server 迁移', link: '/migration' },
             { text: '构建与 CI', link: '/build' },
             { text: '兼容矩阵', link: '/compat-matrix' },

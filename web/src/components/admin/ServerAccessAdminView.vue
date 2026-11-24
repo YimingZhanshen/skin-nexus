@@ -1,9 +1,9 @@
 <script setup>
-import { ref, shallowRef, computed, onMounted, watch } from 'vue'
+import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { confirmDialog } from '../../dialog.js'
 import { serverAccessApi } from '../../api/serverAccessApi.js'
-import { buildServerQuotaPatch, useServerAccessPlatform } from '../../composables/useServerAccessPlatform.js'
+import { buildServerQuotaPatch, isTenantDeletionDue, useServerAccessPlatform } from '../../composables/useServerAccessPlatform.js'
 import EmptyState from '../EmptyState.vue'
 import Pager from '../Pager.vue'
 
@@ -29,6 +29,8 @@ const canRevokeSelected = computed(() => selectedRevokeCredentials.value.some((c
 const tenantSearch = shallowRef('')
 const serverSearch = shallowRef('')
 const auditSearch = shallowRef('')
+const now = shallowRef(Date.now())
+let clock
 const tenantPages = computed(() => Math.max(1, Math.ceil(platform.tenantTotal.value / 20)))
 const serverPages = computed(() => Math.max(1, Math.ceil(platform.serverTotal.value / 20)))
 const auditPages = computed(() => Math.max(1, Math.ceil(platform.auditTotal.value / 20)))
@@ -39,7 +41,11 @@ watch(() => platform.servers.value, (rows) => {
   for (const row of rows) if (!serverQuotaDrafts.value[row.id]) serverQuotaDrafts.value[row.id] = {}
 }, { immediate: true })
 watch(revokeServer, () => { revokeCredential.value = '' })
-onMounted(() => platform.load())
+onMounted(() => {
+  platform.load()
+  clock = setInterval(() => { now.value = Date.now() }, 1000)
+})
+onBeforeUnmount(() => clearInterval(clock))
 
 function statusLabel(status) {
   const key = `serverAccess.statusMap.${status}`
@@ -60,10 +66,17 @@ function auditLabel(action) {
   return label === key ? action : label
 }
 async function toggleTenant(row) {
+  if (row.status === 'deleting') return
   const suspending = row.status !== 'suspended'
   const message = suspending ? t('adminServerAccess.confirmSuspend', { id: row.id }) : t('adminServerAccess.confirmActivate', { id: row.id })
   if (!(await confirmDialog(message, { danger: suspending }))) return
   await platform.updateTenant(row.id, { status: suspending ? 'suspended' : 'active' })
+}
+async function deleteTenant(row) {
+  if (!isTenantDeletionDue(row, now.value) || platform.busy.value) return
+  const message = t('adminServerAccess.confirmDelete', { id: row.id, due: row.deletionDueAt })
+  if (!(await confirmDialog(message, { danger: true }))) return
+  await platform.deleteTenant(row.id)
 }
 async function toggleServer(row) {
   const suspending = row.status !== 'suspended'
@@ -129,11 +142,13 @@ async function revoke() {
       <div v-else class="table-scroll">
         <table>
           <caption class="sr-only">{{ t('adminServerAccess.tenants') }}</caption>
-          <thead><tr><th scope="col">ID</th><th scope="col">{{ t('adminServerAccess.tenant') }}</th><th scope="col">{{ t('serverAccess.status') }}</th><th scope="col">{{ t('adminServerAccess.quota') }}</th><th scope="col">{{ t('serverAccess.actions') }}</th></tr></thead>
+          <thead><tr><th scope="col">ID</th><th scope="col">{{ t('adminServerAccess.tenant') }}</th><th scope="col">{{ t('serverAccess.status') }}</th><th scope="col">{{ t('adminServerAccess.deletionRequestedAt') }}</th><th scope="col">{{ t('adminServerAccess.deletionDueAt') }}</th><th scope="col">{{ t('adminServerAccess.quota') }}</th><th scope="col">{{ t('serverAccess.actions') }}</th></tr></thead>
           <tbody><tr v-for="row in platform.tenants.value" :key="row.id">
             <td>{{ row.id }}</td><td>{{ row.name }}</td><td>{{ statusLabel(row.status) }}</td>
-            <td><div class="row quota-row"><input v-model.number="quotaDrafts[row.id]" type="number" min="1" max="10000" :aria-label="t('adminServerAccess.quota')" /><button class="secondary small" :disabled="platform.busy.value" @click="platform.updateTenant(row.id, { serverLimit: Number(quotaDrafts[row.id]) })">{{ t('adminServerAccess.saveQuota') }}</button></div></td>
-            <td><button class="secondary small" :class="{ 'danger-outline': row.status !== 'suspended' }" :disabled="platform.busy.value" @click="toggleTenant(row)">{{ row.status === 'suspended' ? t('adminServerAccess.activate') : t('adminServerAccess.suspend') }}</button></td>
+            <td><time v-if="row.deletionRequestedAt" :datetime="row.deletionRequestedAt">{{ row.deletionRequestedAt }}</time><span v-else>—</span></td>
+            <td><time v-if="row.deletionDueAt" :datetime="row.deletionDueAt">{{ row.deletionDueAt }}</time><span v-else>—</span></td>
+            <td><div class="row quota-row"><input v-model.number="quotaDrafts[row.id]" type="number" min="1" max="10000" :disabled="row.status === 'deleting'" :aria-label="t('adminServerAccess.quota')" /><button class="secondary small" :disabled="platform.busy.value || row.status === 'deleting'" @click="platform.updateTenant(row.id, { serverLimit: Number(quotaDrafts[row.id]) })">{{ t('adminServerAccess.saveQuota') }}</button></div></td>
+            <td><button v-if="row.status === 'deleting'" class="secondary small danger-outline" :disabled="platform.busy.value || !isTenantDeletionDue(row, now)" :title="t('adminServerAccess.deleteDueHint')" @click="deleteTenant(row)">{{ t('adminServerAccess.deleteTenant') }}</button><button v-else class="secondary small" :class="{ 'danger-outline': row.status !== 'suspended' }" :disabled="platform.busy.value" @click="toggleTenant(row)">{{ row.status === 'suspended' ? t('adminServerAccess.activate') : t('adminServerAccess.suspend') }}</button></td>
           </tr></tbody>
         </table>
       </div>

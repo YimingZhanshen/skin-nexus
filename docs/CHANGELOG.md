@@ -9,61 +9,15 @@ description: "SkinNexus 变更日志：按日期倒序的迭代历史，只记�
 > 相称——只记「改了什么 / 为什么 / 行为变化」，验证过程一句话。开发细节见对应 commit；
 > README 状态行只留一句话摘要。
 
-## 2026-11-24 · 租户数据导出与宽限期删除（同轮）
+## 2026-11-24 · 可选服务器接入模块（同轮）
 
-- 新增 owner/admin 租户 JSON 附件导出，按字段白名单返回租户、服务器/策略、白名单、封禁、owner 可见进服事件与凭据元数据；不返回邮箱、IP、token、secret/hash、邀请或全局用户/玩家/纹理，审计不记录导出内容。非空租户固定 6 条批量数据查询；首版对服务器、白名单、封禁、事件、凭据元数据与最终 JSON 字节执行硬上限，超限明确返回 413，不静默截断。
-- 新增 owner 删除请求：在一个事务内把租户置为 `deleting`、暂停全部服务器、吊销全部凭据并固定截止时间；`SKIN_SERVERACCESS_DELETION_GRACE_HOURS` 默认 168 小时，修改配置不改变已请求的期限。凭据创建/轮换与删除共享 tenant 行锁，并按 tenant、server、credential 顺序加锁，删除重放不会延长期限或留下活跃凭据。
-- 新增平台超管到期删除：未请求或未到期返回 409，到期后事务执行既有 `sa_*` 级联，重复删除返回 404；全局用户、玩家和纹理保留。删除中的租户与服务器不能被重新启用。
-- 三引擎加法迁移 `0036_serveraccess_lifecycle.sql` 新增独立 `deletion_requested_at` / `deletion_due_at`，不复用 `deleted_at`；模块关闭时新路由统一 404。
+- 新增默认关闭、可热切换的 `serveraccess` 模块：租户/成员/邀请、按服服务器/策略/白名单/封禁/凭据控制面，独立 `/servers` 服主门户与仅网页超管可用的平台状态/配额/紧急管理；store 强制租户 scope，viewer 只读，关闭时模块 API 统一 404，旧 Yggdrasil wire 不变。
+- 新增 URL secret 与 Bearer Header 两种按服 `hasJoined`：256 位 secret 只展示一次、仅存 SHA-256 摘要，支持 24 小时重叠轮换与立即吊销；按状态、封禁、UID 白名单、配额/并发、本地 session、官方 fallback 顺序决策，拒绝/未命中/故障保持空 204，无效/吊销/过期统一 404。
+- 新增按服进服事件与原子配额、脱敏 owner 时间线、可选免数据库 `verify-proxy`、按服 fallback 并发/熔断与事件保留 worker；日志和指标不记录 secret、原始 URL、query、body 或玩家身份，Header 模式仍只证明持有凭据，attested 未实现。
+- 新增字段白名单租户 JSON 导出与有界 413；owner 删除请求在一个事务内暂停全部服务器、吊销全部凭据并固定 7 天默认宽限期，平台超管到期才级联删除 `sa_*`，全局用户、玩家和纹理保留。
+- 服主导出/输入租户名称确认删除、平台请求/截止时间与到期删除门禁已接入真实 API；补齐产品/部署/兼容文档、安全指标标签与告警示例、三引擎备份恢复 runbook，并执行 SQLite 关闭-复制-恢复-重开演练，核验 deleting/suspended/revoked 与策略数据存活。
 
-验证：S6a 红绿 API/store/migration/config 测试、SQLite 三引擎夹具集成、Go 全量 test/vet/build 与 locales/docs 闸通过。
-
-## 2026-11-24 · 可选验证代理与治理加固（同轮）
-
-- 新增可选 `skin-nexus verify-proxy` 子命令：不连接数据库、不加载主站配置，只凭 public server id、upstream API root 与 Bearer credential 转发标准 `hasJoined`；S3/S4 不依赖它。
-- proxy 支持 env/flag、0600 凭据文件、系统或私有 CA 的 TLS 校验、本地监听与读写/请求头超时、请求/响应体上限；仅网络瞬断、超时和 5xx 有限重试，204/4xx/鉴权失败不重试，所有上游失败保持空 204。
-- 官方 fallback 增加按服并发与熔断：连续 5 次上游故障打开 30 秒，半开仅允许 1 次探测；健康 204 不算故障，本地 session、白名单、封禁、停服与吊销判定不被熔断旁路。
-- 按 `EventRetentionDays` 每小时批量清理进服事件；模块关闭时不创建 worker，面板热开关与进程退出显式停止，单服失败不会阻断其他服务器清理。
-- 新增 proxy 上游失败、fallback 熔断打开与 retention 清理失败指标；日志与指标不使用 secret、query、body、玩家身份或 URL 标签。
-
-验证：S5 红绿单测、真实 S3 proxy/URL-secret 决策与事件一致性、紧急吊销/停服、Go 全量 test/vet/build、前端构建与 docs 闸通过。
-
-## 2026-11-24 · 服务器接入服主门户与平台管理（同轮）
-
-- 新增默认关闭模块下的独立 `/servers` 服主门户：租户/成员/邀请、服务器状态、按服策略、白名单、封禁、Premium fallback、进服时间线与凭证轮换/吊销；viewer 只读，owner/admin 可写，全部沿用普通同源网页会话。
-- 平台超管视图提供租户/服务器状态、租户与按服配额、紧急停用/启用、全局 fallback、凭证吊销与审计；按服配额只提交已填写字段，不改后端响应契约。
-- 补齐两个租户只读端点：按服脱敏进服事件游标分页与玩家 `{uid,name,uuid}` 精确解析；服务端强制会话成员租户 scope，跨租户返回 404。
-- `/servers` 在模块关闭时仍提供 SPA 不可用说明，模块 API 全部 404，未知子路径保持 404；公开站点配置实时发布能力位，面板热切换同步更新导航。凭证明文只展示一次，关闭、切换服务器或过期请求都不会重新显示已丢弃的 secret。
-- 本切片不实现验证代理二进制、导出/租户删除或公测运维。
-
-验证：Go 全量 test/vet/build、Yggdrasil 契约测试、前端构建、composable 测试、locales/a11y/theme/modal/docs 闸与文档站构建通过。
-
-## 2026-11-24 · 服务器接入可信验证链（同轮）
-
-- 新增 URL secret 与 Bearer Header 两种按服 `hasJoined` 入口；无效、吊销、过期、跨租户或模块关闭统一 404，
-  有效凭证的策略拒绝与故障保持标准空 204，响应禁止缓存与 Referrer 泄露。
-- 验证链按模块/服务器状态、凭证、平台封禁、本服封禁、UID 白名单、配额/并发、本地 session、官方兜底依次执行；
-  只有真实 session miss 且两级开关允许才回源，官方响应原样透传，本地 profile 继续使用既有签名格式。
-- 三引擎加法迁移 `0035_serveraccess_events.sql` 新增按服进服事件与数据库原子配额窗口；事件记录身份、结果、来源、
-  耗时和请求关联 ID，同一本地 join 重放去重，写入失败只记固定标签结构化错误、指标与告警 hook，不改变验证结果。
-- 验证路由在组装层提前关闭诊断采集，原始 secret path、query、Authorization、body、IP 与邮箱不进入应用日志或明细；
-  旧 `/api/yggdrasil` 路由、DTO、错误体、纹理与签名契约保持不变。
-
-验证：`go test ./...`、`go vet ./...`、`go vet -tags integration ./...`、`go build ./...` 与 SQLite S3 集成测试通过。
-
-## 2026-11-24 · 服务器接入模块骨架与零表面开关
-
-- 新增默认关闭的 `serveraccess` 模块栈：面板 `serveraccess_enabled` 优先于 `SKIN_SERVERACCESS_ENABLED`，
-  支持热切换；关闭时 `/api/serveraccess`、`/v`、`/servers` 与平台模块子树统一 404，不落入 SPA。
-- 开启后提供租户、成员、邀请、服务器、凭证、策略、白名单与本服封禁控制面，以及仅超管网页会话可用的平台紧急控制；
-  所有租户资源由会话成员关系推导并在 store 层强制 scope，跨租户读写返回 404，viewer 只读。
-- 凭证使用 256 位随机 secret、只展示一次明文、数据库仅存 SHA-256 摘要；支持 24 小时重叠轮换与立即吊销。
-  邀请原子单次消费，过期、重放、邮箱不匹配与停用租户均拒绝。
-- 三引擎加法迁移 `0033_serveraccess_core.sql` 新增租户、成员、服务器核心表；`0034_serveraccess_control.sql`
-  新增邀请、凭证、策略、白名单、封禁与租户服务器配额；表、列、索引与外键名一致，租户删除只级联 `sa_*`，不删除全局账号。
-- 本切片不包含验证链、events 0035、前端、proxy 或导出实现；关闭时仍统一 404，不写库、不生成密钥。
-
-验证：SQLite 迁移/仓库/API 红绿测试、角色矩阵与跨租户负向测试、邀请并发消费、凭证轮换吊销、双语与文档闸通过。
+验证：红绿 UI/API/恢复测试、SQLite 真文件恢复、Go 全量 test/vet/build、前端构建、locales/a11y/theme/modal/docs 闸与文档站构建通过；MySQL/PostgreSQL 恢复 runbook 本地 not-run。
 
 ## 2026-11-22 · README 动图、面板自检卖点入表与 35 秒宣传片
 

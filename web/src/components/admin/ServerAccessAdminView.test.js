@@ -97,6 +97,9 @@ function find(node, predicate) {
 function byId(rootNode, id) {
   return find(rootNode, (node) => node.props.id === id)
 }
+function button(rootNode, label) {
+  return find(rootNode, (node) => node.type === 'button' && text(node) === label)
+}
 
 async function settle() {
   await new Promise((resolve) => setImmediate(resolve))
@@ -177,6 +180,41 @@ test('platform server view shows current policy and quota beside explicit sparse
     app.unmount()
     delete globalThis.__serverAccessApi
     delete globalThis.__serverAccessConfirm
+  }
+})
+
+test('platform deletion displays both timestamps and enables deletion only for a due deleting tenant', async () => {
+  const tenants = [
+    { id: 1, name: 'Due tenant', status: 'deleting', serverLimit: 5, deletionRequestedAt: '2000-01-01T00:00:00Z', deletionDueAt: '2000-01-08T00:00:00Z' },
+    { id: 2, name: 'Future tenant', status: 'deleting', serverLimit: 5, deletionRequestedAt: '2999-01-01T00:00:00Z', deletionDueAt: '2999-01-08T00:00:00Z' },
+    { id: 3, name: 'Active tenant', status: 'active', serverLimit: 5, deletionRequestedAt: null, deletionDueAt: '2000-01-08T00:00:00Z' },
+  ]
+  const state = { tenants: structuredClone(tenants), deletes: [] }
+  const { app, container } = await mountView({
+    platformTenants: async () => ({ tenants: state.tenants, total: state.tenants.length }),
+    deletePlatformTenant: async (id) => {
+      state.deletes.push(id)
+      state.tenants = state.tenants.filter((row) => row.id !== id)
+      return { deleted: true }
+    },
+  })
+  try {
+    assert.match(text(container), /2000-01-01T00:00:00Z/)
+    assert.match(text(container), /2999-01-08T00:00:00Z/)
+    const rows = descendants(container).filter((node) => node.type === 'tr')
+    const row = (id) => rows.find((node) => descendants(node).some((cell) => cell.type === 'td' && text(cell) === String(id)))
+    assert.equal(button(row(1), 'Delete tenant').props.disabled, false)
+    assert.equal(button(row(2), 'Delete tenant').props.disabled, true)
+    assert.equal(button(row(3), 'Delete tenant'), undefined, 'active tenant must not expose physical deletion')
+
+    button(row(2), 'Delete tenant').props.onClick()
+    await settle()
+    assert.deepEqual(state.deletes, [])
+    button(row(1), 'Delete tenant').props.onClick()
+    await settle()
+    assert.deepEqual(state.deletes, [1])
+  } finally {
+    app.unmount()
   }
 })
 

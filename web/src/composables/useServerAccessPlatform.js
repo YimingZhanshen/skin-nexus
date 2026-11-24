@@ -2,6 +2,12 @@ import { ref, shallowRef, readonly } from 'vue'
 
 const quotaFields = ['verifyRateLimit', 'verifyBurst', 'maxConcurrent', 'whitelistLimit', 'eventRetentionDays']
 
+export function isTenantDeletionDue(row, now = Date.now()) {
+  if (!row || row.status !== 'deleting' || !row.deletionDueAt) return false
+  const due = Date.parse(row.deletionDueAt)
+  return Number.isFinite(due) && due <= now
+}
+
 export function buildServerQuotaPatch(draft = {}) {
   const patch = {}
   for (const field of quotaFields) {
@@ -120,6 +126,9 @@ export function useServerAccessPlatform(api) {
     pageServers: (page) => { serverPage.value = page; return loadServers() },
     pageAudit: (page) => { auditPage.value = page; return loadAudit() },
     updateTenant: (id, body) => mutate(() => api.updatePlatformTenant(id, body), loadTenants),
+    deleteTenant: (id) => mutate(() => api.deletePlatformTenant(id), async () => {
+      await Promise.all([loadTenants(), loadAudit()])
+    }),
     updateServer: (id, body) => mutate(() => api.updatePlatformServer(id, body), loadServers),
     setFallback: (enabled) => mutate(async () => {
       const data = await api.setPlatformFallback(enabled)

@@ -1,5 +1,5 @@
 ---
-description: "Docker Compose 部署 SkinNexus 的完整手册：quickstart、53 个环境变量、启动验收、升级备份、Nginx 反代与宝塔、排错表。"
+description: "Docker Compose 部署 SkinNexus 的完整手册：quickstart、环境变量、启动验收、升级备份、服务器接入运维、Nginx 反代与宝塔、排错表。"
 ---
 
 # SkinNexus 部署手册（Docker 优先）
@@ -18,6 +18,7 @@ description: "Docker Compose 部署 SkinNexus 的完整手册：quickstart、53 
 |---|---|
 | [一](#一、部署方式选择) 部署方式 | Docker Compose（推荐）还是裸二进制 |
 | [二](#二、docker-compose-部署-主线) Compose 主线 | 准备 → 选库 → 环境变量 → 启动验收 → 升级 → 备份 → 排错 → 宝塔 |
+| [服务器接入](#服务器接入模块控制面可信验证链可选代理与治理加固已实现默认关闭真源在管理-站点设置) | 服主门户、按服验证、可选代理、监控与恢复 |
 | [三](#三、nginx-反代-前置-https-证书) 反代与 CDN | Nginx 必传头、安全头/CORS 归属、宝塔 WAF 跨域坑、CDN 真实 IP |
 | [四](#四、从老站迁移) 迁移 | Docker 下的 migrate 入口（详见 migration.md） |
 | [五](#五、备选-源码构建-systemd-无-docker-环境) 源码 + systemd | 无 Docker 环境的完整单元示例 |
@@ -276,6 +277,8 @@ app 进程能看到哪些变量，取决于 compose 文件里 `environment:` 段
 
 **服务器接入模块**（控制面、可信验证链、可选代理与治理加固已实现，默认关闭；真源在「管理 → 站点设置」）
 
+产品配置、角色、零组件 URL、策略与排错见 [服务器接入手册](server-access.md)。
+
 | 变量 | 必填性 | 默认（源码 / 镜像内） | 说明 |
 |---|---|---|---|
 | `SKIN_SERVERACCESS_ENABLED` | 面板真源 | `false` | 服务器接入模块开关；面板 `serveraccess_enabled` 优先且热生效。关闭时所有模块 API 统一 404，`/servers` 仍提供 SPA 壳并明确显示模块不可用；开启后提供独立 `/servers` 服主门户、租户/服务器/成员/邀请控制面、按服凭证与白名单/封禁策略、进服事件、平台状态/配额/紧急管理，以及 URL secret / Bearer Header 两种 `hasJoined` 验证入口。进服事件与验证配额持久化；可选 `verify-proxy` 独立子命令、按服 fallback 熔断、按 `EventRetentionDays` 的事件清理、字段白名单导出与宽限期删除均已实现 |
@@ -351,11 +354,65 @@ install -m 600 /dev/null /etc/skin-nexus/verify-proxy.credential
 
 **监控与告警**
 
-- `verify_proxy_upstream_failures_total{reason}`：proxy 最终上游失败，reason 仅为 `network`、`timeout`、`upstream_status`、`response_too_large`、`canceled`、`invalid_request`；主站 `SKIN_METRICS=1` 的 `/metrics` 或 proxy 本地 `/metrics` 可采集。
-- `serveraccess_fallback_breaker_open_total`：按服熔断打开次数；增长表示官方 sessionserver 持续故障。
-- `serveraccess_retention_cleanup_failures_total`：保留策略读取或单服清理失败；非零时检查数据库权限、磁盘和 `sa_join_events` 状态。
+主站 `SKIN_METRICS=1` 的 `/metrics` 与 proxy 本地 `/metrics` 默认关闭/仅环回监听，采集端需先做网络访问控制。应用直接导出的服务器接入指标如下：
 
-三个指标都没有 secret、URL、query、body、玩家或服务器标签。出现熔断打开/retention 失败时应用同时写固定标签 `serveraccess.fallback breaker_open` 或 `serveraccess.retention cleanup_failed`，可据此配置告警；proxy 上游失败写 `verify_proxy upstream_failure`。
+| 指标 | 标签 | 含义 |
+|---|---|---|
+| `http_requests_total` | `method`、`status` | 全站 HTTP 请求数；可观察 204/5xx，但没有路由标签，不能单独筛出验证请求 |
+| `serveraccess_event_write_failures_total` | 无 | 进服事件持久化失败；验证结果不变，但事件/配额派生监控会漏计 |
+| `serveraccess_fallback_breaker_open_total` | 无 | 按服官方 fallback 熔断打开次数 |
+| `serveraccess_retention_cleanup_failures_total` | 无 | 保留策略读取或单服事件清理失败 |
+| `verify_proxy_upstream_failures_total` | `reason` | proxy 最终上游失败；reason 仅为 `network`、`timeout`、`upstream_status`、`response_too_large`、`canceled`、`invalid_request` |
+
+应用没有直接导出按验证路由的延迟直方图或配额拒绝计数器。部署采集器时，把 URL secret 与 Header 两种验证路由归一为固定 `route="serveraccess.verify"`，不得使用原始 URI；`source_mode` 只能取 `url_secret` 或 `header`。采集器侧使用以下固定名称（不是应用内置指标）：
+
+- `serveraccess_verify_requests_total{route,status,source_mode}`：验证请求数，status 使用实际 HTTP 状态；204 是正常的拒绝/未命中，不能当作 5xx。
+- `serveraccess_verify_duration_seconds{route,source_mode}`：验证延迟直方图，必须含 `le` 桶。
+- `serveraccess_quota_denials_total{route,source_mode}`：从 `sa_join_events.reason_code` 的 `quota_exceeded` 与 `concurrent_limit` 聚合。事件写入失败会漏计，因此必须与 `serveraccess_event_write_failures_total` 同时告警。
+
+安全标签白名单只有 `route`、`status`、`source_mode`、固定 `reason` 与直方图 `le`。禁止添加 secret、原始 path/query、Authorization、body、玩家名/UUID/uid、邮箱、IP、tenant_id、server_id、credential_id、request_id；告警正文与工单也不得回显这些值。
+
+Prometheus 告警示例（阈值需按实际流量调整；查询与通知均不带凭据或路径）：
+
+```yaml
+- alert: ServerAccessVerify5xx
+  expr: sum(rate(serveraccess_verify_requests_total{route="serveraccess.verify",status=~"5.."}[5m])) > 0.05
+  for: 5m
+  labels: { severity: page }
+  annotations: { summary: "Server-access verification is returning 5xx" }
+- alert: ServerAccessVerifyLatency
+  expr: histogram_quantile(0.95, sum by (le, route, source_mode) (rate(serveraccess_verify_duration_seconds_bucket{route="serveraccess.verify"}[5m]))) > 1
+  for: 10m
+  labels: { severity: ticket }
+  annotations: { summary: "Server-access verification p95 exceeds one second" }
+- alert: ServerAccessQuotaDenials
+  expr: sum(rate(serveraccess_quota_denials_total{route="serveraccess.verify"}[5m])) / clamp_min(sum(rate(serveraccess_verify_requests_total{route="serveraccess.verify"}[5m])), 0.001) > 0.2
+  for: 10m
+  labels: { severity: ticket }
+  annotations: { summary: "Server-access quota denials exceed one fifth of requests" }
+- alert: ServerAccessEventWriteFailures
+  expr: increase(serveraccess_event_write_failures_total[5m]) > 0
+  for: 1m
+  labels: { severity: page }
+  annotations: { summary: "Server-access join events are not being persisted" }
+- alert: ServerAccessFallbackBreaker
+  expr: increase(serveraccess_fallback_breaker_open_total[10m]) > 0
+  for: 1m
+  labels: { severity: ticket }
+  annotations: { summary: "Server-access official fallback circuit opened" }
+- alert: ServerAccessRetentionFailures
+  expr: increase(serveraccess_retention_cleanup_failures_total[15m]) > 0
+  for: 5m
+  labels: { severity: ticket }
+  annotations: { summary: "Server-access event retention cleanup is failing" }
+- alert: VerifyProxyUpstreamFailures
+  expr: sum(rate(verify_proxy_upstream_failures_total{reason=~"network|timeout|upstream_status|response_too_large"}[5m])) > 0.1
+  for: 5m
+  labels: { severity: ticket }
+  annotations: { summary: "Optional verify proxy upstream failures are sustained" }
+```
+
+204/5xx 的比例与延迟观察依赖上述采集器归一化；只开应用 `/metrics` 时只能看到全站状态计数。出现熔断打开/retention 失败时应用同时写固定标签 `serveraccess.fallback breaker_open` 或 `serveraccess.retention cleanup_failed`；proxy 上游失败写 `verify_proxy upstream_failure`。结构化日志不得附带原始验证 URL。
 
 **`/v/` 路径本身就是凭据，运维边界比普通页面更严格：**
 
@@ -571,6 +628,79 @@ docker compose exec db sh -c 'exec mysqldump -uskin -p"$MYSQL_PASSWORD" skin_nex
 > `sign-key.pem` 是纹理签名私钥（**首次启动自动生成**，RSA-4096），建议额外**加密后异地**备份一份；
 > `oidc-key.pem` 与它分离（免密登录 token 专用），**仅在 `SKIN_OIDC_ENABLED=true` 时生成**——
 > OIDC 关闭时文件不存在属正常，开启后首启自动生成。两钥互不代替，都纳入备份。
+
+服务器接入的租户、服务器、策略、白名单、封禁、事件、凭据摘要/吊销状态与删除期限都在数据库备份中。`skin-data` 还需覆盖插件主密钥 `plugin-secrets.key`；可选 verify-proxy 的凭据文件与私有 CA 不在数据库内，必须单独加密备份并限制为 owner-only。备份不包含任何可恢复的 credential secret 明文。
+
+**恢复演练状态**：SQLite 已由 `TestServerAccessSQLiteRestoreDrill` 真正执行关闭、复制文件、删除原文件、复制恢复、重新打开，并核验 deleting/suspended/revoked 状态与策略、白名单、封禁、事件。MySQL 与 PostgreSQL 的恢复命令仅作为 runbook，本地 **not-run**；应在一次性数据库环境执行后再纳入发布检查。
+
+#### SQLite 文件恢复
+
+停应用后再复制，避免把仍在写入的 WAL 当作完整备份。下列路径均为占位符，替换成实际持久卷；`sqlite3` 是宿主机工具，未安装时可在停止应用后完整复制主库及同目录 `-wal`/`-shm` 文件。
+
+```bash
+SQLITE_DB=/var/lib/skin-nexus/skin.db
+BACKUP_DIR=/backup/serveraccess/sqlite-$(date +%F)
+install -d -m 700 "$BACKUP_DIR"
+# 先停止 skin-nexus；不要用第二个进程同时写 SQLite。
+sqlite3 "$SQLITE_DB" 'PRAGMA wal_checkpoint(TRUNCATE);'
+cp -p "$SQLITE_DB" "$BACKUP_DIR/skin.db"
+sha256sum "$BACKUP_DIR/skin.db" > "$BACKUP_DIR/skin.db.sha256"
+
+# 恢复到原路径前保留旧文件，核对备份校验和后停应用。
+sha256sum -c "$BACKUP_DIR/skin.db.sha256"
+cp -p "$SQLITE_DB" "$SQLITE_DB.before-restore"
+cp -p "$BACKUP_DIR/skin.db" "$SQLITE_DB"
+# 启动后执行下方验收；失败时停应用并恢复 before-restore 文件。
+```
+
+自动验收命令（从 `server/` 目录执行，测试只使用临时目录，不碰运行库）：
+
+```bash
+go test -count=1 ./internal/store -run TestServerAccessSQLiteRestoreDrill -v
+```
+
+#### MySQL / MariaDB 逻辑备份与恢复（not-run）
+
+使用独立备份账号，口令通过安全环境或凭据文件提供，不写进命令历史。恢复目标必须是可丢弃的空库；先停应用，再导入。
+
+```bash
+BACKUP_DIR=/backup/serveraccess/mysql-$(date +%F)
+install -d -m 700 "$BACKUP_DIR"
+mysqldump --single-transaction --quick --routines --events --hex-blob \
+  --databases skin_nexus | gzip > "$BACKUP_DIR/skin_nexus.sql.gz"
+sha256sum "$BACKUP_DIR/skin_nexus.sql.gz" > "$BACKUP_DIR/skin_nexus.sql.gz.sha256"
+
+# 在一次性环境创建空库 skin_nexus_restore，停应用后导入。
+gzip -dc "$BACKUP_DIR/skin_nexus.sql.gz" | mysql skin_nexus_restore
+```
+
+MariaDB 使用同一 MySQL 线协议与 DSN 形状。备份/Restore 后都要检查 `schema_migrations`、`sa_*` 行数与吊销/删除状态；不要靠导出文件里是否出现 `secret_hash` 判断备份完整性。
+
+#### PostgreSQL 逻辑备份与恢复（not-run）
+
+`pg_dump` 使用自定义归档，恢复到新建的空库；不要对生产库直接执行 `--clean`。
+
+```bash
+BACKUP_DIR=/backup/serveraccess/postgres-$(date +%F)
+install -d -m 700 "$BACKUP_DIR"
+pg_dump --format=custom --dbname=skin_nexus --file="$BACKUP_DIR/skin_nexus.dump"
+sha256sum "$BACKUP_DIR/skin_nexus.dump" > "$BACKUP_DIR/skin_nexus.dump.sha256"
+
+# 在一次性环境创建空库，停应用后恢复并核验，再切换 DSN。
+createdb skin_nexus_restore
+pg_restore --dbname=skin_nexus_restore "$BACKUP_DIR/skin_nexus.dump"
+```
+
+#### 恢复后验收
+
+1. 校验备份文件摘要，确认迁移标记覆盖 `0036_serveraccess_lifecycle.sql`。
+2. 对比恢复前后的全局用户、角色、纹理数量与关键引用；租户删除不得级联全局身份。
+3. 对吊销凭据发起验证应为 404；deleting 租户的服务器应为 suspended，凭据应为 revoked，请求/截止时间保持不变。
+4. 用未到期与已到期两个样本验证平台删除门禁；不要为验收提前删除需要保留的租户。
+5. 核对签名私钥、OIDC 私钥、插件主密钥与 proxy 凭据文件已恢复，且文件权限未放宽。
+6. 确认应用、反代、WAF、CDN、APM 的 `/v/` 日志与缓存禁令仍生效，再恢复流量。
+
+不要把旧备份直接覆盖到更新状态的生产库：备份可能回滚已吊销凭据或已承诺的删除期限，这类恢复必须作为安全事件审批。
 
 ### 2.7 日志与排错
 

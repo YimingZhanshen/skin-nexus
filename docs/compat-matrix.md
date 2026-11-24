@@ -64,6 +64,21 @@ JWT access token 实测形状：`aud="2"（shared_client_id）、sub=uid、scope
 | 联盟自助诊断（管理面板） | 一跳回探、证据平铺一张表、两态（深说见下） | 同一跳同一形状，按腿分家 + 三态 + JSON 导出（深说见下） | ✅ |
 | `enabledFeatures` 能力声明 | hello 按两个 option 追加，启用状态直接写 true/false（深说见下） | 四项按请求读 option，改完即生效不缓存（深说见下） | ✅ |
 
+### 3.1 可选服务器接入边界
+
+这是 SkinNexus 的可选增量面，不是 blessing 1:1 协议；旧 `/api/yggdrasil/**` wire 保持不变。模块默认关闭，关闭时下列端点返回 404。
+
+| 端点 | 权限与行为 | 状态 |
+|---|---|---|
+| `GET /v/<secret>/sessionserver/session/minecraft/hasJoined` | 按服 URL secret；有效策略拒绝/未命中/故障为空 204，无效/吊销/过期为 404 | ✅ |
+| `GET /api/serveraccess/v1/servers/<public_id>/hasJoined` | 可选 Header 模式，`Authorization: Bearer <secret>`；与 URL 模式共用策略链 | ✅ |
+| `GET /api/serveraccess/v1/tenants/me/export` | 租户 owner/admin；字段白名单 JSON 附件，超限 413，不含 secret 或全局玩家资料 | ✅ |
+| `POST /api/serveraccess/v1/tenants/me/delete-request` | 仅 owner；事务暂停服务器、吊销凭据并固定宽限期截止时间 | ✅ |
+| `POST /api/admin/v1/serveraccess/tenants/<id>/delete` | 仅网页超管；未到期 409，到期级联删除 `sa_*`，保留全局身份 | ✅ |
+| `attested` 组件身份证明 | 未实现；URL secret 与 Header 都只证明持有凭据，Header 不构成 attested | ➖ |
+
+完整字段、上限、角色与运维约束见 [服务器接入手册](server-access.md)。
+
 <details>
 <summary>§3 表注：六行的 legacy 行为与我方实现全量考据——可以先不读</summary>
 
