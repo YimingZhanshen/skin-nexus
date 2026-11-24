@@ -74,7 +74,7 @@ func (m *memStore) PlayersByUID(_ context.Context, uid int64) ([]Player, error) 
 func (m *memStore) PlayerByUUID(_ context.Context, uuid string) (Player, error) {
 	p, ok := m.byUUID[uuid]
 	if !ok {
-		return Player{}, errors.New("no player")
+		return Player{}, ErrProfileNotFound
 	}
 	return p, nil
 }
@@ -82,7 +82,7 @@ func (m *memStore) PlayerByUUID(_ context.Context, uuid string) (Player, error) 
 func (m *memStore) PlayerByName(_ context.Context, name string) (Player, error) {
 	p, ok := m.players[name]
 	if !ok {
-		return Player{}, errors.New("no player")
+		return Player{}, ErrProfileNotFound
 	}
 	return p, nil
 }

@@ -70,6 +70,19 @@ func (m *Mysql) DeleteDueSATenant(ctx context.Context, tenantID int64, now time.
 		return err
 	}
 	defer tx.Rollback()
+	if err := deleteDueSATenantTx(ctx, tx, tenantID, now); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (m *Mysql) DeleteDueSATenantAudited(ctx context.Context, tenantID int64, now time.Time, actorUID int64, action string, detail any) error {
+	return m.withSAAudit(ctx, actorUID, action, detail, func(tx *dbx.Tx) error {
+		return deleteDueSATenantTx(ctx, tx, tenantID, now)
+	})
+}
+
+func deleteDueSATenantTx(ctx context.Context, tx *dbx.Tx, tenantID int64, now time.Time) error {
 	tenant, err := saLockTenantLifecycleRow(ctx, tx, tenantID)
 	if err != nil {
 		return err
@@ -77,10 +90,7 @@ func (m *Mysql) DeleteDueSATenant(ctx context.Context, tenantID int64, now time.
 	if tenant.Status != "deleting" || tenant.DeletionDueAt == nil || now.UTC().Before(*tenant.DeletionDueAt) {
 		return ErrDeletionNotDue
 	}
-	if err := deleteSATenantTx(ctx, tx, tenantID); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return deleteSATenantTx(ctx, tx, tenantID)
 }
 
 func saLockTenantLifecycleRow(ctx context.Context, tx *dbx.Tx, tenantID int64) (SATenant, error) {

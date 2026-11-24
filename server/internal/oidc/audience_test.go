@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"slices"
 	"strings"
@@ -260,36 +261,109 @@ func TestYggTokenResolverRejectsExpiredAndRevokedTokens(t *testing.T) {
 	}
 }
 
-func TestYggTokenResolverFailsClosedWithoutPolicy(t *testing.T) {
+func TestYggTokenResolverFailsClosedWithoutCompletePolicy(t *testing.T) {
 	key := testKey(t)
-	backend := newMemBackend()
-	claims := validAccessClaims("jti-no-policy")
-	if err := backend.SaveAccessToken(context.Background(), AccessTokenRecord{
-		JTI: "jti-no-policy", UserID: 42, ClientID: "2",
-		Scopes: []string{ScopeYggdrasilJoin}, ExpiresAt: time.Now().Add(time.Hour),
-	}); err != nil {
-		t.Fatal(err)
-	}
-	resolve := NewYggTokenResolver(backend, "https://skin.test", &key.PublicKey, TokenPolicy{})
-	if _, err := resolve(context.Background(), signedTestJWT(t, key, claims)); err == nil {
-		t.Fatal("empty audience/client policy must fail closed")
+	for _, tc := range []struct {
+		name   string
+		policy TokenPolicy
+	}{
+		{name: "empty", policy: TokenPolicy{}},
+		{name: "missing audience", policy: TokenPolicy{AllowedClientIDs: []string{"2"}}},
+		{name: "blank audience", policy: TokenPolicy{Audience: " ", AllowedClientIDs: []string{"2"}}},
+		{name: "missing clients", policy: TokenPolicy{Audience: "https://skin.test/api/yggdrasil"}},
+		{name: "blank clients", policy: TokenPolicy{
+			Audience: "https://skin.test/api/yggdrasil", AllowedClientIDs: []string{"", " "},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			backend := newMemBackend()
+			claims := validAccessClaims("jti-no-policy")
+			if err := backend.SaveAccessToken(context.Background(), AccessTokenRecord{
+				JTI: "jti-no-policy", UserID: 42, ClientID: "2",
+				Scopes: []string{ScopeYggdrasilJoin}, ExpiresAt: time.Now().Add(time.Hour),
+			}); err != nil {
+				t.Fatal(err)
+			}
+			resolve := NewYggTokenResolver(backend, "https://skin.test", &key.PublicKey, tc.policy)
+			if _, err := resolve(context.Background(), signedTestJWT(t, key, claims)); err == nil {
+				t.Fatal("empty/incomplete audience/client policy must fail closed")
+			}
+		})
 	}
 }
 
-func TestVerifyBearerUsesSameAudienceAndClientPolicy(t *testing.T) {
+func TestVerifyBearerRejectsMissingOrWrongAudience(t *testing.T) {
 	key := testKey(t)
 	backend := newMemBackend()
-	claims := validAccessClaims("jti-bearer")
+	policy := TokenPolicy{Audience: "https://skin.test/api/yggdrasil"}
+	for _, tc := range []struct {
+		name     string
+		audience any
+	}{
+		{name: "missing"},
+		{name: "wrong", audience: "https://elsewhere.test/api/yggdrasil"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			jti := "jti-bearer-" + strings.ReplaceAll(tc.name, " ", "-")
+			claims := validAccessClaims(jti)
+			claims["aud"] = tc.audience
+			if err := backend.SaveAccessToken(context.Background(), AccessTokenRecord{
+				JTI: jti, UserID: 42, ClientID: "other", ExpiresAt: time.Now().Add(time.Hour),
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := VerifyBearer(context.Background(), backend, "https://skin.test", &key.PublicKey, signedTestJWT(t, key, claims), policy); err == nil {
+				t.Fatal("userinfo verification must reject a missing or wrong resource audience")
+			}
+		})
+	}
+}
+
+func TestUserinfoAcceptsClientOutsideYggdrasilAllowlist(t *testing.T) {
+	p, backend := testProvider(t)
+	policy := p.AccessTokenPolicy()
+	const clientID = "other"
+	const jti = "jti-non-ygg-client"
+	if err := backend.EnsureOidcClient(context.Background(), ClientRecord{
+		ID: clientID, Name: "Other OIDC client",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	claims := validAccessClaims(jti)
+	claims["aud"] = []string{policy.Audience, clientID}
 	if err := backend.SaveAccessToken(context.Background(), AccessTokenRecord{
-		JTI: "jti-bearer", UserID: 42, ClientID: "other",
+		JTI: jti, UserID: 42, ClientID: clientID, SelectedPID: 7,
 		Scopes: []string{ScopeYggdrasilJoin}, ExpiresAt: time.Now().Add(time.Hour),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	raw := signedTestJWT(t, key, claims)
-	if _, err := VerifyBearer(context.Background(), backend, "https://skin.test", &key.PublicKey, raw, TokenPolicy{
-		Audience: "https://skin.test/api/yggdrasil", AllowedClientIDs: []string{"2"},
-	}); err == nil {
-		t.Fatal("userinfo verification must enforce the ledger client allowlist")
+	raw := signedTestJWT(t, p.cfg.Key, claims)
+
+	resolve := NewYggTokenResolver(backend, p.cfg.Issuer, &p.cfg.Key.PublicKey, policy)
+	if _, err := resolve(context.Background(), raw); err == nil {
+		t.Error("Yggdrasil resolver must reject a ledger client outside its allowlist")
+	}
+
+	rec, err := VerifyBearer(context.Background(), backend, p.cfg.Issuer, &p.cfg.Key.PublicKey, raw, policy)
+	if err != nil {
+		t.Errorf("VerifyBearer rejected a valid token for another OIDC client: %v", err)
+	} else if rec.JTI != jti || rec.ClientID != clientID {
+		t.Errorf("VerifyBearer returned ledger record %+v, want jti %q and client %q", rec, jti, clientID)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/userinfo", nil)
+	req.Header.Set("Authorization", "Bearer "+raw)
+	response := httptest.NewRecorder()
+	p.UserinfoHandler().ServeHTTP(response, req)
+	if response.Code != http.StatusOK {
+		t.Errorf("userinfo status = %d, want %d; body: %s", response.Code, http.StatusOK, response.Body.String())
+		return
+	}
+	var userinfo map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &userinfo); err != nil {
+		t.Fatalf("decode userinfo response: %v", err)
+	}
+	if userinfo["sub"] != "42" {
+		t.Errorf("userinfo sub = %v, want %q", userinfo["sub"], "42")
 	}
 }

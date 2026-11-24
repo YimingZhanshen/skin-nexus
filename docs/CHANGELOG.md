@@ -16,6 +16,12 @@ description: "SkinNexus 变更日志：按日期倒序的迭代历史，只记�
 
 验证：store/API/前端红绿测试、SQLite integration、Go 全量 test/vet/build 与覆盖率、前端 32 项测试与构建、locales/a11y/theme/modal/docs 闸及文档站构建通过；MySQL/MariaDB/PostgreSQL 因本地无测试 DSN 未运行。
 
+**同日 2 轮（服务器接入全分支审查修复）**
+
+- 旧全局 `hasJoined`/profile 只在确证本地未命中时回源，玩家查询、join 查询、签名与数据库故障不再被官方身份覆盖；标准 OIDC `userinfo` 与 Yggdrasil join 客户端 allowlist 分离，合法非 shared client 不再被误拒。
+- 删除宽限期内 owner/admin 仍可导出，viewer 仍拒绝；成员邀请必须先验证邮箱。平台紧急状态、配额、fallback、吊销和删除改为与审计原子提交，审计失败整笔回滚。
+- `VerifyBurst` 真正按秒执行原子准入，分钟/秒配额窗口由保留 worker 分批清理；平台 fallback 的界面初值与运行时默认统一为关闭。E2E 改用临时回环端口、白名单环境、有界失败日志与退出后清理。
+
 ## 2026-11-24 · 可选服务器接入模块（同轮）
 
 - 新增默认关闭、可热切换的 `serveraccess` 模块：租户/成员/邀请、按服服务器/策略/白名单/封禁/凭据控制面，独立 `/servers` 服主门户与仅网页超管可用的平台状态/配额/紧急管理；store 强制租户 scope，viewer 只读，关闭时模块 API 统一 404，旧 Yggdrasil wire 不变。

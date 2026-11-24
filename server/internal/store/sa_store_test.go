@@ -984,6 +984,28 @@ func TestServerAccessQuotaAdmissionReturnsItsOwnIncrement(t *testing.T) {
 	}
 }
 
+func TestServerAccessQuotaPurgeDeletesOnlyExpiredWindows(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	tenant, _ := st.CreateSATenant(ctx, "quota-purge", 2)
+	server, _ := st.CreateSAServer(ctx, tenant, "srv_quota_purge", "quota")
+	now := time.Now().UTC().Truncate(time.Second)
+	if _, _, err := st.AdmitSAQuotaWindow(ctx, server.ID, now.Add(-2*time.Minute), "verify", 10, time.Minute, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.AdmitSAQuotaWindow(ctx, server.ID, now, "verify_burst", 10, time.Second, now); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := st.PurgeSAQuotaUsage(ctx, now, 100)
+	if err != nil || removed != 1 {
+		t.Fatalf("purge = (%d, %v), want one expired row", removed, err)
+	}
+	var count int
+	if err := st.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM sa_quota_usage WHERE server_id=?`, server.ID).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("quota rows after purge = %d, %v, want current row only", count, err)
+	}
+}
+
 func TestServerAccessQuotaAdmissionConcurrentLimit(t *testing.T) {
 	st := openSQLiteStore(t)
 	ctx := context.Background()

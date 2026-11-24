@@ -17,6 +17,8 @@ import (
 	"skin-nexus/server/internal/ygg"
 )
 
+const serveraccessGlobalFallbackOption = "serveraccess_global_fallback"
+
 type verificationStore interface {
 	SACredentialBySecretHash(context.Context, string, time.Time) (store.SACredential, error)
 	SAServerByPublicID(context.Context, int64, string) (store.SAServer, error)
@@ -25,6 +27,7 @@ type verificationStore interface {
 	SAWhitelistMember(context.Context, int64, int64, int64) (bool, error)
 	SAActiveBan(context.Context, int64, int64, int64, time.Time) (bool, error)
 	AdmitSAQuota(context.Context, int64, time.Time, string, int, time.Time) (int64, bool, error)
+	AdmitSAQuotaWindow(context.Context, int64, time.Time, string, int, time.Duration, time.Time) (int64, bool, error)
 	InsertSAJoinEvent(context.Context, store.SAJoinEvent) error
 	GetOption(context.Context, string) (string, bool, error)
 }
@@ -71,6 +74,15 @@ func (p *requestPolicy) Evaluate(ctx context.Context, identity ygg.VerificationI
 	if !allowed {
 		return ygg.VerificationDecision{ReasonCode: "quota_exceeded"}, nil
 	}
+	if p.policy.VerifyBurst > 0 {
+		_, allowed, err = p.store.AdmitSAQuotaWindow(ctx, p.server.ID, p.now.UTC().Truncate(time.Second), "verify_burst", p.policy.VerifyBurst, time.Second, p.now)
+		if err != nil {
+			return ygg.VerificationDecision{}, err
+		}
+		if !allowed {
+			return ygg.VerificationDecision{ReasonCode: "quota_exceeded"}, nil
+		}
+	}
 	fallback := p.policy.PremiumFallbackEnabled && !p.policy.WhitelistEnabled
 	// Concurrency is checked after bans, whitelist and quota, and the slot is
 	// held until the verification callback so it also bounds official fallback.
@@ -98,7 +110,7 @@ func (p *requestPolicy) ResolveFallback(ctx context.Context, _ ygg.VerificationI
 }
 
 func saGlobalFallback(ctx context.Context, st verificationStore) (bool, error) {
-	value, ok, err := st.GetOption(ctx, "serveraccess_global_fallback")
+	value, ok, err := st.GetOption(ctx, serveraccessGlobalFallbackOption)
 	if err != nil {
 		return false, err
 	}

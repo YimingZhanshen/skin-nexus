@@ -19,6 +19,7 @@ const (
 type retentionStore interface {
 	SAEventRetentionPolicies(context.Context) ([]store.SAServerPolicy, error)
 	PurgeSAJoinEvents(context.Context, int64, time.Time, int) (int64, error)
+	PurgeSAQuotaUsage(context.Context, time.Time, int) (int64, error)
 }
 
 // RetentionWorker owns one explicitly started goroutine. Construction is inert;
@@ -116,10 +117,11 @@ func (w *RetentionWorker) RunOnce(ctx context.Context) error {
 		slog.Error("serveraccess.retention policy_read_failed")
 		return err
 	}
-	if len(policies) == 0 || ctx.Err() != nil {
-		return nil
-	}
 	now := w.now().UTC()
+	quotaErr := w.purgeQuotaUsage(ctx, now)
+	if len(policies) == 0 || ctx.Err() != nil {
+		return quotaErr
+	}
 	for _, policy := range policies {
 		if ctx.Err() != nil {
 			return nil
@@ -137,7 +139,23 @@ func (w *RetentionWorker) RunOnce(ctx context.Context) error {
 			}
 		}
 	}
-	return nil
+	return quotaErr
+}
+
+func (w *RetentionWorker) purgeQuotaUsage(ctx context.Context, now time.Time) error {
+	for {
+		n, err := w.store.PurgeSAQuotaUsage(ctx, now, retentionBatchSize)
+		if err != nil {
+			if ctx.Err() == nil {
+				metrics.ServerAccessRetentionCleanupFailures.Inc()
+				slog.Error("serveraccess.retention quota_cleanup_failed")
+			}
+			return err
+		}
+		if n < retentionBatchSize || ctx.Err() != nil {
+			return nil
+		}
+	}
 }
 
 func (w *RetentionWorker) purgeServer(ctx context.Context, serverID int64, cutoff time.Time) error {

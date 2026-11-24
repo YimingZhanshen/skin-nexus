@@ -18,9 +18,10 @@ import (
 // openid/offline_access/PlayerProfiles.Select/Server.Join (both launchers).
 const ScopeYggdrasilJoin = "Yggdrasil.Server.Join"
 
-// TokenPolicy is the global access-token boundary. Audience identifies the one
-// Yggdrasil API resource; AllowedClientIDs is an explicit set of OAuth clients
-// whose ledger entries may authorize it. An empty/incomplete policy fails closed.
+// TokenPolicy configures access-token audience validation and the Yggdrasil
+// join-client allowlist. Audience is required for both Bearer verification and
+// Yggdrasil resolution; AllowedClientIDs is required only for Yggdrasil
+// resolution. An empty/incomplete Yggdrasil policy fails closed.
 type TokenPolicy struct {
 	Audience         string
 	AllowedClientIDs []string
@@ -85,8 +86,9 @@ func NewYggTokenResolver(backend Backend, issuer string, pub *rsa.PublicKey, pol
 	}
 }
 
-// VerifyBearer verifies an access token for the userinfo endpoint (no join
-// scope requirement) and returns its ledger record.
+// VerifyBearer verifies an access token for the userinfo endpoint and returns
+// its ledger record. It enforces the resource audience and common token checks,
+// but not the Yggdrasil join scope or client allowlist.
 func VerifyBearer(ctx context.Context, backend Backend, issuer string, pub *rsa.PublicKey, raw string, policy TokenPolicy) (AccessTokenRecord, error) {
 	rec, _, err := verifyJWT(ctx, backend, issuer, pub, normalizeTokenPolicy(policy), raw, false)
 	if err != nil {
@@ -95,8 +97,8 @@ func VerifyBearer(ctx context.Context, backend Backend, issuer string, pub *rsa.
 	return rec, nil
 }
 
-func resolveJWT(ctx context.Context, backend Backend, issuer string, pub *rsa.PublicKey, policy TokenPolicy, raw string, requireJoinScope bool) (ygg.Token, error) {
-	rec, _, err := verifyJWT(ctx, backend, issuer, pub, policy, raw, requireJoinScope)
+func resolveJWT(ctx context.Context, backend Backend, issuer string, pub *rsa.PublicKey, policy TokenPolicy, raw string, forYggdrasil bool) (ygg.Token, error) {
+	rec, _, err := verifyJWT(ctx, backend, issuer, pub, policy, raw, forYggdrasil)
 	if err != nil {
 		return ygg.Token{}, err
 	}
@@ -140,7 +142,7 @@ type jwtClaims struct {
 
 // verifyJWT is the single verification path: signature first, then claims,
 // then the jti ledger. There is intentionally no "skip signature" fallback.
-func verifyJWT(ctx context.Context, backend Backend, issuer string, pub *rsa.PublicKey, policy TokenPolicy, raw string, requireJoinScope bool) (AccessTokenRecord, jwtClaims, error) {
+func verifyJWT(ctx context.Context, backend Backend, issuer string, pub *rsa.PublicKey, policy TokenPolicy, raw string, forYggdrasil bool) (AccessTokenRecord, jwtClaims, error) {
 	var zero AccessTokenRecord
 	parts := strings.Split(raw, ".")
 	if len(parts) != 3 {
@@ -178,7 +180,7 @@ func verifyJWT(ctx context.Context, backend Backend, issuer string, pub *rsa.Pub
 	if claims.Issuer != issuer || claims.JTI == "" || claims.Subject == "" {
 		return zero, jwtClaims{}, ygg.ErrTokenInvalid
 	}
-	if !policy.valid() || !audienceContains(claims.Audience, policy.Audience) {
+	if policy.Audience == "" || (forYggdrasil && len(policy.AllowedClientIDs) == 0) || !audienceContains(claims.Audience, policy.Audience) {
 		return zero, jwtClaims{}, ygg.ErrTokenInvalid
 	}
 	now := time.Now()
@@ -193,16 +195,15 @@ func verifyJWT(ctx context.Context, backend Backend, issuer string, pub *rsa.Pub
 	if !rec.RevokedAt.IsZero() || now.After(rec.ExpiresAt) {
 		return zero, jwtClaims{}, ygg.ErrTokenInvalid
 	}
-	// The signed token establishes identity; the ledger is authoritative for
-	// which OAuth client obtained it. A valid audience from an unapproved client
-	// is still not a Yggdrasil credential.
-	if !policy.allowsClient(rec.ClientID) {
+	// A ledger client outside the allowlist is not a Yggdrasil credential.
+	// Standard OIDC userinfo intentionally has no launcher-client restriction.
+	if forYggdrasil && !policy.allowsClient(rec.ClientID) {
 		return zero, jwtClaims{}, ygg.ErrTokenInvalid
 	}
 	// Join-scope gate. The ledger record is authoritative: zitadel v3 JWT
 	// access tokens may omit the "scope" claim entirely (CreateJWT never sets
 	// Scopes), so the claim is only a fallback.
-	if requireJoinScope {
+	if forYggdrasil {
 		granted := scopeGranted(claims.Scope, ScopeYggdrasilJoin) ||
 			scopeGranted(strings.Join(rec.Scopes, " "), ScopeYggdrasilJoin)
 		if !granted {

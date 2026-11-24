@@ -315,6 +315,12 @@ func TestServerAccessAPIInviteAcceptanceAndCredentialOneTimeRotation(t *testing.
 		b, _ := json.Marshal(map[string]string{"token": inviteBody.Token})
 		return f.request(t, invitee, "POST", "/api/serveraccess/v1/invites/accept", string(b), "")
 	}
+	if rec := accept(); rec.Code != http.StatusForbidden {
+		t.Fatalf("unverified invite accept = %d %s, want 403", rec.Code, rec.Body.String())
+	}
+	if err := f.st.SetEmailVerified(context.Background(), invitee, true); err != nil {
+		t.Fatal(err)
+	}
 	if rec := accept(); rec.Code != http.StatusOK {
 		t.Fatalf("accept = %d %s", rec.Code, rec.Body.String())
 	}
@@ -508,6 +514,10 @@ func TestServerAccessAPIPlatformCreateTenantRejectsSecondActiveOwner(t *testing.
 
 func TestServerAccessAPIPlatformUpdatesFallbackAndAudit(t *testing.T) {
 	f := newSAFixture(t)
+	initial := f.request(t, f.super, "GET", "/api/admin/v1/serveraccess/fallback", "", "")
+	if initial.Code != http.StatusOK || !strings.Contains(initial.Body.String(), `"enabled":false`) {
+		t.Fatalf("default platform fallback = %d %s, want disabled", initial.Code, initial.Body.String())
+	}
 	for _, tc := range []struct {
 		method, path, body string
 		want               int
@@ -689,6 +699,142 @@ func TestServerAccessAPIPlatformCanRevokeCredential(t *testing.T) {
 	if _, err := f.st.SACredentialBySecretHash(context.Background(), strings.Repeat("d", 64), f.now); err == nil {
 		t.Fatal("platform-revoked credential still resolves")
 	}
+}
+
+func TestServerAccessAPIEmergencyMutationsRollBackWhenAuditFails(t *testing.T) {
+	t.Run("server status", func(t *testing.T) {
+		f := newSAFixture(t)
+		if _, err := f.st.DB().ExecContext(context.Background(), `CREATE TRIGGER fail_server_status_audit
+			BEFORE INSERT ON audit_log WHEN NEW.action='serveraccess_server_status_update'
+			BEGIN SELECT RAISE(ABORT,'forced audit failure'); END`); err != nil {
+			t.Fatal(err)
+		}
+		path := fmt.Sprintf("/api/admin/v1/serveraccess/servers/%d", f.server)
+		rec := f.request(t, f.super, "PATCH", path, `{"status":"suspended"}`, "")
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("status update with audit failure = %d %s, want 500", rec.Code, rec.Body.String())
+		}
+		server, err := f.st.SAServerByID(context.Background(), f.tenant, f.server)
+		if err != nil || server.Status != "active" {
+			t.Fatalf("status mutation survived audit failure: %+v %v", server, err)
+		}
+	})
+
+	t.Run("tenant status", func(t *testing.T) {
+		f := newSAFixture(t)
+		if _, err := f.st.DB().ExecContext(context.Background(), `CREATE TRIGGER fail_tenant_status_audit
+			BEFORE INSERT ON audit_log WHEN NEW.action='serveraccess_tenant_status_update'
+			BEGIN SELECT RAISE(ABORT,'forced audit failure'); END`); err != nil {
+			t.Fatal(err)
+		}
+		path := fmt.Sprintf("/api/admin/v1/serveraccess/tenants/%d", f.tenant)
+		rec := f.request(t, f.super, "PATCH", path, `{"status":"suspended"}`, "")
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("tenant status with audit failure = %d %s, want 500", rec.Code, rec.Body.String())
+		}
+		tenant, err := f.st.SATenantByID(context.Background(), f.tenant)
+		if err != nil || tenant.Status != "active" {
+			t.Fatalf("tenant status survived audit failure: %+v %v", tenant, err)
+		}
+	})
+
+	t.Run("tenant combined update", func(t *testing.T) {
+		f := newSAFixture(t)
+		if _, err := f.st.DB().ExecContext(context.Background(), `CREATE TRIGGER fail_tenant_quota_audit
+			BEFORE INSERT ON audit_log WHEN NEW.action='serveraccess_tenant_quota_update'
+			BEGIN SELECT RAISE(ABORT,'forced audit failure'); END`); err != nil {
+			t.Fatal(err)
+		}
+		path := fmt.Sprintf("/api/admin/v1/serveraccess/tenants/%d", f.tenant)
+		rec := f.request(t, f.super, "PATCH", path, `{"status":"suspended","serverLimit":3}`, "")
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("combined tenant update with audit failure = %d %s, want 500", rec.Code, rec.Body.String())
+		}
+		tenant, err := f.st.SATenantByID(context.Background(), f.tenant)
+		if err != nil || tenant.Status != "active" || tenant.ServerLimit != 10 {
+			t.Fatalf("combined tenant update partially survived audit failure: %+v %v", tenant, err)
+		}
+	})
+
+	t.Run("server quota", func(t *testing.T) {
+		f := newSAFixture(t)
+		if _, err := f.st.DB().ExecContext(context.Background(), `CREATE TRIGGER fail_server_quota_audit
+			BEFORE INSERT ON audit_log WHEN NEW.action='serveraccess_server_quota_update'
+			BEGIN SELECT RAISE(ABORT,'forced audit failure'); END`); err != nil {
+			t.Fatal(err)
+		}
+		path := fmt.Sprintf("/api/admin/v1/serveraccess/servers/%d", f.server)
+		rec := f.request(t, f.super, "PATCH", path, `{"verifyRateLimit":7}`, "")
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("server quota with audit failure = %d %s, want 500", rec.Code, rec.Body.String())
+		}
+		policy, err := f.st.SAServerPolicy(context.Background(), f.tenant, f.server)
+		if err != nil || policy.VerifyRateLimit == 7 {
+			t.Fatalf("server quota survived audit failure: %+v %v", policy, err)
+		}
+	})
+
+	t.Run("fallback switch", func(t *testing.T) {
+		f := newSAFixture(t)
+		if _, err := f.st.DB().ExecContext(context.Background(), `CREATE TRIGGER fail_fallback_audit
+			BEFORE INSERT ON audit_log WHEN NEW.action='serveraccess_fallback_update'
+			BEGIN SELECT RAISE(ABORT,'forced audit failure'); END`); err != nil {
+			t.Fatal(err)
+		}
+		rec := f.request(t, f.super, "PUT", "/api/admin/v1/serveraccess/fallback", `{"enabled":false}`, "")
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("fallback switch with audit failure = %d %s, want 500", rec.Code, rec.Body.String())
+		}
+		value, ok, err := f.st.GetOption(context.Background(), "serveraccess_global_fallback")
+		if err != nil || ok {
+			t.Fatalf("fallback mutation survived audit failure: value=%q ok=%v err=%v", value, ok, err)
+		}
+	})
+
+	t.Run("credential revoke", func(t *testing.T) {
+		f := newSAFixture(t)
+		cid, err := f.st.CreateSAServerCredential(context.Background(), f.tenant, f.server, store.SACredential{
+			Mode: "header", SecretHash: strings.Repeat("d", 64), Scopes: `["verify:join"]`, Status: "active",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.st.DB().ExecContext(context.Background(), `CREATE TRIGGER fail_revoke_audit
+			BEFORE INSERT ON audit_log WHEN NEW.action='serveraccess_platform_credential_revoke'
+			BEGIN SELECT RAISE(ABORT,'forced audit failure'); END`); err != nil {
+			t.Fatal(err)
+		}
+		path := fmt.Sprintf("/api/admin/v1/serveraccess/servers/%d/credentials/%d/revoke", f.server, cid)
+		rec := f.request(t, f.super, "POST", path, `{}`, "")
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("revoke with audit failure = %d %s, want 500", rec.Code, rec.Body.String())
+		}
+		credentials, err := f.st.ListSAServerCredentials(context.Background(), f.tenant, f.server)
+		if err != nil || len(credentials) != 1 || credentials[0].Status != "active" {
+			t.Fatalf("revoke survived audit failure: %+v %v", credentials, err)
+		}
+	})
+
+	t.Run("tenant delete", func(t *testing.T) {
+		f := newSAFixture(t)
+		if rec := f.request(t, f.owner, "POST", "/api/serveraccess/v1/tenants/me/delete-request", `{}`, ""); rec.Code != http.StatusOK {
+			t.Fatalf("delete request = %d %s", rec.Code, rec.Body.String())
+		}
+		if _, err := f.st.DB().ExecContext(context.Background(), `CREATE TRIGGER fail_delete_audit
+			BEFORE INSERT ON audit_log WHEN NEW.action='serveraccess_tenant_delete'
+			BEGIN SELECT RAISE(ABORT,'forced audit failure'); END`); err != nil {
+			t.Fatal(err)
+		}
+		*f.clock = f.now.Add(7 * 24 * time.Hour)
+		path := fmt.Sprintf("/api/admin/v1/serveraccess/tenants/%d/delete", f.tenant)
+		rec := f.request(t, f.super, "POST", path, `{}`, "")
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("delete with audit failure = %d %s, want 500", rec.Code, rec.Body.String())
+		}
+		if _, err := f.st.SATenantByID(context.Background(), f.tenant); err != nil {
+			t.Fatalf("tenant delete survived audit failure: %v", err)
+		}
+	})
 }
 
 func TestServerAccessAPIDisabledGateDoesNotTouchStore(t *testing.T) {

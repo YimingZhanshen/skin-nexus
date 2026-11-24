@@ -80,21 +80,9 @@ func (c *control) platformTenantUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	who := saCaller(r)
-	if body.Status != "" {
-		if err := c.cfg.Store.UpdateSATenantStatus(r.Context(), id, body.Status); err != nil {
-			writeSAStoreError(w, err)
-			return
-		}
-		c.cfg.Store.InsertAudit(r.Context(), who.UID, "serveraccess_tenant_status_update",
-			map[string]any{"tenantId": id, "status": body.Status})
-	}
-	if body.ServerLimit != nil {
-		if err := c.cfg.Store.UpdateSATenantQuota(r.Context(), id, *body.ServerLimit); err != nil {
-			writeSAStoreError(w, err)
-			return
-		}
-		c.cfg.Store.InsertAudit(r.Context(), who.UID, "serveraccess_tenant_quota_update",
-			map[string]any{"tenantId": id, "serverLimit": *body.ServerLimit})
+	if err := c.cfg.Store.UpdateSATenantPlatformAudited(r.Context(), id, body.Status, body.ServerLimit, who.UID); err != nil {
+		writeSAStoreError(w, err)
+		return
 	}
 	writeSAJSON(w, http.StatusOK, map[string]any{"id": id})
 }
@@ -136,44 +124,43 @@ func (c *control) platformServerUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	who := saCaller(r)
-	if body.Status != "" {
-		if err := c.cfg.Store.UpdateSAServer(r.Context(), server.TenantID, id, server.Name, body.Status); err != nil {
-			writeSAStoreError(w, err)
-			return
-		}
-		c.cfg.Store.InsertAudit(r.Context(), who.UID, "serveraccess_server_status_update",
-			map[string]any{"tenantId": server.TenantID, "serverId": id, "status": body.Status})
-	}
-	if body.VerifyRateLimit != nil || body.VerifyBurst != nil || body.MaxConcurrent != nil || body.WhitelistLimit != nil || body.EventRetentionDays != nil {
-		if err := c.cfg.Store.UpdateSAServerPlatformPolicy(r.Context(), server.TenantID, id,
-			body.VerifyRateLimit, body.VerifyBurst, body.MaxConcurrent, body.WhitelistLimit, body.EventRetentionDays); err != nil {
-			writeSAStoreError(w, err)
-			return
-		}
-		c.cfg.Store.InsertAudit(r.Context(), who.UID, "serveraccess_server_quota_update",
-			map[string]any{"tenantId": server.TenantID, "serverId": id})
+	if err := c.cfg.Store.UpdateSAServerPlatformAudited(r.Context(), server.TenantID, id, server.Name, body.Status,
+		body.VerifyRateLimit, body.VerifyBurst, body.MaxConcurrent, body.WhitelistLimit, body.EventRetentionDays, who.UID); err != nil {
+		writeSAStoreError(w, err)
+		return
 	}
 	writeSAJSON(w, http.StatusOK, map[string]any{"id": id})
 }
 
 func (c *control) platformRevoke(w http.ResponseWriter, r *http.Request) {
-	serverID, credentialID, tenantID, ok := c.revoke(w, r)
-	if !ok {
+	serverID, ok := saID(r, "id")
+	credentialID, credentialOK := saID(r, "cid")
+	if !ok || !credentialOK {
+		writeSAError(w, http.StatusBadRequest, i18n.MsgBadID, "Invalid server or credential id")
 		return
 	}
-	c.cfg.Store.InsertAudit(r.Context(), saCaller(r).UID, "serveraccess_platform_credential_revoke",
-		map[string]any{"tenantId": tenantID, "serverId": serverID, "credentialId": credentialID})
+	server, err := c.cfg.Store.PlatformSAServerByID(r.Context(), serverID)
+	if err != nil {
+		writeSAStoreError(w, err)
+		return
+	}
+	who := saCaller(r)
+	if err := c.cfg.Store.RevokeSAServerCredentialAudited(r.Context(), server.TenantID, serverID, credentialID, who.UID,
+		"serveraccess_platform_credential_revoke", map[string]any{"tenantId": server.TenantID, "serverId": serverID, "credentialId": credentialID}); err != nil {
+		writeSAStoreError(w, err)
+		return
+	}
 	writeSAJSON(w, http.StatusOK, map[string]any{"revoked": true})
 }
 
 func (c *control) platformFallback(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		raw, ok, err := c.cfg.Store.GetOption(r.Context(), "serveraccess_global_fallback")
+		raw, ok, err := c.cfg.Store.GetOption(r.Context(), serveraccessGlobalFallbackOption)
 		if err != nil {
 			writeSAStoreError(w, err)
 			return
 		}
-		enabled := !ok || raw == "1" || raw == "true"
+		enabled := ok && (raw == "1" || raw == "true")
 		writeSAJSON(w, http.StatusOK, map[string]any{"enabled": enabled})
 		return
 	}
@@ -188,12 +175,11 @@ func (c *control) platformFallback(w http.ResponseWriter, r *http.Request) {
 	if *body.Enabled {
 		value = "1"
 	}
-	if err := c.cfg.Store.SetOption(r.Context(), "serveraccess_global_fallback", value); err != nil {
+	if err := c.cfg.Store.SetOptionAudited(r.Context(), serveraccessGlobalFallbackOption, value, saCaller(r).UID,
+		"serveraccess_fallback_update", map[string]any{"enabled": *body.Enabled}); err != nil {
 		writeSAStoreError(w, err)
 		return
 	}
-	c.cfg.Store.InsertAudit(r.Context(), saCaller(r).UID, "serveraccess_fallback_update",
-		map[string]any{"enabled": *body.Enabled})
 	writeSAJSON(w, http.StatusOK, map[string]any{"enabled": *body.Enabled})
 }
 

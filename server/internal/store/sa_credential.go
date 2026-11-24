@@ -218,6 +218,26 @@ func (m *Mysql) RevokeSAServerCredential(ctx context.Context, tenantID, serverID
 	})
 }
 
+func (m *Mysql) RevokeSAServerCredentialAudited(ctx context.Context, tenantID, serverID, credentialID int64, actorUID int64, action string, detail any) error {
+	return m.withSAAudit(ctx, actorUID, action, detail, func(tx *dbx.Tx) error {
+		res, err := tx.ExecContext(ctx,
+			`UPDATE sa_server_credentials SET status='revoked' WHERE id=? AND server_id=?
+			   AND server_id IN (SELECT id FROM sa_servers WHERE id=? AND tenant_id=?)`,
+			credentialID, serverID, serverID, tenantID)
+		return saUpdateAffected(res, err, func() (bool, error) {
+			var one int
+			err := tx.QueryRowContext(ctx,
+				`SELECT 1 FROM sa_server_credentials WHERE id=? AND server_id=?
+				   AND server_id IN (SELECT id FROM sa_servers WHERE id=? AND tenant_id=?)`,
+				credentialID, serverID, serverID, tenantID).Scan(&one)
+			if errors.Is(err, sql.ErrNoRows) {
+				return false, nil
+			}
+			return err == nil, err
+		})
+	})
+}
+
 func (m *Mysql) SetSAServerCredentialStatus(ctx context.Context, tenantID, serverID, credentialID int64, status string) error {
 	res, err := m.db.ExecContext(ctx,
 		`UPDATE sa_server_credentials SET status=? WHERE id=? AND server_id=?

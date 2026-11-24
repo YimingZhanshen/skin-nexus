@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const fallbackCanned = `{"id":"000000000000000000000000000000ff","name":"Official","properties":[{"name":"textures","value":"dmFsdWU="}]}`
@@ -301,6 +302,76 @@ func TestIsPublicIP(t *testing.T) {
 }
 
 // ---- handler-level wiring ----
+
+type legacyFaultStore struct {
+	*memStore
+	playerNameErr error
+	playerUUIDErr error
+	joinErr       error
+}
+
+func (s *legacyFaultStore) PlayerByName(ctx context.Context, name string) (Player, error) {
+	if s.playerNameErr != nil {
+		return Player{}, s.playerNameErr
+	}
+	return s.memStore.PlayerByName(ctx, name)
+}
+
+func (s *legacyFaultStore) PlayerByUUID(ctx context.Context, uuid string) (Player, error) {
+	if s.playerUUIDErr != nil {
+		return Player{}, s.playerUUIDErr
+	}
+	return s.memStore.PlayerByUUID(ctx, uuid)
+}
+
+func (s *legacyFaultStore) FindLiveJoins(ctx context.Context, uuid string, now time.Time) ([]JoinSession, error) {
+	if s.joinErr != nil {
+		return nil, s.joinErr
+	}
+	return s.memStore.FindLiveJoins(ctx, uuid, now)
+}
+
+type failingSigner struct{}
+
+func (failingSigner) SignValue(string) (string, error) { return "", errors.New("signing unavailable") }
+func (failingSigner) PublicKeyPEM() string             { return "" }
+func (failingSigner) KeyFingerprint() string           { return "failing" }
+
+func TestLegacyFallbackFailsClosedForLocalFaults(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		path   string
+		store  *legacyFaultStore
+		signer Signer
+	}{
+		{name: "player lookup", path: "/api/yggdrasil/sessionserver/session/minecraft/hasJoined?username=Steve&serverId=abc", store: &legacyFaultStore{playerNameErr: errors.New("player lookup unavailable")}},
+		{name: "join lookup", path: "/api/yggdrasil/sessionserver/session/minecraft/hasJoined?username=Steve&serverId=abc", store: &legacyFaultStore{joinErr: errors.New("join lookup unavailable")}},
+		{name: "profile signing", path: "/api/yggdrasil/sessionserver/session/minecraft/hasJoined?username=Steve&serverId=abc", signer: failingSigner{}},
+		{name: "profile lookup", path: "/api/yggdrasil/sessionserver/session/minecraft/profile/" + testUUID, store: &legacyFaultStore{playerUUIDErr: errors.New("profile lookup unavailable")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			api, st := newTestAPI(t)
+			if tc.store != nil {
+				tc.store.memStore = st
+				api.svc.store = tc.store
+			}
+			if tc.signer != nil {
+				api.svc.signer = tc.signer
+				st.joins = append(st.joins, JoinSession{UUID: testUUID, ServerID: "abc", ExpiresAt: time.Now().Add(time.Minute)})
+			}
+			stub := newStubMojang(t, okJSON)
+			api.SetFallback(stub.fallback())
+
+			rec := do(t, api.Handler(), http.MethodGet, tc.path, "", nil)
+			if rec.Code != http.StatusNoContent {
+				t.Fatalf("local fault %s = %d %s, want 204", tc.name, rec.Code, rec.Body.String())
+			}
+			if hits := stub.hits.Load(); hits != 0 {
+				t.Fatalf("local fault %s consulted official fallback %d times", tc.name, hits)
+			}
+		})
+	}
+}
 
 func TestHasJoinedFallbackFailsClosedForLocalAccountDenial(t *testing.T) {
 	for _, tc := range []struct {

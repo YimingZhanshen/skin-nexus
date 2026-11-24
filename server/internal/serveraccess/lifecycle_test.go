@@ -432,6 +432,52 @@ func TestServerAccessAPIDeleteRequestAtomicallySuspendsAndRevokes(t *testing.T) 
 	if !reflect.DeepEqual(audit, wantAudit) {
 		t.Fatalf("delete request audit detail = %s, want %#v", detail, wantAudit)
 	}
+	rec = f.request(t, f.owner, http.MethodGet, "/api/serveraccess/v1/tenants/me/export", "", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("owner export during deletion grace = %d %s, want 200", rec.Code, rec.Body.String())
+	}
+	var document saExportDocument
+	if err := json.Unmarshal(rec.Body.Bytes(), &document); err != nil {
+		t.Fatalf("decode grace export: %v", err)
+	}
+	if document.Tenant.Status != "deleting" || len(document.Servers) != 1 || document.Servers[0].Status != "suspended" {
+		t.Fatalf("grace export lost deletion state: %+v", document)
+	}
+	rec = f.request(t, f.viewer, http.MethodGet, "/api/serveraccess/v1/tenants/me/export", "", "")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("viewer export during deletion grace = %d %s, want 403", rec.Code, rec.Body.String())
+	}
+}
+
+func TestServerAccessAPILifecycleExportPrefersActiveMembership(t *testing.T) {
+	f := newSAFixture(t)
+	ctx := context.Background()
+	uid := saUser(t, f.st, "active-after-deleting@example.com", "active_after_deleting", 0)
+	if err := f.st.AddSATenantMember(ctx, f.otherTenant, uid, "viewer"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.st.DB().ExecContext(ctx,
+		`UPDATE sa_tenant_members SET created_at=? WHERE tenant_id=? AND uid=?`,
+		f.now.Add(-time.Hour), f.otherTenant, uid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.st.RequestSATenantDeletion(ctx, f.otherTenant, 7*24*time.Hour, f.now); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.AddSATenantMember(ctx, f.tenant, uid, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	rec := f.request(t, uid, http.MethodGet, "/api/serveraccess/v1/tenants/me/export", "", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("export with active and deleting memberships = %d %s, want active tenant", rec.Code, rec.Body.String())
+	}
+	var document saExportDocument
+	if err := json.Unmarshal(rec.Body.Bytes(), &document); err != nil {
+		t.Fatal(err)
+	}
+	if document.Tenant.ID != f.tenant || document.Tenant.Status != "active" {
+		t.Fatalf("export selected wrong membership: %+v", document.Tenant)
+	}
 }
 
 func TestServerAccessAPIDeleteRequestRoleAndOriginGates(t *testing.T) {

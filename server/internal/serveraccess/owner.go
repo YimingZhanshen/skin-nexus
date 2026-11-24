@@ -106,9 +106,13 @@ func (c *control) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	who := saCaller(r)
-	email, err := c.cfg.Store.SAUserEmail(r.Context(), who.UID)
+	email, verified, err := c.cfg.Store.SAUserEmail(r.Context(), who.UID)
 	if err != nil {
 		writeSAStoreError(w, err)
+		return
+	}
+	if !verified {
+		writeSAError(w, http.StatusForbidden, i18n.MsgEmailVerifyRequired, "Verify your email address before accepting an invitation")
 		return
 	}
 	tenantID, err := c.cfg.Store.AcceptSATenantInvite(r.Context(), saHash(body.Token), who.UID, email, c.now())

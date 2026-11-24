@@ -605,9 +605,9 @@ func (a *API) handleHasJoined(w http.ResponseWriter, r *http.Request) {
 	name, sid := q.Get("username"), q.Get("serverId")
 	p, err := a.svc.HasJoined(r.Context(), name, sid, q.Get("ip"))
 	if err != nil {
-		// A local policy denial is not a session miss: never ask the official
-		// server to override it. Only genuine local misses may use fallback.
-		if !errors.Is(err, ErrAccessDenied) {
+		// Only a proven local miss may use fallback. Policy denials, store
+		// failures and signing faults must never be overridden upstream.
+		if errors.Is(err, ErrProfileNotFound) || errors.Is(err, ErrSessionNotFound) {
 			// A2 fallback: no local join record → ask the official sessionserver
 			// before answering 204 (Mojang confirms joins it recorded itself —
 			// official-account players on authlib-injector servers).
@@ -636,14 +636,14 @@ func (a *API) handleProfile(w http.ResponseWriter, r *http.Request) {
 	withSig := r.URL.Query().Get("unsigned") == "false"
 	p, err := a.svc.ProfileByUUID(r.Context(), uuid, withSig)
 	if err != nil {
-		// A2 fallback: unknown-to-us UUID → the official sessionserver may
-		// still know it (signature policy mirrored: unsigned=true only when
-		// our own handler would have stripped signatures).
-		if body, ok := a.fallback.profile(r.Context(), uuid, withSig); ok {
-			a.accessLog(r, accesslog.Entry{Kind: accesslog.YggProfile,
-				Outcome: accesslog.OutcomeOK, Who: uuid, Detail: "src=official"})
-			writeFallbackProfile(w, body)
-			return
+		// Only a proven missing profile may use fallback; local faults fail closed.
+		if errors.Is(err, ErrProfileNotFound) {
+			if body, ok := a.fallback.profile(r.Context(), uuid, withSig); ok {
+				a.accessLog(r, accesslog.Entry{Kind: accesslog.YggProfile,
+					Outcome: accesslog.OutcomeOK, Who: uuid, Detail: "src=official"})
+				writeFallbackProfile(w, body)
+				return
+			}
 		}
 		a.accessLog(r, accesslog.Entry{Kind: accesslog.YggProfile,
 			Outcome: accesslog.OutcomeMiss, Who: uuid, Detail: "src=none"})

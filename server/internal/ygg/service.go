@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"log/slog"
@@ -650,7 +651,10 @@ func (s *Service) HasJoined(ctx context.Context, username, serverID, serverIP st
 	}
 	p, err := s.store.PlayerByName(ctx, username)
 	if err != nil {
-		return Profile{}, ErrProfileNotFound
+		if errors.Is(err, ErrProfileNotFound) || errors.Is(err, sql.ErrNoRows) {
+			return Profile{}, ErrProfileNotFound
+		}
+		return Profile{}, err
 	}
 	if !s.accountAccessAllowed(ctx, p.UID) {
 		return Profile{}, ErrAccessDenied
@@ -678,7 +682,7 @@ func (s *Service) findLiveJoin(ctx context.Context, p Player, serverID, serverIP
 	}
 	joins, err := sc.FindLiveJoins(ctx, p.UUID, s.now())
 	if err != nil {
-		return JoinSession{}, ErrSessionNotFound
+		return JoinSession{}, err
 	}
 	for _, j := range joins {
 		if serverID != "" && j.ServerID != serverID {
@@ -697,7 +701,10 @@ func (s *Service) findLiveJoin(ctx context.Context, p Player, serverID, serverIP
 func (s *Service) ProfileByUUID(ctx context.Context, uuid string, withSig bool) (Profile, error) {
 	p, err := s.store.PlayerByUUID(ctx, NormalizeUUID(uuid))
 	if err != nil {
-		return Profile{}, ErrProfileNotFound
+		if errors.Is(err, ErrProfileNotFound) || errors.Is(err, sql.ErrNoRows) {
+			return Profile{}, ErrProfileNotFound
+		}
+		return Profile{}, err
 	}
 	return s.buildProfile(ctx, p, withSig)
 }

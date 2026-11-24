@@ -165,8 +165,15 @@ func (m *Mysql) LookupSAPlayer(ctx context.Context, query string) (SAPlayerIdent
 // both the window and expiry comparison; no second read or clock sample can
 // attribute another request's increment to this one.
 func (m *Mysql) AdmitSAQuota(ctx context.Context, serverID int64, windowStart time.Time, counter string, limit int, now time.Time) (int64, bool, error) {
+	return m.AdmitSAQuotaWindow(ctx, serverID, windowStart, counter, limit, time.Minute, now)
+}
+
+func (m *Mysql) AdmitSAQuotaWindow(ctx context.Context, serverID int64, windowStart time.Time, counter string, limit int, window time.Duration, now time.Time) (int64, bool, error) {
 	windowStart, now = windowStart.UTC(), now.UTC()
-	expiresAt := windowStart.Add(time.Minute)
+	if window <= 0 {
+		window = time.Minute
+	}
+	expiresAt := windowStart.Add(window)
 	query, returning := m.db.Dialect().AtomicCounterIncrement(
 		"sa_quota_usage", []string{"server_id", "window_start", "counter"}, "value", "expires_at")
 	args := []any{serverID, windowStart, saCounter(counter), expiresAt, now, expiresAt}
@@ -199,6 +206,26 @@ func (m *Mysql) AdmitSAQuota(ctx context.Context, serverID int64, windowStart ti
 		return 0, false, errors.New("store: atomic quota increment returned no count")
 	}
 	return used, used <= int64(limit), nil
+}
+
+func (m *Mysql) PurgeSAQuotaUsage(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
+	if limit > 10000 {
+		limit = 10000
+	}
+	res, err := m.db.ExecContext(ctx, `DELETE FROM sa_quota_usage
+		WHERE expires_at<? AND (server_id,window_start,counter) IN (
+		  SELECT server_id,window_start,counter FROM (
+		    SELECT server_id,window_start,counter FROM sa_quota_usage
+		    WHERE expires_at<? ORDER BY expires_at LIMIT ?
+		  ) AS expired
+		)`, cutoff.UTC(), cutoff.UTC(), limit)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func (m *Mysql) ReadSAQuota(ctx context.Context, serverID int64, windowStart time.Time, counter string) (int64, error) {

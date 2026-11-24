@@ -164,7 +164,11 @@ func (m *Mysql) PlayerByID(ctx context.Context, id int64) (ygg.Player, error) {
 }
 
 func (m *Mysql) PlayerByUUID(ctx context.Context, uuid string) (ygg.Player, error) {
-	return m.scanPlayer(ctx, "u.uuid = ?", uuid)
+	p, err := m.scanPlayer(ctx, "u.uuid = ?", uuid)
+	if errors.Is(err, ErrNotFound) {
+		return ygg.Player{}, ygg.ErrProfileNotFound
+	}
+	return p, err
 }
 
 func (m *Mysql) PlayerByName(ctx context.Context, name string) (ygg.Player, error) {

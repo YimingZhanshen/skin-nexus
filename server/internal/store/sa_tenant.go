@@ -155,6 +155,13 @@ func (m *Mysql) UpdateSATenantStatus(ctx context.Context, tenantID int64, status
 		return err
 	}
 	defer tx.Rollback()
+	if err := updateSATenantStatusTx(ctx, tx, tenantID, status); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func updateSATenantStatusTx(ctx context.Context, tx *dbx.Tx, tenantID int64, status string) error {
 	current, _, err := saLockTenantRow(ctx, tx, tenantID)
 	if err != nil {
 		return err
@@ -166,10 +173,10 @@ func (m *Mysql) UpdateSATenantStatus(ctx context.Context, tenantID int64, status
 		if _, err := tx.ExecContext(ctx, `UPDATE sa_tenants SET status=? WHERE id=?`, status, tenantID); err != nil {
 			return err
 		}
-		return tx.Commit()
+		return nil
 	}
 	if current == "active" {
-		return tx.Commit()
+		return nil
 	}
 	// Publish the activation inside the transaction before checking members.
 	// A concurrent activator that waits on the same user lock then observes
@@ -206,7 +213,7 @@ func (m *Mysql) UpdateSATenantStatus(ctx context.Context, tenantID int64, status
 			return ErrForbidden
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 func (m *Mysql) UpdateSATenantQuota(ctx context.Context, tenantID int64, serverLimit int) error {
@@ -360,13 +367,23 @@ func (m *Mysql) ListSATenantMembers(ctx context.Context, tenantID int64) ([]SATe
 // SATenantMemberByUID is the sole user-to-tenant derivation query. It returns
 // the oldest active membership and never accepts a tenant id from a client.
 func (m *Mysql) SATenantMemberByUID(ctx context.Context, uid int64) (SATenantMember, bool, error) {
+	return m.saTenantMemberByUID(ctx, uid, "t.status='active'")
+}
+
+// SATenantLifecycleMemberByUID also resolves membership while a tenant is in
+// its deletion grace period. It is only for the read-only export surface.
+func (m *Mysql) SATenantLifecycleMemberByUID(ctx context.Context, uid int64) (SATenantMember, bool, error) {
+	return m.saTenantMemberByUID(ctx, uid, "t.status IN ('active','deleting')")
+}
+
+func (m *Mysql) saTenantMemberByUID(ctx context.Context, uid int64, status string) (SATenantMember, bool, error) {
 	var v SATenantMember
 	err := m.db.QueryRowContext(ctx,
 		`SELECT tm.tenant_id,tm.uid,tm.role,tm.created_at,COALESCE(u.nickname,'')
 		 FROM sa_tenant_members tm JOIN sa_tenants t ON t.id=tm.tenant_id
 		 LEFT JOIN users u ON u.id=tm.uid
-		 WHERE tm.uid=? AND t.status='active' AND t.deleted_at IS NULL
-		 ORDER BY tm.created_at,tm.tenant_id LIMIT 1`, uid).
+		 WHERE tm.uid=? AND `+status+` AND t.deleted_at IS NULL
+		 ORDER BY CASE WHEN t.status='active' THEN 0 ELSE 1 END,tm.created_at,tm.tenant_id LIMIT 1`, uid).
 		Scan(&v.TenantID, &v.UID, &v.Role, &v.CreatedAt, &v.Nickname)
 	if errors.Is(err, sql.ErrNoRows) {
 		return SATenantMember{}, false, nil
@@ -374,13 +391,14 @@ func (m *Mysql) SATenantMemberByUID(ctx context.Context, uid int64) (SATenantMem
 	return v, err == nil, err
 }
 
-func (m *Mysql) SAUserEmail(ctx context.Context, uid int64) (string, error) {
+func (m *Mysql) SAUserEmail(ctx context.Context, uid int64) (string, bool, error) {
 	var email string
-	err := m.db.QueryRowContext(ctx, `SELECT email FROM users WHERE id=?`, uid).Scan(&email)
+	var verified bool
+	err := m.db.QueryRowContext(ctx, `SELECT email,email_verified FROM users WHERE id=?`, uid).Scan(&email, &verified)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", ErrNotFound
+		return "", false, ErrNotFound
 	}
-	return email, err
+	return email, verified, err
 }
 
 func (m *Mysql) CreateSATenantInvite(ctx context.Context, tenantID int64, email, role, tokenHash string, expiresAt time.Time) (int64, error) {
@@ -613,6 +631,13 @@ func (m *Mysql) UpdateSAServer(ctx context.Context, tenantID, serverID int64, na
 		return err
 	}
 	defer tx.Rollback()
+	if err := updateSAServerTx(ctx, tx, tenantID, serverID, name, status); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func updateSAServerTx(ctx context.Context, tx *dbx.Tx, tenantID, serverID int64, name, status string) error {
 	tenantStatus, _, err := saLockTenantRow(ctx, tx, tenantID)
 	if err != nil {
 		return err
@@ -637,7 +662,7 @@ func (m *Mysql) UpdateSAServer(ctx context.Context, tenantID, serverID int64, na
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // UpdateSAServerOwner keeps platform suspension atomic with the owner write.

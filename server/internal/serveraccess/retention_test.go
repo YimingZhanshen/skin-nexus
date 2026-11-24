@@ -12,8 +12,9 @@ import (
 )
 
 type retentionStoreStub struct {
-	policies []store.SAServerPolicy
-	purge    func(context.Context, int64, time.Time, int) (int64, error)
+	policies   []store.SAServerPolicy
+	purge      func(context.Context, int64, time.Time, int) (int64, error)
+	purgeQuota func(context.Context, time.Time, int) (int64, error)
 }
 
 func (s *retentionStoreStub) SAEventRetentionPolicies(context.Context) ([]store.SAServerPolicy, error) {
@@ -22,6 +23,32 @@ func (s *retentionStoreStub) SAEventRetentionPolicies(context.Context) ([]store.
 
 func (s *retentionStoreStub) PurgeSAJoinEvents(ctx context.Context, serverID int64, cutoff time.Time, limit int) (int64, error) {
 	return s.purge(ctx, serverID, cutoff, limit)
+}
+
+func (s *retentionStoreStub) PurgeSAQuotaUsage(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
+	if s.purgeQuota != nil {
+		return s.purgeQuota(ctx, cutoff, limit)
+	}
+	return 0, nil
+}
+
+func TestRetentionRunOncePurgesExpiredQuotaWindows(t *testing.T) {
+	now := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	calls := 0
+	stub := &retentionStoreStub{purgeQuota: func(_ context.Context, cutoff time.Time, limit int) (int64, error) {
+		calls++
+		if !cutoff.Equal(now) || limit != 1000 {
+			t.Fatalf("quota purge cutoff=%s limit=%d", cutoff, limit)
+		}
+		return 0, nil
+	}}
+	worker := NewRetentionWorker(stub, func() time.Time { return now }, time.Hour)
+	if err := worker.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("quota purge calls = %d, want 1", calls)
+	}
 }
 
 func TestRetentionRunOnceUsesEachPolicyAndContinuesAfterFailure(t *testing.T) {

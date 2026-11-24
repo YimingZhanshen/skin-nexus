@@ -38,7 +38,7 @@ func (s *Stack) controlHandler() http.Handler {
 		writeSAJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	mux.Handle("GET /api/serveraccess/v1/tenants/me", c.owner(http.HandlerFunc(c.tenantMe)))
-	mux.Handle("GET /api/serveraccess/v1/tenants/me/export", c.owner(http.HandlerFunc(c.tenantExport), "admin", "owner"))
+	mux.Handle("GET /api/serveraccess/v1/tenants/me/export", c.ownerLifecycle(http.HandlerFunc(c.tenantExport), "admin", "owner"))
 	mux.Handle("POST /api/serveraccess/v1/tenants/me/delete-request", c.owner(http.HandlerFunc(c.tenantDeleteRequest), "owner"))
 	mux.Handle("GET /api/serveraccess/v1/tenants/me/members", c.owner(http.HandlerFunc(c.members)))
 	mux.Handle("POST /api/serveraccess/v1/tenants/me/members/invite", c.owner(http.HandlerFunc(c.invite), "owner"))
@@ -105,9 +105,20 @@ func (c *control) session(next http.HandlerFunc) http.Handler {
 }
 
 func (c *control) owner(next http.HandlerFunc, roles ...string) http.Handler {
+	return c.ownerMembership(next, false, roles...)
+}
+
+func (c *control) ownerLifecycle(next http.HandlerFunc, roles ...string) http.Handler {
+	return c.ownerMembership(next, true, roles...)
+}
+
+func (c *control) ownerMembership(next http.HandlerFunc, includeDeleting bool, roles ...string) http.Handler {
 	return c.session(func(w http.ResponseWriter, r *http.Request) {
 		who := r.Context().Value(callerKey{}).(caller)
 		member, ok, err := c.cfg.Store.SATenantMemberByUID(r.Context(), who.UID)
+		if includeDeleting {
+			member, ok, err = c.cfg.Store.SATenantLifecycleMemberByUID(r.Context(), who.UID)
+		}
 		if err != nil {
 			writeSAError(w, http.StatusInternalServerError, i18n.MsgInternal, "Could not resolve tenant membership")
 			return

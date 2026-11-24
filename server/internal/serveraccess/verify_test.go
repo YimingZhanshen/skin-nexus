@@ -428,6 +428,30 @@ func TestServerAccessQuotaDeniesBeforeFallback(t *testing.T) {
 	}
 }
 
+func TestServerAccessBurstQuotaIsEnforcedIndependently(t *testing.T) {
+	f := newVerifyFixture(t)
+	f.credential(t, "url_secret")
+	f.playerAndJoin(t)
+	rate, burst := 100, 1
+	if err := f.st.UpdateSAServerPlatformPolicy(context.Background(), f.tenant, f.server, &rate, &burst, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if rec := f.verify(t, "url_secret", "Alice", "server-id", "203.0.113.8"); rec.Code != http.StatusOK {
+		t.Fatalf("first burst request = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := f.verify(t, "url_secret", "Alice", "server-id", "203.0.113.8"); rec.Code != http.StatusNoContent || f.fallback != 0 {
+		t.Fatalf("burst denial = %d %s fallback=%d", rec.Code, rec.Body.String(), f.fallback)
+	}
+	events, err := f.st.ListSAJoinEvents(context.Background(), f.tenant, f.server, f.now.Add(-time.Minute), f.now.Add(time.Minute), 20)
+	if err != nil || len(events) != 2 || events[0].ReasonCode != "quota_exceeded" {
+		t.Fatalf("burst events = %+v, %v", events, err)
+	}
+	f.now = f.now.Add(time.Second)
+	if rec := f.verify(t, "url_secret", "Alice", "server-id", "203.0.113.8"); rec.Code != http.StatusOK {
+		t.Fatalf("next-second burst request = %d %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestServerAccessEventFailureDegradesAndLogsFixedLabel(t *testing.T) {
 	f := newVerifyFixture(t)
 	f.credential(t, "url_secret")

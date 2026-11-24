@@ -216,7 +216,8 @@ func (c *control) platformTenantDelete(w http.ResponseWriter, r *http.Request) {
 		writeSAError(w, http.StatusBadRequest, i18n.MsgBadID, "Invalid tenant id")
 		return
 	}
-	if err := c.cfg.Store.DeleteDueSATenant(r.Context(), id, c.now()); err != nil {
+	if err := c.cfg.Store.DeleteDueSATenantAudited(r.Context(), id, c.now(), saCaller(r).UID,
+		"serveraccess_tenant_delete", map[string]any{"tenantId": id}); err != nil {
 		if errors.Is(err, store.ErrDeletionNotDue) {
 			writeSAError(w, http.StatusConflict, i18n.MsgServerAccessConflict, "Tenant deletion is not requested or its grace period has not elapsed")
 		} else {
@@ -224,7 +225,6 @@ func (c *control) platformTenantDelete(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	c.cfg.Store.InsertAudit(r.Context(), saCaller(r).UID, "serveraccess_tenant_delete", map[string]any{"tenantId": id})
 	writeSAJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 

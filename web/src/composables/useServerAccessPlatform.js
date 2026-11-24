@@ -33,7 +33,7 @@ export function useServerAccessPlatform(api) {
   const tenantQuery = shallowRef('')
   const serverQuery = shallowRef('')
   const auditQuery = shallowRef('')
-  const fallback = shallowRef(true)
+  const fallback = shallowRef(false)
   const loading = shallowRef(false)
   const busy = shallowRef(false)
   const error = shallowRef('')

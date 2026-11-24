@@ -4,22 +4,160 @@
 // seeds two tenants through the public APIs, then exercises authenticate → join
 // → hasJoined for URL-secret and Header credentials. No production access.
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { once } from 'node:events'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 const work = mkdtempSync(join(tmpdir(), 'skin-nexus-serveraccess-e2e-'))
 const bin = join(work, process.platform === 'win32' ? 'skin-nexus.exe' : 'skin-nexus')
-const port = 18081
-const base = `http://127.0.0.1:${port}`
+const logLimit = 64 * 1024
+const stopTimeout = 5000
+let base
+let port
 let child
+let childDone
+const logs = {
+  stdout: { chunks: [], bytes: 0, omitted: false },
+  stderr: { chunks: [], bytes: 0, omitted: false },
+}
+
+function assert(cond, message) {
+  if (!cond) throw new Error(message)
+}
+
+function fetchE2E(input, init = {}) {
+  return fetch(input, { ...init, signal: init.signal ?? AbortSignal.timeout(10000) })
+}
+
+async function reserveLoopbackPort() {
+  const server = createServer(socket => socket.destroy())
+  let bound = false
+  try {
+    await new Promise((resolve, reject) => {
+      server.once('error', reject)
+      server.listen({ host: '127.0.0.1', port: 0, exclusive: true }, resolve)
+    })
+    bound = true
+    const address = server.address()
+    assert(address && typeof address === 'object' && address.address === '127.0.0.1', 'port reservation did not return a loopback address')
+    return address.port
+  } catch (error) {
+    throw new Error(`cannot reserve an ephemeral loopback port for serveraccess E2E: ${error.message}`, { cause: error })
+  } finally {
+    if (bound) {
+      await new Promise((resolve, reject) => server.close(error => {
+        if (error) reject(new Error(`cannot release reserved loopback port: ${error.message}`, { cause: error }))
+        else resolve()
+      }))
+    }
+  }
+}
+
+function childEnvironment() {
+  const temp = join(work, 'tmp')
+  mkdirSync(temp)
+  const env = process.platform === 'win32'
+    ? { SystemRoot: process.env.SystemRoot, TEMP: temp, TMP: temp }
+    : { TMPDIR: temp }
+  for (const [key, value] of Object.entries(env)) {
+    if (value) env[key] = value
+    else delete env[key]
+  }
+  return {
+    ...env,
+    TZ: 'UTC',
+    SKIN_LISTEN: `127.0.0.1:${port}`,
+    SKIN_BASE_URL: base,
+    SKIN_DATABASE_DSN: `sqlite:${join(work, 'skin.db')}`,
+    SKIN_DATA_DIR: join(work, 'data'),
+    SKIN_MIGRATIONS_DIR: join(root, 'server', 'migrations'),
+    SKIN_AUTO_MIGRATE: 'true',
+    SKIN_SETUP_TOKEN: 'e2e-setup-token',
+    SKIN_SERVERACCESS_ENABLED: 'true',
+    SKIN_OIDC_ENABLED: 'false',
+    SKIN_UNION_ENABLED: 'false',
+    SKIN_INDEXNOW_ENABLED: 'false',
+    SKIN_MOJANG_FALLBACK: '0',
+    SKIN_PLUGIN_MARKET_URL: '',
+    SKIN_THEME_MARKET_URL: '',
+  }
+}
+
+function captureOutput(stream, name) {
+  const log = logs[name]
+  stream.on('data', chunk => {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    log.chunks.push(buffer)
+    log.bytes += buffer.length
+    while (log.bytes > logLimit) {
+      const excess = log.bytes - logLimit
+      if (log.chunks.length === 1) {
+        log.chunks[0] = log.chunks[0].subarray(excess)
+        log.bytes -= excess
+      } else {
+        log.bytes -= log.chunks.shift().length
+      }
+      log.omitted = true
+    }
+  })
+}
+
+function printChildLogs() {
+  for (const name of ['stdout', 'stderr']) {
+    const log = logs[name]
+    console.error(`--- child ${name} (last ${log.bytes} bytes${log.omitted ? '; earlier output omitted' : ''}) ---`)
+    if (log.bytes) {
+      process.stderr.write(Buffer.concat(log.chunks))
+      if (log.chunks.at(-1).at(-1) !== 10) process.stderr.write('\n')
+    }
+  }
+}
+
+function assertChildRunning() {
+  assert(child && child.pid && child.exitCode === null && child.signalCode === null,
+    `server exited before becoming ready (code=${child?.exitCode}, signal=${child?.signalCode})`)
+}
+
+async function waitForChildExit(timeout) {
+  let timer
+  try {
+    return await Promise.race([
+      childDone.then(() => true),
+      new Promise(resolve => { timer = setTimeout(() => resolve(false), timeout) }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function killWindowsTree() {
+  const result = spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore', timeout: stopTimeout })
+  if (result.error || result.status !== 0) child.kill('SIGKILL')
+}
+
+async function stopChild() {
+  if (!child) return
+  if (child.pid && child.exitCode === null && child.signalCode === null) {
+    if (process.platform === 'win32') killWindowsTree()
+    else child.kill('SIGTERM')
+  }
+  if (await waitForChildExit(stopTimeout)) return
+  if (child.pid) {
+    if (process.platform === 'win32') killWindowsTree()
+    else child.kill('SIGKILL')
+  }
+  assert(await waitForChildExit(stopTimeout),
+    `child process ${child.pid ?? '<unknown>'} did not exit within ${stopTimeout * 2}ms; temporary data retained at ${work}`)
+}
 
 function client() {
   const cookies = new Map()
   return {
     async request(path, { method = 'GET', body, headers = {} } = {}) {
-      const res = await fetch(base + path, {
+      const res = await fetchE2E(base + path, {
         method,
         headers: {
           'content-type': 'application/json',
@@ -42,42 +180,40 @@ function client() {
   }
 }
 
-function assert(cond, message) {
-  if (!cond) throw new Error(message)
-}
-
 async function waitReady() {
   for (let i = 0; i < 80; i++) {
+    assertChildRunning()
     try {
-      const res = await fetch(`${base}/api/v1/setup/status`)
+      const res = await fetchE2E(`${base}/api/v1/setup/status`, { signal: AbortSignal.timeout(1000) })
+      assertChildRunning()
       if (res.ok) return
-    } catch {}
+    } catch {
+      assertChildRunning()
+    }
     await new Promise(r => setTimeout(r, 150))
   }
+  assertChildRunning()
   throw new Error('server did not become ready')
 }
 
+let failed = false
 try {
   const build = spawnSync('go', ['build', '-o', bin, './cmd/skin-nexus'], { cwd: join(root, 'server'), stdio: 'inherit' })
   assert(build.status === 0, 'go build failed')
 
+  port = await reserveLoopbackPort()
+  base = `http://127.0.0.1:${port}`
   child = spawn(bin, [], {
     cwd: root,
-    env: {
-      ...process.env,
-      SKIN_LISTEN: `127.0.0.1:${port}`,
-      SKIN_BASE_URL: base,
-      SKIN_DATABASE_DSN: `sqlite:${join(work, 'skin.db')}`,
-      SKIN_DATA_DIR: join(work, 'data'),
-      SKIN_MIGRATIONS_DIR: join(root, 'server', 'migrations'),
-      SKIN_AUTO_MIGRATE: 'true',
-      SKIN_SETUP_TOKEN: 'e2e-setup-token',
-      SKIN_SERVERACCESS_ENABLED: 'true',
-    },
+    env: childEnvironment(),
     stdio: ['ignore', 'pipe', 'pipe'],
   })
-  child.stdout.on('data', () => {})
-  child.stderr.on('data', () => {})
+  child.on('error', () => {})
+  childDone = new Promise(resolve => child.once('close', resolve))
+  captureOutput(child.stdout, 'stdout')
+  captureOutput(child.stderr, 'stderr')
+  await once(child, 'spawn')
+  assertChildRunning()
   await waitReady()
 
   const admin = client(), ownerB = client(), player = client(), player2 = client()
@@ -132,18 +268,18 @@ try {
   }
 
   const authenticate = async identifier => {
-    const res = await fetch(`${base}/api/yggdrasil/authserver/authenticate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: identifier, password: 'e2e-password-123', clientToken: `e2e-${identifier}` }) })
+    const res = await fetchE2E(`${base}/api/yggdrasil/authserver/authenticate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: identifier, password: 'e2e-password-123', clientToken: `e2e-${identifier}` }) })
     assert(res.status === 200, `authenticate ${identifier}: ${res.status}`)
     return res.json()
   }
   const auth = await authenticate('player_a')
   const auth2 = await authenticate('player_b')
   const joinServer = async (token, selectedProfile, sid) => {
-    const res = await fetch(`${base}/api/yggdrasil/sessionserver/session/minecraft/join`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accessToken: token, selectedProfile: selectedProfile.uuid, serverId: sid }) })
+    const res = await fetchE2E(`${base}/api/yggdrasil/sessionserver/session/minecraft/join`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accessToken: token, selectedProfile: selectedProfile.uuid, serverId: sid }) })
     assert(res.status === 204, `join ${sid}: ${res.status}`)
   }
-  const verifyA = async (selectedProfile, sid) => fetch(`${base}/v/${secretA}/sessionserver/session/minecraft/hasJoined?username=${selectedProfile.name}&serverId=${sid}&ip=127.0.0.1`)
-  const verifyB = async (selectedProfile, sid) => fetch(`${base}/api/serveraccess/v1/servers/${serverB.publicId}/hasJoined?username=${selectedProfile.name}&serverId=${sid}&ip=127.0.0.1`, { headers: { authorization: `Bearer ${secretB}` } })
+  const verifyA = async (selectedProfile, sid) => fetchE2E(`${base}/v/${secretA}/sessionserver/session/minecraft/hasJoined?username=${selectedProfile.name}&serverId=${sid}&ip=127.0.0.1`)
+  const verifyB = async (selectedProfile, sid) => fetchE2E(`${base}/api/serveraccess/v1/servers/${serverB.publicId}/hasJoined?username=${selectedProfile.name}&serverId=${sid}&ip=127.0.0.1`, { headers: { authorization: `Bearer ${secretB}` } })
 
   await joinServer(auth.accessToken, profile, 'e2e-a1')
   r = await verifyA(profile, 'e2e-a1')
@@ -218,22 +354,32 @@ try {
 
   r = await admin.request('/api/admin/v1/settings', { method: 'PUT', body: { key: 'serveraccess_enabled', value: '0' } })
   assert(r.status === 200, `module off: ${r.status}`)
-  r = await fetch(`${base}/api/serveraccess/v1/health`)
+  r = await fetchE2E(`${base}/api/serveraccess/v1/health`)
   assert(r.status === 404, `module off health: ${r.status}`)
-  r = await fetch(`${base}/api/yggdrasil/authserver/validate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accessToken: auth2.accessToken }) })
+  r = await fetchE2E(`${base}/api/yggdrasil/authserver/validate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accessToken: auth2.accessToken }) })
   assert(r.status === 204, `global Yggdrasil validate unavailable while module off: ${r.status}`)
   r = await admin.request('/api/admin/v1/settings', { method: 'PUT', body: { key: 'serveraccess_enabled', value: '1' } })
   assert(r.status === 200, `module on: ${r.status}`)
-  r = await fetch(`${base}/api/serveraccess/v1/health`)
+  r = await fetchE2E(`${base}/api/serveraccess/v1/health`)
   assert(r.status === 200, `module on health: ${r.status}`)
 
-  console.log('PASS serveraccess E2E: two tenants, two players, URL-secret + Header verification, whitelist and ban isolation, platform ban, full cross-tenant negatives, scoped events, credential redaction, module hot toggle, global Yggdrasil regression')
+} catch (error) {
+  failed = true
+  process.exitCode = 1
+  console.error(`serveraccess E2E failed: ${error.stack ?? error}`)
+  printChildLogs()
 } finally {
-  if (child && process.platform === 'win32') {
-    spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
-    await new Promise(r => setTimeout(r, 800))
-  } else if (child) {
-    child.kill('SIGTERM')
+  try {
+    await stopChild()
+    rmSync(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+  } catch (error) {
+    failed = true
+    process.exitCode = 1
+    console.error(`serveraccess E2E cleanup failed: ${error.stack ?? error}`)
+    printChildLogs()
   }
-  rmSync(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+}
+
+if (!failed) {
+  console.log('PASS serveraccess E2E: two tenants, two players, URL-secret + Header verification, whitelist and ban isolation, platform ban, full cross-tenant negatives, scoped events, credential redaction, module hot toggle, global Yggdrasil regression')
 }
