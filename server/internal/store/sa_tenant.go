@@ -25,6 +25,62 @@ func (m *Mysql) CreateSATenant(ctx context.Context, name string, serverLimit int
 	return id, nil
 }
 
+// CreateSATenantWithOwner publishes an active tenant and its first owner in one
+// transaction. The user row is the shared serialization point with every other
+// active-membership write, so a uid can never gain two active tenants.
+func (m *Mysql) CreateSATenantWithOwner(ctx context.Context, name string, serverLimit int, ownerUID int64) (SATenant, SATenantMember, error) {
+	if serverLimit < 1 {
+		serverLimit = 10
+	}
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return SATenant{}, SATenantMember{}, err
+	}
+	defer tx.Rollback()
+	if err := saLockUserRow(ctx, tx, ownerUID); err != nil {
+		return SATenant{}, SATenantMember{}, err
+	}
+	now := m.now().UTC()
+	tenantID, err := tx.InsertReturningID(ctx,
+		`INSERT INTO sa_tenants (name,status,server_limit,created_at) VALUES (?,'active',?,?)`,
+		name, serverLimit, now)
+	if err != nil {
+		return SATenant{}, SATenantMember{}, err
+	}
+	other, err := saHasOtherActiveMembership(ctx, tx, ownerUID, tenantID)
+	if err != nil {
+		return SATenant{}, SATenantMember{}, err
+	}
+	if other {
+		return SATenant{}, SATenantMember{}, ErrForbidden
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO sa_tenant_members (tenant_id,uid,role,created_at) VALUES (?,?,'owner',?)`,
+		tenantID, ownerUID, now); err != nil {
+		if isDupKey(err) {
+			return SATenant{}, SATenantMember{}, ErrDuplicate
+		}
+		return SATenant{}, SATenantMember{}, err
+	}
+	tenant, err := scanSATenant(tx.QueryRowContext(ctx,
+		`SELECT id,name,status,server_limit,created_at,deleted_at,deletion_requested_at,deletion_due_at FROM sa_tenants WHERE id=?`,
+		tenantID))
+	if err != nil {
+		return SATenant{}, SATenantMember{}, err
+	}
+	var owner SATenantMember
+	if err := tx.QueryRowContext(ctx,
+		`SELECT tm.tenant_id,tm.uid,tm.role,tm.created_at,COALESCE(u.nickname,'')
+		 FROM sa_tenant_members tm LEFT JOIN users u ON u.id=tm.uid WHERE tm.tenant_id=? AND tm.uid=?`,
+		tenantID, ownerUID).Scan(&owner.TenantID, &owner.UID, &owner.Role, &owner.CreatedAt, &owner.Nickname); err != nil {
+		return SATenant{}, SATenantMember{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return SATenant{}, SATenantMember{}, err
+	}
+	return tenant, owner, nil
+}
+
 func (m *Mysql) SATenantByID(ctx context.Context, tenantID int64) (SATenant, error) {
 	return scanSATenant(m.db.QueryRowContext(ctx,
 		`SELECT id,name,status,server_limit,created_at,deleted_at,deletion_requested_at,deletion_due_at FROM sa_tenants
@@ -162,6 +218,13 @@ func (m *Mysql) UpdateSATenantQuota(ctx context.Context, tenantID int64, serverL
 }
 
 func saLockUserRow(ctx context.Context, tx *dbx.Tx, uid int64) error {
+	if tx.Engine() == dialect.SQLite {
+		// Acquire SQLite's single writer lock before the read, rather than
+		// trying to upgrade a deferred read transaction during the later insert.
+		if _, err := tx.ExecContext(ctx, `UPDATE users SET id=id WHERE id=?`, uid); err != nil {
+			return err
+		}
+	}
 	query := `SELECT id FROM users WHERE id=?`
 	if tx.Engine() != dialect.SQLite {
 		query += tx.Engine().LockSQL()

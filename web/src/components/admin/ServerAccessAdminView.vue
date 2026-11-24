@@ -27,6 +27,9 @@ const selectedRevokeCredentials = computed(() => selectedRevokeServer.value?.cre
 const hasActiveRevokeCredentials = computed(() => selectedRevokeCredentials.value.some((credential) => credential.status === 'active'))
 const canRevokeSelected = computed(() => selectedRevokeCredentials.value.some((credential) => String(credential.id) === revokeCredential.value && credential.status === 'active'))
 const tenantSearch = shallowRef('')
+const tenantDraft = ref({ name: '', serverLimit: '', ownerUid: '' })
+const tenantCreated = shallowRef(false)
+const tenantValidationError = shallowRef('')
 const serverSearch = shallowRef('')
 const auditSearch = shallowRef('')
 const now = shallowRef(Date.now())
@@ -64,6 +67,24 @@ function auditLabel(action) {
   const key = `adminServerAccess.auditAction.${action}`
   const label = t(key)
   return label === key ? action : label
+}
+async function createTenant() {
+  if (platform.busy.value) return
+  tenantCreated.value = false
+  tenantValidationError.value = ''
+  const name = tenantDraft.value.name.trim()
+  const serverLimit = Number(tenantDraft.value.serverLimit)
+  const ownerUid = Number(tenantDraft.value.ownerUid)
+  if (!name || Array.from(name).length > 190 || !Number.isSafeInteger(serverLimit) || serverLimit < 1 || serverLimit > 10000 || !Number.isSafeInteger(ownerUid) || ownerUid < 1) {
+    tenantValidationError.value = t('adminServerAccess.createInvalid')
+    return
+  }
+  if (await platform.createTenant({ name, serverLimit, ownerUid })) {
+    tenantDraft.value = { name: '', serverLimit: '', ownerUid: '' }
+    tenantSearch.value = ''
+    auditSearch.value = ''
+    tenantCreated.value = true
+  }
 }
 async function toggleTenant(row) {
   if (row.status === 'deleting') return
@@ -133,6 +154,25 @@ async function revoke() {
 
     <section class="card">
       <h2>{{ t('adminServerAccess.tenants') }}</h2>
+      <form class="create-tenant-form" @submit.prevent="createTenant">
+        <h3>{{ t('adminServerAccess.createTenant') }}</h3>
+        <p class="muted">{{ t('adminServerAccess.createTenantHint') }}</p>
+        <div class="row">
+          <label for="sa-create-tenant-name">{{ t('adminServerAccess.tenantName') }}</label>
+          <input id="sa-create-tenant-name" v-model="tenantDraft.name" name="name" required maxlength="190" :disabled="platform.busy.value" />
+        </div>
+        <div class="row">
+          <label for="sa-create-tenant-limit">{{ t('adminServerAccess.serverLimit') }}</label>
+          <input id="sa-create-tenant-limit" v-model="tenantDraft.serverLimit" name="serverLimit" type="number" min="1" max="10000" step="1" required :disabled="platform.busy.value" />
+        </div>
+        <div class="row">
+          <label for="sa-create-tenant-owner">{{ t('adminServerAccess.ownerUid') }}</label>
+          <input id="sa-create-tenant-owner" v-model="tenantDraft.ownerUid" name="ownerUid" type="number" min="1" step="1" required :disabled="platform.busy.value" />
+        </div>
+        <p v-if="tenantValidationError" class="error" role="alert">{{ tenantValidationError }}</p>
+        <p v-if="tenantCreated" class="muted" role="status">{{ t('adminServerAccess.tenantCreated') }}</p>
+        <button :disabled="platform.busy.value">{{ t('adminServerAccess.create') }}</button>
+      </form>
       <form class="row search-row" @submit.prevent="platform.searchTenants(tenantSearch)">
         <label class="sr-only" for="sa-platform-tenants">{{ t('adminServerAccess.search') }}</label>
         <input id="sa-platform-tenants" v-model="tenantSearch" :placeholder="t('adminServerAccess.search')" />
@@ -259,6 +299,9 @@ async function revoke() {
 .fallback-card { display: flex !important; flex-direction: column; }
 .check-row { display: flex; align-items: center; gap: var(--sp-2); }
 .search-row { margin: 0; flex-wrap: wrap; }
+.create-tenant-form { display: grid; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-m); }
+.create-tenant-form h3, .create-tenant-form p { margin: 0; font-size: var(--fs-s); }
+.create-tenant-form label { min-width: var(--sp-8); }
 .search-row input, .search-row select { flex: 1; min-width: 0; }
 .quota-row { margin: 0; }
 .quota-row input { width: var(--sp-8); }

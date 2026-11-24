@@ -120,7 +120,7 @@ Full feature list: [docs site](https://docs.skin.yimingzhanshen.cn/). Under the 
 | Integrate a launcher | [docs.skin.yimingzhanshen.cn/launcher-api](https://docs.skin.yimingzhanshen.cn/launcher-api) |
 | Browse the knowledge handbook | [docs.skin.yimingzhanshen.cn/handbook](https://docs.skin.yimingzhanshen.cn/handbook/) |
 
-Current release v0.6.0; iteration history in [`docs/CHANGELOG.md`](docs/CHANGELOG.md). The optional server-access module is implemented behind the default-off panel switch: the `/servers` owner portal covers tenants, servers, credentials, policies, whitelist, bans, join events, JSON export and typed-confirmation deletion, while super-admins get status, quota, emergency controls and due-date deletion. URL-secret and Bearer-header verification, the database-free verify-proxy command, fallback circuit breaking, event retention, operational documentation, safe monitoring labels and an executed SQLite restore drill are included. Most detailed documentation is Chinese-first.
+Current release v0.6.0; iteration history in [`docs/CHANGELOG.md`](docs/CHANGELOG.md). The optional server-access module is implemented behind the default-off panel switch: super-admins can atomically create a tenant with its first owner, the `/servers` owner portal covers servers, credentials, policies, whitelist, bans, join events, JSON export and typed-confirmation deletion, and platform controls cover status, quota, emergencies and due-date deletion. URL-secret and Bearer-header verification, the database-free verify-proxy command, fallback circuit breaking, event retention, operational documentation, safe monitoring labels and an executed SQLite restore drill are included. Most detailed documentation is Chinese-first.
 
 ## Compatibility promise
 

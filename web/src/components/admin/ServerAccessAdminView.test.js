@@ -157,6 +157,70 @@ async function mountView(overrides = {}) {
   return { app, container, state, errors }
 }
 
+test('platform tenant creation sends numeric fields, refreshes tenants and audit, and clears the form', async () => {
+  const state = { creates: [], tenantLoads: 0, auditLoads: 0 }
+  const { app, container } = await mountView({
+    platformTenants: async () => { state.tenantLoads++; return { tenants: [], total: 0 } },
+    platformAudit: async () => { state.auditLoads++; return { audit: [], total: 0 } },
+    createPlatformTenant: async (body) => { state.creates.push(body); return { tenant: { id: 3 }, owner: { uid: 42 } } },
+  })
+  try {
+    byId(container, 'sa-create-tenant-name').props['onUpdate:modelValue']('New tenant')
+    byId(container, 'sa-create-tenant-limit').props['onUpdate:modelValue']('5')
+    byId(container, 'sa-create-tenant-owner').props['onUpdate:modelValue']('42')
+    await nextTick()
+    const name = byId(container, 'sa-create-tenant-name')
+    const form = find(container, (node) => node.type === 'form' && descendants(node).includes(name))
+    form.props.onSubmit({ preventDefault() {} })
+    await settle()
+    assert.deepEqual(state.creates, [{ name: 'New tenant', serverLimit: 5, ownerUid: 42 }])
+    assert.equal(state.tenantLoads, 2)
+    assert.equal(state.auditLoads, 2)
+    assert.equal(byId(container, 'sa-create-tenant-name').value, '')
+    assert.equal(byId(container, 'sa-create-tenant-limit').value, '')
+    assert.equal(byId(container, 'sa-create-tenant-owner').value, '')
+    assert.ok(find(container, (node) => node.props.role === 'status' && /created successfully/i.test(text(node))))
+    assert.equal(find(container, (node) => node.props.role === 'alert'), undefined)
+  } finally {
+    app.unmount()
+    delete globalThis.__serverAccessApi
+    delete globalThis.__serverAccessConfirm
+  }
+})
+
+test('platform tenant creation keeps input and shows an accessible error when rejected', async () => {
+  const state = { creates: [], tenantLoads: 0, auditLoads: 0 }
+  const { app, container } = await mountView({
+    platformTenants: async () => { state.tenantLoads++; return { tenants: [], total: 0 } },
+    platformAudit: async () => { state.auditLoads++; return { audit: [], total: 0 } },
+    createPlatformTenant: async (body) => { state.creates.push(body); throw new Error('Owner already belongs to an active tenant') },
+  })
+  try {
+    byId(container, 'sa-create-tenant-name').props['onUpdate:modelValue']('Rejected tenant')
+    byId(container, 'sa-create-tenant-limit').props['onUpdate:modelValue']('8')
+    byId(container, 'sa-create-tenant-owner').props['onUpdate:modelValue']('42')
+    await nextTick()
+    const name = byId(container, 'sa-create-tenant-name')
+    find(container, (node) => node.type === 'form' && descendants(node).includes(name)).props.onSubmit({ preventDefault() {} })
+    await settle()
+    assert.equal(state.creates.length, 1)
+    assert.equal(state.tenantLoads, 1)
+    assert.equal(state.auditLoads, 1)
+    find(container, (node) => node.type === 'form' && descendants(node).includes(byId(container, 'sa-create-tenant-name'))).props.onSubmit({ preventDefault() {} })
+    await settle()
+    assert.deepEqual(state.creates, [
+      { name: 'Rejected tenant', serverLimit: 8, ownerUid: 42 },
+      { name: 'Rejected tenant', serverLimit: 8, ownerUid: 42 },
+    ], 'failed creation must retain all draft values')
+    assert.match(text(find(container, (node) => node.props.role === 'alert')), /Owner already belongs/)
+    assert.equal(find(container, (node) => node.props.role === 'status' && /created successfully/i.test(text(node))), undefined)
+  } finally {
+    app.unmount()
+    delete globalThis.__serverAccessApi
+    delete globalThis.__serverAccessConfirm
+  }
+})
+
 test('platform server view shows current policy and quota beside explicit sparse patch fields', async () => {
   const { app, container, state } = await mountView()
   try {

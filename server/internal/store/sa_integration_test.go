@@ -23,6 +23,33 @@ func TestIntegrationServerAccessConcurrentQuotas(t *testing.T) {
 	})
 }
 
+func TestIntegrationServerAccessAtomicTenantOwner(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	uid := seedUser(t, m)
+	tenant, owner, err := m.CreateSATenantWithOwner(ctx, "atomic-integration", 7, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tenant.Status != "active" || tenant.ServerLimit != 7 || owner.TenantID != tenant.ID || owner.UID != uid || owner.Role != "owner" {
+		t.Fatalf("atomic creation = %+v owner=%+v", tenant, owner)
+	}
+	_, beforeTotal, err := m.PlatformSATenants(ctx, "", 1, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := m.CreateSATenantWithOwner(ctx, "duplicate-integration", 2, uid); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("second active owner err = %v, want forbidden", err)
+	}
+	if _, _, err := m.CreateSATenantWithOwner(ctx, "missing-integration", 2, 999999); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("invalid owner err = %v, want not found", err)
+	}
+	_, afterTotal, err := m.PlatformSATenants(ctx, "", 1, 20)
+	if err != nil || afterTotal != beforeTotal {
+		t.Fatalf("tenant total after rollbacks = %d, before=%d, err=%v", afterTotal, beforeTotal, err)
+	}
+}
+
 func TestIntegrationServerAccessVerificationPersistence(t *testing.T) {
 	m := openTestStore(t)
 	ctx := context.Background()

@@ -59,6 +59,7 @@ export const serverAccessApi = {
   lookupPlayer: (q) => request('GET', `${ownerBase}/players/lookup?q=${encodeURIComponent(q.trim())}`),
 
   platformTenants: (page = 1, q = '') => request('GET', `${platformBase}/tenants?page=${page}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
+  createPlatformTenant: (body) => request('POST', `${platformBase}/tenants`, body),
   platformServers: (page = 1, q = '') => request('GET', `${platformBase}/servers?page=${page}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
   updatePlatformTenant: (id, body) => request('PATCH', `${platformBase}/tenants/${id}`, body),
   deletePlatformTenant: (id) => request('POST', `${platformBase}/tenants/${id}/delete`, {}),

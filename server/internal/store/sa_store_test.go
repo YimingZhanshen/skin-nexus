@@ -141,6 +141,118 @@ func TestServerAccessRejectsSecondActiveTenantMembership(t *testing.T) {
 	}
 }
 
+func TestServerAccessCreateTenantWithOwner(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid := saSeedUserAs(t, st, "atomic-owner@example.com", "atomic-owner")
+	tenant, owner, err := st.CreateSATenantWithOwner(ctx, "atomic-tenant", 7, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tenant.ID <= 0 || tenant.Name != "atomic-tenant" || tenant.Status != "active" || tenant.ServerLimit != 7 {
+		t.Fatalf("tenant = %+v", tenant)
+	}
+	if owner.TenantID != tenant.ID || owner.UID != uid || owner.Role != "owner" || owner.Nickname != "atomic-owner" {
+		t.Fatalf("owner = %+v", owner)
+	}
+	stored, err := st.SATenantByID(ctx, tenant.ID)
+	if err != nil || stored != tenant {
+		t.Fatalf("stored tenant = %+v err=%v", stored, err)
+	}
+	members, err := st.ListSATenantMembers(ctx, tenant.ID)
+	if err != nil || len(members) != 1 || members[0] != owner {
+		t.Fatalf("members = %+v err=%v", members, err)
+	}
+}
+
+func TestServerAccessCreateTenantWithOwnerRollsBack(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(*testing.T, *Mysql) int64
+		err   error
+	}{
+		{name: "invalid owner", setup: func(*testing.T, *Mysql) int64 { return 999999 }, err: ErrNotFound},
+		{name: "second active owner", setup: func(t *testing.T, st *Mysql) int64 {
+			uid := saSeedUser(t, st)
+			tenant, _ := st.CreateSATenant(context.Background(), "existing", 2)
+			if err := st.AddSATenantMember(context.Background(), tenant, uid, "owner"); err != nil {
+				t.Fatal(err)
+			}
+			return uid
+		}, err: ErrForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st := openSQLiteStore(t)
+			ctx := context.Background()
+			uid := tc.setup(t, st)
+			before, _, err := st.PlatformSATenants(ctx, "", 1, 20)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _, err = st.CreateSATenantWithOwner(ctx, tc.name, 2, uid)
+			if !errors.Is(err, tc.err) {
+				t.Fatalf("create err = %v, want %v", err, tc.err)
+			}
+			after, _, err := st.PlatformSATenants(ctx, "", 1, 20)
+			if err != nil || len(after) != len(before) {
+				t.Fatalf("tenants after rollback = %+v before=%+v err=%v", after, before, err)
+			}
+		})
+	}
+}
+
+func TestServerAccessCreateTenantWithOwnerMembershipFailureRollsBack(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid := saSeedUser(t, st)
+	if _, err := st.db.ExecContext(ctx, `CREATE TRIGGER fail_atomic_owner
+		BEFORE INSERT ON sa_tenant_members WHEN NEW.role='owner'
+		BEGIN SELECT RAISE(ABORT, 'forced owner failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.CreateSATenantWithOwner(ctx, "forced-failure", 2, uid); err == nil {
+		t.Fatal("membership failure unexpectedly succeeded")
+	}
+	tenants, total, err := st.PlatformSATenants(ctx, "", 1, 20)
+	if err != nil || total != 0 || len(tenants) != 0 {
+		t.Fatalf("tenants after membership failure = %+v total=%d err=%v", tenants, total, err)
+	}
+}
+
+func TestServerAccessConcurrentCreateTenantWithOwnerAllowsOne(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid := saSeedUser(t, st)
+	start := make(chan struct{})
+	errs := make([]error, 2)
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			_, _, errs[i] = st.CreateSATenantWithOwner(ctx, fmt.Sprintf("create-race-%d", i), 2, uid)
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	wins := 0
+	for _, err := range errs {
+		if err == nil {
+			wins++
+		} else if !errors.Is(err, ErrForbidden) {
+			t.Fatalf("create race err = %v, want forbidden", err)
+		}
+	}
+	if wins != 1 {
+		t.Fatalf("create race wins = %d, want 1 (errs %v)", wins, errs)
+	}
+	tenants, total, err := st.PlatformSATenants(ctx, "", 1, 20)
+	if err != nil || total != 1 || len(tenants) != 1 {
+		t.Fatalf("tenants after race = %+v total=%d err=%v", tenants, total, err)
+	}
+}
+
 func TestServerAccessConcurrentMembershipCreationAllowsOneActiveTenant(t *testing.T) {
 	st := openSQLiteStore(t)
 	ctx := context.Background()

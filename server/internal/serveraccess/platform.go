@@ -3,6 +3,8 @@ package serveraccess
 import (
 	"net/http"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
 	"skin-nexus/server/internal/i18n"
 )
@@ -15,6 +17,31 @@ func (c *control) platformTenants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeSAJSON(w, http.StatusOK, map[string]any{"tenants": rows, "total": total, "page": page, "size": size})
+}
+
+func (c *control) platformTenantCreate(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name        string `json:"name"`
+		ServerLimit int    `json:"serverLimit"`
+		OwnerUID    int64  `json:"ownerUid"`
+	}
+	if !decodeSAJSON(w, r, &body) {
+		return
+	}
+	body.Name = strings.TrimSpace(body.Name)
+	if body.Name == "" || utf8.RuneCountInString(body.Name) > 190 || body.ServerLimit < 1 || body.ServerLimit > 10000 || body.OwnerUID < 1 {
+		writeSAError(w, http.StatusBadRequest, i18n.MsgServerAccessInvalid,
+			"Name is required (at most 190 characters), server limit must be between 1 and 10000, and owner UID must be positive")
+		return
+	}
+	tenant, owner, err := c.cfg.Store.CreateSATenantWithOwner(r.Context(), body.Name, body.ServerLimit, body.OwnerUID)
+	if err != nil {
+		writeSAStoreError(w, err)
+		return
+	}
+	c.cfg.Store.InsertAudit(r.Context(), saCaller(r).UID, "serveraccess_tenant_create",
+		map[string]any{"tenantId": tenant.ID, "ownerUid": owner.UID, "serverLimit": tenant.ServerLimit})
+	writeSAJSON(w, http.StatusCreated, map[string]any{"tenant": tenant, "owner": owner})
 }
 
 func (c *control) platformServers(w http.ResponseWriter, r *http.Request) {

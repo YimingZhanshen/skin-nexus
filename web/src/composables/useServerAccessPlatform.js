@@ -125,6 +125,13 @@ export function useServerAccessPlatform(api) {
     pageTenants: (page) => { tenantPage.value = page; return loadTenants() },
     pageServers: (page) => { serverPage.value = page; return loadServers() },
     pageAudit: (page) => { auditPage.value = page; return loadAudit() },
+    createTenant: (body) => mutate(() => api.createPlatformTenant(body), async () => {
+      tenantPage.value = 1
+      tenantQuery.value = ''
+      auditPage.value = 1
+      auditQuery.value = ''
+      await Promise.all([loadTenants(), loadAudit()])
+    }),
     updateTenant: (id, body) => mutate(() => api.updatePlatformTenant(id, body), loadTenants),
     deleteTenant: (id) => mutate(() => api.deletePlatformTenant(id), async () => {
       await Promise.all([loadTenants(), loadAudit()])

@@ -9,6 +9,13 @@ description: "SkinNexus 变更日志：按日期倒序的迭代历史，只记�
 > 相称——只记「改了什么 / 为什么 / 行为变化」，验证过程一句话。开发细节见对应 commit；
 > README 状态行只留一句话摘要。
 
+## 2026-11-25 · 平台原子创建租户与首位 owner
+
+- 服务器接入平台视图新增最小创建表单：网页超管填写名称、服务器配额与 owner UID，即可在同一事务中建立租户和首位 owner，沿用单 active membership 约束；任何失败回滚，不接受客户端指定租户 id。
+- 新增仅同源网页超管会话可用的 `POST /api/admin/v1/serveraccess/tenants`，严格校验三字段、返回租户与 owner 并记录 `serveraccess_tenant_create` 审计；前端补齐提交中、错误、成功与租户/审计刷新状态，中英文文案同步。
+
+验证：store/API/前端红绿测试、SQLite integration、Go 全量 test/vet/build 与覆盖率、前端 32 项测试与构建、locales/a11y/theme/modal/docs 闸及文档站构建通过；MySQL/MariaDB/PostgreSQL 因本地无测试 DSN 未运行。
+
 ## 2026-11-24 · 可选服务器接入模块（同轮）
 
 - 新增默认关闭、可热切换的 `serveraccess` 模块：租户/成员/邀请、按服服务器/策略/白名单/封禁/凭据控制面，独立 `/servers` 服主门户与仅网页超管可用的平台状态/配额/紧急管理；store 强制租户 scope，viewer 只读，关闭时模块 API 统一 404，旧 Yggdrasil wire 不变。

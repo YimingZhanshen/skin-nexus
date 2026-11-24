@@ -188,6 +188,7 @@ func TestServerAccessAPIRejectsCrossOriginMutations(t *testing.T) {
 		{"owner credential create", f.owner, "POST", base + "/credentials", `{"mode":"header"}`},
 		{"owner credential rotate", f.owner, "POST", fmt.Sprintf("%s/credentials/%d/rotate", base, cred), `{}`},
 		{"owner credential revoke", f.owner, "POST", fmt.Sprintf("%s/credentials/%d/revoke", base, cred), `{}`},
+		{"platform tenant create", f.super, "POST", "/api/admin/v1/serveraccess/tenants", `{"name":"cross-origin","serverLimit":2,"ownerUid":999999}`},
 		{"platform tenant update", f.super, "PATCH", fmt.Sprintf("/api/admin/v1/serveraccess/tenants/%d", f.tenant), `{"serverLimit":2}`},
 		{"platform server update", f.super, "PATCH", fmt.Sprintf("/api/admin/v1/serveraccess/servers/%d", f.server), `{"status":"disabled"}`},
 		{"platform credential revoke", f.super, "POST", fmt.Sprintf("/api/admin/v1/serveraccess/servers/%d/credentials/%d/revoke", f.server, cred), `{}`},
@@ -370,6 +371,138 @@ func TestServerAccessAPIInviteCannotCreateSecondActiveMembership(t *testing.T) {
 	if me.Code != http.StatusOK || !strings.Contains(me.Body.String(), fmt.Sprintf(`"tenantId":%d`, f.tenant)) ||
 		strings.Contains(me.Body.String(), fmt.Sprintf(`"tenantId":%d`, f.otherTenant)) {
 		t.Fatalf("portal tenant became ambiguous: %d %s", me.Code, me.Body.String())
+	}
+}
+
+func TestServerAccessAPIPlatformCreatesTenantWithOwnerAndAudits(t *testing.T) {
+	f := newSAFixture(t)
+	uid := saUser(t, f.st, "created-owner@example.com", "created-owner", 0)
+	body := fmt.Sprintf(`{"name":"created tenant","serverLimit":7,"ownerUid":%d}`, uid)
+	rec := f.request(t, f.super, "POST", "/api/admin/v1/serveraccess/tenants", body, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create tenant = %d %s, want 201", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Tenant store.SATenant       `json:"tenant"`
+		Owner  store.SATenantMember `json:"owner"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Tenant.ID <= 0 || response.Tenant.Name != "created tenant" || response.Tenant.Status != "active" || response.Tenant.ServerLimit != 7 {
+		t.Fatalf("created tenant = %+v", response.Tenant)
+	}
+	if response.Owner.TenantID != response.Tenant.ID || response.Owner.UID != uid || response.Owner.Role != "owner" || response.Owner.Nickname != "created-owner" {
+		t.Fatalf("created owner = %+v", response.Owner)
+	}
+	stored, err := f.st.SATenantByID(context.Background(), response.Tenant.ID)
+	if err != nil || stored != response.Tenant {
+		t.Fatalf("stored tenant = %+v err=%v", stored, err)
+	}
+	members, err := f.st.ListSATenantMembers(context.Background(), response.Tenant.ID)
+	if err != nil || len(members) != 1 || members[0] != response.Owner {
+		t.Fatalf("stored members = %+v err=%v", members, err)
+	}
+	audit, total, err := f.st.PlatformServerAccessAudit(context.Background(), "serveraccess_tenant_create", 1, 20)
+	if err != nil || total != 1 || len(audit) != 1 {
+		t.Fatalf("create audit = %+v total=%d err=%v", audit, total, err)
+	}
+	if audit[0]["action"] != "serveraccess_tenant_create" || audit[0]["actorUid"] != f.super {
+		t.Fatalf("create audit actor/action = %+v", audit[0])
+	}
+	var detail map[string]any
+	if err := json.Unmarshal([]byte(audit[0]["detail"].(string)), &detail); err != nil {
+		t.Fatal(err)
+	}
+	wantDetail := map[string]any{"tenantId": float64(response.Tenant.ID), "ownerUid": float64(uid), "serverLimit": float64(7)}
+	if !reflect.DeepEqual(detail, wantDetail) {
+		t.Fatalf("create audit detail = %#v, want %#v", detail, wantDetail)
+	}
+}
+
+func TestServerAccessAPIPlatformCreateTenantAuthorization(t *testing.T) {
+	f := newSAFixture(t)
+	body := `{"name":"unauthorized","serverLimit":2,"ownerUid":999999}`
+	for _, tc := range []struct {
+		name  string
+		uid   int64
+		token string
+	}{
+		{name: "anonymous"},
+		{name: "ordinary user", uid: f.viewer},
+		{name: "legacy admin", uid: f.legacyAdmin},
+		{name: "tenant owner", uid: f.owner},
+		{name: "machine token", token: "machine-secret"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := f.request(t, tc.uid, "POST", "/api/admin/v1/serveraccess/tenants", body, tc.token)
+			if rec.Code != http.StatusForbidden {
+				t.Fatalf("create tenant = %d %s, want 403", rec.Code, rec.Body.String())
+			}
+		})
+	}
+	rows, total, err := f.st.PlatformSATenants(context.Background(), "", 1, 20)
+	if err != nil || total != 2 || len(rows) != 2 {
+		t.Fatalf("unauthorized create changed tenants: %+v total=%d err=%v", rows, total, err)
+	}
+}
+
+func TestServerAccessAPIPlatformCreateTenantValidation(t *testing.T) {
+	f := newSAFixture(t)
+	uid := saUser(t, f.st, "validation-owner@example.com", "validation-owner", 0)
+	valid := fmt.Sprintf(`{"name":"valid","serverLimit":2,"ownerUid":%d}`, uid)
+	for _, tc := range []struct {
+		name, body string
+		want       int
+	}{
+		{"empty name", fmt.Sprintf(`{"name":"","serverLimit":2,"ownerUid":%d}`, uid), 400},
+		{"whitespace name", fmt.Sprintf(`{"name":"   ","serverLimit":2,"ownerUid":%d}`, uid), 400},
+		{"long name", fmt.Sprintf(`{"name":%q,"serverLimit":2,"ownerUid":%d}`, strings.Repeat("界", 191), uid), 400},
+		{"missing name", fmt.Sprintf(`{"serverLimit":2,"ownerUid":%d}`, uid), 400},
+		{"missing limit", fmt.Sprintf(`{"name":"valid","ownerUid":%d}`, uid), 400},
+		{"zero limit", fmt.Sprintf(`{"name":"valid","serverLimit":0,"ownerUid":%d}`, uid), 400},
+		{"negative limit", fmt.Sprintf(`{"name":"valid","serverLimit":-1,"ownerUid":%d}`, uid), 400},
+		{"large limit", fmt.Sprintf(`{"name":"valid","serverLimit":10001,"ownerUid":%d}`, uid), 400},
+		{"fractional limit", fmt.Sprintf(`{"name":"valid","serverLimit":1.5,"ownerUid":%d}`, uid), 400},
+		{"string limit", fmt.Sprintf(`{"name":"valid","serverLimit":"2","ownerUid":%d}`, uid), 400},
+		{"missing owner", `{"name":"valid","serverLimit":2}`, 400},
+		{"zero owner", `{"name":"valid","serverLimit":2,"ownerUid":0}`, 400},
+		{"negative owner", `{"name":"valid","serverLimit":2,"ownerUid":-1}`, 400},
+		{"fractional owner", `{"name":"valid","serverLimit":2,"ownerUid":1.5}`, 400},
+		{"unknown owner", `{"name":"valid","serverLimit":2,"ownerUid":999999}`, 404},
+		{"tenant_id", fmt.Sprintf(`{"name":"valid","serverLimit":2,"ownerUid":%d,"tenant_id":1}`, uid), 400},
+		{"tenantId", fmt.Sprintf(`{"name":"valid","serverLimit":2,"ownerUid":%d,"tenantId":1}`, uid), 400},
+		{"multiple objects", valid + valid, 400},
+		{"malformed", `{"name":`, 400},
+		{"null", `null`, 400},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := f.request(t, f.super, "POST", "/api/admin/v1/serveraccess/tenants", tc.body, "")
+			if rec.Code != tc.want {
+				t.Fatalf("create tenant = %d %s, want %d", rec.Code, rec.Body.String(), tc.want)
+			}
+		})
+	}
+	rows, total, err := f.st.PlatformSATenants(context.Background(), "", 1, 20)
+	if err != nil || total != 2 || len(rows) != 2 {
+		t.Fatalf("invalid create changed tenants: %+v total=%d err=%v", rows, total, err)
+	}
+}
+
+func TestServerAccessAPIPlatformCreateTenantRejectsSecondActiveOwner(t *testing.T) {
+	f := newSAFixture(t)
+	body := fmt.Sprintf(`{"name":"second active","serverLimit":2,"ownerUid":%d}`, f.owner)
+	rec := f.request(t, f.super, "POST", "/api/admin/v1/serveraccess/tenants", body, "")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("second active owner = %d %s, want 403", rec.Code, rec.Body.String())
+	}
+	rows, total, err := f.st.PlatformSATenants(context.Background(), "", 1, 20)
+	if err != nil || total != 2 || len(rows) != 2 {
+		t.Fatalf("rejected create changed tenants: %+v total=%d err=%v", rows, total, err)
+	}
+	_, auditTotal, err := f.st.PlatformServerAccessAudit(context.Background(), "serveraccess_tenant_create", 1, 20)
+	if err != nil || auditTotal != 0 {
+		t.Fatalf("rejected create wrote audit: total=%d err=%v", auditTotal, err)
 	}
 }
 
@@ -568,6 +701,14 @@ func TestServerAccessAPIDisabledGateDoesNotTouchStore(t *testing.T) {
 	rows, err := f.st.ListSAServers(context.Background(), f.tenant, "")
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("disabled write changed rows: %+v %v", rows, err)
+	}
+	rec = f.request(t, f.super, "POST", "/api/admin/v1/serveraccess/tenants", `{"name":"disabled","serverLimit":2,"ownerUid":999999}`, "")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("disabled platform create = %d %s, want 404", rec.Code, rec.Body.String())
+	}
+	tenants, total, err := f.st.PlatformSATenants(context.Background(), "", 1, 20)
+	if err != nil || total != 2 || len(tenants) != 2 {
+		t.Fatalf("disabled platform create changed tenants: %+v total=%d err=%v", tenants, total, err)
 	}
 }
 

@@ -65,6 +65,7 @@ func (s *Stack) controlHandler() http.Handler {
 	mux.Handle("GET /api/serveraccess/v1/players/lookup", c.owner(http.HandlerFunc(c.playerLookup)))
 
 	mux.Handle("GET /api/admin/v1/serveraccess/tenants", c.platform(http.HandlerFunc(c.platformTenants)))
+	mux.Handle("POST /api/admin/v1/serveraccess/tenants", c.platform(http.HandlerFunc(c.platformTenantCreate)))
 	mux.Handle("GET /api/admin/v1/serveraccess/servers", c.platform(http.HandlerFunc(c.platformServers)))
 	mux.Handle("PATCH /api/admin/v1/serveraccess/tenants/{id}", c.platform(http.HandlerFunc(c.platformTenantUpdate)))
 	mux.Handle("POST /api/admin/v1/serveraccess/tenants/{id}/delete", c.platform(http.HandlerFunc(c.platformTenantDelete)))

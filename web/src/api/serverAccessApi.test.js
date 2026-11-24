@@ -121,6 +121,42 @@ test('deletion requests use only the existing owner and platform lifecycle endpo
   }
 })
 
+test('platform tenant creation sends only the explicit owner contract with session semantics', async () => {
+  const previousFetch = globalThis.fetch
+  const previousStorage = globalThis.localStorage
+  globalThis.localStorage = { getItem: () => 'must-not-be-sent' }
+  globalThis.fetch = async (path, options) => {
+    assert.equal(path, '/api/admin/v1/serveraccess/tenants')
+    assert.equal(options.method, 'POST')
+    assert.equal(options.credentials, 'same-origin')
+    assert.deepEqual(options.headers, { 'Content-Type': 'application/json' })
+    assert.equal(options.headers['X-Admin-Token'], undefined)
+    assert.equal(options.body, '{"name":"Tenant","serverLimit":5,"ownerUid":42}')
+    return jsonResponse(201, { tenant: { id: 3 }, owner: { tenantId: 3, uid: 42, role: 'owner' } })
+  }
+  try {
+    const result = await serverAccessApi.createPlatformTenant({ name: 'Tenant', serverLimit: 5, ownerUid: 42 })
+    assert.deepEqual(result, { tenant: { id: 3 }, owner: { tenantId: 3, uid: 42, role: 'owner' } })
+  } finally {
+    globalThis.fetch = previousFetch
+    globalThis.localStorage = previousStorage
+  }
+})
+
+test('platform tenant creation preserves conflict status and response data', async () => {
+  const previousFetch = globalThis.fetch
+  globalThis.fetch = async () => jsonResponse(409, { code: 'serveraccess.duplicate', message: 'Duplicate' })
+  try {
+    await assert.rejects(serverAccessApi.createPlatformTenant({ name: 'Tenant', serverLimit: 5, ownerUid: 42 }), (error) => {
+      assert.equal(error.status, 409)
+      assert.equal(error.data.code, 'serveraccess.duplicate')
+      return true
+    })
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
 test('platform fallback uses the same cookie client without an admin token', async () => {
   const previousFetch = globalThis.fetch
   const previousStorage = globalThis.localStorage
