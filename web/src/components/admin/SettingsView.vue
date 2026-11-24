@@ -25,6 +25,7 @@ const setOk = ref('')
 const boolKeys = new Set([
   'invite_required', 'require_verification',
   'union_enabled', 'union_enable_update', 'union_enable_oauth2',
+  'serveraccess_enabled',
   'ygg_mojang_fallback', 'cdn_enabled',
 ])
 const textKeys = new Set([

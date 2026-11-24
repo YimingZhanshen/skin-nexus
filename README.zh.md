@@ -120,7 +120,7 @@ docker compose -f docker-compose.quickstart.yml up -d
 | 启动器对接 | [docs.skin.yimingzhanshen.cn/launcher-api](https://docs.skin.yimingzhanshen.cn/launcher-api) |
 | 翻知识手册 | [docs.skin.yimingzhanshen.cn/handbook](https://docs.skin.yimingzhanshen.cn/handbook/) |
 
-当前版本 v0.6.0；迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)。详细文档以中文为主。
+当前版本 v0.6.0；迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)。服务器接入模块已提供默认关闭的面板开关骨架，目前仅开放健康检查与空服务器列表。详细文档以中文为主。
 
 ## 兼容承诺
 

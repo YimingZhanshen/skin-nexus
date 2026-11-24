@@ -98,6 +98,9 @@ var settingsWhitelist = []settingSpec{
 	{"union_resolve_names", false, "union", false},
 	{"union_oauth2_sig_private_key", true, "union", true},
 	{"union_oauth2_sig_public_key", true, "union", false},
+	// Optional server-access module shares the existing optional-module section;
+	// S1 has no frontend portal, only this hot module switch.
+	{"serveraccess_enabled", false, "union", false},
 }
 
 func (b *Backend) settingValue(ctx context.Context, key, def string) string {
@@ -148,7 +151,7 @@ func (b *Backend) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch req.Key {
-	case "invite_required", "require_verification", "indexnow_enabled", "union_enabled", "union_enable_update", "union_enable_oauth2", "union_resolve_names", "ygg_mojang_fallback", "cdn_enabled":
+	case "invite_required", "require_verification", "indexnow_enabled", "union_enabled", "serveraccess_enabled", "union_enable_update", "union_enable_oauth2", "union_resolve_names", "ygg_mojang_fallback", "cdn_enabled":
 		normalized, ok := normalizeBool(val)
 		if !ok {
 			writeErrCode(w, http.StatusBadRequest, "boolean must be 1/0/true/false/on/off/yes/no", i18n.MsgInvalidValue)

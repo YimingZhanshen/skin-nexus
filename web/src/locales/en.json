@@ -1423,6 +1423,9 @@
     "union_enabled": {
       "desc": "Union module switch (hot toggle: off means every union route answers 404 and signing falls back to the local key)"
     },
+    "serveraccess_enabled": {
+      "desc": "Server access module switch (off by default; when enabled, only health and an empty server list are exposed)"
+    },
     "union_api_root": {
       "desc": "Union hub API root (default https://skin.mualliance.ltd/api/union, applies immediately)"
     },

@@ -1423,6 +1423,9 @@
     "union_enabled": {
       "desc": "Union 联盟模块开关（热切换：关=全路由 404、签名回本地密钥）"
     },
+    "serveraccess_enabled": {
+      "desc": "服务器接入模块开关（默认关；热切换后仅开放健康检查与空服务器列表）"
+    },
     "union_api_root": {
       "desc": "Union hub API 根（默认 https://skin.mualliance.ltd/api/union，立即生效）"
     },

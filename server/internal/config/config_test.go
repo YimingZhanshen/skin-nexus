@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"skin-nexus/server/internal/signedpkg"
@@ -116,5 +117,29 @@ func TestSMTPPortDefault(t *testing.T) {
 	c := loadSMTP()
 	if c.Port != "465" {
 		t.Errorf("unset SKIN_SMTP_PORT gave %q, want the documented 465 default", c.Port)
+	}
+}
+
+func TestServerAccessEnabledDefaultsOffAndValidatesEnv(t *testing.T) {
+	t.Setenv("SKIN_DATABASE_DSN", "u:p@tcp(localhost:3306)/x")
+	t.Setenv("SKIN_DATA_DIR", t.TempDir())
+	t.Setenv("SKIN_SERVERACCESS_ENABLED", "")
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ServerAccessEnabled {
+		t.Fatal("server access must default off")
+	}
+
+	t.Setenv("SKIN_SERVERACCESS_ENABLED", "true")
+	c, err = Load()
+	if err != nil || !c.ServerAccessEnabled {
+		t.Fatalf("explicit env enable = %v, err %v", c.ServerAccessEnabled, err)
+	}
+
+	t.Setenv("SKIN_SERVERACCESS_ENABLED", "not-a-bool")
+	if _, err = Load(); err == nil || !strings.Contains(err.Error(), "SKIN_SERVERACCESS_ENABLED") {
+		t.Fatalf("invalid enable value must fail validation, got %v", err)
 	}
 }

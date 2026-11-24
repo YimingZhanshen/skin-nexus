@@ -383,6 +383,9 @@ func main() {
 	unionCtx, unionCancel := context.WithCancel(context.Background())
 	defer unionCancel()
 	ustack := newUnionStack(unionCtx, st, cfg, version, signer)
+	// Optional server access is always assembled for the panel hot toggle, but
+	// its inert stack has no DB writes, key generation or background workers.
+	sastack := newServerAccessStack(st, cfg)
 	unionAPI, unionGrant := ustack.api, ustack.grant
 	unionOut, unionSigner := ustack.out, ustack.signer
 	var activeSigner ygg.Signer = signer
@@ -728,6 +731,9 @@ func main() {
 			}
 		case "union_member_key":
 			ustack.setMemberKey(value)
+		case "serveraccess_enabled":
+			sastack.setEnabled(context.Background(), value == "1")
+			slog.Info("serveraccess: hot toggle", "value", value)
 		case "cdn_enabled", "cdn_headers":
 			applyCDN()
 			slog.Info("cdn: hot apply", "key", key, "value", value)
@@ -788,6 +794,7 @@ func main() {
 		"union_resolve_names":          boolStr(cfg.UnionResolveNames),
 		"union_oauth2_sig_private_key": "",
 		"union_oauth2_sig_public_key":  "",
+		"serveraccess_enabled":         boolStr(cfg.ServerAccessEnabled),
 		// A1 找回密码: SMTP env fallbacks shown as panel placeholders. Same map as
 		// the mailer's, minus the password — see config.SMTPConfig.PanelMap.
 		"smtp_host": cfg.SMTP.Host,
@@ -929,6 +936,7 @@ func main() {
 	}
 
 	root := http.NewServeMux()
+	mountServerAccess(root, sastack)
 	mountCompatSurfaces(root, yggAPI.Handler())
 	if oidcProvider != nil {
 		root.Handle("GET /api/yggdrasil/.well-known/openid-configuration", oidcProvider.DiscoveryHandler())

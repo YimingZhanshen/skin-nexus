@@ -274,6 +274,12 @@ app 进程能看到哪些变量，取决于 compose 文件里 `environment:` 段
 | `SKIN_UNION_QUERYEMAIL_MODE` | 面板真源 | `full` | 联盟邮箱查询应答：`full` = 返回邮箱、`off` = 403 拒绝；其他值按 `off` 处理（fail-closed） |
 | `SKIN_UNION_RESOLVE_NAMES` | 面板真源 | `true` | 是否由本站后台向各成员站的 `/api/yggdrasil` 读取站名（hub 不存站名）。读取只走受控出站（公网地址、禁重定向、固定单一路径、限响应体），且不在请求路径上等待；设为 `false` 后连已读到的名字也不再显示。面板项 `union_resolve_names` 热生效 |
 
+**服务器接入模块**（当前仅骨架；真源在「管理 → 站点设置」）
+
+| 变量 | 必填性 | 默认（源码 / 镜像内） | 说明 |
+|---|---|---|---|
+| `SKIN_SERVERACCESS_ENABLED` | 面板真源 | `false` | 服务器接入模块开关；面板 `serveraccess_enabled` 优先且热生效。关闭时模块子树统一 404；开启后仅提供健康检查与空服务器列表，不开放控制面或验证策略 |
+
 **联盟入站的部署形状（不是待办，是约束）**
 
 hub 会主动回调本站 `api/union/member/*`，每次请求带三头签名，验签窗口是
