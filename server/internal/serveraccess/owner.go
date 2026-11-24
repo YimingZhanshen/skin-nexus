@@ -249,24 +249,14 @@ func (c *control) updateServer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if body.Name != nil || body.Status != nil {
-		if err := c.cfg.Store.UpdateSAServer(r.Context(), who.TenantID, id, name, status); err != nil {
+		if err := c.cfg.Store.UpdateSAServerOwner(r.Context(), who.TenantID, id, name, body.Status); err != nil {
 			writeSAStoreError(w, err)
 			return
 		}
 	}
 	if body.Policy != nil {
-		policy, err := c.cfg.Store.SAServerPolicy(r.Context(), who.TenantID, id)
-		if err != nil {
-			writeSAStoreError(w, err)
-			return
-		}
-		if body.Policy.WhitelistEnabled != nil {
-			policy.WhitelistEnabled = *body.Policy.WhitelistEnabled
-		}
-		if body.Policy.PremiumFallbackEnabled != nil {
-			policy.PremiumFallbackEnabled = *body.Policy.PremiumFallbackEnabled
-		}
-		if err := c.cfg.Store.UpdateSAServerPolicy(r.Context(), who.TenantID, id, policy); err != nil {
+		if err := c.cfg.Store.UpdateSAServerOwnerPolicy(r.Context(), who.TenantID, id,
+			body.Policy.WhitelistEnabled, body.Policy.PremiumFallbackEnabled); err != nil {
 			writeSAStoreError(w, err)
 			return
 		}

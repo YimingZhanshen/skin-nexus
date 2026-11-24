@@ -118,27 +118,8 @@ func (c *control) platformServerUpdate(w http.ResponseWriter, r *http.Request) {
 			map[string]any{"tenantId": server.TenantID, "serverId": id, "status": body.Status})
 	}
 	if body.VerifyRateLimit != nil || body.VerifyBurst != nil || body.MaxConcurrent != nil || body.WhitelistLimit != nil || body.EventRetentionDays != nil {
-		policy, err := c.cfg.Store.SAServerPolicy(r.Context(), server.TenantID, id)
-		if err != nil {
-			writeSAStoreError(w, err)
-			return
-		}
-		if body.VerifyRateLimit != nil {
-			policy.VerifyRateLimit = *body.VerifyRateLimit
-		}
-		if body.VerifyBurst != nil {
-			policy.VerifyBurst = *body.VerifyBurst
-		}
-		if body.MaxConcurrent != nil {
-			policy.MaxConcurrent = *body.MaxConcurrent
-		}
-		if body.WhitelistLimit != nil {
-			policy.WhitelistLimit = *body.WhitelistLimit
-		}
-		if body.EventRetentionDays != nil {
-			policy.EventRetentionDays = *body.EventRetentionDays
-		}
-		if err := c.cfg.Store.UpdateSAServerPolicy(r.Context(), server.TenantID, id, policy); err != nil {
+		if err := c.cfg.Store.UpdateSAServerPlatformPolicy(r.Context(), server.TenantID, id,
+			body.VerifyRateLimit, body.VerifyBurst, body.MaxConcurrent, body.WhitelistLimit, body.EventRetentionDays); err != nil {
 			writeSAStoreError(w, err)
 			return
 		}

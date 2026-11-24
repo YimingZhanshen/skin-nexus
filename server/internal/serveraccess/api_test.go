@@ -95,6 +95,11 @@ func saUser(t *testing.T, st *store.Mysql, email, nick string, permission int) i
 
 func (f *saFixture) request(t *testing.T, uid int64, method, path, body string, token string) *httptest.ResponseRecorder {
 	t.Helper()
+	return f.requestHeaders(t, uid, method, path, body, token, nil)
+}
+
+func (f *saFixture) requestHeaders(t *testing.T, uid int64, method, path, body, token string, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
 	r := httptest.NewRequest(method, path, strings.NewReader(body))
 	if uid > 0 {
 		session := fmt.Sprintf("session-%d-%d", uid, time.Now().UnixNano())
@@ -109,6 +114,10 @@ func (f *saFixture) request(t *testing.T, uid int64, method, path, body string, 
 	}
 	if body != "" {
 		r.Header.Set("Content-Type", "application/json")
+	}
+	r.Header.Set("Origin", "http://example.com")
+	for name, value := range headers {
+		r.Header.Set(name, value)
 	}
 	rec := httptest.NewRecorder()
 	f.h.ServeHTTP(rec, r)
@@ -141,6 +150,97 @@ func TestServerAccessAPIRoleMatrix(t *testing.T) {
 			rec := f.request(t, tc.uid, tc.method, tc.path, tc.body, tc.token)
 			if rec.Code != tc.want {
 				t.Fatalf("%s %s = %d %s, want %d", tc.method, tc.path, rec.Code, rec.Body.String(), tc.want)
+			}
+		})
+	}
+}
+
+func TestServerAccessAPIRejectsCrossOriginMutations(t *testing.T) {
+	f := newSAFixture(t)
+	cred, err := f.st.CreateSAServerCredential(context.Background(), f.tenant, f.server, store.SACredential{
+		Mode: "header", SecretHash: strings.Repeat("a", 64), Scopes: `["verify:join"]`, Status: "active",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	invite, err := f.st.CreateSATenantInvite(context.Background(), f.tenant, "new@example.com", "viewer", strings.Repeat("b", 64), f.now.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := fmt.Sprintf("/api/serveraccess/v1/servers/%d", f.server)
+	for _, tc := range []struct {
+		name         string
+		uid          int64
+		method, path string
+		body         string
+	}{
+		{"owner create", f.owner, "POST", "/api/serveraccess/v1/servers", `{"name":"cross-origin"}`},
+		{"owner update", f.owner, "PATCH", base, `{"name":"cross-origin"}`},
+		{"owner invite", f.owner, "POST", "/api/serveraccess/v1/tenants/me/members/invite", `{"email":"new@example.com","role":"viewer"}`},
+		{"owner revoke invite", f.owner, "DELETE", fmt.Sprintf("/api/serveraccess/v1/tenants/me/invites/%d", invite), ""},
+		{"owner remove member", f.owner, "DELETE", fmt.Sprintf("/api/serveraccess/v1/tenants/me/members/%d", f.admin), ""},
+		{"owner whitelist add", f.owner, "POST", base + "/whitelist", `{"uid":1}`},
+		{"owner whitelist remove", f.owner, "DELETE", base + "/whitelist/1", ""},
+		{"owner ban add", f.owner, "POST", base + "/bans", `{"uid":1}`},
+		{"owner ban remove", f.owner, "DELETE", base + "/bans/1", ""},
+		{"owner credential create", f.owner, "POST", base + "/credentials", `{"mode":"header"}`},
+		{"owner credential rotate", f.owner, "POST", fmt.Sprintf("%s/credentials/%d/rotate", base, cred), `{}`},
+		{"owner credential revoke", f.owner, "POST", fmt.Sprintf("%s/credentials/%d/revoke", base, cred), `{}`},
+		{"platform tenant update", f.super, "PATCH", fmt.Sprintf("/api/admin/v1/serveraccess/tenants/%d", f.tenant), `{"serverLimit":2}`},
+		{"platform server update", f.super, "PATCH", fmt.Sprintf("/api/admin/v1/serveraccess/servers/%d", f.server), `{"status":"disabled"}`},
+		{"platform credential revoke", f.super, "POST", fmt.Sprintf("/api/admin/v1/serveraccess/servers/%d/credentials/%d/revoke", f.server, cred), `{}`},
+		{"platform fallback", f.super, "PUT", "/api/admin/v1/serveraccess/fallback", `{"enabled":false}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := f.requestHeaders(t, tc.uid, tc.method, tc.path, tc.body, "", map[string]string{
+				"Origin":         "https://evil.example",
+				"Sec-Fetch-Site": "same-origin",
+			})
+			if rec.Code != http.StatusForbidden {
+				t.Fatalf("cross-origin mutation = %d %s, want 403", rec.Code, rec.Body.String())
+			}
+		})
+	}
+	server, err := f.st.SAServerByID(context.Background(), f.tenant, f.server)
+	if err != nil || server.Name != "one" || server.Status != "active" {
+		t.Fatalf("cross-origin update changed server: %+v %v", server, err)
+	}
+	tenant, err := f.st.SATenantByID(context.Background(), f.tenant)
+	if err != nil || tenant.ServerLimit != 10 {
+		t.Fatalf("cross-origin update changed tenant: %+v %v", tenant, err)
+	}
+	if _, err := f.st.SACredentialBySecretHash(context.Background(), strings.Repeat("a", 64), f.now); err != nil {
+		t.Fatalf("cross-origin request revoked credential: %v", err)
+	}
+}
+
+func TestServerAccessAPIJSONBodyRequiresJSONContentTypeOrCustomHeader(t *testing.T) {
+	f := newSAFixture(t)
+	for _, tc := range []struct {
+		name, contentType, requestedWith string
+		want                             int
+	}{
+		{"missing content type", "", "", http.StatusUnsupportedMediaType},
+		{"text plain", "text/plain", "", http.StatusUnsupportedMediaType},
+		{"form encoded", "application/x-www-form-urlencoded", "", http.StatusUnsupportedMediaType},
+		{"wrong custom header", "text/plain", "wrong", http.StatusUnsupportedMediaType},
+		{"json", "application/json", "", http.StatusCreated},
+		{"json charset", "application/json; charset=utf-8", "", http.StatusCreated},
+		{"custom header", "text/plain", "XMLHttpRequest", http.StatusCreated},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			headers := map[string]string{}
+			if tc.contentType != "" {
+				headers["Content-Type"] = tc.contentType
+			} else {
+				headers["Content-Type"] = ""
+			}
+			if tc.requestedWith != "" {
+				headers["X-Requested-With"] = tc.requestedWith
+			}
+			rec := f.requestHeaders(t, f.owner, "POST", "/api/serveraccess/v1/servers", `{"name":"json-gate"}`, "", headers)
+			if rec.Code != tc.want {
+				t.Fatalf("content type %q custom header %q = %d %s, want %d", tc.contentType, tc.requestedWith, rec.Code, rec.Body.String(), tc.want)
 			}
 		})
 	}
@@ -197,7 +297,8 @@ func TestServerAccessAPICrossTenantEveryFamilyReturns404(t *testing.T) {
 
 func TestServerAccessAPIInviteAcceptanceAndCredentialOneTimeRotation(t *testing.T) {
 	f := newSAFixture(t)
-	invite := f.request(t, f.owner, "POST", "/api/serveraccess/v1/tenants/me/members/invite", `{"email":"outsider@example.com","role":"viewer"}`, "")
+	invitee := saUser(t, f.st, "invitee@example.com", "invitee", 0)
+	invite := f.request(t, f.owner, "POST", "/api/serveraccess/v1/tenants/me/members/invite", `{"email":"invitee@example.com","role":"viewer"}`, "")
 	if invite.Code != http.StatusCreated {
 		t.Fatalf("invite = %d %s", invite.Code, invite.Body.String())
 	}
@@ -209,7 +310,7 @@ func TestServerAccessAPIInviteAcceptanceAndCredentialOneTimeRotation(t *testing.
 	}
 	accept := func() *httptest.ResponseRecorder {
 		b, _ := json.Marshal(map[string]string{"token": inviteBody.Token})
-		return f.request(t, f.outsider, "POST", "/api/serveraccess/v1/invites/accept", string(b), "")
+		return f.request(t, invitee, "POST", "/api/serveraccess/v1/invites/accept", string(b), "")
 	}
 	if rec := accept(); rec.Code != http.StatusOK {
 		t.Fatalf("accept = %d %s", rec.Code, rec.Body.String())
@@ -250,6 +351,23 @@ func TestServerAccessAPIInviteAcceptanceAndCredentialOneTimeRotation(t *testing.
 	revokeNew := f.request(t, f.owner, "POST", fmt.Sprintf("%s/%d/revoke", base, rotated.Credential.ID), `{}`, "")
 	if revokeNew.Code != http.StatusOK {
 		t.Fatalf("revoke new = %d %s", revokeNew.Code, revokeNew.Body.String())
+	}
+}
+
+func TestServerAccessAPIInviteCannotCreateSecondActiveMembership(t *testing.T) {
+	f := newSAFixture(t)
+	hash := saHash("second-active-membership")
+	if _, err := f.st.CreateSATenantInvite(context.Background(), f.otherTenant, "owner@example.com", "viewer", hash, f.now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	rec := f.request(t, f.owner, "POST", "/api/serveraccess/v1/invites/accept", `{"token":"second-active-membership"}`, "")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("second active membership accept = %d %s, want 403", rec.Code, rec.Body.String())
+	}
+	me := f.request(t, f.owner, "GET", "/api/serveraccess/v1/tenants/me", "", "")
+	if me.Code != http.StatusOK || !strings.Contains(me.Body.String(), fmt.Sprintf(`"tenantId":%d`, f.tenant)) ||
+		strings.Contains(me.Body.String(), fmt.Sprintf(`"tenantId":%d`, f.otherTenant)) {
+		t.Fatalf("portal tenant became ambiguous: %d %s", me.Code, me.Body.String())
 	}
 }
 

@@ -4,6 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
+
+	"skin-nexus/server/internal/dbx"
+	"skin-nexus/server/internal/dialect"
 )
 
 const saPolicySelect = `SELECT p.server_id,p.whitelist_enabled,p.premium_fallback_enabled,
@@ -25,49 +29,120 @@ func (m *Mysql) SAServerPolicy(ctx context.Context, tenantID, serverID int64) (S
 		saPolicySelect+` WHERE s.tenant_id=? AND p.server_id=?`, tenantID, serverID))
 }
 
-func (m *Mysql) UpdateSAServerPolicy(ctx context.Context, tenantID, serverID int64, p SAServerPolicy) error {
-	res, err := m.db.ExecContext(ctx,
-		`UPDATE sa_server_policies SET whitelist_enabled=?,premium_fallback_enabled=?,
-		 verify_rate_limit=?,verify_burst=?,max_concurrent=?,whitelist_limit=?,event_retention_days=?
-		 WHERE server_id=? AND server_id IN (SELECT id FROM sa_servers WHERE id=? AND tenant_id=?)`,
-		p.WhitelistEnabled, p.PremiumFallbackEnabled, p.VerifyRateLimit, p.VerifyBurst,
-		p.MaxConcurrent, p.WhitelistLimit, p.EventRetentionDays, serverID, serverID, tenantID)
+// UpdateSAServerOwnerPolicy writes only owner-controlled switches. Nil fields
+// are omitted, so neither a stale read nor a partial request can reset platform
+// quotas or the other owner switch.
+func (m *Mysql) UpdateSAServerOwnerPolicy(ctx context.Context, tenantID, serverID int64, whitelistEnabled, premiumFallbackEnabled *bool) error {
+	var sets []string
+	var args []any
+	if whitelistEnabled != nil {
+		sets = append(sets, `whitelist_enabled=?`)
+		args = append(args, *whitelistEnabled)
+	}
+	if premiumFallbackEnabled != nil {
+		sets = append(sets, `premium_fallback_enabled=?`)
+		args = append(args, *premiumFallbackEnabled)
+	}
+	return m.updateSAPolicyFields(ctx, tenantID, serverID, sets, args)
+}
+
+// UpdateSAServerPlatformPolicy writes only explicitly requested quota fields.
+// Owner switches are deliberately absent from this method's surface.
+func (m *Mysql) UpdateSAServerPlatformPolicy(ctx context.Context, tenantID, serverID int64,
+	verifyRateLimit, verifyBurst, maxConcurrent, whitelistLimit, eventRetentionDays *int) error {
+	var sets []string
+	var args []any
+	for _, field := range []struct {
+		name  string
+		value *int
+	}{
+		{"verify_rate_limit", verifyRateLimit},
+		{"verify_burst", verifyBurst},
+		{"max_concurrent", maxConcurrent},
+		{"whitelist_limit", whitelistLimit},
+		{"event_retention_days", eventRetentionDays},
+	} {
+		if field.value != nil {
+			sets = append(sets, field.name+`=?`)
+			args = append(args, *field.value)
+		}
+	}
+	return m.updateSAPolicyFields(ctx, tenantID, serverID, sets, args)
+}
+
+func (m *Mysql) updateSAPolicyFields(ctx context.Context, tenantID, serverID int64, sets []string, args []any) error {
+	if len(sets) == 0 {
+		return nil
+	}
+	query := `UPDATE sa_server_policies SET ` + strings.Join(sets, ",") +
+		` WHERE server_id=? AND server_id IN (SELECT id FROM sa_servers WHERE id=? AND tenant_id=?)`
+	args = append(args, serverID, serverID, tenantID)
+	res, err := m.db.ExecContext(ctx, query, args...)
 	return saUpdateAffected(res, err, func() (bool, error) {
 		return m.saExists(ctx, `SELECT 1 FROM sa_server_policies WHERE server_id=? AND server_id IN (SELECT id FROM sa_servers WHERE id=? AND tenant_id=?)`, serverID, serverID, tenantID)
 	})
 }
 
+// saLockPolicyRow locks the scoped policy row that owns whitelist_limit. The
+// SQLite no-op write is the equivalent of FOR UPDATE under its single-writer
+// model, and keeps the quota read and insert in one serialized transaction.
+func saLockPolicyRow(ctx context.Context, tx *dbx.Tx, tenantID, serverID int64) (int, error) {
+	if tx.Engine() == dialect.SQLite {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE sa_server_policies SET whitelist_enabled=whitelist_enabled
+			 WHERE server_id=? AND server_id IN (SELECT id FROM sa_servers WHERE id=? AND tenant_id=?)`,
+			serverID, serverID, tenantID); err != nil {
+			return 0, err
+		}
+	}
+	var limit int
+	err := tx.QueryRowContext(ctx,
+		`SELECT p.whitelist_limit FROM sa_server_policies p JOIN sa_servers s ON s.id=p.server_id
+		 WHERE s.tenant_id=? AND p.server_id=?`+tx.Engine().LockSQL(), tenantID, serverID).Scan(&limit)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return limit, err
+}
+
 func (m *Mysql) AddSAServerWhitelist(ctx context.Context, tenantID, serverID, uid int64, note string, createdBy int64) error {
-	res, err := m.db.ExecContext(ctx,
-		`INSERT INTO sa_server_whitelist (server_id,uid,note,created_by,created_at)
-		 SELECT ?,?,?,?,? FROM sa_servers s JOIN sa_server_policies p ON p.server_id=s.id
-		 WHERE s.id=? AND s.tenant_id=? AND (SELECT COUNT(*) FROM sa_server_whitelist WHERE server_id=s.id)<p.whitelist_limit`,
-		serverID, uid, note, createdBy, m.now().UTC(), serverID, tenantID)
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	limit, err := saLockPolicyRow(ctx, tx, tenantID, serverID)
+	if err != nil {
+		return err
+	}
+	var one int
+	err = tx.QueryRowContext(ctx,
+		`SELECT 1 FROM sa_server_whitelist w JOIN sa_servers s ON s.id=w.server_id
+		 WHERE w.server_id=? AND w.uid=? AND s.tenant_id=?`, serverID, uid, tenantID).Scan(&one)
+	if err == nil {
+		return ErrDuplicate
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	var count int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sa_server_whitelist WHERE server_id=?`, serverID).Scan(&count); err != nil {
+		return err
+	}
+	if count >= limit {
+		return ErrQuota
+	}
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO sa_server_whitelist (server_id,uid,note,created_by,created_at) VALUES (?,?,?,?,?)`,
+		serverID, uid, note, createdBy, m.now().UTC())
 	if err != nil {
 		if isDupKey(err) {
 			return ErrDuplicate
 		}
 		return err
 	}
-	if n, _ := res.RowsAffected(); n != 1 {
-		var one int
-		if scanErr := m.db.QueryRowContext(ctx,
-			`SELECT 1 FROM sa_server_whitelist w JOIN sa_servers s ON s.id=w.server_id
-			 WHERE w.server_id=? AND w.uid=? AND s.tenant_id=?`, serverID, uid, tenantID).Scan(&one); scanErr == nil {
-			return ErrDuplicate
-		} else if !errors.Is(scanErr, sql.ErrNoRows) {
-			return scanErr
-		}
-		if scanErr := m.db.QueryRowContext(ctx,
-			`SELECT 1 FROM sa_servers WHERE id=? AND tenant_id=?`, serverID, tenantID).Scan(&one); scanErr != nil {
-			if errors.Is(scanErr, sql.ErrNoRows) {
-				return ErrNotFound
-			}
-			return scanErr
-		}
-		return ErrQuota
-	}
-	return nil
+	return tx.Commit()
 }
 
 func (m *Mysql) ListSAServerWhitelist(ctx context.Context, tenantID, serverID int64) ([]SAServerWhitelist, error) {

@@ -11,10 +11,11 @@ import (
 	"skin-nexus/server/internal/plugin"
 )
 
-// sameOriginForAdmin is the P2 market CSRF gate: a browser mutation must carry
+// SameOriginForAdmin is the P2 market CSRF gate: a browser mutation must carry
 // an Origin matching Host (or Sec-Fetch-Site: same-origin). The super-admin
-// session is still required; X-Admin-Token is rejected by pluginSuper.
-func sameOriginForAdmin(r *http.Request) bool {
+// session is still required; X-Admin-Token is rejected by pluginSuper. Other
+// cookie-authenticated admin surfaces reuse this exact gate.
+func SameOriginForAdmin(r *http.Request) bool {
 	if origin := r.Header.Get("Origin"); origin != "" && origin != "null" {
 		u, err := url.Parse(origin)
 		return err == nil && strings.EqualFold(u.Host, r.Host)
@@ -36,7 +37,7 @@ func (b *Backend) pluginSuper(w http.ResponseWriter, r *http.Request) (int64, bo
 		writeErrCode(w, http.StatusForbidden, "a super admin account (permission=2) is required", i18n.MsgSuperAdminRequired)
 		return 0, false
 	}
-	if !sameOriginForAdmin(r) {
+	if !SameOriginForAdmin(r) {
 		writeErrCode(w, http.StatusForbidden, "origin check failed", i18n.MsgOriginMismatch)
 		return 0, false
 	}

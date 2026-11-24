@@ -75,11 +75,61 @@ func (m *Mysql) DeleteSATenant(ctx context.Context, tenantID int64) error {
 }
 
 func (m *Mysql) UpdateSATenantStatus(ctx context.Context, tenantID int64, status string) error {
-	res, err := m.db.ExecContext(ctx,
-		`UPDATE sa_tenants SET status=? WHERE id=? AND deleted_at IS NULL`, status, tenantID)
-	return saUpdateAffected(res, err, func() (bool, error) {
-		return m.saExists(ctx, `SELECT 1 FROM sa_tenants WHERE id=? AND deleted_at IS NULL`, tenantID)
-	})
+	if status != "active" {
+		res, err := m.db.ExecContext(ctx,
+			`UPDATE sa_tenants SET status=? WHERE id=? AND deleted_at IS NULL`, status, tenantID)
+		return saUpdateAffected(res, err, func() (bool, error) {
+			return m.saExists(ctx, `SELECT 1 FROM sa_tenants WHERE id=? AND deleted_at IS NULL`, tenantID)
+		})
+	}
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	current, _, err := saLockTenantRow(ctx, tx, tenantID)
+	if err != nil {
+		return err
+	}
+	if current == "active" {
+		return tx.Commit()
+	}
+	// Publish the activation inside the transaction before checking members.
+	// A concurrent activator that waits on the same user lock then observes
+	// this committed active tenant instead of two stale inactive snapshots.
+	if _, err := tx.ExecContext(ctx, `UPDATE sa_tenants SET status='active' WHERE id=?`, tenantID); err != nil {
+		return err
+	}
+	rows, err := tx.QueryContext(ctx,
+		`SELECT uid FROM sa_tenant_members WHERE tenant_id=? ORDER BY uid`, tenantID)
+	if err != nil {
+		return err
+	}
+	var uids []int64
+	for rows.Next() {
+		var uid int64
+		if err := rows.Scan(&uid); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		uids = append(uids, uid)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, uid := range uids {
+		if err := saLockUserRow(ctx, tx, uid); err != nil {
+			return err
+		}
+		other, err := saHasOtherActiveMembership(ctx, tx, uid, tenantID)
+		if err != nil {
+			return err
+		}
+		if other {
+			return ErrForbidden
+		}
+	}
+	return tx.Commit()
 }
 
 func (m *Mysql) UpdateSATenantQuota(ctx context.Context, tenantID int64, serverLimit int) error {
@@ -90,14 +140,65 @@ func (m *Mysql) UpdateSATenantQuota(ctx context.Context, tenantID int64, serverL
 	})
 }
 
+func saLockUserRow(ctx context.Context, tx *dbx.Tx, uid int64) error {
+	query := `SELECT id FROM users WHERE id=?`
+	if tx.Engine() != dialect.SQLite {
+		query += tx.Engine().LockSQL()
+	}
+	var id int64
+	err := tx.QueryRowContext(ctx, query, uid).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	return err
+}
+
+func saHasOtherActiveMembership(ctx context.Context, tx *dbx.Tx, uid, tenantID int64) (bool, error) {
+	query := `SELECT tm.tenant_id FROM sa_tenant_members tm JOIN sa_tenants t ON t.id=tm.tenant_id
+		WHERE tm.uid=? AND tm.tenant_id<>? AND t.status='active' AND t.deleted_at IS NULL LIMIT 1`
+	if tx.Engine() != dialect.SQLite {
+		query += tx.Engine().LockSQL()
+	}
+	var other int64
+	err := tx.QueryRowContext(ctx, query, uid, tenantID).Scan(&other)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 func (m *Mysql) AddSATenantMember(ctx context.Context, tenantID, uid int64, role string) error {
-	_, err := m.db.ExecContext(ctx,
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	status, _, err := saLockTenantRow(ctx, tx, tenantID)
+	if err != nil {
+		return err
+	}
+	if status == "active" {
+		if err := saLockUserRow(ctx, tx, uid); err != nil {
+			return err
+		}
+		other, err := saHasOtherActiveMembership(ctx, tx, uid, tenantID)
+		if err != nil {
+			return err
+		}
+		if other {
+			return ErrForbidden
+		}
+	}
+	_, err = tx.ExecContext(ctx,
 		`INSERT INTO sa_tenant_members (tenant_id,uid,role,created_at) VALUES (?,?,?,?)`,
 		tenantID, uid, role, m.now().UTC())
 	if isDupKey(err) {
 		return ErrDuplicate
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (m *Mysql) UpdateSATenantMemberRole(ctx context.Context, tenantID, uid int64, role string) error {
@@ -255,18 +356,29 @@ func (m *Mysql) AcceptSATenantInvite(ctx context.Context, tokenHash string, uid 
 		`SELECT tenant_id,role FROM sa_tenant_invites WHERE token_hash=?`, tokenHash).Scan(&tenantID, &role); err != nil {
 		return 0, err
 	}
-	var tenantLock int
-	if err := tx.QueryRowContext(ctx,
-		`SELECT id FROM sa_tenants WHERE id=? AND status='active' AND deleted_at IS NULL`+m.db.Dialect().LockSQL(), tenantID).Scan(&tenantLock); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return 0, ErrNotFound
-		}
+	status, _, err := saLockTenantRow(ctx, tx, tenantID)
+	if err != nil {
 		return 0, err
+	}
+	if status != "active" {
+		return 0, ErrNotFound
 	}
 	var existingRole string
 	if err := tx.QueryRowContext(ctx,
 		`SELECT role FROM sa_tenant_members WHERE tenant_id=? AND uid=?`, tenantID, uid).Scan(&existingRole); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return 0, err
+	}
+	if existingRole == "" {
+		if err := saLockUserRow(ctx, tx, uid); err != nil {
+			return 0, err
+		}
+		other, err := saHasOtherActiveMembership(ctx, tx, uid, tenantID)
+		if err != nil {
+			return 0, err
+		}
+		if other {
+			return 0, ErrForbidden
+		}
 	}
 	if saRoleRank(existingRole) >= saRoleRank(role) {
 		role = existingRole
@@ -296,29 +408,51 @@ func saRoleRank(role string) int {
 	}
 }
 
+// saLockTenantRow serializes quota checks and membership changes. SQLite has
+// no row locks, so a scoped no-op write acquires its single writer lock before
+// the read; MySQL and PostgreSQL use SELECT FOR UPDATE on the tenant row.
+func saLockTenantRow(ctx context.Context, tx *dbx.Tx, tenantID int64) (string, int, error) {
+	if tx.Engine() == dialect.SQLite {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE sa_tenants SET name=name WHERE id=? AND deleted_at IS NULL`, tenantID); err != nil {
+			return "", 0, err
+		}
+	}
+	var status string
+	var serverLimit int
+	err := tx.QueryRowContext(ctx,
+		`SELECT status,server_limit FROM sa_tenants WHERE id=? AND deleted_at IS NULL`+tx.Engine().LockSQL(),
+		tenantID).Scan(&status, &serverLimit)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", 0, ErrNotFound
+	}
+	return status, serverLimit, err
+}
+
 func (m *Mysql) CreateSAServer(ctx context.Context, tenantID int64, publicID, name string) (SAServer, error) {
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return SAServer{}, err
 	}
 	defer tx.Rollback()
-	id, err := tx.InsertReturningID(ctx,
-		`INSERT INTO sa_servers (tenant_id,public_id,name,status,source_mode,created_at)
-		 SELECT t.id,?,?,'active','url_secret',? FROM sa_tenants t
-		 WHERE t.id=? AND t.status='active' AND t.deleted_at IS NULL
-		   AND (SELECT COUNT(*) FROM sa_servers WHERE tenant_id=t.id)<t.server_limit`,
-		publicID, name, m.now().UTC(), tenantID)
-	if id == 0 && (err == nil || errors.Is(err, sql.ErrNoRows)) {
-		var one int
-		if scanErr := tx.QueryRowContext(ctx,
-			`SELECT 1 FROM sa_tenants WHERE id=? AND status='active' AND deleted_at IS NULL`, tenantID).Scan(&one); scanErr != nil {
-			if errors.Is(scanErr, sql.ErrNoRows) {
-				return SAServer{}, ErrNotFound
-			}
-			return SAServer{}, scanErr
-		}
+	status, serverLimit, err := saLockTenantRow(ctx, tx, tenantID)
+	if err != nil {
+		return SAServer{}, err
+	}
+	if status != "active" {
+		return SAServer{}, ErrNotFound
+	}
+	var count int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sa_servers WHERE tenant_id=?`, tenantID).Scan(&count); err != nil {
+		return SAServer{}, err
+	}
+	if count >= serverLimit {
 		return SAServer{}, ErrQuota
 	}
+	id, err := tx.InsertReturningID(ctx,
+		`INSERT INTO sa_servers (tenant_id,public_id,name,status,source_mode,created_at)
+		 VALUES (?,?,?,'active','url_secret',?)`, tenantID, publicID, name, m.now().UTC())
 	if err != nil {
 		if isDupKey(err) {
 			return SAServer{}, ErrDuplicate
@@ -378,6 +512,49 @@ func (m *Mysql) UpdateSAServer(ctx context.Context, tenantID, serverID int64, na
 	return saUpdateAffected(res, err, func() (bool, error) {
 		return m.saExists(ctx, `SELECT 1 FROM sa_servers WHERE tenant_id=? AND id=?`, tenantID, serverID)
 	})
+}
+
+// UpdateSAServerOwner keeps platform suspension atomic with the owner write.
+// A name-only update is allowed on a suspended server; any requested status
+// transition must observe a row that is not suspended in the same statement.
+func (m *Mysql) UpdateSAServerOwner(ctx context.Context, tenantID, serverID int64, name string, status *string) error {
+	query := `UPDATE sa_servers SET name=?`
+	args := []any{name}
+	if status != nil {
+		query += `,status=?`
+		args = append(args, *status)
+	}
+	query += ` WHERE tenant_id=? AND id=?`
+	args = append(args, tenantID, serverID)
+	if status != nil {
+		query += ` AND status <> 'suspended'`
+	}
+	res, err := m.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 1 {
+		return nil
+	}
+	// MySQL reports zero for an unchanged row. Distinguish that no-op from a
+	// missing scope or a platform suspension that won the read/write race.
+	var currentStatus string
+	err = m.db.QueryRowContext(ctx,
+		`SELECT status FROM sa_servers WHERE tenant_id=? AND id=?`, tenantID, serverID).Scan(&currentStatus)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if status != nil && currentStatus == "suspended" {
+		return ErrForbidden
+	}
+	return nil
 }
 
 func (m *Mysql) DeleteSAServer(ctx context.Context, tenantID, serverID int64) error {

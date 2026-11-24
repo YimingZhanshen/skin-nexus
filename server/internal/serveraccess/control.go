@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"skin-nexus/server/internal/adminapi"
 	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/store"
 )
@@ -67,6 +69,10 @@ func (s *Stack) controlHandler() http.Handler {
 	mux.Handle("PUT /api/admin/v1/serveraccess/fallback", c.platform(http.HandlerFunc(c.platformFallback)))
 	mux.Handle("GET /api/admin/v1/serveraccess/audit", c.platform(http.HandlerFunc(c.platformAudit)))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions && !adminapi.SameOriginForAdmin(r) {
+			writeSAError(w, http.StatusForbidden, i18n.MsgOriginMismatch, "Origin check failed")
+			return
+		}
 		if r.Body != nil {
 			r.Body = http.MaxBytesReader(w, r.Body, maxControlBody)
 		}
@@ -167,6 +173,11 @@ func saID(r *http.Request, name string) (int64, bool) {
 }
 
 func decodeSAJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if mediaType != "application/json" && r.Header.Get("X-Requested-With") != "XMLHttpRequest" {
+		writeSAError(w, http.StatusUnsupportedMediaType, i18n.MsgBadBody, "Request body must use application/json")
+		return false
+	}
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
