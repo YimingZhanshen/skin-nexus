@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -168,6 +169,44 @@ func TestFallbackCancellationIsNotUpstreamFault(t *testing.T) {
 		})
 	}
 }
+
+func TestFallbackBodyReadCancellationIsNotUpstreamFault(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		err       error
+		wantFault bool
+	}{
+		{name: "canceled", err: context.Canceled},
+		{name: "wrapped canceled", err: fmt.Errorf("response body read stopped: %w", context.Canceled)},
+		{name: "deadline", err: context.DeadlineExceeded, wantFault: true},
+		{name: "network", err: errors.New("connection reset"), wantFault: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			f := &Fallback{BaseURL: "https://official.example", Enabled: func(context.Context) bool { return true }, Client: newFallbackClient(fallbackCounter(func(*http.Request) (*http.Response, error) {
+				calls++
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(fallbackErrorReader{err: tc.err}),
+				}, nil
+			}))}
+			result := f.scopedHasJoined(context.Background(), "Unknown", "server-id", "")
+			if result.Matched || result.UpstreamFault != tc.wantFault {
+				t.Fatalf("fallback result = %+v, want matched=false fault=%v", result, tc.wantFault)
+			}
+			if calls != 1 {
+				t.Fatalf("upstream calls = %d, want 1", calls)
+			}
+		})
+	}
+}
+
+type fallbackErrorReader struct {
+	err error
+}
+
+func (r fallbackErrorReader) Read([]byte) (int, error) { return 0, r.err }
 
 func TestFallbackResponseGates(t *testing.T) {
 	cases := []struct {

@@ -244,6 +244,64 @@ func TestServerAccessFallbackCancellationDoesNotOpenCircuit(t *testing.T) {
 	}
 }
 
+func TestServerAccessFallbackBodyCancellationDoesNotCountAsFailure(t *testing.T) {
+	f := newVerifyFixture(t)
+	f.credential(t, "url_secret")
+	on := true
+	if err := f.st.UpdateSAServerOwnerPolicy(context.Background(), f.tenant, f.server, nil, &on); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	f.api.SetFallback(&ygg.Fallback{BaseURL: "https://official.example", Enabled: func(context.Context) bool { return true }, Client: &http.Client{Transport: verifyFallback(func(*http.Request) (*http.Response, error) {
+		calls++
+		response := breakerResponse(http.StatusOK)
+		response.Body = io.NopCloser(verifyFallbackErrorReader{err: fmt.Errorf("response body read canceled: %w", context.Canceled)})
+		return response, nil
+	})}})
+	before := metrics.ServerAccessFallbackBreakerOpen.Value()
+	for i := 0; i < fallbackFailureThreshold+1; i++ {
+		if rec := f.verify(t, "url_secret", "Unknown", "server-id", ""); rec.Code != http.StatusNoContent {
+			t.Fatalf("body-canceled fallback %d = %d %s", i, rec.Code, rec.Body.String())
+		}
+	}
+	if calls != fallbackFailureThreshold+1 {
+		t.Fatalf("body-canceled upstream calls = %d, want %d", calls, fallbackFailureThreshold+1)
+	}
+	if got := metrics.ServerAccessFallbackBreakerOpen.Value(); got != before {
+		t.Fatalf("body cancellations opened circuit: metric = %d, want %d", got, before)
+	}
+	events, err := f.st.ListSAJoinEvents(context.Background(), f.tenant, f.server, f.now.Add(-time.Minute), f.now.Add(time.Minute), 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range events {
+		if event.ReasonCode == "fallback_unavailable" || event.ReasonCode == "fallback_circuit_open" {
+			t.Fatalf("body cancellation recorded as upstream failure: %+v", event)
+		}
+	}
+
+	f.api.SetFallback(&ygg.Fallback{BaseURL: "https://official.example", Enabled: func(context.Context) bool { return true }, Client: &http.Client{Transport: verifyFallback(func(*http.Request) (*http.Response, error) {
+		calls++
+		return breakerResponse(http.StatusServiceUnavailable), nil
+	})}})
+	for i := 0; i < fallbackFailureThreshold-1; i++ {
+		f.verify(t, "url_secret", "Unknown", "server-id", "")
+	}
+	if got := metrics.ServerAccessFallbackBreakerOpen.Value(); got != before {
+		t.Fatalf("body cancellations counted toward circuit threshold: metric = %d, want %d", got, before)
+	}
+	f.verify(t, "url_secret", "Unknown", "server-id", "")
+	if got := metrics.ServerAccessFallbackBreakerOpen.Value(); got != before+1 {
+		t.Fatalf("real upstream faults did not open circuit: metric = %d, want %d", got, before+1)
+	}
+}
+
+type verifyFallbackErrorReader struct {
+	err error
+}
+
+func (r verifyFallbackErrorReader) Read([]byte) (int, error) { return 0, r.err }
+
 func breakerResponse(status int) *http.Response {
 	body := `{"id":"0123456789abcdef0123456789abcdef","name":"Unknown"}`
 	if status != http.StatusOK {

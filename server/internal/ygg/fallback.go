@@ -190,6 +190,9 @@ func (f *Fallback) getResult(ctx context.Context, rawURL string) ([]byte, bool, 
 		return nil, false, true
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, fallbackMaxBody+1))
+	if errors.Is(err, context.Canceled) {
+		return nil, false, false
+	}
 	if err != nil || len(body) > fallbackMaxBody {
 		return nil, false, true
 	}
