@@ -484,6 +484,7 @@ func main() {
 		}
 		return mojangFallbackDefault
 	}))
+	sastack.setVerifier(yggAPI)
 	// 运维观测面（2026-10-26）：网页/启动器登录、Yggdrasil 服务器流量、
 	// 联盟出入站通信统一落 access_logs，管理面板可筛选分页查看。全程
 	// 旁路：nil 安全、写失败吞掉，任何情况下不改变协议响应。保留 90 天，

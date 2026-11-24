@@ -90,3 +90,32 @@ type SAServerBan struct {
 	CreatedBy int64        `json:"createdBy"`
 	CreatedAt time.Time    `json:"createdAt"`
 }
+
+type SAJoinEvent struct {
+	ID            int64         `json:"id"`
+	TenantID      int64         `json:"-"`
+	ServerID      int64         `json:"-"`
+	JoinSessionID sql.NullInt64 `json:"joinSessionId,omitempty"`
+	UID           sql.NullInt64 `json:"uid,omitempty"`
+	UUID          string        `json:"uuid"`
+	PlayerName    string        `json:"playerName"`
+	Outcome       string        `json:"outcome"`
+	ReasonCode    string        `json:"reasonCode"`
+	SourceMode    string        `json:"sourceMode"`
+	DurationMS    int64         `json:"durationMs"`
+	RequestID     string        `json:"requestId"`
+	CreatedAt     time.Time     `json:"createdAt"`
+}
+
+// TrustLevel derives the S3 trust label from the persisted source mode. Both
+// supported modes prove possession of a credential only; neither is attested.
+func (e SAJoinEvent) TrustLevel() string {
+	switch e.SourceMode {
+	case "url_secret":
+		return "possessed_credential"
+	case "header":
+		return "header_credential"
+	default:
+		return "untrusted"
+	}
+}

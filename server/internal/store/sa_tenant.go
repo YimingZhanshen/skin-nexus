@@ -474,6 +474,14 @@ func (m *Mysql) SAServerByID(ctx context.Context, tenantID, serverID int64) (SAS
 		 WHERE tenant_id=? AND id=?`, tenantID, serverID))
 }
 
+// SAServerByPublicID resolves a header-mode route only inside the tenant
+// already derived from the authenticated credential.
+func (m *Mysql) SAServerByPublicID(ctx context.Context, tenantID int64, publicID string) (SAServer, error) {
+	return scanSAServer(m.db.QueryRowContext(ctx,
+		`SELECT id,tenant_id,public_id,name,status,source_mode,created_at FROM sa_servers
+		 WHERE tenant_id=? AND public_id=?`, tenantID, publicID))
+}
+
 func scanSAServer(s rowScanner) (SAServer, error) {
 	var v SAServer
 	err := s.Scan(&v.ID, &v.TenantID, &v.PublicID, &v.Name, &v.Status, &v.SourceMode, &v.CreatedAt)

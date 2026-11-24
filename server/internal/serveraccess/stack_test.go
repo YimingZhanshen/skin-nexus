@@ -54,7 +54,7 @@ func TestHotToggleExposesOnlyHealthAndEmptyServerList(t *testing.T) {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		if rec.Code != http.StatusNotFound {
-			t.Fatalf("GET %s = %d, want 404 (not implemented in S1)", path, rec.Code)
+			t.Fatalf("GET %s = %d, want 404 (verifier not wired)", path, rec.Code)
 		}
 	}
 

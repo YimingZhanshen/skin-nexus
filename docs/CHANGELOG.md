@@ -9,6 +9,19 @@ description: "SkinNexus 变更日志：按日期倒序的迭代历史，只记�
 > 相称——只记「改了什么 / 为什么 / 行为变化」，验证过程一句话。开发细节见对应 commit；
 > README 状态行只留一句话摘要。
 
+## 2026-11-24 · 服务器接入可信验证链（同轮）
+
+- 新增 URL secret 与 Bearer Header 两种按服 `hasJoined` 入口；无效、吊销、过期、跨租户或模块关闭统一 404，
+  有效凭证的策略拒绝与故障保持标准空 204，响应禁止缓存与 Referrer 泄露。
+- 验证链按模块/服务器状态、凭证、平台封禁、本服封禁、UID 白名单、配额/并发、本地 session、官方兜底依次执行；
+  只有真实 session miss 且两级开关允许才回源，官方响应原样透传，本地 profile 继续使用既有签名格式。
+- 三引擎加法迁移 `0035_serveraccess_events.sql` 新增按服进服事件与数据库原子配额窗口；事件记录身份、结果、来源、
+  耗时和请求关联 ID，同一本地 join 重放去重，写入失败只记固定标签结构化错误、指标与告警 hook，不改变验证结果。
+- 验证路由在组装层提前关闭诊断采集，原始 secret path、query、Authorization、body、IP 与邮箱不进入应用日志或明细；
+  旧 `/api/yggdrasil` 路由、DTO、错误体、纹理与签名契约保持不变。
+
+验证：`go test ./...`、`go vet ./...`、`go vet -tags integration ./...`、`go build ./...` 与 SQLite S3 集成测试通过。
+
 ## 2026-11-24 · 服务器接入模块骨架与零表面开关
 
 - 新增默认关闭的 `serveraccess` 模块栈：面板 `serveraccess_enabled` 优先于 `SKIN_SERVERACCESS_ENABLED`，

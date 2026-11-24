@@ -515,6 +515,9 @@ func TestServerAccessCredentialRotationRevokeAndScope(t *testing.T) {
 	if err := st.RevokeSAServerCredential(ctx, tenant, server.ID, newID, now); err != nil {
 		t.Fatal(err)
 	}
+	if err := st.TouchSACredential(ctx, tenant, server.ID, newID, now); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("revoked credential touch err = %v, want not found", err)
+	}
 	if _, err := st.SACredentialBySecretHash(ctx, newHash, now); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("revoked secret err = %v", err)
 	}
@@ -738,6 +741,93 @@ func TestSAUpdateAffectedDistinguishesNoOpFromMissingScope(t *testing.T) {
 	}
 	if err := saUpdateAffected(saZeroResult{}, lookupErr, func() (bool, error) { t.Fatal("lookup called after write failure"); return false, nil }); !errors.Is(err, lookupErr) {
 		t.Fatalf("write failure = %v, want original error", err)
+	}
+}
+
+func TestServerAccessVerificationEventsAndAtomicQuota(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid := saSeedUser(t, st)
+	tenant, _ := st.CreateSATenant(ctx, "verify", 2)
+	other, _ := st.CreateSATenant(ctx, "other", 2)
+	server, _ := st.CreateSAServer(ctx, tenant, "srv_verify", "verify")
+	now := time.Now().UTC().Truncate(time.Minute)
+	allowed, err := st.SAWhitelistMember(ctx, tenant, server.ID, uid)
+	if err != nil || allowed {
+		t.Fatalf("missing whitelist = %v, %v", allowed, err)
+	}
+	if err := st.AddSAServerWhitelist(ctx, tenant, server.ID, uid, "yes", uid); err != nil {
+		t.Fatal(err)
+	}
+	if allowed, err := st.SAWhitelistMember(ctx, other, server.ID, uid); err != nil || allowed {
+		t.Fatalf("cross-tenant whitelist = %v, %v", allowed, err)
+	}
+	if allowed, err = st.SAWhitelistMember(ctx, tenant, server.ID, uid); err != nil || !allowed {
+		t.Fatalf("whitelist member = %v, %v", allowed, err)
+	}
+	if banned, err := st.SAActiveBan(ctx, tenant, server.ID, uid, now); err != nil || banned {
+		t.Fatalf("missing ban = %v, %v", banned, err)
+	}
+	if err := st.AddSAServerBan(ctx, tenant, server.ID, uid, "ban", sql.NullTime{Time: now.Add(time.Minute), Valid: true}, uid); err != nil {
+		t.Fatal(err)
+	}
+	if banned, err := st.SAActiveBan(ctx, tenant, server.ID, uid, now); err != nil || !banned {
+		t.Fatalf("active ban = %v, %v", banned, err)
+	}
+	if banned, err := st.SAActiveBan(ctx, tenant, server.ID, uid, now.Add(2*time.Minute)); err != nil || banned {
+		t.Fatalf("expired ban = %v, %v", banned, err)
+	}
+	event := SAJoinEvent{TenantID: tenant, ServerID: server.ID, JoinSessionID: sql.NullInt64{Int64: 42, Valid: true},
+		UID: sql.NullInt64{Int64: uid, Valid: true}, UUID: "0123456789abcdef0123456789abcdef", PlayerName: "Alice",
+		Outcome: "allow", ReasonCode: "local_session", SourceMode: "url_secret", DurationMS: 12, RequestID: "req-1"}
+	if err := st.InsertSAJoinEvent(ctx, event); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.InsertSAJoinEvent(ctx, event); err != nil {
+		t.Fatalf("event replay must be idempotent: %v", err)
+	}
+	events, err := st.ListSAJoinEvents(ctx, tenant, server.ID, now.Add(-time.Minute), now.Add(time.Minute), 20)
+	if err != nil || len(events) != 1 || events[0].PlayerName != "Alice" || events[0].SourceMode != "url_secret" || events[0].TenantID != tenant {
+		t.Fatalf("events = %+v, %v", events, err)
+	}
+	if events[0].TrustLevel() != "possessed_credential" {
+		t.Fatalf("event trust level = %q", events[0].TrustLevel())
+	}
+	headerEvent := event
+	headerEvent.SourceMode = "header"
+	if headerEvent.TrustLevel() != "header_credential" {
+		t.Fatalf("header event trust level = %q", headerEvent.TrustLevel())
+	}
+	if err := st.InsertSAJoinEvent(ctx, SAJoinEvent{TenantID: other, ServerID: server.ID, PlayerName: "Cross", Outcome: "deny", ReasonCode: "test", SourceMode: "url_secret"}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-tenant event insert err = %v, want not found", err)
+	}
+	if events, err = st.ListSAJoinEvents(ctx, other, server.ID, now.Add(-time.Minute), now.Add(time.Minute), 20); err != nil || len(events) != 0 {
+		t.Fatalf("cross-tenant events = %+v, %v", events, err)
+	}
+	const workers = 12
+	start := make(chan struct{})
+	errs := make([]error, workers)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			errs[i] = st.IncrementSAQuota(ctx, server.ID, now, "verify", now.Add(time.Minute))
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got, err := st.ReadSAQuota(ctx, server.ID, now, "verify"); err != nil || got != workers {
+		t.Fatalf("quota = %d, %v, want %d", got, err, workers)
+	}
+	if got, err := st.ReadSAQuota(ctx, server.ID, now.Add(time.Minute), "verify"); err != nil || got != 0 {
+		t.Fatalf("new window quota = %d, %v", got, err)
 	}
 }
 

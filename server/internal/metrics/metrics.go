@@ -225,4 +225,7 @@ var (
 	// SignatureFailures counts refused union requests by the same reason
 	// tokens the audit log records. A module that is off is not failing.
 	SignatureFailures = Default.NewCounter("union_signature_failures_total", "Union request signature checks refused, by reason.", "reason")
+	// ServerAccessEventWriteFailures counts join events that could not be
+	// persisted. Verification still succeeds; operators need an alert signal.
+	ServerAccessEventWriteFailures = Default.NewCounter("serveraccess_event_write_failures_total", "Server-access join event persistence failures.")
 )

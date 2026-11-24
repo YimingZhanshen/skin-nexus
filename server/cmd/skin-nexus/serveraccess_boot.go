@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"strings"
 
+	"skin-nexus/server/internal/accesslog"
 	"skin-nexus/server/internal/config"
 	"skin-nexus/server/internal/serveraccess"
 	"skin-nexus/server/internal/store"
+	"skin-nexus/server/internal/ygg"
 )
 
 // serverAccessOptionReader is deliberately read-only. Assembly can resolve
@@ -38,6 +40,12 @@ func (s *serverAccessStack) setEnabled(_ context.Context, on bool) {
 	}
 }
 
+func (s *serverAccessStack) setVerifier(verifier *ygg.API) {
+	if s != nil {
+		s.stack.SetVerifier(verifier)
+	}
+}
+
 func newServerAccessStack(st serverAccessOptionReader, db *store.Mysql, cfg *config.Config) *serverAccessStack {
 	s := &serverAccessStack{}
 	enabled := cfg != nil && cfg.ServerAccessEnabled
@@ -59,17 +67,29 @@ func newServerAccessStack(st serverAccessOptionReader, db *store.Mysql, cfg *con
 	return s
 }
 
+// guard suppresses diagnostic capture before the fail-closed module gate so
+// even disabled or malformed secret paths never feed headers/body to captures.
+func (s *serverAccessStack) guard(next http.Handler) http.Handler {
+	gated := s.Gate(next)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accesslog.SuppressCapture(r.Context())
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		gated.ServeHTTP(w, r)
+	})
+}
+
 // mountServerAccess claims every module prefix before the SPA catch-all. The
-// not-found handler also keeps not-yet-implemented verification and portal
-// paths inert while the module is enabled.
+// same guarded handler serves verification and control routes; unknown paths
+// remain ordinary module 404s and never fall through to the SPA.
 func mountServerAccess(root *http.ServeMux, s *serverAccessStack) {
-	notFound := s.Gate(http.NotFoundHandler())
+	notFound := s.guard(http.NotFoundHandler())
 	root.Handle("/api/serveraccess", notFound)
-	root.Handle("/api/serveraccess/", s.Gate(s.stack.Handler()))
+	root.Handle("/api/serveraccess/", s.guard(s.stack.Handler()))
 	root.Handle("/api/admin/v1/serveraccess", notFound)
-	root.Handle("/api/admin/v1/serveraccess/", s.Gate(s.stack.Handler()))
+	root.Handle("/api/admin/v1/serveraccess/", s.guard(s.stack.Handler()))
 	root.Handle("/v", notFound)
-	root.Handle("/v/", notFound)
+	root.Handle("/v/", s.guard(s.stack.Handler()))
 	root.Handle("/servers", notFound)
 	root.Handle("/servers/", notFound)
 }

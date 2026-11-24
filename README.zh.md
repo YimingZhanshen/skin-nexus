@@ -120,7 +120,7 @@ docker compose -f docker-compose.quickstart.yml up -d
 | 启动器对接 | [docs.skin.yimingzhanshen.cn/launcher-api](https://docs.skin.yimingzhanshen.cn/launcher-api) |
 | 翻知识手册 | [docs.skin.yimingzhanshen.cn/handbook](https://docs.skin.yimingzhanshen.cn/handbook/) |
 
-当前版本 v0.6.0；迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)。可选的服务器接入控制面（租户、成员、服务器、邀请、凭证、策略、白名单、封禁与平台紧急控制）已在默认关闭的面板开关后实现；验证链与服主界面尚未实现。详细文档以中文为主。
+当前版本 v0.6.0；迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)。可选的服务器接入控制面及可信验证链（URL secret、Header 凭证、按服策略、进服事件与配额）已在默认关闭的面板开关后实现；服主界面、验证代理与公测运维尚未实现。详细文档以中文为主。
 
 ## 兼容承诺
 

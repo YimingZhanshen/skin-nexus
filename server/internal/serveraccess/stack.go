@@ -3,6 +3,8 @@ package serveraccess
 import (
 	"net/http"
 	"sync/atomic"
+
+	"skin-nexus/server/internal/ygg"
 )
 
 // Stack owns the live module gate and immutable control-plane dependencies.
@@ -29,10 +31,19 @@ func (s *Stack) SetEnabled(on bool) {
 	}
 }
 
+// SetVerifier is an assembly-time injection of the narrow Yggdrasil extension.
+func (s *Stack) SetVerifier(verifier *ygg.API) {
+	if s != nil {
+		s.cfg.Verifier = verifier
+	}
+}
+
 // Gate rejects the entire mounted subtree while disabled, before the next
 // handler can expose a surface or fall through to the SPA.
 func (s *Stack) Gate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Referrer-Policy", "no-referrer")
 		if !s.Enabled() {
 			http.NotFound(w, r)
 			return
@@ -41,8 +52,13 @@ func (s *Stack) Gate(next http.Handler) http.Handler {
 	})
 }
 
-// Handler mounts the Slice S2 control plane. Authentication and resource scope
-// are enforced per route; the outer Gate remains the module fail-closed switch.
+// Handler mounts the control plane and the narrow S3 verification routes. The
+// outer Gate remains the module fail-closed switch for every route.
 func (s *Stack) Handler() http.Handler {
-	return s.controlHandler()
+	mux := http.NewServeMux()
+	verify := &verifier{cfg: s.cfg, store: s.cfg.Store, concurrency: make(map[int64]*serverConcurrency)}
+	verify.routes(mux)
+	control := s.controlHandler()
+	mux.Handle("/", control)
+	return mux
 }

@@ -72,7 +72,14 @@ func NewAPI(svc *Service, cfg MetadataConfig) *API {
 
 // SetFallback installs the official-sessionserver fallback (main wires the
 // hot `ygg_mojang_fallback` panel toggle).
-func (a *API) SetFallback(f *Fallback) { a.fallback = f }
+func (a *API) SetFallback(f *Fallback) {
+	a.fallback = f
+	if f == nil {
+		a.svc.scopedFallback = nil
+		return
+	}
+	a.svc.scopedFallback = f.hasJoined
+}
 
 // SetAccess installs the traffic logger (main wires the access_logs sink).
 func (a *API) SetAccess(l *accesslog.Logger) { a.access = l }

@@ -48,6 +48,7 @@ var testTables = []string{
 	"email_verify_tokens", "notifications",
 	"legacy_users", "legacy_players", "legacy_textures", "legacy_uuid",
 	"legacy_options", "legacy_user_closet", "legacy_invitation_codes",
+	"sa_join_events", "sa_quota_usage",
 	"sa_server_credentials", "sa_server_policies", "sa_server_whitelist", "sa_server_bans",
 	"sa_tenant_invites", "sa_servers", "sa_tenant_members", "sa_tenants",
 }

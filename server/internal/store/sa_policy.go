@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"time"
 
 	"skin-nexus/server/internal/dbx"
 	"skin-nexus/server/internal/dialect"
@@ -103,6 +104,29 @@ func saLockPolicyRow(ctx context.Context, tx *dbx.Tx, tenantID, serverID int64) 
 		return 0, ErrNotFound
 	}
 	return limit, err
+}
+
+func (m *Mysql) SAWhitelistMember(ctx context.Context, tenantID, serverID, uid int64) (bool, error) {
+	var one int
+	err := m.db.QueryRowContext(ctx,
+		`SELECT 1 FROM sa_server_whitelist w JOIN sa_servers s ON s.id=w.server_id
+		 WHERE s.tenant_id=? AND w.server_id=? AND w.uid=?`, tenantID, serverID, uid).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (m *Mysql) SAActiveBan(ctx context.Context, tenantID, serverID, uid int64, now time.Time) (bool, error) {
+	var one int
+	err := m.db.QueryRowContext(ctx,
+		`SELECT 1 FROM sa_server_bans b JOIN sa_servers s ON s.id=b.server_id
+		 WHERE s.tenant_id=? AND b.server_id=? AND b.uid=?
+		   AND (b.expires_at IS NULL OR b.expires_at>?)`, tenantID, serverID, uid, now.UTC()).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func (m *Mysql) AddSAServerWhitelist(ctx context.Context, tenantID, serverID, uid int64, note string, createdBy int64) error {

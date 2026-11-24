@@ -3,9 +3,11 @@
 package serveraccess
 
 import (
+	"context"
 	"time"
 
 	"skin-nexus/server/internal/store"
+	"skin-nexus/server/internal/ygg"
 )
 
 // Config is resolved by the caller from the serveraccess_enabled option first,
@@ -19,4 +21,9 @@ type Config struct {
 	InviteTTL       time.Duration
 	CredentialTTL   time.Duration
 	RotationOverlap time.Duration
+	// Verifier is the narrow Yggdrasil extension used only by S3 routes.
+	Verifier *ygg.API
+	// OnEventError is an additional metric/alert hook. Event persistence is
+	// always best-effort and failures are also emitted as structured logs.
+	OnEventError func(context.Context, store.SAJoinEvent, error)
 }

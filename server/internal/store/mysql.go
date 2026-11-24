@@ -171,7 +171,11 @@ func (m *Mysql) PlayerByName(ctx context.Context, name string) (ygg.Player, erro
 	// Case-insensitive legacy name match: on MySQL the general_ci column
 	// collation folded it, so LOWER() preserves that on PostgreSQL (case-
 	// sensitive default) and is a no-op on MySQL/SQLite.
-	return m.scanPlayer(ctx, m.db.Dialect().CIEquals("p.name"), name)
+	p, err := m.scanPlayer(ctx, m.db.Dialect().CIEquals("p.name"), name)
+	if errors.Is(err, ErrNotFound) {
+		return ygg.Player{}, ygg.ErrProfileNotFound
+	}
+	return p, err
 }
 
 func (m *Mysql) PlayersByUID(ctx context.Context, uid int64) ([]ygg.Player, error) {
@@ -396,7 +400,7 @@ func (m *Mysql) JoinByTokenServer(ctx context.Context, access, serverID string) 
 // FindLiveJoins powers hasJoined (service uses this optional scanner).
 func (m *Mysql) FindLiveJoins(ctx context.Context, uuid string, now time.Time) ([]ygg.JoinSession, error) {
 	rows, err := m.db.QueryContext(ctx,
-		`SELECT uuid, server_id, server_ip, created_at, expires_at
+		`SELECT id, uuid, server_id, server_ip, created_at, expires_at
 		 FROM ygg_join_sessions WHERE uuid = ? AND expires_at > ? ORDER BY id DESC`, uuid, now)
 	if err != nil {
 		return nil, err
@@ -405,7 +409,7 @@ func (m *Mysql) FindLiveJoins(ctx context.Context, uuid string, now time.Time) (
 	var out []ygg.JoinSession
 	for rows.Next() {
 		var j ygg.JoinSession
-		if err := rows.Scan(&j.UUID, &j.ServerID, &j.ServerIP, &j.CreatedAt, &j.ExpiresAt); err != nil {
+		if err := rows.Scan(&j.ID, &j.UUID, &j.ServerID, &j.ServerIP, &j.CreatedAt, &j.ExpiresAt); err != nil {
 			return nil, err
 		}
 		out = append(out, j)

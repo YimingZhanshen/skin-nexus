@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 
+	"skin-nexus/server/internal/accesslog"
 	"skin-nexus/server/internal/config"
 )
 
@@ -78,6 +80,9 @@ func TestServerAccessRoutesPreemptSpaCatchAll(t *testing.T) {
 		if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), "SPA") {
 			t.Errorf("disabled GET %s = %d %q, want non-SPA 404", path, rec.Code, rec.Body.String())
 		}
+		if rec.Header().Get("Cache-Control") != "no-store" || rec.Header().Get("Referrer-Policy") != "no-referrer" {
+			t.Errorf("disabled GET %s security headers = %v", path, rec.Header())
+		}
 	}
 
 	s.setEnabled(context.Background(), true)
@@ -96,6 +101,26 @@ func TestServerAccessRoutesPreemptSpaCatchAll(t *testing.T) {
 	}
 }
 
+func TestServerAccessGuardSuppressesDiagnosticCapture(t *testing.T) {
+	s := newServerAccessStack(nil, nil, &config.Config{})
+	s.setEnabled(context.Background(), true)
+	h := accesslog.Observe(s.guard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.ReadAll(r.Body)
+		accesslog.MarkCredential(r.Context(), "never-capture-this")
+		if capture := accesslog.Attach(r); capture != nil {
+			t.Fatalf("server-access diagnostic capture = %+v, want nil", capture)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})))
+	r := httptest.NewRequest(http.MethodGet, "/v/secret/sessionserver/session/minecraft/hasJoined?username=Alice", strings.NewReader("never-capture-this-body"))
+	r.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, r)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rec.Code)
+	}
+}
+
 func TestMainWiresServerAccessAssemblyHotToggleAndRoutes(t *testing.T) {
 	raw, err := os.ReadFile("main.go")
 	if err != nil {
@@ -104,11 +129,12 @@ func TestMainWiresServerAccessAssemblyHotToggleAndRoutes(t *testing.T) {
 	src := string(raw)
 	assembly := strings.Index(src, "sastack := newServerAccessStack(st, st, cfg)")
 	mount := strings.Index(src, "mountServerAccess(root, sastack)")
+	verifier := strings.Index(src, "sastack.setVerifier(yggAPI)")
 	spa := strings.Index(src, `root.Handle("/", spa)`)
-	if assembly < 0 || mount < 0 || spa < 0 {
-		t.Fatalf("main.go missing server-access wiring: assembly=%d mount=%d spa=%d", assembly, mount, spa)
+	if assembly < 0 || verifier < 0 || mount < 0 || spa < 0 {
+		t.Fatalf("main.go missing server-access wiring: assembly=%d verifier=%d mount=%d spa=%d", assembly, verifier, mount, spa)
 	}
-	if assembly > mount || mount > spa {
+	if assembly > verifier || verifier > mount || mount > spa {
 		t.Fatalf("server-access routes must be mounted before SPA: assembly=%d mount=%d spa=%d", assembly, mount, spa)
 	}
 	if !strings.Contains(src, `case "serveraccess_enabled":`) || !strings.Contains(src, "sastack.setEnabled(context.Background(), value == \"1\")") {
