@@ -9,20 +9,19 @@ import (
 	"testing"
 )
 
-// S1's disabled module must be inert by construction, not merely because no
-// current request happens to write. Pin the assembly dependency boundary so a
-// later store, credential or worker cannot slip into the always-built stack.
+// S2 assembly may hold a store reference, but construction and the disabled
+// gate still must not generate keys, write options/audit or start workers.
 func TestServerAccessAssemblyHasNoWriteKeyOrWorkerDeps(t *testing.T) {
 	files := []string{filepath.Join("..", "..", "internal", "serveraccess", "config.go"), filepath.Join("..", "..", "internal", "serveraccess", "stack.go"), "serveraccess_boot.go"}
 	forbiddenImports := map[string]bool{
 		"crypto/rand": true, "database/sql": true,
-		"skin-nexus/server/internal/store": true,
-		"skin-nexus/server/internal/jobs":  true,
+		"skin-nexus/server/internal/jobs": true,
 	}
 	forbiddenCalls := map[string]bool{
 		"SetOption": true, "InsertAudit": true, "GenerateKey": true,
 		"StartJanitor": true, "NewTicker": true, "AfterFunc": true,
 	}
+	forbiddenBootCalls := map[string]bool{"SetOption": true, "InsertAudit": true}
 	for _, path := range files {
 		fset := token.NewFileSet()
 		f, err := parser.ParseFile(fset, path, nil, 0)
@@ -39,8 +38,10 @@ func TestServerAccessAssemblyHasNoWriteKeyOrWorkerDeps(t *testing.T) {
 			case *ast.GoStmt:
 				t.Errorf("%s starts a goroutine", path)
 			case *ast.CallExpr:
-				if sel, ok := node.Fun.(*ast.SelectorExpr); ok && forbiddenCalls[sel.Sel.Name] {
-					t.Errorf("%s calls %s: S1 must stay write/key/worker-free", path, sel.Sel.Name)
+				if sel, ok := node.Fun.(*ast.SelectorExpr); ok {
+					if forbiddenCalls[sel.Sel.Name] || path == "serveraccess_boot.go" && forbiddenBootCalls[sel.Sel.Name] {
+						t.Errorf("%s calls %s: assembly must stay write/key/worker-free", path, sel.Sel.Name)
+					}
 				}
 			}
 			return true

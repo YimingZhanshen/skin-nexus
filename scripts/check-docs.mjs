@@ -162,7 +162,7 @@ for (const name of documented) {
 function envBlockKeys(text, label, stripHash = false) {
   // The same block lives in a YAML comment header, so allow the leading "#".
   const body = stripHash ? text.split('\n').map((l) => l.replace(/^\s*#\s?/, '')).join('\n') : text
-  const m = body.match(/cat > \.env <<EOF\n([\s\S]*?)\n\s*EOF/)
+  const m = body.match(/cat > \.env <<EOF\r?\n([\s\S]*?)\r?\n\s*EOF/)
   if (!m) {
     fail(`${label}: no \`cat > .env <<EOF … EOF\` block found — the quick start moved, or this gate went blind`)
     return []

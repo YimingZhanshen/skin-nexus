@@ -172,6 +172,16 @@
       "upstream_error": "联盟服务暂不可用",
       "uuid_conflict": "目标 UUID 已被占用，需要站长合并"
     },
+    "serveraccess": {
+      "not_found": "未找到该服务器接入资源，或它不属于当前租户",
+      "forbidden": "当前账号或租户角色无权执行此操作",
+      "invalid": "服务器接入参数不合法",
+      "conflict": "该服务器接入资源已存在或状态冲突",
+      "quota_exceeded": "服务器数量或白名单配额已用尽",
+      "last_owner": "租户必须至少保留一名所有者",
+      "invite_invalid": "邀请无效、已过期或已被使用",
+      "not_implemented": "导出功能尚未实现"
+    },
     "user": {
       "admin_protected": "该账号受保护，不能删除",
       "not_found": "用户不存在"
@@ -1275,6 +1285,26 @@
       "union_sync_create_failed": "联盟同步建档失败",
       "union_sync_rename_failed": "联盟同步改名失败",
       "union_sync_delete_failed": "联盟同步销档失败",
+      "admin_user_permission_update_access_revoke_failed": "改权后吊销访问凭证失败",
+      "serveraccess_invite_create": "创建租户邀请",
+      "serveraccess_invite_revoke": "撤销租户邀请",
+      "serveraccess_invite_accept": "接受租户邀请",
+      "serveraccess_member_remove": "移除租户成员",
+      "serveraccess_server_create": "创建接入服务器",
+      "serveraccess_server_update": "修改接入服务器",
+      "serveraccess_whitelist_add": "添加服务器白名单",
+      "serveraccess_whitelist_remove": "移除服务器白名单",
+      "serveraccess_ban_add": "添加服务器封禁",
+      "serveraccess_ban_remove": "移除服务器封禁",
+      "serveraccess_credential_create": "创建服务器凭证",
+      "serveraccess_credential_rotate": "轮换服务器凭证",
+      "serveraccess_credential_revoke": "吊销服务器凭证",
+      "serveraccess_tenant_status_update": "修改租户状态",
+      "serveraccess_tenant_quota_update": "修改租户配额",
+      "serveraccess_server_status_update": "紧急修改服务器状态",
+      "serveraccess_server_quota_update": "修改服务器配额",
+      "serveraccess_platform_credential_revoke": "平台紧急吊销服务器凭证",
+      "serveraccess_fallback_update": "修改全局正版兜底开关",
       "ygg_tokens_pruned": "清理过期的启动器令牌"
     }
   },

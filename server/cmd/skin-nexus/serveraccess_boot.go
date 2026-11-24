@@ -7,6 +7,7 @@ import (
 
 	"skin-nexus/server/internal/config"
 	"skin-nexus/server/internal/serveraccess"
+	"skin-nexus/server/internal/store"
 )
 
 // serverAccessOptionReader is deliberately read-only. Slice S1 assembly can
@@ -36,7 +37,7 @@ func (s *serverAccessStack) setEnabled(_ context.Context, on bool) {
 	}
 }
 
-func newServerAccessStack(st serverAccessOptionReader, cfg *config.Config) *serverAccessStack {
+func newServerAccessStack(st serverAccessOptionReader, db *store.Mysql, cfg *config.Config) *serverAccessStack {
 	s := &serverAccessStack{}
 	enabled := cfg != nil && cfg.ServerAccessEnabled
 	if st != nil {
@@ -53,7 +54,7 @@ func newServerAccessStack(st serverAccessOptionReader, cfg *config.Config) *serv
 			}
 		}
 	}
-	s.stack = serveraccess.NewStack(serveraccess.Config{Enabled: enabled})
+	s.stack = serveraccess.NewStack(serveraccess.Config{Enabled: enabled, Store: db})
 	return s
 }
 
@@ -65,7 +66,7 @@ func mountServerAccess(root *http.ServeMux, s *serverAccessStack) {
 	root.Handle("/api/serveraccess", notFound)
 	root.Handle("/api/serveraccess/", s.Gate(s.stack.Handler()))
 	root.Handle("/api/admin/v1/serveraccess", notFound)
-	root.Handle("/api/admin/v1/serveraccess/", notFound)
+	root.Handle("/api/admin/v1/serveraccess/", s.Gate(s.stack.Handler()))
 	root.Handle("/v", notFound)
 	root.Handle("/v/", notFound)
 	root.Handle("/servers", notFound)

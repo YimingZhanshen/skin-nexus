@@ -383,9 +383,9 @@ func main() {
 	unionCtx, unionCancel := context.WithCancel(context.Background())
 	defer unionCancel()
 	ustack := newUnionStack(unionCtx, st, cfg, version, signer)
-	// Optional server access is always assembled for the panel hot toggle, but
-	// its inert stack has no DB writes, key generation or background workers.
-	sastack := newServerAccessStack(st, cfg)
+	// Optional server access is always assembled for the panel hot toggle. The
+	// store reference is inert until the gate opens and a session is presented.
+	sastack := newServerAccessStack(st, st, cfg)
 	unionAPI, unionGrant := ustack.api, ustack.grant
 	unionOut, unionSigner := ustack.out, ustack.signer
 	var activeSigner ygg.Signer = signer

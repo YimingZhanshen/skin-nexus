@@ -37,19 +37,18 @@ func TestHotToggleExposesOnlyHealthAndEmptyServerList(t *testing.T) {
 		want string
 	}{
 		{"/api/serveraccess/v1/health", `"status":"ok"`},
-		{"/api/serveraccess/v1/servers", `"servers":[]`},
+		{"/api/serveraccess/v1/servers", `"code":"common.unauthorized"`},
+		{"/api/admin/v1/serveraccess/tenants", `"code":"admin.web_session_required"`},
 	} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
-		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), tc.want) {
+		if rec.Code != http.StatusOK && tc.path == "/api/serveraccess/v1/health" || rec.Code == http.StatusOK && tc.path != "/api/serveraccess/v1/health" || !strings.Contains(rec.Body.String(), tc.want) {
 			t.Fatalf("GET %s = %d %s, want 200 containing %s", tc.path, rec.Code, rec.Body.String(), tc.want)
 		}
 	}
 
 	for _, path := range []string{
-		"/api/serveraccess/v1/tenants",
 		"/api/serveraccess/v1/servers/srv_public/hasJoined",
-		"/api/admin/v1/serveraccess/tenants",
 		"/v/secret/sessionserver/session/minecraft/hasJoined",
 	} {
 		rec := httptest.NewRecorder()

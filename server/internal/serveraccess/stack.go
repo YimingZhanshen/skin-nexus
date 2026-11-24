@@ -1,7 +1,6 @@
 package serveraccess
 
 import (
-	"encoding/json"
 	"net/http"
 	"sync/atomic"
 )
@@ -9,11 +8,12 @@ import (
 // Stack owns the live module gate. It has no store, key material or workers:
 // disabling the module cannot write data, generate credentials or start work.
 type Stack struct {
-	on atomic.Bool
+	on  atomic.Bool
+	cfg Config
 }
 
 func NewStack(cfg Config) *Stack {
-	s := &Stack{}
+	s := &Stack{cfg: cfg}
 	s.SetEnabled(cfg.Enabled)
 	return s
 }
@@ -40,17 +40,8 @@ func (s *Stack) Gate(next http.Handler) http.Handler {
 	})
 }
 
-// Handler is the complete Slice S1 API. Unknown routes and all methods other
-// than these two GETs remain 404/405; no control or verification policy exists.
+// Handler mounts the Slice S2 control plane. Authentication and resource scope
+// are enforced per route; the outer Gate remains the module fail-closed switch.
 func (s *Stack) Handler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/serveraccess/v1/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	})
-	mux.HandleFunc("GET /api/serveraccess/v1/servers", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"servers": []any{}})
-	})
-	return mux
+	return s.controlHandler()
 }

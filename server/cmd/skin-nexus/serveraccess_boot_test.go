@@ -41,7 +41,7 @@ func TestServerAccessStackOptionsFirstAndFailClosed(t *testing.T) {
 			if tc.present {
 				spy.values["serveraccess_enabled"] = tc.option
 			}
-			s := newServerAccessStack(spy, &config.Config{ServerAccessEnabled: tc.env})
+			s := newServerAccessStack(spy, nil, &config.Config{ServerAccessEnabled: tc.env})
 			if s.Enabled() != tc.want {
 				t.Fatalf("Enabled() = %v, want %v", s.Enabled(), tc.want)
 			}
@@ -53,7 +53,7 @@ func TestServerAccessStackOptionsFirstAndFailClosed(t *testing.T) {
 }
 
 func TestServerAccessRoutesPreemptSpaCatchAll(t *testing.T) {
-	s := newServerAccessStack(nil, &config.Config{})
+	s := newServerAccessStack(nil, nil, &config.Config{})
 	root := http.NewServeMux()
 	mountServerAccess(root, s)
 	root.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -81,11 +81,17 @@ func TestServerAccessRoutesPreemptSpaCatchAll(t *testing.T) {
 	}
 
 	s.setEnabled(context.Background(), true)
-	for _, path := range []string{"/api/serveraccess/v1/health", "/api/serveraccess/v1/servers"} {
+	for _, path := range []string{"/api/serveraccess/v1/health", "/api/serveraccess/v1/servers", "/api/admin/v1/serveraccess/tenants"} {
 		rec := httptest.NewRecorder()
 		root.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
-		if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "SPA") {
-			t.Errorf("enabled GET %s = %d %q, want module 200", path, rec.Code, rec.Body.String())
+		want := http.StatusUnauthorized
+		if path == "/api/serveraccess/v1/health" {
+			want = http.StatusOK
+		} else if strings.HasPrefix(path, "/api/admin/") {
+			want = http.StatusForbidden
+		}
+		if rec.Code != want || strings.Contains(rec.Body.String(), "SPA") {
+			t.Errorf("enabled GET %s = %d %q, want module %d", path, rec.Code, rec.Body.String(), want)
 		}
 	}
 }
@@ -96,7 +102,7 @@ func TestMainWiresServerAccessAssemblyHotToggleAndRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	src := string(raw)
-	assembly := strings.Index(src, "sastack := newServerAccessStack(st, cfg)")
+	assembly := strings.Index(src, "sastack := newServerAccessStack(st, st, cfg)")
 	mount := strings.Index(src, "mountServerAccess(root, sastack)")
 	spa := strings.Index(src, `root.Handle("/", spa)`)
 	if assembly < 0 || mount < 0 || spa < 0 {

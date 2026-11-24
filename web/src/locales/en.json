@@ -172,6 +172,16 @@
       "upstream_error": "Union service is unavailable",
       "uuid_conflict": "That UUID is already taken; the site owner must merge it"
     },
+    "serveraccess": {
+      "not_found": "The server-access resource was not found or does not belong to this tenant",
+      "forbidden": "This account or tenant role cannot perform the action",
+      "invalid": "The server-access parameters are invalid",
+      "conflict": "The server-access resource already exists or its state conflicts",
+      "quota_exceeded": "The server or whitelist quota has been reached",
+      "last_owner": "A tenant must retain at least one owner",
+      "invite_invalid": "The invitation is invalid, expired, or already used",
+      "not_implemented": "Export is not implemented yet"
+    },
     "user": {
       "admin_protected": "This account is protected and cannot be deleted",
       "not_found": "User not found"
@@ -1275,6 +1285,26 @@
       "union_sync_create_failed": "Union sync could not create the record",
       "union_sync_rename_failed": "Union sync could not update the name",
       "union_sync_delete_failed": "Union sync could not delete the record",
+      "admin_user_permission_update_access_revoke_failed": "Access credentials could not be revoked after a permission change",
+      "serveraccess_invite_create": "Tenant invitation created",
+      "serveraccess_invite_revoke": "Tenant invitation revoked",
+      "serveraccess_invite_accept": "Tenant invitation accepted",
+      "serveraccess_member_remove": "Tenant member removed",
+      "serveraccess_server_create": "Server-access server created",
+      "serveraccess_server_update": "Server-access server updated",
+      "serveraccess_whitelist_add": "Server whitelist entry added",
+      "serveraccess_whitelist_remove": "Server whitelist entry removed",
+      "serveraccess_ban_add": "Server ban added",
+      "serveraccess_ban_remove": "Server ban removed",
+      "serveraccess_credential_create": "Server credential created",
+      "serveraccess_credential_rotate": "Server credential rotated",
+      "serveraccess_credential_revoke": "Server credential revoked",
+      "serveraccess_tenant_status_update": "Tenant status changed",
+      "serveraccess_tenant_quota_update": "Tenant quota changed",
+      "serveraccess_server_status_update": "Emergency server status changed",
+      "serveraccess_server_quota_update": "Server quota changed",
+      "serveraccess_platform_credential_revoke": "Server credential revoked by the platform",
+      "serveraccess_fallback_update": "Global premium fallback switch changed",
       "ygg_tokens_pruned": "Expired launcher tokens pruned"
     }
   },
