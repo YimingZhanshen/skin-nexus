@@ -79,6 +79,106 @@ func TestProxyRetryMatrix(t *testing.T) {
 	}
 }
 
+func TestProxyCancellationIsNotUpstreamFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "canceled", err: context.Canceled},
+		{name: "wrapped canceled", err: fmt.Errorf("local request stopped: %w", context.Canceled)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var logs strings.Builder
+			previous := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+			t.Cleanup(func() { slog.SetDefault(previous) })
+			calls := 0
+			client := &http.Client{Transport: proxyRoundTrip(func(*http.Request) (*http.Response, error) {
+				calls++
+				return nil, tc.err
+			})}
+			handler, err := NewHandler(proxyTestConfig(), client)
+			if err != nil {
+				t.Fatal(err)
+			}
+			beforeNetwork := metrics.VerifyProxyUpstreamFailures.Value("network")
+			beforeCanceled := metrics.VerifyProxyUpstreamFailures.Value("canceled")
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/sessionserver/session/minecraft/hasJoined?username=Alice&serverId=server-id", nil))
+			if rec.Code != http.StatusNoContent || calls != 1 {
+				t.Fatalf("canceled request = %d calls=%d, want 204 calls=1", rec.Code, calls)
+			}
+			if got := metrics.VerifyProxyUpstreamFailures.Value("network"); got != beforeNetwork {
+				t.Fatalf("cancellation counted as network failure: %d -> %d", beforeNetwork, got)
+			}
+			if got := metrics.VerifyProxyUpstreamFailures.Value("canceled"); got != beforeCanceled {
+				t.Fatalf("cancellation counted as upstream failure: %d -> %d", beforeCanceled, got)
+			}
+			if strings.Contains(logs.String(), "verify_proxy upstream_failure") {
+				t.Fatalf("local cancellation logged as upstream failure: %s", logs.String())
+			}
+		})
+	}
+}
+
+func TestProxyCancellationDuringRetryBackoffIsNotUpstreamFailure(t *testing.T) {
+	var logs strings.Builder
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	attempted := make(chan struct{})
+	var calls atomic.Int32
+	client := &http.Client{Transport: proxyRoundTrip(func(*http.Request) (*http.Response, error) {
+		if calls.Add(1) == 1 {
+			close(attempted)
+		}
+		return nil, syscall.ECONNRESET
+	})}
+	cfg := proxyTestConfig()
+	cfg.RetryBackoff = 2 * time.Minute
+	handler, err := NewHandler(cfg, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeNetwork := metrics.VerifyProxyUpstreamFailures.Value("network")
+	beforeCanceled := metrics.VerifyProxyUpstreamFailures.Value("canceled")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/sessionserver/session/minecraft/hasJoined?username=Alice&serverId=server-id", nil).WithContext(ctx)
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		done <- rec
+	}()
+	select {
+	case <-attempted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("proxy did not attempt the upstream request")
+	}
+	cancel()
+	select {
+	case rec := <-done:
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("canceled retry = %d, want 204", rec.Code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("proxy did not stop retry backoff after cancellation")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("upstream calls after cancellation = %d, want 1", got)
+	}
+	if got := metrics.VerifyProxyUpstreamFailures.Value("network"); got != beforeNetwork {
+		t.Fatalf("retry cancellation counted as network failure: %d -> %d", beforeNetwork, got)
+	}
+	if got := metrics.VerifyProxyUpstreamFailures.Value("canceled"); got != beforeCanceled {
+		t.Fatalf("retry cancellation counted as upstream failure: %d -> %d", beforeCanceled, got)
+	}
+	if strings.Contains(logs.String(), "verify_proxy upstream_failure") {
+		t.Fatalf("retry cancellation logged as upstream failure: %s", logs.String())
+	}
+}
+
 func TestProxyBoundsBodiesAndRedactsFailureLogs(t *testing.T) {
 	var logs strings.Builder
 	previous := slog.Default()

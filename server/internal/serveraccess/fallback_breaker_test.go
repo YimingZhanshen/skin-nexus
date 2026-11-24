@@ -2,6 +2,7 @@ package serveraccess
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -194,6 +195,52 @@ func TestServerAccessFallbackHalfOpenAllowsOnlyOneProbe(t *testing.T) {
 	releaseProbe()
 	if rec := <-done; rec.Code != http.StatusOK {
 		t.Fatalf("half-open probe = %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestServerAccessFallbackCancellationDoesNotOpenCircuit(t *testing.T) {
+	f := newVerifyFixture(t)
+	f.credential(t, "url_secret")
+	on := true
+	if err := f.st.UpdateSAServerOwnerPolicy(context.Background(), f.tenant, f.server, nil, &on); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	f.api.SetFallback(&ygg.Fallback{BaseURL: "https://official.example", Enabled: func(context.Context) bool { return true }, Client: &http.Client{Transport: verifyFallback(func(*http.Request) (*http.Response, error) {
+		calls++
+		return nil, fmt.Errorf("local request canceled: %w", context.Canceled)
+	})}})
+	before := metrics.ServerAccessFallbackBreakerOpen.Value()
+	for i := 0; i < fallbackFailureThreshold+1; i++ {
+		if rec := f.verify(t, "url_secret", "Unknown", "server-id", ""); rec.Code != http.StatusNoContent {
+			t.Fatalf("canceled fallback %d = %d %s", i, rec.Code, rec.Body.String())
+		}
+	}
+	if calls != fallbackFailureThreshold+1 {
+		t.Fatalf("canceled upstream calls = %d, want %d", calls, fallbackFailureThreshold+1)
+	}
+	if got := metrics.ServerAccessFallbackBreakerOpen.Value(); got != before {
+		t.Fatalf("local cancellations opened circuit: metric = %d, want %d", got, before)
+	}
+	events, err := f.st.ListSAJoinEvents(context.Background(), f.tenant, f.server, f.now.Add(-time.Minute), f.now.Add(time.Minute), 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range events {
+		if event.ReasonCode == "fallback_unavailable" {
+			t.Fatalf("local cancellation recorded as upstream failure: %+v", event)
+		}
+	}
+
+	f.api.SetFallback(&ygg.Fallback{BaseURL: "https://official.example", Enabled: func(context.Context) bool { return true }, Client: &http.Client{Transport: verifyFallback(func(*http.Request) (*http.Response, error) {
+		calls++
+		return breakerResponse(http.StatusServiceUnavailable), nil
+	})}})
+	for i := 0; i < fallbackFailureThreshold; i++ {
+		f.verify(t, "url_secret", "Unknown", "server-id", "")
+	}
+	if got := metrics.ServerAccessFallbackBreakerOpen.Value(); got != before+1 {
+		t.Fatalf("real upstream faults did not open circuit: metric = %d, want %d", got, before+1)
 	}
 }
 

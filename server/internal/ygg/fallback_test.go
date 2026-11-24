@@ -3,6 +3,7 @@ package ygg
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -137,6 +138,34 @@ func TestFallbackDisabled(t *testing.T) {
 	}
 	if stub.hits.Load() != 0 {
 		t.Errorf("disabled paths hit the stub %d times", stub.hits.Load())
+	}
+}
+
+func TestFallbackCancellationIsNotUpstreamFault(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		err       error
+		wantFault bool
+	}{
+		{name: "canceled", err: context.Canceled},
+		{name: "wrapped canceled", err: fmt.Errorf("local request stopped: %w", context.Canceled)},
+		{name: "deadline", err: context.DeadlineExceeded, wantFault: true},
+		{name: "network", err: errors.New("connection refused"), wantFault: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			f := &Fallback{BaseURL: "https://official.example", Enabled: func(context.Context) bool { return true }, Client: newFallbackClient(fallbackCounter(func(*http.Request) (*http.Response, error) {
+				calls++
+				return nil, tc.err
+			}))}
+			result := f.scopedHasJoined(context.Background(), "Unknown", "server-id", "")
+			if result.Matched || result.UpstreamFault != tc.wantFault {
+				t.Fatalf("fallback result = %+v, want matched=false fault=%v", result, tc.wantFault)
+			}
+			if calls != 1 {
+				t.Fatalf("upstream calls = %d, want 1", calls)
+			}
+		})
 	}
 }
 

@@ -108,7 +108,7 @@ func (p *proxy) hasJoined(w http.ResponseWriter, r *http.Request) {
 	requestID := newRequestID()
 	w.Header().Set("X-Request-Id", requestID)
 	status, body, failure := p.forward(r.Context(), forward, requestID)
-	if failure != "" {
+	if failure != "" && failure != "canceled" {
 		slog.Error("verify_proxy upstream_failure", "reason", failure)
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -138,6 +138,9 @@ func (p *proxy) forward(ctx context.Context, query url.Values, requestID string)
 		if result.reason == "" {
 			return result.status, result.body, ""
 		}
+		if result.reason == "canceled" || errors.Is(ctx.Err(), context.Canceled) {
+			return 0, nil, "canceled"
+		}
 		if !result.retry || attempt == p.cfg.Retries || ctx.Err() != nil {
 			metrics.VerifyProxyUpstreamFailures.Inc(result.reason)
 			return 0, nil, result.reason
@@ -150,7 +153,6 @@ func (p *proxy) forward(ctx context.Context, query url.Values, requestID string)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			metrics.VerifyProxyUpstreamFailures.Inc("canceled")
 			return 0, nil, "canceled"
 		case <-timer.C:
 		}
@@ -198,6 +200,9 @@ func (p *proxy) doAttempt(parent context.Context, target, requestID string) prox
 }
 
 func classifyProxyError(err error) (string, bool) {
+	if errors.Is(err, context.Canceled) {
+		return "canceled", false
+	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "timeout", true
 	}

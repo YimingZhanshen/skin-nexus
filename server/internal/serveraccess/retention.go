@@ -28,9 +28,10 @@ type RetentionWorker struct {
 	now      func() time.Time
 	interval time.Duration
 
-	mu     sync.Mutex
-	cancel context.CancelFunc
-	done   chan struct{}
+	lifecycle sync.Mutex
+	mu        sync.Mutex
+	cancel    context.CancelFunc
+	done      chan struct{}
 }
 
 func NewRetentionWorker(st retentionStore, now func() time.Time, interval time.Duration) *RetentionWorker {
@@ -56,6 +57,8 @@ func (w *RetentionWorker) Start(ctx context.Context) error {
 	if w == nil || w.store == nil {
 		return errors.New("serveraccess: retention store is required")
 	}
+	w.lifecycle.Lock()
+	defer w.lifecycle.Unlock()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.cancel != nil {
@@ -84,6 +87,8 @@ func (w *RetentionWorker) Stop() {
 	if w == nil {
 		return
 	}
+	w.lifecycle.Lock()
+	defer w.lifecycle.Unlock()
 	w.mu.Lock()
 	cancel, done := w.cancel, w.done
 	w.mu.Unlock()

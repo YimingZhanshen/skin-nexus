@@ -3,6 +3,7 @@ package ygg
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -176,6 +177,9 @@ func (f *Fallback) getResult(ctx context.Context, rawURL string) ([]byte, bool, 
 	req.Header.Set("User-Agent", "SkinNexus session-fallback")
 	resp, err := f.Client.Do(req)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil, false, false
+		}
 		return nil, false, true
 	}
 	defer resp.Body.Close()

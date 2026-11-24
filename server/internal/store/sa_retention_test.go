@@ -8,6 +8,11 @@ import (
 
 func TestSAEventRetentionDeletesOnlyExpiredServerEventsInBatches(t *testing.T) {
 	st := openSQLiteStore(t)
+	saExerciseEventRetentionDeletesOnlyExpiredServerEventsInBatches(t, st)
+}
+
+func saExerciseEventRetentionDeletesOnlyExpiredServerEventsInBatches(t *testing.T, st *Mysql) {
+	t.Helper()
 	ctx := context.Background()
 	tenant, err := st.CreateSATenant(ctx, "retention", 10)
 	if err != nil {
@@ -75,6 +80,11 @@ func TestSAEventRetentionDeletesOnlyExpiredServerEventsInBatches(t *testing.T) {
 
 func TestSAEventRetentionPoliciesIncludeDisabledServersButNotDeletedTenants(t *testing.T) {
 	st := openSQLiteStore(t)
+	saExerciseEventRetentionPoliciesIncludeDisabledServersButNotDeletedTenants(t, st)
+}
+
+func saExerciseEventRetentionPoliciesIncludeDisabledServersButNotDeletedTenants(t *testing.T, st *Mysql) {
+	t.Helper()
 	ctx := context.Background()
 	tenant, err := st.CreateSATenant(ctx, "retention", 10)
 	if err != nil {
