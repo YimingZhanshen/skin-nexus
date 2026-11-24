@@ -24,7 +24,7 @@ const componentCode = `${script.content.replace('export default', 'const compone
 const vite = await createServer({
   root,
   configFile: false,
-  server: { middlewareMode: true, hmr: false },
+  server: { middlewareMode: true, hmr: false, ws: false },
   appType: 'custom',
   optimizeDeps: { noDiscovery: true, include: [] },
   plugins: [{

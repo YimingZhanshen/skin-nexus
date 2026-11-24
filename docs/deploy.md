@@ -661,20 +661,46 @@ go test -count=1 ./internal/store -run TestServerAccessSQLiteRestoreDrill -v
 
 #### MySQL / MariaDB 逻辑备份与恢复（not-run）
 
-使用独立备份账号，口令通过安全环境或凭据文件提供，不写进命令历史。恢复目标必须是可丢弃的空库；先停应用，再导入。
+使用独立备份账号，口令通过安全环境或凭据文件提供，不写进命令历史。下列命令在 Bash 中执行：`SOURCE_CNF` 是源库备份凭据，`RESTORE_CNF` 必须连接一次性/隔离实例，绝不能指向生产实例；恢复账号只授权访问该实例的目标库。两个凭据文件均应限制为 `chmod 600`。
 
 ```bash
+set -euo pipefail
+SOURCE_DB=skin_nexus
+RESTORE_DB=skin_nexus_restore
+SOURCE_CNF=/etc/skin-nexus/backup.cnf
+RESTORE_CNF=/etc/skin-nexus/restore.cnf
 BACKUP_DIR=/backup/serveraccess/mysql-$(date +%F)
+BACKUP_FILE="$BACKUP_DIR/skin_nexus.sql.gz"
 install -d -m 700 "$BACKUP_DIR"
-mysqldump --single-transaction --quick --routines --events --hex-blob \
-  --databases skin_nexus | gzip > "$BACKUP_DIR/skin_nexus.sql.gz"
-sha256sum "$BACKUP_DIR/skin_nexus.sql.gz" > "$BACKUP_DIR/skin_nexus.sql.gz.sha256"
 
-# 在一次性环境创建空库 skin_nexus_restore，停应用后导入。
-gzip -dc "$BACKUP_DIR/skin_nexus.sql.gz" | mysql skin_nexus_restore
+# 不使用 --databases：只导出表，不生成 CREATE DATABASE / USE，避免导入时切回源库名。
+mysqldump --defaults-extra-file="$SOURCE_CNF" \
+  --single-transaction --quick --routines --events --hex-blob --no-tablespaces \
+  "$SOURCE_DB" | gzip > "$BACKUP_FILE"
+sha256sum "$BACKUP_FILE" > "$BACKUP_FILE.sha256"
+sha256sum -c "$BACKUP_FILE.sha256"
+
+# 导入前只读核对实例、端口与账号；确认 RESTORE_CNF 属于隔离环境，不是生产。
+mysql --defaults-extra-file="$RESTORE_CNF" --batch --skip-column-names \
+  --execute='SELECT @@hostname, @@port, CURRENT_USER();'
+
+# 拒绝包含数据库切换语句的备份；正常的不带 --databases 导出不会命中。
+if gzip -dc "$BACKUP_FILE" | grep -E '^[[:space:]]*(CREATE|DROP)[[:space:]]+DATABASE|^[[:space:]]*USE([[:space:]]|$)' > /dev/null; then
+  printf '%s\n' ' refusing dump containing database-level statements' >&2
+  exit 1
+fi
+
+# 在隔离实例创建一次性空库；若已由管理员建好并确认为空，跳过本行。
+mysql --defaults-extra-file="$RESTORE_CNF" \
+  --execute="CREATE DATABASE \`$RESTORE_DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+# 停应用后再导入；mysql 的 --database 固定选择隔离目标库。
+gzip -dc "$BACKUP_FILE" | mysql --defaults-extra-file="$RESTORE_CNF" --database="$RESTORE_DB"
 ```
 
-MariaDB 使用同一 MySQL 线协议与 DSN 形状。备份/Restore 后都要检查 `schema_migrations`、`sa_*` 行数与吊销/删除状态；不要靠导出文件里是否出现 `secret_hash` 判断备份完整性。
+若隔离实例内必须恢复原库名，将 `RESTORE_DB` 设为 `skin_nexus`，但仍只能使用隔离实例的 `RESTORE_CNF`。验收通过后再由应用 DSN 指向恢复库；不要把包含 `CREATE DATABASE` / `USE` 的整库导出直接导入同名生产实例。
+
+MariaDB 使用同一 MySQL 线协议与 DSN 形状。备份/恢复后都要检查 `schema_migrations`、`sa_*` 行数与吊销/删除状态；不要靠导出文件里是否出现 `secret_hash` 判断备份完整性。
 
 #### PostgreSQL 逻辑备份与恢复（not-run）
 
