@@ -46,7 +46,7 @@ SkinNexus 的服务器接入模块让一个站点为多个 Minecraft 服务器�
    https://skin.example.com/v/<secret>
    ```
 
-   `<secret>` 是完整随机路径段。不要追加 `/api/yggdrasil`，也不要把 secret 放到 query 参数。
+   `<secret>` 是完整随机路径段。不要追加 `/api/yggdrasil`，也不要把 secret 放到 query 参数。authlib-injector 启动时会直接 GET 这个 root（有无末尾斜杠均可）读取 `meta`、`skinDomains` 与 `signaturePublickey`；凭据无效、过期、吊销或模块关闭时同样返回 404。
 4. 启动器仍使用全局 Yggdrasil 登录面；进服验证请求由该按服 root 转发到：
 
    ```text
@@ -146,9 +146,9 @@ owner/admin 可在 `/servers` 点击“导出租户数据”，浏览器下载�
 
 ## 可复现验收
 
-在仓库根目录运行 `node scripts/e2e-serveraccess.mjs`。脚本会构建当前二进制，通过 Node API 预留可用的临时回环端口，在 `127.0.0.1` 上启动隔离 SQLite 实例，并通过真实 HTTP API 创建两个租户、两台服务器与两名玩家，覆盖 URL secret 与 Header 两种验证、白名单拒绝/允许、租户封禁隔离、平台封禁、跨租户读写/轮换/吊销/导出 404、事件隔离、凭据脱敏、模块热开关及全局 Yggdrasil 回归。子进程只接收操作系统运行所需的白名单环境变量与显式 `SKIN_*` 测试配置，不继承外部服务配置；普通请求设有 10 秒超时，失败时打印有界的 stdout/stderr 尾部，并在确认子进程退出后清理临时目录。脚本只使用临时目录与回环地址，不连接生产环境。
+在仓库根目录运行 `node scripts/e2e-serveraccess.mjs`。脚本会构建当前二进制，通过 Node API 预留可用的临时回环端口，在 `127.0.0.1` 上启动隔离 SQLite 实例，并通过真实 HTTP API 创建两个租户、两台服务器与两名玩家，覆盖 authlib-injector 元数据、URL secret 与 Header 两种验证、白名单拒绝/允许、租户封禁隔离、平台封禁、跨租户读写/轮换/吊销/导出 404、事件隔离、凭据脱敏、模块热开关及全局 Yggdrasil 回归。子进程只接收操作系统运行所需的白名单环境变量与显式 `SKIN_*` 测试配置，不继承外部服务配置；普通请求设有 10 秒超时，失败时打印有界的 stdout/stderr 尾部，并在确认子进程退出后清理临时目录。脚本只使用临时目录与回环地址，不连接生产环境。
 
-该脚本不替代真实 Minecraft/authlib-injector 进服测试；公开公测前仍需完成真实客户端、服务器与外部数据库的验收矩阵。
+该脚本不替代真实 Minecraft/authlib-injector 进服测试；公开公测前必须完成真实客户端、服务器与外部数据库的验收矩阵。
 
 ## 排错
 

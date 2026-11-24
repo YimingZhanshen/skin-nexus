@@ -103,6 +103,49 @@ func (f *verifyFixture) verify(t *testing.T, mode, name, sid, ip string) *httpte
 	return rec
 }
 
+func TestServerAccessURLSecretServesAuthlibMetadata(t *testing.T) {
+	f := newVerifyFixture(t)
+	f.credential(t, "url_secret")
+	r := httptest.NewRequest(http.MethodGet, "/v/"+f.secret+"/", nil)
+	rec := httptest.NewRecorder()
+	f.h.ServeHTTP(rec, r)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("metadata = %d %s", rec.Code, rec.Body.String())
+	}
+	var metadata ygg.Metadata
+	if err := json.Unmarshal(rec.Body.Bytes(), &metadata); err != nil {
+		t.Fatalf("metadata JSON: %v", err)
+	}
+	if metadata.SignaturePublicKey != f.signer.PublicKeyPEM() || metadata.Meta.ImplementationName != "SkinNexus" {
+		t.Fatalf("metadata = %+v", metadata)
+	}
+	if rec.Header().Get("Content-Type") != "application/json" || rec.Header().Get("Cache-Control") != "no-store" || rec.Header().Get("Referrer-Policy") != "no-referrer" {
+		t.Fatalf("metadata headers = %v", rec.Header())
+	}
+	if got, want := rec.Header().Get("X-Authlib-Injector-API-Location"), "http://example.com/v/"+f.secret; got != want {
+		t.Fatalf("metadata API location = %q, want %q", got, want)
+	}
+	if strings.Contains(rec.Body.String(), f.secret) {
+		t.Fatal("metadata leaked the URL secret")
+	}
+
+	headerSecret := "test-only-header-secret-0123456789abcdef"
+	sum := sha256.Sum256([]byte(headerSecret))
+	if _, err := f.st.CreateSAServerCredential(context.Background(), f.tenant, f.server, store.SACredential{
+		Mode: "header", SecretHash: hex.EncodeToString(sum[:]), Scopes: `["verify:join"]`, Status: "active",
+		ExpiresAt: sql.NullTime{Time: f.now.Add(time.Hour), Valid: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	r = httptest.NewRequest(http.MethodGet, "/v/"+headerSecret+"/", nil)
+	r.Header.Set("Authorization", "Bearer "+headerSecret)
+	rec = httptest.NewRecorder()
+	f.h.ServeHTTP(rec, r)
+	if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), headerSecret) {
+		t.Fatalf("header credential on metadata route = %d %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestServerAccessURLSecretReturnsSignedProfileAndDeduplicatesEvent(t *testing.T) {
 	f := newVerifyFixture(t)
 	f.credential(t, "url_secret")
@@ -688,6 +731,11 @@ func TestServerAccessInvalidExpiredRevokedAndRotatedCredentialsReturn404(t *test
 			rec := f.verify(t, "url_secret", "Alice", "server-id", "")
 			if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), f.secret) || f.fallback != 0 {
 				t.Fatalf("invalid credential = %d %s fallback=%d", rec.Code, rec.Body.String(), f.fallback)
+			}
+			rec = httptest.NewRecorder()
+			f.h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v/"+f.secret+"/", nil))
+			if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), f.secret) {
+				t.Fatalf("invalid metadata credential = %d %s", rec.Code, rec.Body.String())
 			}
 		})
 	}

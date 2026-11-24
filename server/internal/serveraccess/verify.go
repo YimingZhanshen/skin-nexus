@@ -159,28 +159,8 @@ func (v *verifier) handler(w http.ResponseWriter, r *http.Request) {
 	accesslog.SuppressCapture(r.Context())
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	if v.cfg.Verifier == nil || v.store == nil {
-		http.NotFound(w, r)
-		return
-	}
-	secret, mode, publicID, ok := v.credential(r)
+	credential, mode, ok := v.authorize(r)
 	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-	credential, err := v.store.SACredentialBySecretHash(r.Context(), saHash(secret), v.now())
-	if err != nil || credential.Mode != mode || credential.ServerID <= 0 || !saVerifyScope(credential.Scopes) {
-		http.NotFound(w, r)
-		return
-	}
-	if mode == "header" {
-		server, err := v.store.SAServerByPublicID(r.Context(), credential.TenantID, publicID)
-		if err != nil || server.ID != credential.ServerID || server.Status != "active" {
-			http.NotFound(w, r)
-			return
-		}
-	}
-	if err := v.store.TouchSACredential(r.Context(), credential.TenantID, credential.ServerID, credential.ID, v.now()); err != nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -209,6 +189,42 @@ func (v *verifier) handler(w http.ResponseWriter, r *http.Request) {
 		requestPolicy.identity = result.Identity
 		v.observe(r, credential, mode, requestID, requestPolicy.identity, result, started)
 	}).ServeHTTP(w, r)
+}
+
+func (v *verifier) authorize(r *http.Request) (store.SACredential, string, bool) {
+	if v.cfg.Verifier == nil || v.store == nil {
+		return store.SACredential{}, "", false
+	}
+	secret, mode, publicID, ok := v.credential(r)
+	if !ok {
+		return store.SACredential{}, "", false
+	}
+	credential, err := v.store.SACredentialBySecretHash(r.Context(), saHash(secret), v.now())
+	if err != nil || credential.Mode != mode || credential.ServerID <= 0 || !saVerifyScope(credential.Scopes) {
+		return store.SACredential{}, "", false
+	}
+	if mode == "header" {
+		server, err := v.store.SAServerByPublicID(r.Context(), credential.TenantID, publicID)
+		if err != nil || server.ID != credential.ServerID || server.Status != "active" {
+			return store.SACredential{}, "", false
+		}
+	}
+	if err := v.store.TouchSACredential(r.Context(), credential.TenantID, credential.ServerID, credential.ID, v.now()); err != nil {
+		return store.SACredential{}, "", false
+	}
+	return credential, mode, true
+}
+
+func (v *verifier) metadataHandler(w http.ResponseWriter, r *http.Request) {
+	accesslog.SuppressCapture(r.Context())
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	_, mode, ok := v.authorize(r)
+	if !ok || mode != "url_secret" {
+		http.NotFound(w, r)
+		return
+	}
+	v.cfg.Verifier.MetadataHandler().ServeHTTP(w, r)
 }
 
 func (v *verifier) credential(r *http.Request) (secret, mode, publicID string, ok bool) {
@@ -324,6 +340,8 @@ func saRequestID(r *http.Request) string {
 }
 
 func (v *verifier) routes(mux *http.ServeMux) {
+	mux.Handle("GET /v/{secret}", http.HandlerFunc(v.metadataHandler))
+	mux.Handle("GET /v/{secret}/{$}", http.HandlerFunc(v.metadataHandler))
 	mux.Handle("GET /v/{secret}/sessionserver/session/minecraft/hasJoined", http.HandlerFunc(v.handler))
 	mux.Handle("GET /api/serveraccess/v1/servers/{public_id}/hasJoined", http.HandlerFunc(v.handler))
 }

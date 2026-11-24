@@ -14,13 +14,20 @@ description: "SkinNexus 变更日志：按日期倒序的迭代历史，只记�
 - 服务器接入平台视图新增最小创建表单：网页超管填写名称、服务器配额与 owner UID，即可在同一事务中建立租户和首位 owner，沿用单 active membership 约束；任何失败回滚，不接受客户端指定租户 id。
 - 新增仅同源网页超管会话可用的 `POST /api/admin/v1/serveraccess/tenants`，严格校验三字段、返回租户与 owner 并记录 `serveraccess_tenant_create` 审计；前端补齐提交中、错误、成功与租户/审计刷新状态，中英文文案同步。
 
-验证：store/API/前端红绿测试、SQLite integration、Go 全量 test/vet/build 与覆盖率、前端 32 项测试与构建、locales/a11y/theme/modal/docs 闸及文档站构建通过；MySQL/MariaDB/PostgreSQL 因本地无测试 DSN 未运行。
+验证：store/API/前端红绿测试、SQLite integration、Go 全量 test/vet/build 与覆盖率、前端 32 项测试与构建、locales/a11y/theme/modal/docs 闸及文档站构建通过；外库与真实 MC 矩阵在同日第三轮补跑。
 
 **同日 2 轮（服务器接入全分支审查修复）**
 
 - 旧全局 `hasJoined`/profile 只在确证本地未命中时回源，玩家查询、join 查询、签名与数据库故障不再被官方身份覆盖；标准 OIDC `userinfo` 与 Yggdrasil join 客户端 allowlist 分离，合法非 shared client 不再被误拒。
 - 删除宽限期内 owner/admin 仍可导出，viewer 仍拒绝；成员邀请必须先验证邮箱。平台紧急状态、配额、fallback、吊销和删除改为与审计原子提交，审计失败整笔回滚。
 - `VerifyBurst` 真正按秒执行原子准入，分钟/秒配额窗口由保留 worker 分批清理；平台 fallback 的界面初值与运行时默认统一为关闭。E2E 改用临时回环端口、白名单环境、有界失败日志与退出后清理。
+
+**同日 3 轮（真实 MC 与多引擎验收）**
+
+- 按服 API root 补上 authlib-injector 启动所需的元数据，复用全局 `meta`、`skinDomains` 与签名公钥；有无末尾斜杠均可直连，无效、过期、吊销、Header 模式或模块关闭统一 404，E2E 同时钉住 API-location 与无重定向行为。
+- PostgreSQL 集成夹具改为按外键依赖顺序删表、删表失败立即终止、MySQL 外键开关限定在独立连接；raw fixture SQL 走方言层，并补 dry-run 行内容、超管提升与私有材质可见性回归。
+
+验证：真实 Minecraft 1.21 + authlib-injector 1.2.7 白名单进服/未白名单拒绝通过；SQLite、MySQL 8.0/5.7、MariaDB 11.4/10.11、PostgreSQL 16 全套 integration 与 Go race detector 通过；Go 全量 test/vet/build、前端 32 测试与构建、E2E、三个真实主题包扫描及 docs/a11y/theme/modal/locales/diag-model/VitePress 全绿。未操作生产、未 push。
 
 ## 2026-11-24 · 可选服务器接入模块（同轮）
 

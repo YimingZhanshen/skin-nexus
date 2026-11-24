@@ -30,7 +30,7 @@ func saExerciseEventRetentionDeletesOnlyExpiredServerEventsInBatches(t *testing.
 	cutoff := now.Add(-7 * 24 * time.Hour)
 	for i := 0; i < 3; i++ {
 		created := cutoff.Add(-time.Duration(i+1) * time.Hour)
-		if _, err := st.DB().Exec(`INSERT INTO sa_join_events
+		if _, err := st.db.ExecContext(ctx, `INSERT INTO sa_join_events
 			(tenant_id,server_id,uuid,player_name,outcome,reason_code,source_mode,duration_ms,request_id,created_at)
 			VALUES (?,?,?,?,?,?,?,?,?,?)`, tenant, server.ID, "", "Old", "deny", "test", "header", 0, "old", created); err != nil {
 			t.Fatal(err)
@@ -45,7 +45,7 @@ func saExerciseEventRetentionDeletesOnlyExpiredServerEventsInBatches(t *testing.
 		{server.ID, "Fresh", cutoff.Add(time.Hour)},
 		{other.ID, "OtherOld", cutoff.Add(-24 * time.Hour)},
 	} {
-		if _, err := st.DB().Exec(`INSERT INTO sa_join_events
+		if _, err := st.db.ExecContext(ctx, `INSERT INTO sa_join_events
 			(tenant_id,server_id,uuid,player_name,outcome,reason_code,source_mode,duration_ms,request_id,created_at)
 			VALUES (?,?,?,?,?,?,?,?,?,?)`, tenant, row.server, "", row.name, "deny", "test", "header", 0, row.name, row.at); err != nil {
 			t.Fatal(err)
@@ -108,7 +108,7 @@ func saExerciseEventRetentionPoliciesIncludeDisabledServersButNotDeletedTenants(
 	if _, err := st.CreateSAServer(ctx, deletedTenant, "srv_deleted", "deleted"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.DB().Exec(`UPDATE sa_tenants SET deleted_at=? WHERE id=?`, time.Now().UTC(), deletedTenant); err != nil {
+	if _, err := st.db.ExecContext(ctx, `UPDATE sa_tenants SET deleted_at=? WHERE id=?`, time.Now().UTC(), deletedTenant); err != nil {
 		t.Fatal(err)
 	}
 	policies, err := st.SAEventRetentionPolicies(ctx)

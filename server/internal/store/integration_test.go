@@ -40,7 +40,11 @@ var testTables = []string{
 	"oidc_device_auth", "oidc_refresh_tokens", "oidc_access_tokens",
 	"oidc_auth_requests", "oidc_clients",
 	"union_kv", "web_sessions", "audit_log", "options",
-	"ygg_join_sessions", "ygg_tokens", "uuid_map", "textures", "players", "users",
+	"ygg_join_sessions", "ygg_tokens", "uuid_map", "textures", "players",
+	"sa_join_events", "sa_quota_usage",
+	"sa_server_credentials", "sa_server_policies", "sa_server_whitelist", "sa_server_bans",
+	"sa_tenant_invites", "sa_servers", "sa_tenant_members", "sa_tenants",
+	"users",
 	"invitation_codes", "user_closet", "password_reset_tokens", "access_logs", "schema_migrations",
 	"access_log_details",
 	"plugin_meta", "plugin_secrets", "plugin_kv", "plugin_docs", "plugin_migrations", "plugin_install_tx",
@@ -48,9 +52,6 @@ var testTables = []string{
 	"email_verify_tokens", "notifications",
 	"legacy_users", "legacy_players", "legacy_textures", "legacy_uuid",
 	"legacy_options", "legacy_user_closet", "legacy_invitation_codes",
-	"sa_join_events", "sa_quota_usage",
-	"sa_server_credentials", "sa_server_policies", "sa_server_whitelist", "sa_server_bans",
-	"sa_tenant_invites", "sa_servers", "sa_tenant_members", "sa_tenants",
 }
 
 func openTestStore(t *testing.T) *Mysql {
@@ -67,9 +68,25 @@ func openTestStore(t *testing.T) *Mysql {
 	t.Cleanup(func() { _ = m.Close() })
 
 	ctx := context.Background()
-	_, _ = m.db.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS=0")
+	conn, err := m.db.Conn(ctx)
+	if err != nil {
+		t.Fatalf("setup connection: %v", err)
+	}
+	defer conn.Close()
+	if m.Engine() == dialect.MySQL {
+		if _, err := conn.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS=0"); err != nil {
+			t.Fatalf("disable foreign keys for teardown: %v", err)
+		}
+	}
 	for _, tbl := range testTables {
-		_, _ = m.db.ExecContext(ctx, "DROP TABLE IF EXISTS "+tbl)
+		if _, err := conn.ExecContext(ctx, "DROP TABLE IF EXISTS "+tbl); err != nil {
+			t.Fatalf("drop %s: %v", tbl, err)
+		}
+	}
+	if m.Engine() == dialect.MySQL {
+		if _, err := conn.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS=1"); err != nil {
+			t.Fatalf("restore foreign keys after teardown: %v", err)
+		}
 	}
 	applyMigrations(t, m)
 	return m

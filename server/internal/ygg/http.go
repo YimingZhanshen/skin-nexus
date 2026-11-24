@@ -186,6 +186,11 @@ func writeYggBodyTooLarge(w http.ResponseWriter) {
 
 // ---- metadata ----
 
+// MetadataHandler exposes the same discovery document at authenticated API roots.
+func (a *API) MetadataHandler() http.Handler {
+	return http.HandlerFunc(a.handleMetadata)
+}
+
 func (a *API) handleMetadata(w http.ResponseWriter, r *http.Request) {
 	var b strings.Builder
 	b.WriteString(`{"meta":{"serverName":`)

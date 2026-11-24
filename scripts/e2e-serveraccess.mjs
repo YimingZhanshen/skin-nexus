@@ -250,6 +250,17 @@ try {
   assert(r.status === 201, `credential B: ${r.status}`)
   const secretB = r.json.secret
   assert(secretA && secretB, 'credential secrets missing')
+  for (const suffix of ['', '/']) {
+    r = await fetchE2E(`${base}/v/${secretA}${suffix}`, { redirect: 'manual' })
+    assert(r.status === 200 && r.headers.get('x-authlib-injector-api-location') === `${base}/v/${secretA}`, `authlib metadata ${suffix || 'no slash'}: ${r.status}`)
+    const metadata = await r.json()
+    assert(metadata.meta?.implementationName === 'SkinNexus' && metadata.signaturePublickey, 'authlib metadata document incomplete')
+    assert(!JSON.stringify(metadata).includes(secretA), 'authlib metadata leaked the URL secret')
+  }
+  r = await fetchE2E(`${base}/v/${secretB}/`, { headers: { authorization: `Bearer ${secretB}` }, redirect: 'manual' })
+  assert(r.status === 404, `header credential on authlib metadata: ${r.status}`)
+  r = await admin.request('/v/unknown-only-secret-0123456789abcdef/')
+  assert(r.status === 404, `unknown authlib metadata: ${r.status}`)
 
   const profiles = []
   for (const [c, name] of [[player, 'E2E_Player'], [player2, 'E2E_Player_Two']]) {
@@ -356,6 +367,8 @@ try {
   assert(r.status === 200, `module off: ${r.status}`)
   r = await fetchE2E(`${base}/api/serveraccess/v1/health`)
   assert(r.status === 404, `module off health: ${r.status}`)
+  r = await fetchE2E(`${base}/v/${secretA}/`)
+  assert(r.status === 404, `module off authlib metadata: ${r.status}`)
   r = await fetchE2E(`${base}/api/yggdrasil/authserver/validate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accessToken: auth2.accessToken }) })
   assert(r.status === 204, `global Yggdrasil validate unavailable while module off: ${r.status}`)
   r = await admin.request('/api/admin/v1/settings', { method: 'PUT', body: { key: 'serveraccess_enabled', value: '1' } })
@@ -381,5 +394,5 @@ try {
 }
 
 if (!failed) {
-  console.log('PASS serveraccess E2E: two tenants, two players, URL-secret + Header verification, whitelist and ban isolation, platform ban, full cross-tenant negatives, scoped events, credential redaction, module hot toggle, global Yggdrasil regression')
+  console.log('PASS serveraccess E2E: two tenants, two players, authlib metadata + URL-secret and Header verification, whitelist and ban isolation, platform ban, full cross-tenant negatives, scoped events, credential redaction, module hot toggle, global Yggdrasil regression')
 }

@@ -96,7 +96,7 @@ func TestIntegrationServerAccessLifecycleMigrationAndScopedCascade(t *testing.T)
 		{"sa_quota_usage", "server_id=?", server.ID},
 	} {
 		var count int
-		if err := m.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM `+query.table+` WHERE `+query.where, query.arg).Scan(&count); err != nil || count != 0 {
+		if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+query.table+` WHERE `+query.where, query.arg).Scan(&count); err != nil || count != 0 {
 			t.Errorf("%s rows after tenant delete = %d, err %v; want 0", query.table, count, err)
 		}
 	}
