@@ -28,10 +28,17 @@ type Config struct {
 	Key            *rsa.PrivateKey
 	KID            string // JWK key id (kid) — launchers match on it
 	SharedClientID string // discovery shared_client_id ("2" by default)
-	LoginURL       string // SPA login page for the consent/selection step
-	DeviceFormPath string // verification page path, "/device"
-	DeviceLifetime time.Duration
-	DevicePollSecs int
+	// YggdrasilAudience is the global resource audience placed on access
+	// tokens. Empty defaults to issuer + /api/yggdrasil; it is deliberately not
+	// tenant-specific because all launchers use the one global API root.
+	YggdrasilAudience string
+	// YggdrasilAllowedClients is the explicit OAuth client allowlist for
+	// access-token ledger entries. Empty defaults to SharedClientID only.
+	YggdrasilAllowedClients []string
+	LoginURL                string // SPA login page for the consent/selection step
+	DeviceFormPath          string // verification page path, "/device"
+	DeviceLifetime          time.Duration
+	DevicePollSecs          int
 }
 
 // Provider owns the zitadel OP plus the contract-shaped wrappers.
@@ -105,11 +112,25 @@ func New(backend Backend, profiles ProfileSource, cfg Config) (*Provider, error)
 	if cfg.DevicePollSecs == 0 {
 		cfg.DevicePollSecs = 5
 	}
+	if cfg.YggdrasilAudience == "" {
+		cfg.YggdrasilAudience = strings.TrimRight(cfg.Issuer, "/") + "/api/yggdrasil"
+	}
+	if len(cfg.YggdrasilAllowedClients) == 0 {
+		cfg.YggdrasilAllowedClients = []string{cfg.SharedClientID}
+	}
+	policy := normalizeTokenPolicy(TokenPolicy{
+		Audience: cfg.YggdrasilAudience, AllowedClientIDs: cfg.YggdrasilAllowedClients,
+	})
+	if !policy.valid() {
+		return nil, errors.New("oidc: Yggdrasil audience and at least one allowed client are required")
+	}
+	cfg.YggdrasilAudience = policy.Audience
+	cfg.YggdrasilAllowedClients = policy.AllowedClientIDs
 	kid := cfg.KID
 	if kid == "" {
 		kid = keyFingerprint(&cfg.Key.PublicKey)
 	}
-	storage := NewStorage(backend, profiles, cfg.Key, kid, cfg.Issuer)
+	storage := NewStorage(backend, profiles, cfg.Key, kid, cfg.Issuer, cfg.YggdrasilAudience)
 
 	engine, err := op.NewProvider(&op.Config{
 		CryptoKey:             randomCryptoKey(),
@@ -139,6 +160,16 @@ func New(backend Backend, profiles ProfileSource, cfg Config) (*Provider, error)
 	p := &Provider{cfg: cfg, storage: storage, engine: engine, backend: backend}
 	p.live = &liveDevice{Provider: engine, owner: p, baked: engine.DeviceAuthorization()}
 	return p, nil
+}
+
+// AccessTokenPolicy returns the provider's global Yggdrasil resource audience
+// and client allowlist. The slice is copied so a caller cannot mutate the
+// verification boundary after bootstrap.
+func (p *Provider) AccessTokenPolicy() TokenPolicy {
+	return TokenPolicy{
+		Audience:         p.cfg.YggdrasilAudience,
+		AllowedClientIDs: append([]string(nil), p.cfg.YggdrasilAllowedClients...),
+	}
 }
 
 // SeedSharedClient upserts the public launcher client advertised as
@@ -250,7 +281,7 @@ func (p *Provider) UserinfoHandler() http.Handler {
 			unauthorized(w)
 			return
 		}
-		rec, err := VerifyBearer(r.Context(), p.backend, p.cfg.Issuer, &p.cfg.Key.PublicKey, raw)
+		rec, err := VerifyBearer(r.Context(), p.backend, p.cfg.Issuer, &p.cfg.Key.PublicKey, raw, p.AccessTokenPolicy())
 		if err != nil {
 			unauthorized(w)
 			return

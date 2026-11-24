@@ -365,6 +365,20 @@ func (b *Backend) handleUserSetPermission(w http.ResponseWriter, r *http.Request
 		writeStoreErr(w, err, i18n.MsgEmailTaken, "that email is already used by another account")
 		return
 	}
+	// A ban is only complete once opaque tokens, both OIDC token families and
+	// every player's join session are revoked. Run this for every ban write so a
+	// retry can finish a previous partial attempt; never answer success when the
+	// transactional revoke failed. permission=-1 already fails authenticate/join
+	// closed through the store projection while this operation is in progress.
+	if perm == -1 {
+		if err := b.Store.RevokeUserAccess(r.Context(), id); err != nil {
+			detail := map[string]any{"target": id, "permission": perm, "error": err.Error()}
+			b.Store.InsertAudit(r.Context(), actorUID(r), "admin_user_permission_update_access_revoke_failed", detail)
+			slog.Warn("admin ban: access revoke failed", "uid", id, "error", err)
+			writeStoreErr(w, err, i18n.MsgEmailTaken, "that email is already used by another account")
+			return
+		}
+	}
 	if prevErr == nil {
 		if perm == -1 && prevPerm != -1 {
 			b.notifyUser(r.Context(), id, store.NotifAccountBanned)
@@ -378,9 +392,9 @@ func (b *Backend) handleUserSetPermission(w http.ResponseWriter, r *http.Request
 			b.notifyUser(r.Context(), id, store.NotifAccountUnbanned)
 		}
 	}
-	// A demoted/banned admin's session must die now — the session gate
-	// re-checks permission per request, but their tokens/grants linger.
-	if perm < 1 {
+	// A demoted admin's session must die now. Bans already revoked opaque
+	// tokens in RevokeUserAccess; do not repeat that update for the same write.
+	if perm < 1 && perm != -1 {
 		b.revokeUserTokens(r.Context(), actorUID(r), id, "admin_user_permission_update_token_revoke_failed", map[string]any{"permission": perm})
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_user_permission_update", map[string]any{"target": id, "permission": perm})

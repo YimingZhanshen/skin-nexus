@@ -75,18 +75,32 @@ func (m *Mysql) TextureURL(hash string) string { return siteurl.Texture(hash) }
 
 type rowScanner interface{ Scan(...interface{}) error }
 
+// sqlExecer is the common statement surface of dbx.DB and dbx.Tx. Token
+// revocation helpers use it so the single-user access revoke can run all of its
+// credential-family updates in one transaction without duplicating their SQL.
+type sqlExecer interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
 func scanUser(s rowScanner) (ygg.User, error) {
 	var u ygg.User
-	err := s.Scan(&u.ID, &u.Nickname, &u.EmailVerified, &u.CanJoinServer, &u.CreatedAt)
+	var permission int
+	err := s.Scan(&u.ID, &u.Nickname, &u.EmailVerified, &u.CanJoinServer, &u.CreatedAt, &permission)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ygg.User{}, ErrNotFound
+	}
+	if err == nil && permission == -1 {
+		// A platform ban wins over the independent join flag, but the stored
+		// can_join_server value is deliberately left untouched so unban cannot
+		// silently re-enable an account disabled for another reason.
+		u.CanJoinServer = false
 	}
 	return u, err
 }
 
 func (m *Mysql) UserByID(ctx context.Context, id int64) (ygg.User, error) {
 	return scanUser(m.db.QueryRowContext(ctx,
-		"SELECT id, nickname, email_verified, can_join_server, created_at FROM users WHERE id = ?", id))
+		"SELECT id, nickname, email_verified, can_join_server, created_at, permission FROM users WHERE id = ?", id))
 }
 
 func (m *Mysql) UserByIdentifier(ctx context.Context, ident string) (ygg.User, error) {
@@ -96,7 +110,7 @@ func (m *Mysql) UserByIdentifier(ctx context.Context, ident string) (ygg.User, e
 	// sensitive; MySQL/SQLite already fold, so the predicate is a no-op there.
 	eng := m.db.Dialect()
 	return scanUser(m.db.QueryRowContext(ctx,
-		"SELECT id, nickname, email_verified, can_join_server, created_at FROM users WHERE "+
+		"SELECT id, nickname, email_verified, can_join_server, created_at, permission FROM users WHERE "+
 			eng.CIEquals("email")+" OR "+eng.CIEquals("nickname")+" LIMIT 1",
 		ident, ident))
 }
@@ -254,8 +268,45 @@ func (m *Mysql) InvalidateToken(ctx context.Context, access string) error {
 }
 
 func (m *Mysql) InvalidateUserTokens(ctx context.Context, uid int64) error {
-	_, err := m.db.ExecContext(ctx, "UPDATE ygg_tokens SET invalidated = 1 WHERE user_id = ?", uid)
+	return invalidateUserTokens(ctx, m.db, uid)
+}
+
+func invalidateUserTokens(ctx context.Context, db sqlExecer, uid int64) error {
+	_, err := db.ExecContext(ctx, "UPDATE ygg_tokens SET invalidated = 1 WHERE user_id = ?", uid)
 	return err
+}
+
+// RevokeUserAccess invalidates every credential family that can authorize a
+// banned account and removes all of its short-lived join sessions. The updates
+// share one transaction: a failed join-session delete must not leave a caller
+// believing opaque/OIDC credentials were revoked when they were rolled back.
+func (m *Mysql) RevokeUserAccess(ctx context.Context, uid int64) error {
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := invalidateUserTokens(ctx, tx, uid); err != nil {
+		return err
+	}
+	if err := revokeUserAccessTokens(ctx, tx, uid, m.now().UTC()); err != nil {
+		return err
+	}
+	if err := revokeUserRefreshTokens(ctx, tx, uid); err != nil {
+		return err
+	}
+	// players has no uuid column; uuid_map is the persisted player identity.
+	// The join therefore covers every character owned by uid without relying on
+	// a MySQL-only DELETE ... JOIN shape.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM ygg_join_sessions WHERE uuid IN (
+			SELECT u.uuid FROM uuid_map u
+			JOIN players p ON p.id = u.player_id
+			WHERE p.uid = ?)`, uid); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // PruneUserTokens implements ygg.TokenPruner (ygg_tokens_limit, 2026-10-24

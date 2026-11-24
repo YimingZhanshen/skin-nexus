@@ -124,6 +124,9 @@ type Storage struct {
 	key      *rsa.PrivateKey
 	kid      string
 	issuer   string
+	// yggdrasilAudience is injected through op.TokenRequest.GetAudience, the
+	// supported zitadel v3 hook used by CreateJWT for access-token aud.
+	yggdrasilAudience string
 
 	mu     sync.Mutex
 	devPID map[*op.DeviceAuthorizationState]pidEntry
@@ -135,15 +138,26 @@ type pidEntry struct {
 }
 
 // NewStorage builds the adapter. kid is the JWK key id echoed in jwks.
-func NewStorage(backend Backend, profiles ProfileSource, key *rsa.PrivateKey, kid, issuer string) *Storage {
+func NewStorage(backend Backend, profiles ProfileSource, key *rsa.PrivateKey, kid, issuer, yggdrasilAudience string) *Storage {
 	return &Storage{
-		backend:  backend,
-		profiles: profiles,
-		key:      key,
-		kid:      kid,
-		issuer:   issuer,
-		devPID:   make(map[*op.DeviceAuthorizationState]pidEntry),
+		backend:           backend,
+		profiles:          profiles,
+		key:               key,
+		kid:               kid,
+		issuer:            issuer,
+		yggdrasilAudience: yggdrasilAudience,
+		devPID:            make(map[*op.DeviceAuthorizationState]pidEntry),
 	}
+}
+
+// tokenAudience keeps the OAuth client id in aud as well as the global
+// Yggdrasil resource. zitadel's device request appends the client id itself;
+// setting both here makes device, authorization-code and refresh tokens agree.
+func (s *Storage) tokenAudience(clientID string) []string {
+	if s.yggdrasilAudience == "" {
+		return []string{clientID}
+	}
+	return []string{s.yggdrasilAudience, clientID}
 }
 
 // ---- signing / keys ----
@@ -252,7 +266,7 @@ func (s *Storage) CreateAuthRequest(ctx context.Context, req *oidc.AuthRequest, 
 	if err := s.backend.SaveAuthRequest(ctx, rec); err != nil {
 		return nil, err
 	}
-	return &authRequest{rec: rec, response: req.ResponseType, mode: req.ResponseMode}, nil
+	return &authRequest{rec: rec, response: req.ResponseType, mode: req.ResponseMode, audience: s.tokenAudience(req.ClientID)}, nil
 }
 
 func (s *Storage) AuthRequestByID(ctx context.Context, id string) (op.AuthRequest, error) {
@@ -260,7 +274,7 @@ func (s *Storage) AuthRequestByID(ctx context.Context, id string) (op.AuthReques
 	if err != nil {
 		return nil, err
 	}
-	return &authRequest{rec: rec, response: oidc.ResponseTypeCode}, nil
+	return &authRequest{rec: rec, response: oidc.ResponseTypeCode, audience: s.tokenAudience(rec.ClientID)}, nil
 }
 
 func (s *Storage) AuthRequestByCode(ctx context.Context, code string) (op.AuthRequest, error) {
@@ -271,7 +285,7 @@ func (s *Storage) AuthRequestByCode(ctx context.Context, code string) (op.AuthRe
 	if rec.CodeExpires.Before(time.Now()) {
 		return nil, ErrNotFound
 	}
-	return &authRequest{rec: rec, response: oidc.ResponseTypeCode}, nil
+	return &authRequest{rec: rec, response: oidc.ResponseTypeCode, audience: s.tokenAudience(rec.ClientID)}, nil
 }
 
 func (s *Storage) SaveAuthCode(ctx context.Context, code, id string) error {
@@ -390,7 +404,7 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, token string) 
 	if rec.Revoked || time.Now().After(rec.ExpiresAt) {
 		return nil, op.ErrInvalidRefreshToken
 	}
-	return &refreshTokenRequest{rec: rec, scopes: rec.Scopes}, nil
+	return &refreshTokenRequest{rec: rec, scopes: rec.Scopes, audience: s.tokenAudience(rec.ClientID)}, nil
 }
 
 // TerminateSession kills BOTH token families (review P3: access-only left
@@ -573,6 +587,7 @@ func (s *Storage) GetDeviceAuthorizatonState(ctx context.Context, clientID, devi
 	}
 	state := &op.DeviceAuthorizationState{
 		ClientID: rec.ClientID,
+		Audience: s.tokenAudience(rec.ClientID),
 		Scopes:   rec.Scopes,
 		Expires:  rec.ExpiresAt,
 		Done:     rec.Done,

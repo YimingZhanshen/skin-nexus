@@ -46,6 +46,11 @@ type MetadataConfig struct {
 	ExtraSkinDomains func() []string
 }
 
+// maxYggJSONBodyBytes bounds every JSON request on the frozen Yggdrasil
+// surface. 64 KiB leaves ample room for authenticate/refresh/join credentials
+// and the maximum 100-name bulk lookup while preventing unbounded JSON buffering.
+const maxYggJSONBodyBytes int64 = 64 << 10
+
 // API serves the Yggdrasil HTTP surface mounted at /api/yggdrasil.
 type API struct {
 	svc *Service
@@ -142,6 +147,22 @@ func checkJSON(r *http.Request, w http.ResponseWriter) bool {
 		return false
 	}
 	return true
+}
+
+// limitYggJSONBody must be called immediately before every JSON Decode. The
+// overflow response stays on the legacy error envelope; under-cap malformed
+// bodies keep each handler's existing status and message.
+func limitYggJSONBody(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxYggJSONBodyBytes)
+}
+
+func yggBodyTooLarge(err error) bool {
+	var tooLarge *http.MaxBytesError
+	return errors.As(err, &tooLarge)
+}
+
+func writeYggBodyTooLarge(w http.ResponseWriter) {
+	writeError(w, http.StatusRequestEntityTooLarge, "IllegalArgumentException", "request body too large")
 }
 
 // ---- metadata ----
@@ -303,7 +324,12 @@ func (a *API) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
 		ClientToken string `json:"clientToken"`
 		RequestUser bool   `json:"requestUser"`
 	}
+	limitYggJSONBody(w, r)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if yggBodyTooLarge(err) {
+			writeYggBodyTooLarge(w)
+			return
+		}
 		writeError(w, http.StatusBadRequest, "IllegalArgumentException", "invalid JSON body")
 		return
 	}
@@ -371,7 +397,12 @@ func (a *API) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		RequestUser     bool            `json:"requestUser"`
 		SelectedProfile json.RawMessage `json:"selectedProfile"`
 	}
+	limitYggJSONBody(w, r)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if yggBodyTooLarge(err) {
+			writeYggBodyTooLarge(w)
+			return
+		}
 		writeError(w, http.StatusBadRequest, "IllegalArgumentException", "invalid JSON body")
 		return
 	}
@@ -419,7 +450,12 @@ func (a *API) handleValidate(w http.ResponseWriter, r *http.Request) {
 		AccessToken string `json:"accessToken"`
 		ClientToken string `json:"clientToken"`
 	}
+	limitYggJSONBody(w, r)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if yggBodyTooLarge(err) {
+			writeYggBodyTooLarge(w)
+			return
+		}
 		writeError(w, http.StatusBadRequest, "IllegalArgumentException", "invalid JSON body")
 		return
 	}
@@ -442,7 +478,11 @@ func (a *API) handleInvalidate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		AccessToken string `json:"accessToken"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	limitYggJSONBody(w, r)
+	if err := json.NewDecoder(r.Body).Decode(&req); yggBodyTooLarge(err) {
+		writeYggBodyTooLarge(w)
+		return
+	}
 	a.svc.Invalidate(r.Context(), req.AccessToken)
 	noContent(w) // always 204
 }
@@ -455,7 +495,11 @@ func (a *API) handleSignout(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	limitYggJSONBody(w, r)
+	if err := json.NewDecoder(r.Body).Decode(&req); yggBodyTooLarge(err) {
+		writeYggBodyTooLarge(w)
+		return
+	}
 	// B5.2 gap throttle applies upstream (routes.php:11-15 puts Throttle on
 	// signout too), but the frozen wire contract is "signout always 204" —
 	// a throttle hit DROPS the work (no password check = anti-brute-force
@@ -477,7 +521,12 @@ func (a *API) handleJoin(w http.ResponseWriter, r *http.Request) {
 		SelectedProfile json.RawMessage `json:"selectedProfile"`
 		ServerID        string          `json:"serverId"`
 	}
+	limitYggJSONBody(w, r)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if yggBodyTooLarge(err) {
+			writeYggBodyTooLarge(w)
+			return
+		}
 		writeError(w, http.StatusBadRequest, "IllegalArgumentException", "invalid arguments")
 		return
 	}
@@ -609,7 +658,12 @@ func (a *API) handleLookupBulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var names []string
+	limitYggJSONBody(w, r)
 	if err := json.NewDecoder(r.Body).Decode(&names); err != nil {
+		if yggBodyTooLarge(err) {
+			writeYggBodyTooLarge(w)
+			return
+		}
 		writeError(w, http.StatusBadRequest, "IllegalArgumentException", "invalid JSON body")
 		return
 	}

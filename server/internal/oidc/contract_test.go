@@ -529,7 +529,7 @@ func TestDeviceFlowEndToEnd(t *testing.T) {
 	}
 
 	// 7. access token is a Yggdrasil token (dual-state) — resolver round-trip.
-	resolver := NewYggTokenResolver(nil, "https://skin.test", &p.cfg.Key.PublicKey)
+	resolver := NewYggTokenResolver(nil, "https://skin.test", &p.cfg.Key.PublicKey, p.AccessTokenPolicy())
 	_ = resolver
 	yt, err := ResolveForTest(context.Background(), p, access)
 	if err != nil {
@@ -641,7 +641,7 @@ func TestYggResolverGates(t *testing.T) {
 		return at
 	}
 
-	resolver := NewYggTokenResolver(p.backend, "https://skin.test", &p.cfg.Key.PublicKey)
+	resolver := NewYggTokenResolver(p.backend, "https://skin.test", &p.cfg.Key.PublicKey, p.AccessTokenPolicy())
 
 	noJoin := mk("openid offline_access Yggdrasil.PlayerProfiles.Select")
 	if _, err := resolver(context.Background(), noJoin); err == nil {
@@ -668,7 +668,7 @@ func TestYggResolverGates(t *testing.T) {
 
 // ResolveForTest exercises the resolver path with the provider's backend.
 func ResolveForTest(ctx context.Context, p *Provider, access string) (ygg.Token, error) {
-	resolver := NewYggTokenResolver(p.backend, p.cfg.Issuer, &p.cfg.Key.PublicKey)
+	resolver := NewYggTokenResolver(p.backend, p.cfg.Issuer, &p.cfg.Key.PublicKey, p.AccessTokenPolicy())
 	return resolver(ctx, access)
 }
 

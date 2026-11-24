@@ -418,10 +418,11 @@ func main() {
 			},
 			User: st.UserBrief,
 		}, oidc.Config{
-			Issuer:         cfg.OIDCIssuer,
-			Key:            okey,
-			SharedClientID: cfg.SharedClientID,
-			LoginURL:       cfg.BaseURL + "/login",
+			Issuer:            cfg.OIDCIssuer,
+			Key:               okey,
+			SharedClientID:    cfg.SharedClientID,
+			YggdrasilAudience: strings.TrimRight(cfg.BaseURL, "/") + "/api/yggdrasil",
+			LoginURL:          cfg.BaseURL + "/login",
 		})
 		if err != nil {
 			logx.Fatal("oidc", "error", err)
@@ -444,7 +445,7 @@ func main() {
 		// ledger; opaque password-flow tokens fall back to the store lookup.
 		// Only ErrNotJOSE falls back — a JWT-shaped token that fails
 		// verification must not degrade to another authority (2026-10-23).
-		jwtResolve := oidc.NewYggTokenResolver(st, cfg.OIDCIssuer, &okey.PublicKey)
+		jwtResolve := oidc.NewYggTokenResolver(st, cfg.OIDCIssuer, &okey.PublicKey, oidcProvider.AccessTokenPolicy())
 		yggSvc.SetTokenResolver(func(ctx context.Context, access string) (ygg.Token, error) {
 			t, err := jwtResolve(ctx, access)
 			if errors.Is(err, oidc.ErrNotJOSE) {

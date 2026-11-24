@@ -10,7 +10,7 @@ import (
 // password-flow tokens: the main.go dual-state wrapper keys its store
 // fallback on this exact error, so it must not change shape silently.
 func TestResolverOpaqueTokenSentinel(t *testing.T) {
-	resolve := NewYggTokenResolver(nil, "https://x.test", nil)
+	resolve := NewYggTokenResolver(nil, "https://x.test", nil, TokenPolicy{})
 	_, err := resolve(context.Background(), "deadbeefcafebabe")
 	if !errors.Is(err, ErrNotJOSE) {
 		t.Fatalf("opaque token err = %v (want ErrNotJOSE sentinel)", err)
