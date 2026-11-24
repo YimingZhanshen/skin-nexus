@@ -143,7 +143,7 @@ type Service struct {
 	searchMaxResolver  func(ctx context.Context) int
 	// scopedFallback is installed only alongside the HTTP fallback and is used
 	// exclusively by ScopedHasJoined after policy allows a true session miss.
-	scopedFallback func(ctx context.Context, username, serverID, serverIP string) ([]byte, bool)
+	scopedFallback func(ctx context.Context, username, serverID, serverIP string) FallbackResult
 
 	// Plugin host hooks (v0.3.0). Nil = no plugins; all fail-open so a
 	// crashing plugin can never alter the frozen Yggdrasil wire.

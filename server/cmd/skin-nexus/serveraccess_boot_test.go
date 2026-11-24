@@ -144,6 +144,23 @@ func TestServerAccessGuardSuppressesDiagnosticCapture(t *testing.T) {
 	}
 }
 
+func TestMainWiresExplicitRetentionLifecycle(t *testing.T) {
+	raw, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(raw)
+	start := strings.Index(src, "if err := sastack.startRetention(context.Background()); err != nil")
+	stop := strings.Index(src, "defer sastack.stopRetention()")
+	listen := strings.Index(src, "srv.ListenAndServe()")
+	if start < 0 || stop < 0 || listen < 0 || start > stop || stop > listen {
+		t.Fatalf("retention must start explicitly before serving and stop on exit: start=%d stop=%d listen=%d", start, stop, listen)
+	}
+	if !strings.Contains(src, "sastack.startRetention(context.Background())") || !strings.Contains(src, "sastack.stopRetention()") {
+		t.Fatal("retention lifecycle is not connected to the module hot toggle")
+	}
+}
+
 func TestMainWiresServerAccessAssemblyHotToggleAndRoutes(t *testing.T) {
 	raw, err := os.ReadFile("main.go")
 	if err != nil {

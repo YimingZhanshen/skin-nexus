@@ -49,6 +49,28 @@ type VerificationFallbackPolicy interface {
 	ResolveFallback(ctx context.Context, identity VerificationIdentity) (bool, error)
 }
 
+// FallbackResult distinguishes a healthy upstream miss (204/4xx) from an
+// upstream fault. A breaker must never open because a player legitimately has
+// no official profile.
+type FallbackResult struct {
+	Profile       []byte
+	Matched       bool
+	UpstreamFault bool
+}
+
+// FallbackPermit bounds one official-provider attempt. Release receives true
+// for any healthy upstream response, including an expected miss.
+type FallbackPermit struct {
+	Release    func(healthy bool)
+	ReasonCode string
+}
+
+// VerificationFallbackGuard is optional so legacy and local verification keep
+// their existing behavior. A denied permit fails closed before any outbound I/O.
+type VerificationFallbackGuard interface {
+	AdmitFallback() (FallbackPermit, bool)
+}
+
 // VerificationResult carries wire-neutral event facts. Profile is either a
 // locally signed profile or the official response bytes, never re-signed.
 type VerificationResult struct {
@@ -152,17 +174,48 @@ func (s *Service) scopedMiss(ctx context.Context, username, serverID, serverIP s
 			return result, ErrSessionNotFound
 		}
 	}
-	body, ok := s.scopedFallback(ctx, username, serverID, serverIP)
-	if !ok {
+	var permit FallbackPermit
+	if guard, ok := policy.(VerificationFallbackGuard); ok {
+		var allowed bool
+		permit, allowed = guard.AdmitFallback()
+		if !allowed {
+			result.Outcome, result.ReasonCode = "deny", permit.ReasonCode
+			if result.ReasonCode == "" {
+				result.ReasonCode = "fallback_concurrent_limit"
+			}
+			return result, ErrAccessDenied
+		}
+	}
+	attempt := callScopedFallback(s.scopedFallback, ctx, username, serverID, serverIP, permit.Release)
+	if !attempt.Matched {
+		if attempt.UpstreamFault {
+			result.Outcome, result.ReasonCode, result.Source = "error", "fallback_unavailable", "official"
+			return result, ErrSessionNotFound
+		}
 		return result, ErrSessionNotFound
 	}
-	officialUUID, officialName, ok := parseOfficialIdentity(body)
+	officialUUID, officialName, ok := parseOfficialIdentity(attempt.Profile)
 	if !ok {
 		return result, ErrSessionNotFound
 	}
 	result.Identity.OfficialUUID, result.Identity.OfficialName = officialUUID, officialName
-	result.Profile, result.Outcome, result.ReasonCode, result.Source = body, "allow", "official_fallback", "official"
+	result.Profile, result.Outcome, result.ReasonCode, result.Source = attempt.Profile, "allow", "official_fallback", "official"
 	return result, nil
+}
+
+func callScopedFallback(fallback func(context.Context, string, string, string) FallbackResult, ctx context.Context, username, serverID, serverIP string, release func(bool)) (result FallbackResult) {
+	completed := false
+	defer func() {
+		if release != nil && !completed {
+			release(false)
+		}
+	}()
+	result = fallback(ctx, username, serverID, serverIP)
+	completed = true
+	if release != nil {
+		release(!result.UpstreamFault)
+	}
+	return result
 }
 
 // parseOfficialIdentity reads event facts without rewriting the official body.

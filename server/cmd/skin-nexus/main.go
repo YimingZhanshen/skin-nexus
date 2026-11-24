@@ -96,6 +96,13 @@ func buildVersionInfo() (string, string, string) {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "verify-proxy" {
+		if err := runVerifyProxy(context.Background(), os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "version" {
 		fmt.Println("skin-nexus", version)
 		return
@@ -737,6 +744,14 @@ func main() {
 			ustack.setMemberKey(value)
 		case "serveraccess_enabled":
 			sastack.setEnabled(context.Background(), value == "1")
+			on := value == "1"
+			if on {
+				if err := sastack.startRetention(context.Background()); err != nil {
+					slog.Error("serveraccess.retention start_failed")
+				}
+			} else {
+				sastack.stopRetention()
+			}
 			slog.Info("serveraccess: hot toggle", "value", value)
 		case "cdn_enabled", "cdn_headers":
 			applyCDN()
@@ -1143,6 +1158,10 @@ func main() {
 	// diagnostic detail rows and forwards every byte (see internal/accesslog/
 	// observe.go — it persists nothing by itself).
 	srv := newHTTPServer(addr, securityHeaders(accesslog.Observe(pub.WrapRoot(gzipHandler(root))), cspExtras{script: cspScript, connect: cspConnect}))
+	if err := sastack.startRetention(context.Background()); err != nil {
+		logx.Fatal("serveraccess retention", "error", err)
+	}
+	defer sastack.stopRetention()
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.ListenAndServe() }()
 
@@ -1160,6 +1179,7 @@ func main() {
 		slog.Info("received , shutting down", "sig", sig)
 		unionCancel()
 		_ = pluginHost.Close()
+		sastack.stopRetention()
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(ctx); err != nil {

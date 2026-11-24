@@ -78,7 +78,7 @@ func (a *API) SetFallback(f *Fallback) {
 		a.svc.scopedFallback = nil
 		return
 	}
-	a.svc.scopedFallback = f.hasJoined
+	a.svc.scopedFallback = f.scopedHasJoined
 }
 
 // SetAccess installs the traffic logger (main wires the access_logs sink).

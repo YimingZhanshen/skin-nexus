@@ -9,6 +9,16 @@ description: "SkinNexus 变更日志：按日期倒序的迭代历史，只记�
 > 相称——只记「改了什么 / 为什么 / 行为变化」，验证过程一句话。开发细节见对应 commit；
 > README 状态行只留一句话摘要。
 
+## 2026-11-24 · 可选验证代理与治理加固（同轮）
+
+- 新增可选 `skin-nexus verify-proxy` 子命令：不连接数据库、不加载主站配置，只凭 public server id、upstream API root 与 Bearer credential 转发标准 `hasJoined`；S3/S4 不依赖它。
+- proxy 支持 env/flag、0600 凭据文件、系统或私有 CA 的 TLS 校验、本地监听与读写/请求头超时、请求/响应体上限；仅网络瞬断、超时和 5xx 有限重试，204/4xx/鉴权失败不重试，所有上游失败保持空 204。
+- 官方 fallback 增加按服并发与熔断：连续 5 次上游故障打开 30 秒，半开仅允许 1 次探测；健康 204 不算故障，本地 session、白名单、封禁、停服与吊销判定不被熔断旁路。
+- 按 `EventRetentionDays` 每小时批量清理进服事件；模块关闭时不创建 worker，面板热开关与进程退出显式停止，单服失败不会阻断其他服务器清理。
+- 新增 proxy 上游失败、fallback 熔断打开与 retention 清理失败指标；日志与指标不使用 secret、query、body、玩家身份或 URL 标签。
+
+验证：S5 红绿单测、真实 S3 proxy/URL-secret 决策与事件一致性、紧急吊销/停服、Go 全量 test/vet/build、前端构建与 docs 闸通过。
+
 ## 2026-11-24 · 服务器接入服主门户与平台管理（同轮）
 
 - 新增默认关闭模块下的独立 `/servers` 服主门户：租户/成员/邀请、服务器状态、按服策略、白名单、封禁、Premium fallback、进服时间线与凭证轮换/吊销；viewer 只读，owner/admin 可写，全部沿用普通同源网页会话。

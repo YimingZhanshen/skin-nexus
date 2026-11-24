@@ -99,6 +99,46 @@ func (m *Mysql) ListSAJoinEventsPage(ctx context.Context, tenantID, serverID int
 	return out, rows.Err()
 }
 
+// SAEventRetentionPolicies returns every live tenant's per-server policy,
+// including suspended/disabled servers: emergency governance must not make old
+// verification evidence immortal.
+func (m *Mysql) SAEventRetentionPolicies(ctx context.Context) ([]SAServerPolicy, error) {
+	rows, err := m.db.QueryContext(ctx, saPolicySelect+` JOIN sa_tenants t ON t.id=s.tenant_id WHERE t.deleted_at IS NULL ORDER BY p.server_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]SAServerPolicy, 0)
+	for rows.Next() {
+		policy, err := scanSAPolicy(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, policy)
+	}
+	return out, rows.Err()
+}
+
+// PurgeSAJoinEvents removes one bounded batch strictly older than cutoff. The
+// boundary itself remains evidence for the configured retention window.
+func (m *Mysql) PurgeSAJoinEvents(ctx context.Context, serverID int64, cutoff time.Time, limit int) (int64, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
+	if limit > 10000 {
+		limit = 10000
+	}
+	res, err := m.db.ExecContext(ctx, `DELETE FROM sa_join_events
+		WHERE server_id=? AND created_at<?
+		  AND id IN (SELECT id FROM (SELECT id FROM sa_join_events
+		    WHERE server_id=? AND created_at<? ORDER BY id LIMIT ?) AS expired)`,
+		serverID, cutoff.UTC(), serverID, cutoff.UTC(), limit)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // LookupSAPlayer resolves only the identity needed by whitelist/ban forms. It
 // deliberately avoids the global player/profile projection and its texture joins.
 func (m *Mysql) LookupSAPlayer(ctx context.Context, query string) (SAPlayerIdentity, error) {

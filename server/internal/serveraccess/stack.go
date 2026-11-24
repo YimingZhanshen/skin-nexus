@@ -1,6 +1,8 @@
 package serveraccess
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"sync/atomic"
 
@@ -11,12 +13,14 @@ import (
 // It generates no keys and starts no workers at assembly; a disabled gate
 // prevents every request from reaching the store.
 type Stack struct {
-	on  atomic.Bool
-	cfg Config
+	on        atomic.Bool
+	cfg       Config
+	retention *RetentionWorker
 }
 
 func NewStack(cfg Config) *Stack {
 	s := &Stack{cfg: cfg}
+	s.retention = NewRetentionWorker(cfg.Store, cfg.Now, 0)
 	s.SetEnabled(cfg.Enabled)
 	return s
 }
@@ -29,6 +33,28 @@ func (s *Stack) SetEnabled(on bool) {
 	if s != nil {
 		s.on.Store(on)
 	}
+}
+
+// StartRetention is explicit and fail-closed: a disabled module or missing
+// store never creates a goroutine. Repeated calls while running are harmless.
+func (s *Stack) StartRetention(ctx context.Context) error {
+	if s == nil || !s.Enabled() {
+		return nil
+	}
+	if s.retention == nil || s.retention.store == nil {
+		return errors.New("serveraccess: retention store is required")
+	}
+	return s.retention.Start(ctx)
+}
+
+func (s *Stack) StopRetention() {
+	if s != nil && s.retention != nil {
+		s.retention.Stop()
+	}
+}
+
+func (s *Stack) RetentionRunning() bool {
+	return s != nil && s.retention != nil && s.retention.Running()
 }
 
 // SetVerifier is an assembly-time injection of the narrow Yggdrasil extension.

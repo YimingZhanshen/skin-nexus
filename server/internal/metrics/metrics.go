@@ -228,4 +228,13 @@ var (
 	// ServerAccessEventWriteFailures counts join events that could not be
 	// persisted. Verification still succeeds; operators need an alert signal.
 	ServerAccessEventWriteFailures = Default.NewCounter("serveraccess_event_write_failures_total", "Server-access join event persistence failures.")
+	// ServerAccessFallbackBreakerOpen counts per-server fallback circuits that
+	// opened after repeated upstream faults. No server or credential label.
+	ServerAccessFallbackBreakerOpen = Default.NewCounter("serveraccess_fallback_breaker_open_total", "Server-access fallback circuit openings after upstream faults.")
+	// ServerAccessRetentionCleanupFailures counts failed per-server retention
+	// passes. The sweeper continues with the remaining servers.
+	ServerAccessRetentionCleanupFailures = Default.NewCounter("serveraccess_retention_cleanup_failures_total", "Server-access event retention cleanup failures.")
+	// VerifyProxyUpstreamFailures counts final proxy failures by a fixed reason.
+	// Credential, URL, query, body and player identity are never labels.
+	VerifyProxyUpstreamFailures = Default.NewCounter("verify_proxy_upstream_failures_total", "Optional verify proxy upstream failures by fixed reason.", "reason")
 )

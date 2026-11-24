@@ -30,13 +30,14 @@ type verificationStore interface {
 }
 
 type requestPolicy struct {
-	store    verificationStore
-	now      time.Time
-	server   store.SAServer
-	policy   store.SAServerPolicy
-	identity ygg.VerificationIdentity
-	acquire  func(int64, int) func()
-	release  func()
+	store         verificationStore
+	now           time.Time
+	server        store.SAServer
+	policy        store.SAServerPolicy
+	identity      ygg.VerificationIdentity
+	acquire       func(int64, int) func()
+	release       func()
+	admitFallback func() (ygg.FallbackPermit, bool)
 }
 
 func (p *requestPolicy) Evaluate(ctx context.Context, identity ygg.VerificationIdentity) (ygg.VerificationDecision, error) {
@@ -82,6 +83,13 @@ func (p *requestPolicy) Evaluate(ctx context.Context, identity ygg.VerificationI
 	return ygg.VerificationDecision{Allow: true, AllowFallback: fallback, ReasonCode: "allowed"}, nil
 }
 
+func (p *requestPolicy) AdmitFallback() (ygg.FallbackPermit, bool) {
+	if p.admitFallback == nil {
+		return ygg.FallbackPermit{}, true
+	}
+	return p.admitFallback()
+}
+
 func (p *requestPolicy) ResolveFallback(ctx context.Context, _ ygg.VerificationIdentity) (bool, error) {
 	if !p.policy.PremiumFallbackEnabled || p.policy.WhitelistEnabled {
 		return false, nil
@@ -98,8 +106,13 @@ func saGlobalFallback(ctx context.Context, st verificationStore) (bool, error) {
 }
 
 type serverConcurrency struct {
-	mu     sync.Mutex
-	active int
+	mu             sync.Mutex
+	active         int
+	fallbackActive int
+	probeActive    bool
+	breaker        breakerState
+	failures       int
+	openedAt       time.Time
 }
 
 type verifier struct {
@@ -168,7 +181,8 @@ func (v *verifier) handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Request-Id", requestID)
 	started := v.now()
 	requestPolicy := &requestPolicy{store: v.store, now: started, server: store.SAServer{ID: credential.ServerID, TenantID: credential.TenantID}, policy: policy,
-		identity: ygg.VerificationIdentity{Username: saText(r.URL.Query().Get("username"), 64)}, acquire: v.acquire}
+		identity: ygg.VerificationIdentity{Username: saText(r.URL.Query().Get("username"), 64)}, acquire: v.acquire,
+		admitFallback: func() (ygg.FallbackPermit, bool) { return v.acquireFallback(credential.ServerID, policy.MaxConcurrent) }}
 	defer func() {
 		if requestPolicy.release != nil {
 			requestPolicy.release()
@@ -303,4 +317,5 @@ func (v *verifier) routes(mux *http.ServeMux) {
 }
 
 var _ ygg.VerificationFallbackPolicy = (*requestPolicy)(nil)
+var _ ygg.VerificationFallbackGuard = (*requestPolicy)(nil)
 var _ ygg.VerificationPolicy = (*requestPolicy)(nil)

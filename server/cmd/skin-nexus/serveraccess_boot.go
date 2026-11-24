@@ -40,6 +40,19 @@ func (s *serverAccessStack) setEnabled(_ context.Context, on bool) {
 	}
 }
 
+func (s *serverAccessStack) startRetention(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	return s.stack.StartRetention(ctx)
+}
+
+func (s *serverAccessStack) stopRetention() {
+	if s != nil {
+		s.stack.StopRetention()
+	}
+}
+
 func (s *serverAccessStack) setVerifier(verifier *ygg.API) {
 	if s != nil {
 		s.stack.SetVerifier(verifier)

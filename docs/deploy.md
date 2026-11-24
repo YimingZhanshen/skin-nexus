@@ -274,11 +274,11 @@ app 进程能看到哪些变量，取决于 compose 文件里 `environment:` 段
 | `SKIN_UNION_QUERYEMAIL_MODE` | 面板真源 | `full` | 联盟邮箱查询应答：`full` = 返回邮箱、`off` = 403 拒绝；其他值按 `off` 处理（fail-closed） |
 | `SKIN_UNION_RESOLVE_NAMES` | 面板真源 | `true` | 是否由本站后台向各成员站的 `/api/yggdrasil` 读取站名（hub 不存站名）。读取只走受控出站（公网地址、禁重定向、固定单一路径、限响应体），且不在请求路径上等待；设为 `false` 后连已读到的名字也不再显示。面板项 `union_resolve_names` 热生效 |
 
-**服务器接入模块**（控制面与可信验证链已实现，默认关闭；真源在「管理 → 站点设置」）
+**服务器接入模块**（控制面、可信验证链、可选代理与治理加固已实现，默认关闭；真源在「管理 → 站点设置」）
 
 | 变量 | 必填性 | 默认（源码 / 镜像内） | 说明 |
 |---|---|---|---|
-| `SKIN_SERVERACCESS_ENABLED` | 面板真源 | `false` | 服务器接入模块开关；面板 `serveraccess_enabled` 优先且热生效。关闭时所有模块 API 统一 404，`/servers` 仍提供 SPA 壳并明确显示模块不可用；开启后提供独立 `/servers` 服主门户、租户/服务器/成员/邀请控制面、按服凭证与白名单/封禁策略、进服事件、平台状态/配额/紧急管理，以及 URL secret / Bearer Header 两种 `hasJoined` 验证入口。进服事件与验证配额持久化；验证代理二进制、导出/注销与公测运维不属于当前实现 |
+| `SKIN_SERVERACCESS_ENABLED` | 面板真源 | `false` | 服务器接入模块开关；面板 `serveraccess_enabled` 优先且热生效。关闭时所有模块 API 统一 404，`/servers` 仍提供 SPA 壳并明确显示模块不可用；开启后提供独立 `/servers` 服主门户、租户/服务器/成员/邀请控制面、按服凭证与白名单/封禁策略、进服事件、平台状态/配额/紧急管理，以及 URL secret / Bearer Header 两种 `hasJoined` 验证入口。进服事件与验证配额持久化；可选 `verify-proxy` 独立子命令、按服 fallback 熔断和按 `EventRetentionDays` 的事件清理也已实现；导出/注销与公测运维不属于当前实现 |
 
 **服主门户接口**
 
@@ -297,6 +297,61 @@ app 进程能看到哪些变量，取决于 compose 文件里 `environment:` 段
 - Bearer Header：`GET /api/serveraccess/v1/servers/<public_id>/hasJoined`，请求头为 `Authorization: Bearer <secret>`。
 
 凭证只展示一次，数据库只存 SHA-256 摘要。白名单按本地账号 `uid` 执行；`whitelist_enabled=true` 时完全禁用官方 fallback，已知玩家没有本地 join session 与未知玩家一样拒绝，不按昵称认领官方身份。未开启白名单时，官方 fallback 只在真实本地 miss、按服开关与平台全局开关均开启、且既有 Yggdrasil fallback 开关也开启时回源；官方 identity 用于事件，但未显式绑定时事件 `uid` 必须为空。
+
+**fallback 熔断、事件保留与紧急治理**
+
+- 每个服务器进程独立维护按服熔断：连续 5 次官方上游故障打开 30 秒；半开只放行 1 次探测，健康响应（包括正常 204）关闭熔断。上游 4xx/204 不计为基础设施故障。`MaxConcurrent` 同时约束本地验证与官方 fallback，并按服务器隔离。
+- 熔断只拦官方 fallback，不拦本地 session、白名单、平台/本服封禁、租户停用、服务器停用或凭证吊销；这些判定每次请求都读实时状态。proxy 只是无缓存转发，因此紧急控制同样立即生效。
+- 模块开启时启动一个事件保留 worker，启动时立即清理一次，此后每小时一次；按每服 `EventRetentionDays` 计算 UTC 截止时间并每批删除 1000 条，严格早于截止时间的事件才删除。模块关闭、面板热关或进程退出会停止 worker；单服失败记指标并继续其他服务器。多实例同时清理是幂等的，但没有分布式 leader。
+- 熔断与并发计数是进程内状态，多副本部署时每个副本独立执行；需要全局限流时应只在网关/单副本层部署验证面。
+
+**可选 `skin-nexus verify-proxy`（S3/S4 不依赖）**
+
+proxy 不读 `SKIN_*` 主站配置、不连接数据库，只接收 public server id、upstream API root 和 Header 模式 credential。它暴露：
+
+- `GET /sessionserver/session/minecraft/hasJoined` 与 `GET /api/yggdrasil/sessionserver/session/minecraft/hasJoined`：本地标准入口；
+- `GET /healthz`：进程健康；
+- `GET /metrics`：proxy 指标，默认只监听 `127.0.0.1:25565`，不要暴露到公网。
+
+请求只转发 `username`、`serverId`、`ip`，去掉客户端 Authorization/Cookie 并注入配置的 Bearer credential。成功 profile 原样返回；上游 204、4xx、认证失败、重定向与最终 5xx/网络/超时均保持标准空 204。仅网络瞬断、超时和 5xx 重试，默认最多重试 2 次（总计 3 次），204/4xx 不重试。TLS 默认校验系统根证书，可指定私有 CA；没有跳过校验开关。响应统一带 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`。
+
+| 环境变量 | flag | 默认 | 说明 |
+|---|---|---|---|
+| `SKINNEXUS_VERIFY_PROXY_PUBLIC_ID` | `--public-id` | 无 | 必填，`srv_` 开头的 public server id |
+| `SKINNEXUS_VERIFY_PROXY_UPSTREAM` | `--upstream` | 无 | 必填，HTTP(S) API root；禁止 query、fragment、userinfo |
+| `SKINNEXUS_VERIFY_PROXY_CREDENTIAL` | 无 | 无 | Header 模式 secret；与 credential-file 二选一，不提供命令行 flag |
+| `SKINNEXUS_VERIFY_PROXY_CREDENTIAL_FILE` | `--credential-file` | 无 | secret 文件；Unix 权限必须为 owner-only，Windows 需自行限制 ACL |
+| `SKINNEXUS_VERIFY_PROXY_CA_FILE` | `--ca-file` | 无 | 可选私有上游 CA PEM |
+| `SKINNEXUS_VERIFY_PROXY_LISTEN` | `--listen` | `127.0.0.1:25565` | 本地监听地址 |
+| `SKINNEXUS_VERIFY_PROXY_READ_TIMEOUT` | `--read-timeout` | `5s` | 本地读超时 |
+| `SKINNEXUS_VERIFY_PROXY_WRITE_TIMEOUT` | `--write-timeout` | `15s` | 本地写超时，覆盖默认 3 次上游尝试与退避 |
+| `SKINNEXUS_VERIFY_PROXY_HEADER_TIMEOUT` | `--header-timeout` | `5s` | 本地请求头读取超时 |
+| `SKINNEXUS_VERIFY_PROXY_REQUEST_TIMEOUT` | `--request-timeout` | `4s` | 每次上游尝试总超时 |
+| `SKINNEXUS_VERIFY_PROXY_MAX_BODY_BYTES` | `--max-body-bytes` | `65536` | 本地请求体上限；hasJoined 本体必须为空 |
+| `SKINNEXUS_VERIFY_PROXY_MAX_HEADER_BYTES` | `--max-header-bytes` | `16384` | 本地请求头上限 |
+| `SKINNEXUS_VERIFY_PROXY_RETRIES` | `--retries` | `2` | 瞬断重试次数，范围 0..5 |
+| `SKINNEXUS_VERIFY_PROXY_RETRY_BACKOFF` | `--retry-backoff` | `100ms` | 首次重试等待，指数退避且单次封顶 2s |
+
+推荐把 header secret 写入仅服务账号可读的文件，而不是放进命令行或 unit 的 `Environment=`：
+
+```bash
+install -m 600 /dev/null /etc/skin-nexus/verify-proxy.credential
+# 用安全编辑器把控制面创建的 Header secret 写入该文件，不加引号或额外空格
+/opt/skin-nexus/skin-nexus verify-proxy \
+  --public-id srv_你的公网id \
+  --upstream https://skin.example.com \
+  --credential-file /etc/skin-nexus/verify-proxy.credential
+```
+
+配置缺失、secret 无效、文件权限过宽、TLS 证书不受信或 listener 失败都会拒绝启动/请求；非法配置的错误文本不回显 secret。日志只写固定标签（`verify_proxy listening`、`verify_proxy upstream_failure`、固定 reason），不写 secret、URL、query、body、玩家身份或客户端头。轮换后必须重启 proxy 进程加载新文件；吊销和停服不需要重启。
+
+**监控与告警**
+
+- `verify_proxy_upstream_failures_total{reason}`：proxy 最终上游失败，reason 仅为 `network`、`timeout`、`upstream_status`、`response_too_large`、`canceled`、`invalid_request`；主站 `SKIN_METRICS=1` 的 `/metrics` 或 proxy 本地 `/metrics` 可采集。
+- `serveraccess_fallback_breaker_open_total`：按服熔断打开次数；增长表示官方 sessionserver 持续故障。
+- `serveraccess_retention_cleanup_failures_total`：保留策略读取或单服清理失败；非零时检查数据库权限、磁盘和 `sa_join_events` 状态。
+
+三个指标都没有 secret、URL、query、body、玩家或服务器标签。出现熔断打开/retention 失败时应用同时写固定标签 `serveraccess.fallback breaker_open` 或 `serveraccess.retention cleanup_failed`，可据此配置告警；proxy 上游失败写 `verify_proxy upstream_failure`。
 
 **`/v/` 路径本身就是凭据，运维边界比普通页面更严格：**
 

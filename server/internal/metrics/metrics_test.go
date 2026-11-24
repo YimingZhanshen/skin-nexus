@@ -5,8 +5,8 @@ package metrics
 //
 // The format is Prometheus text exposition, written by hand (this repository
 // takes no new dependencies): a HELP line and a TYPE line per family, then
-// one sample per label set, values sorted so two scrapes of an idle process
-// are byte-identical.
+// one sample per label set, values sorted so counter samples from two scrapes
+// of an idle process are byte-identical. The uptime gauge intentionally grows.
 
 import (
 	"strings"
@@ -39,8 +39,8 @@ func TestCounterExpositionShape(t *testing.T) {
 	}
 }
 
-// Two scrapes of an untouched process must be byte-identical, so a diffing
-// scraper never reports motion where there is none.
+// Counter samples from two scrapes of an untouched process must be
+// byte-identical. Uptime is excluded because it is a deliberately live gauge.
 func TestExpositionIsDeterministic(t *testing.T) {
 	r := New()
 	c := r.NewCounter("demo_total", "Demo.", "stage")
@@ -52,10 +52,18 @@ func TestExpositionIsDeterministic(t *testing.T) {
 		if err := r.WriteText(&b); err != nil {
 			t.Fatal(err)
 		}
-		return b.String()
+		lines := strings.Split(b.String(), "\n")
+		out := lines[:0]
+		for _, line := range lines {
+			if !strings.HasPrefix(line, "process_uptime_seconds ") {
+				out = append(out, line)
+			}
+		}
+		return strings.Join(out, "\n")
 	}
-	if render() != render() {
-		t.Fatalf("two scrapes of the same registry differ:\n%s\n---\n%s", render(), render())
+	first, second := render(), render()
+	if first != second {
+		t.Fatalf("two scrapes of the same registry differ:\n%s\n---\n%s", first, second)
 	}
 	// label sets in sorted order, not insertion order
 	if strings.Index(render(), `stage="a"`) > strings.Index(render(), `stage="z"`) {

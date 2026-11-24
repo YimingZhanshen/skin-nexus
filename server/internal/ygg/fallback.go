@@ -121,14 +121,13 @@ func (f *Fallback) profile(ctx context.Context, uuid string, withSig bool) ([]by
 // hasJoined forwards a missed join verification to Mojang's hasJoined.
 // Returns the official profile body when Mojang confirms the join.
 func (f *Fallback) hasJoined(ctx context.Context, username, serverID, ip string) ([]byte, bool) {
-	if !f.on(ctx) {
-		return nil, false
-	}
-	if !officialNameRe.MatchString(username) {
-		return nil, false // site-local name: can never exist upstream
-	}
-	if len(serverID) > 128 {
-		return nil, false // pathological input: Mojang would 400 anyway
+	result := f.scopedHasJoined(ctx, username, serverID, ip)
+	return result.Profile, result.Matched
+}
+
+func (f *Fallback) scopedHasJoined(ctx context.Context, username, serverID, ip string) FallbackResult {
+	if !f.on(ctx) || !officialNameRe.MatchString(username) || len(serverID) > 128 {
+		return FallbackResult{}
 	}
 	q := url.Values{}
 	q.Set("username", username)
@@ -138,24 +137,30 @@ func (f *Fallback) hasJoined(ctx context.Context, username, serverID, ip string)
 	if ip != "" && net.ParseIP(ip) != nil {
 		q.Set("ip", ip)
 	}
-	return f.get(ctx, f.BaseURL+"/session/minecraft/hasJoined?"+q.Encode())
+	body, matched, fault := f.getResult(ctx, f.BaseURL+"/session/minecraft/hasJoined?"+q.Encode())
+	return FallbackResult{Profile: body, Matched: matched, UpstreamFault: fault}
 }
 
 // get performs the guarded fetch: exactly 200 + a plausible profile JSON
 // under the size cap. Everything else (4xx/5xx/redirect/garbage/oversize)
 // is a miss.
 func (f *Fallback) get(ctx context.Context, rawURL string) ([]byte, bool) {
+	body, matched, _ := f.getResult(ctx, rawURL)
+	return body, matched
+}
+
+func (f *Fallback) getResult(ctx context.Context, rawURL string) ([]byte, bool, bool) {
 	// Structural re-check: whatever the builders produced, the request may
 	// only ever target the configured origin (defense in depth — the base
 	// is constant in production, but tests and future editors get the same
 	// guarantee).
 	base, err := url.Parse(f.BaseURL)
 	if err != nil || base.Scheme == "" || base.Host == "" {
-		return nil, false
+		return nil, false, true
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, false
+		return nil, false, true
 	}
 	// Scheme and host are case-insensitive (RFC 3986 §3.2.2 / §3.2.1), so a
 	// base typed in one case and a builder-produced URL in the other are the
@@ -165,21 +170,24 @@ func (f *Fallback) get(ctx context.Context, rawURL string) ([]byte, bool) {
 	// lowercasing both sides — this is the guard's only comparison and it
 	// must keep seeing the strings as they are.
 	if !strings.EqualFold(req.URL.Scheme, base.Scheme) || !strings.EqualFold(req.URL.Host, base.Host) {
-		return nil, false
+		return nil, false, true
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "SkinNexus session-fallback")
 	resp, err := f.Client.Do(req)
 	if err != nil {
-		return nil, false
+		return nil, false, true
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNoContent || resp.StatusCode >= 400 && resp.StatusCode < 500 {
+		return nil, false, false // a healthy upstream denial is not a breaker fault
+	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, false
+		return nil, false, true
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, fallbackMaxBody+1))
 	if err != nil || len(body) > fallbackMaxBody {
-		return nil, false
+		return nil, false, true
 	}
 	// Plausibility gate: a profile is a JSON object carrying id + name —
 	// a captive portal's HTML or an error document never passes.
@@ -188,9 +196,9 @@ func (f *Fallback) get(ctx context.Context, rawURL string) ([]byte, bool) {
 		Name string          `json:"name"`
 	}
 	if err := json.Unmarshal(body, &probe); err != nil || len(probe.ID) == 0 || probe.Name == "" {
-		return nil, false
+		return nil, false, true
 	}
-	return body, true
+	return body, true, false
 }
 
 // isLowerHex reports whether s is all [0-9a-f] (length checked by callers).
