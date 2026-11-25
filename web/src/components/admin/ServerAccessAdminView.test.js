@@ -43,7 +43,7 @@ const vite = await createServer({
       if (id === '\0server-access-test-dialog') return 'export const confirmDialog = (...args) => globalThis.__serverAccessConfirm(...args)'
       if (id === '\0server-access-test-api') return 'export const serverAccessApi = new Proxy({}, { get: (_target, key) => globalThis.__serverAccessApi[key] })'
       if (id === '\0server-access-test-empty') return 'import { h } from "vue"; export default { props: ["text"], setup: (props) => () => h("div", { class: "empty-state" }, props.text) }'
-      if (id === '\0server-access-test-pager') return 'export default { render: () => null }'
+      if (id === '\0server-access-test-pager') return 'import { h } from "vue"; export default { props: ["page", "pages", "total"], emits: ["update:page"], setup: (props, { emit }) => () => h("div", { class: "test-pager", page: props.page, pages: props.pages, total: props.total, onUpdatePage: (page) => emit("update:page", page) }) }'
     },
   }],
 })
@@ -156,6 +156,26 @@ async function mountView(overrides = {}) {
   if (errors.length) throw errors[0]
   return { app, container, state, errors }
 }
+
+test('platform pagers use totals and a page size of 20 and request the selected page', async () => {
+  const calls = []
+  const { app, container } = await mountView({
+    platformTenants: async (page) => { calls.push(['tenants', page]); return { tenants: [], total: 21, page, size: 20 } },
+    platformServers: async (page) => { calls.push(['servers', page]); return { servers: [], total: 41, page, size: 20 } },
+    platformAudit: async (page) => { calls.push(['audit', page]); return { audit: [], total: 61, page, size: 20 } },
+  })
+  try {
+    const pagers = descendants(container).filter((node) => node.props.class === 'test-pager')
+    assert.deepEqual(pagers.map((node) => [node.props.page, node.props.pages, node.props.total]), [[1, 2, 21], [1, 3, 41], [1, 4, 61]])
+    pagers[0].props.onUpdatePage(2)
+    await settle()
+    assert.deepEqual(calls.at(-1), ['tenants', 2])
+  } finally {
+    app.unmount()
+    delete globalThis.__serverAccessApi
+    delete globalThis.__serverAccessConfirm
+  }
+})
 
 test('platform tenant creation sends numeric fields, refreshes tenants and audit, and clears the form', async () => {
   const state = { creates: [], tenantLoads: 0, auditLoads: 0 }

@@ -1,7 +1,9 @@
 <script setup>
 import { shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { computed } from 'vue'
 import EmptyState from '../EmptyState.vue'
+import Pager from '../Pager.vue'
 
 const props = defineProps({
   members: { type: Array, default: () => [] },
@@ -9,11 +11,15 @@ const props = defineProps({
   busy: Boolean,
   canManageMembers: Boolean,
   inviteToken: String,
+  page: { type: Number, default: 1 },
+  size: { type: Number, default: 50 },
+  total: { type: Number, default: 0 },
 })
-const emit = defineEmits(['invite', 'remove-member', 'revoke-invite', 'hide-invite'])
+const emit = defineEmits(['invite', 'remove-member', 'revoke-invite', 'hide-invite', 'update:page'])
 const { t } = useI18n()
 const email = shallowRef('')
 const role = shallowRef('viewer')
+const pages = computed(() => Math.max(1, Math.ceil(props.total / props.size)))
 function invite() {
   if (!props.canManageMembers || props.busy || !email.value.trim()) return
   emit('invite', email.value.trim(), role.value)
@@ -66,6 +72,7 @@ function roleLabel(value) {
           </tr></tbody>
         </table>
       </div>
+      <Pager :page="page" :pages="pages" :total="total" @update:page="emit('update:page', $event)" />
     </template>
   </section>
 </template>

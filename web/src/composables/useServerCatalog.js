@@ -7,17 +7,27 @@ export function useServerCatalog(api) {
   const loading = shallowRef(false)
   const busy = shallowRef(false)
   const error = shallowRef('')
+  const total = shallowRef(0)
+  const page = shallowRef(1)
+  const size = shallowRef(50)
+  const quotaUsed = shallowRef(0)
+  const status = shallowRef('')
   let request = 0
 
-  async function load() {
+  async function load(nextPage = page.value, nextSize = size.value, nextStatus = status.value) {
     const current = ++request
+    page.value = nextPage
+    size.value = nextSize
+    status.value = nextStatus
     loading.value = true
     error.value = ''
     try {
-      const data = await api.servers()
+      const data = await api.servers(nextPage, nextSize, nextStatus)
       if (current !== request) return false
       servers.value = data.servers || []
-      if (selected.value && !servers.value.some((item) => item.id === selected.value.server.id)) {
+      total.value = data.total || 0
+      quotaUsed.value = data.quotaUsed ?? total.value
+      if (selected.value && total.value === 0) {
         selected.value = null
         policy.value = null
       }
@@ -62,7 +72,13 @@ export function useServerCatalog(api) {
     error.value = ''
     try {
       const created = await api.createServer(name)
-      servers.value = [created, ...servers.value]
+      quotaUsed.value++
+      if (page.value === 1 && (!status.value || created.status === status.value)) {
+        servers.value = [created, ...servers.value].slice(0, size.value)
+        total.value++
+      } else {
+        await load(1, size.value, status.value)
+      }
       return created
     } catch (cause) {
       error.value = cause.message
@@ -96,6 +112,9 @@ export function useServerCatalog(api) {
   return {
     servers: readonly(servers), selected: readonly(selected), policy: readonly(policy),
     loading: readonly(loading), busy: readonly(busy), error: readonly(error),
-    load, select, clearSelection, create, update,
+    total: readonly(total), page: readonly(page), size: readonly(size), quotaUsed: readonly(quotaUsed),
+    status: readonly(status), load, select, clearSelection, create, update,
+    goPage: (nextPage) => load(nextPage),
+    filter: (nextStatus) => load(1, size.value, nextStatus),
   }
 }

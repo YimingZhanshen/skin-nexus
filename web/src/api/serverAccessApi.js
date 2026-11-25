@@ -23,25 +23,31 @@ async function request(method, path, body, { blob = false } = {}) {
 const ownerBase = '/api/serveraccess/v1'
 const platformBase = '/api/admin/v1/serveraccess'
 
+function ownerList(path, page, size, status = '') {
+  const query = new URLSearchParams({ page: String(page), size: String(size) })
+  if (status) query.set('status', status)
+  return request('GET', `${path}?${query}`)
+}
+
 export const serverAccessApi = {
   tenantMe: () => request('GET', `${ownerBase}/tenants/me`),
   members: () => request('GET', `${ownerBase}/tenants/me/members`),
-  invites: () => request('GET', `${ownerBase}/tenants/me/invites`),
+  invites: (page = 1, size = 50) => ownerList(`${ownerBase}/tenants/me/invites`, page, size),
   inviteMember: (email, role) => request('POST', `${ownerBase}/tenants/me/members/invite`, { email, role }),
   removeMember: (uid) => request('DELETE', `${ownerBase}/tenants/me/members/${uid}`),
   revokeInvite: (id) => request('DELETE', `${ownerBase}/tenants/me/invites/${id}`),
   exportTenant: () => request('GET', `${ownerBase}/tenants/me/export`, undefined, { blob: true }),
   requestTenantDeletion: () => request('POST', `${ownerBase}/tenants/me/delete-request`, {}),
 
-  servers: () => request('GET', `${ownerBase}/servers`),
+  servers: (page = 1, size = 50, status = '') => ownerList(`${ownerBase}/servers`, page, size, status),
   createServer: (name) => request('POST', `${ownerBase}/servers`, { name }),
   server: (id) => request('GET', `${ownerBase}/servers/${id}`),
   updateServer: (id, body) => request('PATCH', `${ownerBase}/servers/${id}`, body),
 
-  whitelist: (id) => request('GET', `${ownerBase}/servers/${id}/whitelist`),
+  whitelist: (id, page = 1, size = 50) => ownerList(`${ownerBase}/servers/${id}/whitelist`, page, size),
   addWhitelist: (id, uid, note) => request('POST', `${ownerBase}/servers/${id}/whitelist`, { uid, note }),
   removeWhitelist: (id, uid) => request('DELETE', `${ownerBase}/servers/${id}/whitelist/${uid}`),
-  bans: (id) => request('GET', `${ownerBase}/servers/${id}/bans`),
+  bans: (id, page = 1, size = 50) => ownerList(`${ownerBase}/servers/${id}/bans`, page, size),
   addBan: (id, body) => request('POST', `${ownerBase}/servers/${id}/bans`, body),
   removeBan: (id, uid) => request('DELETE', `${ownerBase}/servers/${id}/bans/${uid}`),
 

@@ -6,19 +6,36 @@ export function useServerWhitelist(api) {
   const busy = shallowRef(false)
   const error = shallowRef('')
   const resolved = shallowRef(null)
+  const total = shallowRef(0)
+  const page = shallowRef(1)
+  const size = shallowRef(50)
   let activeServer = null
   let request = 0
   let lookupRequest = 0
 
-  async function load(serverId) {
+  async function load(serverId, nextPage, nextSize = size.value) {
     const current = ++request
-    if (activeServer !== serverId) rows.value = []
+    const switchingServer = activeServer !== serverId
+    if (switchingServer) {
+      rows.value = []
+      total.value = 0
+    }
+    if (nextPage === undefined) nextPage = switchingServer ? 1 : page.value
     activeServer = serverId
+    page.value = nextPage
+    size.value = nextSize
     loading.value = true
     error.value = ''
     try {
-      const data = await api.whitelist(serverId)
-      if (current === request) rows.value = data.whitelist || []
+      const data = await api.whitelist(serverId, nextPage, nextSize)
+      if (current !== request) return false
+      rows.value = data.whitelist || []
+      total.value = data.total || 0
+      const lastPage = Math.max(1, Math.ceil(total.value / nextSize))
+      if (nextPage > lastPage) {
+        page.value = lastPage
+        return load(serverId, lastPage, nextSize)
+      }
       return true
     } catch (cause) {
       if (current === request) error.value = cause.message
@@ -81,7 +98,8 @@ export function useServerWhitelist(api) {
 
   return {
     rows: readonly(rows), resolved: readonly(resolved), loading: readonly(loading),
-    busy: readonly(busy), error: readonly(error), load, lookup, add, remove,
+    busy: readonly(busy), error: readonly(error), total: readonly(total), page: readonly(page), size: readonly(size),
+    load, lookup, add, remove, goPage: (serverId, nextPage) => load(serverId, nextPage),
     clearResolution: () => { lookupRequest++; resolved.value = null; error.value = '' },
   }
 }

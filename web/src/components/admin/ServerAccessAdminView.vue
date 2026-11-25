@@ -34,9 +34,9 @@ const serverSearch = shallowRef('')
 const auditSearch = shallowRef('')
 const now = shallowRef(Date.now())
 let clock
-const tenantPages = computed(() => Math.max(1, Math.ceil(platform.tenantTotal.value / 20)))
-const serverPages = computed(() => Math.max(1, Math.ceil(platform.serverTotal.value / 20)))
-const auditPages = computed(() => Math.max(1, Math.ceil(platform.auditTotal.value / 20)))
+const tenantPages = computed(() => Math.max(1, Math.ceil(platform.tenantTotal.value / platform.tenantSize.value)))
+const serverPages = computed(() => Math.max(1, Math.ceil(platform.serverTotal.value / platform.serverSize.value)))
+const auditPages = computed(() => Math.max(1, Math.ceil(platform.auditTotal.value / platform.auditSize.value)))
 watch(() => platform.tenants.value, (rows) => {
   quotaDrafts.value = Object.fromEntries(rows.map((row) => [row.id, row.serverLimit]))
 }, { immediate: true })

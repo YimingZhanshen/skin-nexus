@@ -10,6 +10,9 @@ export function useServerTenant(api) {
   const error = shallowRef('')
   const unavailable = shallowRef(false)
   const forbidden = shallowRef(false)
+  const total = shallowRef(0)
+  const page = shallowRef(1)
+  const size = shallowRef(50)
   let request = 0
 
   async function load() {
@@ -22,13 +25,19 @@ export function useServerTenant(api) {
       const me = await api.tenantMe()
       const [memberData, inviteData] = await Promise.all([
         api.members(),
-        me.role === 'owner' ? api.invites() : Promise.resolve({ invites: [] }),
+        me.role === 'owner' ? api.invites(page.value, size.value) : Promise.resolve({ invites: [], total: 0 }),
       ])
       if (current !== request) return false
       tenant.value = me.tenant
       role.value = me.role
       members.value = memberData.members || []
       invites.value = inviteData.invites || []
+      total.value = inviteData.total || 0
+      const lastPage = Math.max(1, Math.ceil(total.value / size.value))
+      if (page.value > lastPage) {
+        page.value = lastPage
+        return load()
+      }
       return true
     } catch (cause) {
       if (current !== request) return false
@@ -60,7 +69,9 @@ export function useServerTenant(api) {
   return {
     tenant: readonly(tenant), role: readonly(role), members: readonly(members), invites: readonly(invites),
     loading: readonly(loading), busy: readonly(busy), error: readonly(error),
-    unavailable: readonly(unavailable), forbidden: readonly(forbidden), load,
+    unavailable: readonly(unavailable), forbidden: readonly(forbidden),
+    total: readonly(total), page: readonly(page), size: readonly(size), load,
+    pageInvites: (nextPage) => { page.value = nextPage; return load() },
     invite: (email, memberRole) => mutate(() => api.inviteMember(email, memberRole)),
     removeMember: (uid) => mutate(() => api.removeMember(uid)),
     revokeInvite: (id) => mutate(() => api.revokeInvite(id)),

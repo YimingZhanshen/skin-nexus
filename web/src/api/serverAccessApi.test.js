@@ -47,6 +47,37 @@ test('owner lookup encodes the query and keeps ordinary session semantics', asyn
   }
 })
 
+test('owner lists send explicit page and size with a default page size of 50', async () => {
+  const previousFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (path) => {
+    calls.push(path)
+    return jsonResponse(200, {})
+  }
+  try {
+    await serverAccessApi.servers()
+    await serverAccessApi.servers(2, 25, 'disabled')
+    await serverAccessApi.whitelist(9)
+    await serverAccessApi.whitelist(9, 3, 100)
+    await serverAccessApi.bans(9)
+    await serverAccessApi.bans(9, 4, 75)
+    await serverAccessApi.invites()
+    await serverAccessApi.invites(5, 20)
+    assert.deepEqual(calls, [
+      '/api/serveraccess/v1/servers?page=1&size=50',
+      '/api/serveraccess/v1/servers?page=2&size=25&status=disabled',
+      '/api/serveraccess/v1/servers/9/whitelist?page=1&size=50',
+      '/api/serveraccess/v1/servers/9/whitelist?page=3&size=100',
+      '/api/serveraccess/v1/servers/9/bans?page=1&size=50',
+      '/api/serveraccess/v1/servers/9/bans?page=4&size=75',
+      '/api/serveraccess/v1/tenants/me/invites?page=1&size=50',
+      '/api/serveraccess/v1/tenants/me/invites?page=5&size=20',
+    ])
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
 test('event pagination sends the cursor and preserves API error status', async () => {
   const previousFetch = globalThis.fetch
   globalThis.fetch = async (path) => {

@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { confirmDialog } from '../../dialog.js'
 import { useServerWhitelist } from '../../composables/useServerWhitelist.js'
 import EmptyState from '../EmptyState.vue'
+import Pager from '../Pager.vue'
 
 const props = defineProps({
   serverId: { type: Number, default: null },
@@ -16,6 +17,7 @@ const query = shallowRef('')
 const note = shallowRef('')
 const names = ref({})
 const canAdd = computed(() => props.canWrite && panel.resolved.value && query.value.trim() && !panel.busy.value)
+const pages = computed(() => Math.max(1, Math.ceil(panel.total.value / panel.size.value)))
 
 watch(() => props.serverId, (id) => {
   query.value = ''
@@ -69,6 +71,7 @@ async function remove(row) {
         </tr></tbody>
       </table>
     </div>
+    <Pager :page="panel.page.value" :pages="pages" :total="panel.total.value" @update:page="panel.goPage(props.serverId, $event)" />
   </section>
 </template>
 

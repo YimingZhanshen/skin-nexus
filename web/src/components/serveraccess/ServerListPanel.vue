@@ -2,6 +2,7 @@
 import { shallowRef, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import EmptyState from '../EmptyState.vue'
+import Pager from '../Pager.vue'
 
 const props = defineProps({
   servers: { type: Array, default: () => [] },
@@ -12,11 +13,15 @@ const props = defineProps({
   busy: Boolean,
   canWrite: Boolean,
   error: String,
+  page: { type: Number, default: 1 },
+  size: { type: Number, default: 50 },
+  total: { type: Number, default: 0 },
 })
-const emit = defineEmits(['select', 'create', 'update', 'retry'])
+const emit = defineEmits(['select', 'create', 'update', 'retry', 'update:page'])
 const { t } = useI18n()
 const newName = shallowRef('')
 const atQuota = computed(() => props.limit > 0 && props.used >= props.limit)
+const pages = computed(() => Math.max(1, Math.ceil(props.total / props.size)))
 const statusLabel = (status) => t(`serverAccess.statusMap.${status}`)
 
 function create() {
@@ -54,6 +59,7 @@ function create() {
         </tbody>
       </table>
     </div>
+    <Pager :page="page" :pages="pages" :total="total" @update:page="emit('update:page', $event)" />
     <form v-if="canWrite" class="row create-row" @submit.prevent="create">
       <label class="sr-only" for="sa-new-server">{{ t('serverAccess.serverName') }}</label>
       <input id="sa-new-server" v-model="newName" maxlength="191" :placeholder="t('serverAccess.serverName')" required />

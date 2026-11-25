@@ -30,6 +30,9 @@ export function useServerAccessPlatform(api) {
   const tenantPage = shallowRef(1)
   const serverPage = shallowRef(1)
   const auditPage = shallowRef(1)
+  const tenantSize = shallowRef(20)
+  const serverSize = shallowRef(20)
+  const auditSize = shallowRef(20)
   const tenantQuery = shallowRef('')
   const serverQuery = shallowRef('')
   const auditQuery = shallowRef('')
@@ -50,6 +53,11 @@ export function useServerAccessPlatform(api) {
       if (current === tenantRequest) {
         tenants.value = data.tenants || []
         tenantTotal.value = data.total || 0
+        const lastPage = Math.max(1, Math.ceil(tenantTotal.value / tenantSize.value))
+        if (tenantPage.value > lastPage) {
+          tenantPage.value = lastPage
+          return loadTenants()
+        }
       }
       return current === tenantRequest
     } catch (cause) { if (current === tenantRequest) error.value = cause.message; return false }
@@ -62,6 +70,11 @@ export function useServerAccessPlatform(api) {
       if (current === serverRequest) {
         servers.value = data.servers || []
         serverTotal.value = data.total || 0
+        const lastPage = Math.max(1, Math.ceil(serverTotal.value / serverSize.value))
+        if (serverPage.value > lastPage) {
+          serverPage.value = lastPage
+          return loadServers()
+        }
       }
       return current === serverRequest
     } catch (cause) { if (current === serverRequest) error.value = cause.message; return false }
@@ -74,6 +87,11 @@ export function useServerAccessPlatform(api) {
       if (current === auditRequest) {
         audit.value = data.audit || []
         auditTotal.value = data.total || 0
+        const lastPage = Math.max(1, Math.ceil(auditTotal.value / auditSize.value))
+        if (auditPage.value > lastPage) {
+          auditPage.value = lastPage
+          return loadAudit()
+        }
       }
       return current === auditRequest
     } catch (cause) { if (current === auditRequest) error.value = cause.message; return false }
@@ -116,6 +134,7 @@ export function useServerAccessPlatform(api) {
     tenants: readonly(tenants), servers: readonly(servers), audit: readonly(audit),
     tenantTotal: readonly(tenantTotal), serverTotal: readonly(serverTotal), auditTotal: readonly(auditTotal),
     tenantPage: readonly(tenantPage), serverPage: readonly(serverPage), auditPage: readonly(auditPage),
+    tenantSize: readonly(tenantSize), serverSize: readonly(serverSize), auditSize: readonly(auditSize),
     tenantQuery: readonly(tenantQuery), serverQuery: readonly(serverQuery), auditQuery: readonly(auditQuery),
     fallback: readonly(fallback), loading: readonly(loading), busy: readonly(busy), error: readonly(error),
     load, loadTenants, loadServers, loadAudit,

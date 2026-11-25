@@ -80,6 +80,161 @@ test('server catalog selects scoped detail and creates through the owner client'
   assert.equal(catalog.selected.value.policy.whitelistEnabled, false)
 })
 
+test('server catalog keeps pagination metadata and quota separate from the visible page', async () => {
+  const calls = []
+  const catalog = useServerCatalog({
+    servers: async (...args) => {
+      calls.push(args)
+      return { servers: [server], total: 51, quotaUsed: 7, page: args[0], size: args[1] }
+    },
+  })
+  await catalog.load()
+  assert.deepEqual(calls, [[1, 50, '']])
+  assert.equal(catalog.page.value, 1)
+  assert.equal(catalog.size.value, 50)
+  assert.equal(catalog.total.value, 51)
+  assert.equal(catalog.quotaUsed.value, 7)
+  await catalog.goPage(2)
+  assert.deepEqual(calls[1], [2, 50, ''])
+  await catalog.filter('disabled')
+  assert.deepEqual(calls[2], [1, 50, 'disabled'])
+  assert.equal(catalog.page.value, 1)
+})
+
+test('server catalog ignores an older page response', async () => {
+  let releaseOld
+  const catalog = useServerCatalog({
+    servers: async (page) => {
+      if (page === 2) return new Promise((resolve) => { releaseOld = resolve })
+      return { servers: [{ ...server, id: 10 }], total: 51, quotaUsed: 7, page: 1, size: 50 }
+    },
+  })
+  const oldPage = catalog.goPage(2)
+  await catalog.goPage(1)
+  releaseOld({ servers: [server], total: 51, quotaUsed: 7, page: 2, size: 50 })
+  assert.equal(await oldPage, false)
+  assert.deepEqual(catalog.servers.value.map((row) => row.id), [10])
+  assert.equal(catalog.page.value, 1)
+})
+
+test('server catalog keeps the selected server when another page is viewed', async () => {
+  const catalog = useServerCatalog({
+    servers: async (page) => ({ servers: [{ ...server, id: page }], total: 51, quotaUsed: 7, page, size: 50 }),
+    server: async (id) => ({ server: { ...server, id }, policy: {} }),
+  })
+  await catalog.load()
+  await catalog.select(1)
+  await catalog.goPage(2)
+  assert.equal(catalog.selected.value.server.id, 1)
+})
+
+test('owner invitations paginate independently and retain their page on refresh', async () => {
+  const calls = []
+  const portal = useServerTenant({
+    tenantMe: async () => ({ tenant, role: 'owner' }),
+    members: async () => ({ members: [] }),
+    invites: async (...args) => {
+      calls.push(args)
+      return { invites: [{ id: args[0] }], total: 101, page: args[0], size: args[1] }
+    },
+  })
+  await portal.load()
+  assert.deepEqual(calls, [[1, 50]])
+  assert.equal(portal.page.value, 1)
+  assert.equal(portal.size.value, 50)
+  assert.equal(portal.total.value, 101)
+  await portal.pageInvites(3)
+  assert.deepEqual(calls[1], [3, 50])
+  await portal.load()
+  assert.deepEqual(calls[2], [3, 50])
+})
+
+test('whitelist paginates, resets on server changes, and ignores an older page response', async () => {
+  let releaseOld
+  const calls = []
+  const panel = useServerWhitelist({
+    whitelist: async (id, page, size) => {
+      calls.push([id, page, size])
+      if (id === 9 && page === 2) return new Promise((resolve) => { releaseOld = resolve })
+      return { whitelist: [{ id, page }], total: 101, page, size }
+    },
+  })
+  await panel.load(9)
+  assert.deepEqual(calls[0], [9, 1, 50])
+  assert.equal(panel.page.value, 1)
+  assert.equal(panel.size.value, 50)
+  assert.equal(panel.total.value, 101)
+  const oldPage = panel.goPage(9, 2)
+  await panel.goPage(9, 1)
+  releaseOld({ whitelist: [{ id: 99 }], total: 101, page: 2, size: 50 })
+  assert.equal(await oldPage, false)
+  assert.deepEqual(panel.rows.value.map((row) => row.id), [9])
+  await panel.load(10)
+  assert.deepEqual(calls.at(-1), [10, 1, 50])
+  assert.equal(panel.page.value, 1)
+})
+
+test('whitelist clamps to the last populated page after deleting its final row', async () => {
+  const calls = []
+  let rows = 51
+  const panel = useServerWhitelist({
+    whitelist: async (_id, page, size) => {
+      calls.push([page, size])
+      const start = (page - 1) * size
+      return {
+        whitelist: Array.from({ length: Math.max(0, Math.min(size, rows - start)) }, (_, index) => ({ id: start + index + 1 })),
+        total: rows, page, size,
+      }
+    },
+    removeWhitelist: async () => { rows-- },
+  })
+  await panel.load(9)
+  await panel.goPage(9, 2)
+  assert.equal(panel.rows.value.length, 1)
+  await panel.remove(9, 51)
+  assert.deepEqual(calls, [[1, 50], [2, 50], [2, 50], [1, 50]])
+  assert.equal(panel.page.value, 1)
+  assert.equal(panel.rows.value.length, 50)
+  assert.equal(panel.total.value, 50)
+})
+
+test('ban pagination resets on server changes and clamps an empty page after unbanning', async () => {
+  const calls = []
+  let rows = 2
+  const panel = useServerBans({
+    bans: async (id, page, size) => {
+      calls.push([id, page, size])
+      return { bans: rows ? [{ id: rows }] : [], total: rows, page, size }
+    },
+    removeBan: async () => { rows = 0 },
+  })
+  await panel.load(9, 2, 1)
+  assert.equal(panel.page.value, 2)
+  assert.equal(panel.size.value, 1)
+  assert.equal(panel.total.value, 2)
+  await panel.remove(9, 2)
+  assert.equal(panel.page.value, 1)
+  assert.equal(panel.total.value, 0)
+  await panel.load(10)
+  assert.deepEqual(calls.at(-1), [10, 1, 1])
+  assert.equal(panel.page.value, 1)
+})
+
+test('ban list ignores a late response from another server', async () => {
+  let releaseOld
+  const panel = useServerBans({
+    bans: async (id) => {
+      if (id === 9) return new Promise((resolve) => { releaseOld = resolve })
+      return { bans: [{ id: 10 }], total: 1, page: 1, size: 50 }
+    },
+  })
+  const oldLoad = panel.load(9)
+  await panel.load(10)
+  releaseOld({ bans: [{ id: 9 }], total: 1, page: 1, size: 50 })
+  assert.equal(await oldLoad, false)
+  assert.deepEqual(panel.rows.value.map((row) => row.id), [10])
+})
+
 test('whitelist resolves identity then refreshes real rows after add and remove', async () => {
   let rows = []
   const panel = useServerWhitelist({
@@ -186,6 +341,42 @@ test('platform view loads quotas and audit and applies emergency changes', async
   assert.deepEqual(writes, [
     ['tenant', { status: 'suspended' }], ['server', { status: 'active' }], ['fallback', false], ['revoke'],
   ])
+})
+
+test('platform pagination keeps the backend default page size of 20', async () => {
+  const calls = []
+  const platform = useServerAccessPlatform({
+    platformTenants: async (...args) => { calls.push(['tenants', ...args]); return { tenants: [], total: 21, page: 1, size: 20 } },
+    platformServers: async (...args) => { calls.push(['servers', ...args]); return { servers: [], total: 41, page: 1, size: 20 } },
+    platformAudit: async (...args) => { calls.push(['audit', ...args]); return { audit: [], total: 61, page: 1, size: 20 } },
+    platformFallback: async () => ({ enabled: false }),
+  })
+  await platform.load()
+  assert.equal(platform.tenantSize.value, 20)
+  assert.equal(platform.serverSize.value, 20)
+  assert.equal(platform.auditSize.value, 20)
+  assert.deepEqual(calls, [['tenants', 1, ''], ['servers', 1, ''], ['audit', 1, '']])
+})
+
+test('platform tenant deletion clamps an empty last page', async () => {
+  const calls = []
+  let rows = Array.from({ length: 21 }, (_, index) => ({ ...tenant, id: index + 1 }))
+  const platform = useServerAccessPlatform({
+    platformTenants: async (page) => {
+      calls.push(page)
+      return { tenants: rows.slice((page - 1) * 20, page * 20), total: rows.length, page, size: 20 }
+    },
+    platformServers: async () => ({ servers: [], total: 0 }),
+    platformAudit: async () => ({ audit: [], total: 0 }),
+    platformFallback: async () => ({ enabled: false }),
+    deletePlatformTenant: async (id) => { rows = rows.filter((row) => row.id !== id) },
+  })
+  await platform.load()
+  await platform.pageTenants(2)
+  await platform.deleteTenant(21)
+  assert.deepEqual(calls, [1, 2, 2, 1])
+  assert.equal(platform.tenantPage.value, 1)
+  assert.equal(platform.tenants.value.length, 20)
 })
 
 test('platform credential revocation refreshes the server summaries used by selection', async () => {

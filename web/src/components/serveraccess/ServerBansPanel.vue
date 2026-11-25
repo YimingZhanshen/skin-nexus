@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { confirmDialog } from '../../dialog.js'
 import { useServerBans } from '../../composables/useServerBans.js'
 import EmptyState from '../EmptyState.vue'
+import Pager from '../Pager.vue'
 
 const props = defineProps({
   serverId: { type: Number, default: null },
@@ -19,6 +20,7 @@ const permanent = shallowRef(true)
 const validationError = shallowRef('')
 const names = ref({})
 const canAdd = computed(() => props.canWrite && panel.resolved.value && (permanent.value || expiry.value) && !panel.busy.value)
+const pages = computed(() => Math.max(1, Math.ceil(panel.total.value / panel.size.value)))
 
 watch(() => props.serverId, (id) => {
   query.value = ''
@@ -89,6 +91,7 @@ async function unban(row) {
         </tr></tbody>
       </table>
     </div>
+    <Pager :page="panel.page.value" :pages="pages" :total="panel.total.value" @update:page="panel.goPage(props.serverId, $event)" />
   </section>
 </template>
 
