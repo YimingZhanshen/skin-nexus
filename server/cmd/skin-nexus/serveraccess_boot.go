@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -64,10 +65,21 @@ func newServerAccessStack(st serverAccessOptionReader, db *store.Mysql, cfg *con
 	s := &serverAccessStack{}
 	enabled := cfg != nil && cfg.ServerAccessEnabled
 	if st != nil {
-		if raw, ok, err := st.GetOption(context.Background(), "serveraccess_enabled"); err == nil && ok && strings.TrimSpace(raw) != "" {
+		raw, ok, err := st.GetOption(context.Background(), "serveraccess_enabled")
+		value := strings.ToLower(strings.TrimSpace(raw))
+		switch {
+		case err != nil:
+			// Log the read failure, never the returned option contents.
+			slog.Warn("serveraccess: option read failed; module disabled", "error", err)
+			enabled = false
+		case !ok:
+			// Only an absent option may inherit the environment fallback.
+		case value == "":
+			enabled = false
+		default:
 			// A present option is authoritative. Malformed values fail closed
 			// instead of falling through to an env that may enable the module.
-			switch strings.ToLower(strings.TrimSpace(raw)) {
+			switch value {
 			case "1", "true", "on", "yes":
 				enabled = true
 			case "0", "false", "off", "no":

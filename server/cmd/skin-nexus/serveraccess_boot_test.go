@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,13 +18,14 @@ import (
 
 type serverAccessOptionSpy struct {
 	values map[string]string
+	err    error
 	reads  int
 }
 
 func (s *serverAccessOptionSpy) GetOption(_ context.Context, key string) (string, bool, error) {
 	s.reads++
 	v, ok := s.values[key]
-	return v, ok, nil
+	return v, ok, s.err
 }
 
 func TestServerAccessStackOptionsFirstAndFailClosed(t *testing.T) {
@@ -29,17 +33,22 @@ func TestServerAccessStackOptionsFirstAndFailClosed(t *testing.T) {
 		name    string
 		option  string
 		present bool
+		readErr error
 		env     bool
 		want    bool
 	}{
 		{name: "default off"},
-		{name: "env fallback", env: true, want: true},
+		{name: "absent option falls back to env on", env: true, want: true},
 		{name: "option off wins over env on", option: "0", present: true, env: true},
 		{name: "option on wins over env off", option: "yes", present: true, want: true},
-		{name: "invalid option fails closed despite env on", option: "maybe", present: true, env: true},
+		{name: "trimmed option on wins over env off", option: " \tYeS\n", present: true, want: true},
+		{name: "read error fails closed despite env on", option: "true", present: true, readErr: errors.New("synthetic option read failure"), env: true},
+		{name: "blank option fails closed despite env on", present: true, env: true},
+		{name: "whitespace option fails closed despite env on", option: " \t\n", present: true, env: true},
+		{name: "malformed option fails closed despite env on", option: "maybe", present: true, env: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			spy := &serverAccessOptionSpy{values: map[string]string{}}
+			spy := &serverAccessOptionSpy{values: map[string]string{}, err: tc.readErr}
 			if tc.present {
 				spy.values["serveraccess_enabled"] = tc.option
 			}
@@ -51,6 +60,30 @@ func TestServerAccessStackOptionsFirstAndFailClosed(t *testing.T) {
 				t.Fatalf("option reads = %d, want 1", spy.reads)
 			}
 		})
+	}
+}
+
+func TestServerAccessStackOptionReadErrorLogsFailureWithoutValue(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	const optionValue = "synthetic-option-value-must-not-be-logged"
+	readErr := errors.New("synthetic option read failure")
+	spy := &serverAccessOptionSpy{
+		values: map[string]string{"serveraccess_enabled": optionValue},
+		err:    readErr,
+	}
+	s := newServerAccessStack(spy, nil, &config.Config{ServerAccessEnabled: true})
+	if s.Enabled() {
+		t.Fatal("Enabled() = true after option read error, want false")
+	}
+	if !strings.Contains(logs.String(), readErr.Error()) {
+		t.Fatalf("read failure was not logged: %q", logs.String())
+	}
+	if strings.Contains(logs.String(), optionValue) {
+		t.Fatalf("option value leaked into logs: %q", logs.String())
 	}
 }
 

@@ -281,7 +281,7 @@ app 进程能看到哪些变量，取决于 compose 文件里 `environment:` 段
 
 | 变量 | 必填性 | 默认（源码 / 镜像内） | 说明 |
 |---|---|---|---|
-| `SKIN_SERVERACCESS_ENABLED` | 面板真源 | `false` | 服务器接入模块开关；面板 `serveraccess_enabled` 优先且热生效。关闭时所有模块 API 统一 404，`/servers` 仍提供 SPA 壳并明确显示模块不可用；开启后提供独立 `/servers` 服主门户、租户/服务器/成员/邀请控制面、按服凭证与白名单/封禁策略、进服事件、平台状态/配额/紧急管理，以及 URL secret / Bearer Header 两种 `hasJoined` 验证入口。进服事件与验证配额持久化；可选 `verify-proxy` 独立子命令、按服 fallback 熔断、按 `EventRetentionDays` 的事件清理、字段白名单导出与宽限期删除均已实现 |
+| `SKIN_SERVERACCESS_ENABLED` | 面板真源 | `false` | 服务器接入模块开关；启动时仅在面板选项 `serveraccess_enabled` 不存在时使用环境变量兜底，选项存在且合法时优先。读取错误、空值/纯空白或非法值均 fail-closed 关闭，不回退环境变量；合法值为 `1/true/on/yes` 与 `0/false/off/no`（忽略首尾空白、不区分大小写）。面板选项后续热生效。关闭时所有模块 API 统一 404，`/servers` 仍提供 SPA 壳并明确显示模块不可用；开启后提供独立 `/servers` 服主门户、租户/服务器/成员/邀请控制面、按服凭证与白名单/封禁策略、进服事件、平台状态/配额/紧急管理，以及 URL secret / Bearer Header 两种 `hasJoined` 验证入口。进服事件与验证配额持久化；可选 `verify-proxy` 独立子命令、按服 fallback 熔断、按 `EventRetentionDays` 的事件清理、字段白名单导出与宽限期删除均已实现 |
 | `SKIN_SERVERACCESS_DELETION_GRACE_HOURS` | 可选 | `168` | 租户删除请求的宽限期小时数，允许 1–8760。请求发生时把截止时间写入 `deletion_due_at`，之后修改配置不会缩短已承诺的期限；平台超管只能在截止时间到达后执行物理删除 |
 
 **服主门户接口**
