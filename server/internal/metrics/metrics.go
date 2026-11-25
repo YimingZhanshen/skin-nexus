@@ -44,6 +44,15 @@ type counter struct {
 	handle     *Counter // one handle per family, so a repeated declaration is the same one
 }
 
+// metricSnapshot owns every value needed to render one family. WriteText builds
+// these under Registry.mu and never retains a mutable counter pointer.
+type metricSnapshot struct {
+	name       string
+	help       string
+	labelNames []string
+	series     map[string]uint64
+}
+
 func (c *counter) key(values []string) string {
 	return strings.Join(values, "\x00")
 }
@@ -155,23 +164,34 @@ func (r *Registry) Uptime() time.Duration {
 // gauge. Output is deterministic for a given state.
 func (r *Registry) WriteText(w io.Writer) error {
 	r.mu.Lock()
-	names := append([]string(nil), r.order...)
-	families := make(map[string]*counter, len(names))
-	for _, n := range names {
-		families[n] = r.counters[n]
+	snapshots := make([]metricSnapshot, 0, len(r.order))
+	for _, name := range r.order {
+		c := r.counters[name]
+		series := make(map[string]uint64, len(c.series))
+		for key, value := range c.series {
+			series[key] = value
+		}
+		snapshots = append(snapshots, metricSnapshot{
+			name:       c.name,
+			help:       c.help,
+			labelNames: append([]string(nil), c.labelNames...),
+			series:     series,
+		})
 	}
 	uptime := time.Since(r.started)
 	r.mu.Unlock()
 
 	var b strings.Builder
-	for _, name := range names {
-		c := families[name]
-		fmt.Fprintf(&b, "# HELP %s %s\n", name, escapeHelp(c.help))
-		fmt.Fprintf(&b, "# TYPE %s counter\n", name)
-		keys := append([]string(nil), c.order...)
+	for _, c := range snapshots {
+		fmt.Fprintf(&b, "# HELP %s %s\n", c.name, escapeHelp(c.help))
+		fmt.Fprintf(&b, "# TYPE %s counter\n", c.name)
+		keys := make([]string, 0, len(c.series))
+		for k := range c.series {
+			keys = append(keys, k)
+		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			b.WriteString(name)
+			b.WriteString(c.name)
 			if len(c.labelNames) > 0 {
 				values := strings.Split(k, "\x00")
 				b.WriteByte('{')

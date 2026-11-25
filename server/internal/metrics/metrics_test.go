@@ -9,7 +9,10 @@ package metrics
 // of an idle process are byte-identical. The uptime gauge intentionally grows.
 
 import (
+	"fmt"
+	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -137,4 +140,61 @@ func TestWrongLabelCountPanics(t *testing.T) {
 		}
 	}()
 	c.Inc("a", "b")
+}
+
+// A live metrics endpoint must tolerate registration, increments and scrapes at
+// the same time. Reverting WriteText to rendering live counter pointers makes
+// the race detector report concurrent map/slice access here.
+func TestConcurrentRegistrationIncrementAndScrape(t *testing.T) {
+	const (
+		workers    = 8
+		iterations = 250
+	)
+	r := New()
+	shared := r.NewCounter("shared_total", "Shared counter.", "stage")
+	start := make(chan struct{})
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+
+	for worker := 0; worker < workers; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			own := r.NewCounter(fmt.Sprintf("worker_%d_total", worker), "Worker counter.", "stage")
+			for i := 0; i < iterations; i++ {
+				own.Inc("own")
+				shared.Inc("shared")
+				if err := r.WriteText(io.Discard); err != nil {
+					errs <- err
+					return
+				}
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("concurrent scrape failed: %v", err)
+	}
+
+	if got, want := shared.Value("shared"), uint64(workers*iterations); got != want {
+		t.Fatalf("shared count = %d, want %d", got, want)
+	}
+	var b strings.Builder
+	if err := r.WriteText(&b); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	for worker := 0; worker < workers; worker++ {
+		name := fmt.Sprintf("worker_%d_total", worker)
+		if got := r.NewCounter(name, "ignored", "stage").Value("own"); got != iterations {
+			t.Errorf("%s count = %d, want %d", name, got, iterations)
+		}
+		want := fmt.Sprintf("%s{stage=\"own\"} %d\n", name, iterations)
+		if !strings.Contains(out, want) {
+			t.Errorf("final exposition missing %q", want)
+		}
+	}
 }

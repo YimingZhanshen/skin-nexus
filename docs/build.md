@@ -34,7 +34,7 @@ AI agent / 自检 → [§八](#八、给-ai-agent-的最短路径)。
 | Docker（可选） | 20+ / Compose v2 | 路径 A 部署与镜像构建 |
 | 数据库 | MySQL 5.7 / 8.0、MariaDB 10.11 / 11.4、PostgreSQL 14+、SQLite | 四家都由 CI 的 `-tags integration` 存储层往返矩阵跑通；MySQL 5.7.44 另有生产实测。构建侧不需要任何数据库服务 |
 
-不需要 CGO、不需要任何数据库客户端库（MySQL / PostgreSQL / SQLite 三个 driver 都是纯 Go）、不需要云服务。
+不需要 CGO 才能构建或运行生产二进制（数据库 driver 均为纯 Go），也不需要任何数据库客户端库、云服务。只有 Go race detector 需要 `CGO_ENABLED=1` 和 C 编译器；CI 在 Ubuntu 上运行，本地 Windows 无 GCC 时不能替代该门禁。
 
 ## 二、源码构建（单二进制）
 
@@ -48,6 +48,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o skin-nexus ./
 # 自检（合并门禁 = 全部绿）
 go vet ./...
 go test ./...                       # 单元 + 契约测试
+CGO_ENABLED=1 go test -race ./...    # 可选：并发竞态检测，需 CGO + C 编译器（CI 在 Ubuntu 必跑）
 SKIN_TEST_DSN='user:pass@tcp(127.0.0.1:3306)/skin_nexus_test?parseTime=true' \
   go test -tags integration ./internal/store/   # 数据库往返集成测试（DSN 前缀选引擎；不带标签时跑纯单元与 SQLite 引擎用例）
 ```
@@ -96,11 +97,12 @@ docker build -t skin-nexus:latest .   # 本地源码构建（离线/内网场景
 
 ## 五、CI 产物（推荐部署来源）
 
-`.github/workflows/ci.yml` 定义 10 个 job，push 与 PR 各跑 9 个（`docker` 仅 push、`docker-build` 仅 PR；integration 三腿内含矩阵，实际容器数更多）：
+`.github/workflows/ci.yml` 定义 11 个 job，push 与 PR 各跑 10 个（`docker` 仅 push、`docker-build` 仅 PR；integration 三腿内含矩阵，实际容器数更多）：
 
 | job | 触发 | 内容 |
 |---|---|---|
 | server | 两者 | `gofmt` 空输出 + `go build` + `go vet`（含 `-tags integration`）+ `go test ./...` 覆盖率地板与 0% 包集合比对 + 插件工具链测试 |
+| race | 两者 | Ubuntu + CGO：`CGO_ENABLED=1 go test -race ./...`；独立于覆盖率 leg，检测共享状态并发访问 |
 | integration | 两者 | MySQL 8.0 / 5.7 各跑 `-p 1 -tags integration ./internal/store/ ./internal/account/`。`-p 1` 是必需的：两套用例共用同一个库，而 store 那套在迁移前会把所有表 DROP 掉，并行时互相打断（sqlite、postgres、mariadb 三条腿同一签名报错）。5.7 专抓版本差异 SQL（login COLLATE / prepared 1267） |
 | integration-mariadb | 两者 | MariaDB 11.4 / 10.11，同一条命令；抓只有 MySQL 自家扩展能吃下的写法 |
 | integration-portable | 两者 | PostgreSQL 16 与 SQLite 文件库，同一条命令；抓方言与序列差异 |
@@ -115,7 +117,7 @@ docker build -t skin-nexus:latest .   # 本地源码构建（离线/内网场景
 （改名后旧名仍持有原 OfflineUUID，重建同名角色必须答 409 而非 500），且跨引擎成立——
 `dbx.IsDupKey` 对 MySQL/MariaDB/PostgreSQL/SQLite 的唯一键冲突都能归类。
 
-server/web 两个 job 启用 Go modules 与 npm 依赖缓存（`cache-dependency-path`），
+server/race/web 三个 job 启用 Go modules 与 npm 依赖缓存（`cache-dependency-path`），
 workflow 级 `concurrency` 会在同一 ref 有新推送时取消旧运行，避免排队浪费额度。
 
 **部署机推荐只拉不编**（compose 已默认 `pull_policy: always`）：
@@ -151,7 +153,7 @@ cd web && npm run dev
 | 页面显示 “web/dist not built yet” | 后端工作目录下没有 `web/dist`；先构建前端或改用 Docker 镜像（内含产物） |
 | 启动即报 migration 失败 | `SKIN_MIGRATIONS_DIR` 指不到 DDL 目录；从仓库根启动时指向 `server/migrations` |
 | `npm run build` 中途报 Vite 语法/特性错误 | Node < 22（package.json 未设 `engines`，`npm ci` 不会提前拦截）；升级 Node 22（nvm/fnm 皆可） |
-| `go test -race` 报无法使用 | 无 CGO 环境不支持 `-race`；改普通 `go test` + 并发用例覆盖 |
+| `go test -race` 报无法使用 | race detector 需要 CGO 与 C 编译器；Linux 可安装 GCC 后运行 `CGO_ENABLED=1 go test -race ./...`。无 GCC 时普通 `go test` 与并发回归用例只能验证功能，不能替代竞态检测；以 CI 的 Ubuntu race job 结果为准 |
 
 ## 八、给 AI agent 的最短路径
 
