@@ -552,6 +552,212 @@ func TestServerAccessAPIPlatformUpdatesFallbackAndAudit(t *testing.T) {
 	}
 }
 
+func TestServerAccessAPIOwnerListsPaginateBeyondLegacyCaps(t *testing.T) {
+	f := newSAFixture(t)
+	ctx := context.Background()
+	tx, err := f.st.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	insertID := func(query string, args ...any) (int64, error) {
+		var id int64
+		err := tx.QueryRowContext(ctx, query+` RETURNING id`, args...).Scan(&id)
+		return id, err
+	}
+	// The fixture already has one server and one other-tenant decoy. Seed enough
+	// rows in one transaction to expose the old owner caps without slow API setup.
+	var firstServer, firstInvite, firstWhitelist, firstBan int64
+	for i := 0; i < 204; i++ {
+		status := "active"
+		if i%2 == 0 {
+			status = "disabled"
+		}
+		id, err := insertID(
+			`INSERT INTO sa_servers (tenant_id,public_id,name,status,source_mode,created_at)
+			 VALUES (?,?,?,?,'url_secret',?)`, f.tenant, fmt.Sprintf("srv_page_%d", i), fmt.Sprintf("page-%d", i), status, f.now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO sa_server_policies (server_id) VALUES (?)`, id); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			firstServer = id
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO sa_servers (tenant_id,public_id,name,status,source_mode,created_at)
+		 VALUES (?,'srv_page_decoy','decoy','active','url_secret',?)`, f.otherTenant, f.now); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 201; i++ {
+		id, err := insertID(
+			`INSERT INTO sa_tenant_invites (tenant_id,email,role,token_hash,expires_at,created_at)
+			 VALUES (?,?,'viewer',?,?,?)`, f.tenant, fmt.Sprintf("page-%d@example.com", i),
+			fmt.Sprintf("%064d", i+1), f.now.Add(time.Hour), f.now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			firstInvite = id
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO sa_tenant_invites (tenant_id,email,role,token_hash,expires_at,created_at)
+		 VALUES (?,'page-decoy@example.com','viewer',?,?,?)`, f.otherTenant, strings.Repeat("f", 64), f.now.Add(time.Hour), f.now); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 5001; i++ {
+		id, err := insertID(
+			`INSERT INTO sa_server_whitelist (server_id,uid,note,created_by,created_at) VALUES (?,?,?,?,?)`,
+			f.server, i, fmt.Sprintf("page-%d", i), f.owner, f.now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 1 {
+			firstWhitelist = id
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO sa_server_bans (server_id,uid,reason,created_by,created_at) VALUES (?,?,?,?,?)`,
+			f.server, i, fmt.Sprintf("page-%d", i), f.owner, f.now); err != nil {
+			t.Fatal(err)
+		}
+		var banID int64
+		if err := tx.QueryRowContext(ctx, `SELECT id FROM sa_server_bans WHERE server_id=? AND uid=?`, f.server, i).Scan(&banID); err != nil {
+			t.Fatal(err)
+		}
+		if i == 1 {
+			firstBan = banID
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO sa_server_whitelist (server_id,uid,note,created_by,created_at) VALUES (?,999999,'decoy',?,?)`,
+		f.otherServer, f.owner, f.now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO sa_server_bans (server_id,uid,reason,created_by,created_at) VALUES (?,999999,'decoy',?,?)`,
+		f.otherServer, f.owner, f.now); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name, path, key string
+		total, beyondID int
+		page            int
+		size            int
+		quota           int
+	}{
+		{name: "servers default", path: "/api/serveraccess/v1/servers", key: "servers", total: 205, page: 1, size: 50},
+		{name: "servers clamp", path: "/api/serveraccess/v1/servers?size=201", key: "servers", total: 205, page: 1, size: 200},
+		{name: "servers page five beyond old cap", path: "/api/serveraccess/v1/servers?page=5", key: "servers", total: 205, beyondID: int(firstServer), page: 5, size: 50},
+		{name: "servers status total", path: "/api/serveraccess/v1/servers?status=active", key: "servers", total: 103, page: 1, size: 50, quota: 205},
+		{name: "invites default", path: "/api/serveraccess/v1/tenants/me/invites", key: "invites", total: 201, page: 1, size: 50},
+		{name: "invites clamp", path: "/api/serveraccess/v1/tenants/me/invites?size=201", key: "invites", total: 201, page: 1, size: 200},
+		{name: "invites page five beyond old cap", path: "/api/serveraccess/v1/tenants/me/invites?page=5", key: "invites", total: 201, beyondID: int(firstInvite), page: 5, size: 50},
+		{name: "whitelist default", path: fmt.Sprintf("/api/serveraccess/v1/servers/%d/whitelist", f.server), key: "whitelist", total: 5001, page: 1, size: 50},
+		{name: "whitelist clamp", path: fmt.Sprintf("/api/serveraccess/v1/servers/%d/whitelist?size=201", f.server), key: "whitelist", total: 5001, page: 1, size: 200},
+		{name: "whitelist beyond old cap", path: fmt.Sprintf("/api/serveraccess/v1/servers/%d/whitelist?page=26&size=200", f.server), key: "whitelist", total: 5001, beyondID: int(firstWhitelist), page: 26, size: 200},
+		{name: "bans default", path: fmt.Sprintf("/api/serveraccess/v1/servers/%d/bans", f.server), key: "bans", total: 5001, page: 1, size: 50},
+		{name: "bans clamp", path: fmt.Sprintf("/api/serveraccess/v1/servers/%d/bans?size=201", f.server), key: "bans", total: 5001, page: 1, size: 200},
+		{name: "bans beyond old cap", path: fmt.Sprintf("/api/serveraccess/v1/servers/%d/bans?page=26&size=200", f.server), key: "bans", total: 5001, beyondID: int(firstBan), page: 26, size: 200},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := f.request(t, f.owner, "GET", tc.path, "", "")
+			if rec.Code != http.StatusOK {
+				t.Fatalf("list = %d %s", rec.Code, rec.Body.String())
+			}
+			var got map[string]json.RawMessage
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			for key, want := range map[string]int{"total": tc.total, "page": tc.page, "size": tc.size} {
+				var value int
+				if err := json.Unmarshal(got[key], &value); err != nil || value != want {
+					t.Fatalf("%s = %s, want %d (err=%v)", key, got[key], want, err)
+				}
+			}
+			if tc.key == "servers" {
+				want := tc.total
+				if tc.quota != 0 {
+					want = tc.quota
+				}
+				var quota int
+				if err := json.Unmarshal(got["quotaUsed"], &quota); err != nil || quota != want {
+					t.Fatalf("quotaUsed = %s, want %d (err=%v)", got["quotaUsed"], want, err)
+				}
+			}
+			var rows []struct{ ID int64 }
+			if err := json.Unmarshal(got[tc.key], &rows); err != nil {
+				t.Fatal(err)
+			}
+			wantLen := tc.size
+			if remaining := tc.total - (tc.page-1)*tc.size; remaining < wantLen {
+				wantLen = remaining
+			}
+			if wantLen < 0 {
+				wantLen = 0
+			}
+			if len(rows) != wantLen {
+				t.Fatalf("%s length = %d, want %d", tc.key, len(rows), wantLen)
+			}
+			if tc.beyondID != 0 {
+				found := false
+				for _, row := range rows {
+					if row.ID == int64(tc.beyondID) {
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("%s omitted row %d beyond legacy cap: %+v", tc.key, tc.beyondID, rows)
+				}
+			}
+		})
+	}
+
+	// Invalid pages/sizes retain the established clamp behavior, while platform
+	// pagination keeps its independent default of 20.
+	for _, tc := range []struct {
+		path, key string
+		size      int
+		quota     int
+	}{
+		{path: "/api/serveraccess/v1/servers?page=0&size=0", key: "servers", size: 50, quota: 205},
+		{path: "/api/serveraccess/v1/servers?page=-1&size=bad", key: "servers", size: 50, quota: 205},
+		{path: "/api/admin/v1/serveraccess/servers", key: "servers", size: 20},
+	} {
+		uid := f.owner
+		if tc.key == "servers" && strings.Contains(tc.path, "/api/admin/") {
+			uid = f.super
+		}
+		rec := f.request(t, uid, "GET", tc.path, "", "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("pagination clamp %s = %d %s", tc.path, rec.Code, rec.Body.String())
+		}
+		var got struct {
+			Servers []json.RawMessage `json:"servers"`
+			Total   int               `json:"total"`
+			Page    int               `json:"page"`
+			Size    int               `json:"size"`
+			Quota   int               `json:"quotaUsed"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		if got.Page != 1 || got.Size != tc.size || len(got.Servers) != tc.size {
+			t.Fatalf("pagination clamp %s = page %d size %d rows %d", tc.path, got.Page, got.Size, len(got.Servers))
+		}
+		if tc.quota != 0 && got.Quota != tc.quota {
+			t.Fatalf("quotaUsed = %d, want %d", got.Quota, tc.quota)
+		}
+	}
+}
+
 func TestServerAccessAPIPlatformServersExposeCurrentPolicyAndCredentialSummaries(t *testing.T) {
 	f := newSAFixture(t)
 	whitelist, fallback := true, false

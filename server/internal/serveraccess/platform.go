@@ -192,13 +192,21 @@ func (c *control) platformAudit(w http.ResponseWriter, r *http.Request) {
 }
 
 func saPage(r *http.Request) (int, int) {
+	return saPageValues(r, 20)
+}
+
+func saOwnerPage(r *http.Request) (int, int) {
+	return saPageValues(r, 50)
+}
+
+func saPageValues(r *http.Request, defaultSize int) (int, int) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	size, _ := strconv.Atoi(r.URL.Query().Get("size"))
 	if page < 1 {
 		page = 1
 	}
 	if size < 1 {
-		size = 20
+		size = defaultSize
 	}
 	if size > 200 {
 		size = 200

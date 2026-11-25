@@ -70,12 +70,13 @@ func (c *control) invite(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *control) invites(w http.ResponseWriter, r *http.Request) {
-	rows, err := c.cfg.Store.ListSATenantInvites(r.Context(), saCaller(r).TenantID)
+	page, size := saOwnerPage(r)
+	rows, total, err := c.cfg.Store.ListSATenantInvitesPage(r.Context(), saCaller(r).TenantID, page, size)
 	if err != nil {
 		writeSAStoreError(w, err)
 		return
 	}
-	writeSAJSON(w, http.StatusOK, map[string]any{"invites": rows})
+	writeSAJSON(w, http.StatusOK, map[string]any{"invites": rows, "total": total, "page": page, "size": size})
 }
 
 func (c *control) revokeInvite(w http.ResponseWriter, r *http.Request) {
@@ -150,12 +151,21 @@ func (c *control) removeMember(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *control) servers(w http.ResponseWriter, r *http.Request) {
-	rows, err := c.cfg.Store.ListSAServers(r.Context(), saCaller(r).TenantID, r.URL.Query().Get("status"))
+	page, size := saOwnerPage(r)
+	tenantID := saCaller(r).TenantID
+	rows, total, err := c.cfg.Store.ListSAServersPage(r.Context(), tenantID, r.URL.Query().Get("status"), page, size)
 	if err != nil {
 		writeSAStoreError(w, err)
 		return
 	}
-	writeSAJSON(w, http.StatusOK, map[string]any{"servers": rows})
+	quotaUsed, err := c.cfg.Store.CountSAServers(r.Context(), tenantID)
+	if err != nil {
+		writeSAStoreError(w, err)
+		return
+	}
+	writeSAJSON(w, http.StatusOK, map[string]any{
+		"servers": rows, "total": total, "quotaUsed": quotaUsed, "page": page, "size": size,
+	})
 }
 
 func (c *control) createServer(w http.ResponseWriter, r *http.Request) {
@@ -265,8 +275,8 @@ func (c *control) updateServer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *control) whitelist(w http.ResponseWriter, r *http.Request) {
-	c.listServerRows(w, r, func(tenant, server int64) (any, error) {
-		return c.cfg.Store.ListSAServerWhitelist(r.Context(), tenant, server)
+	c.listServerRows(w, r, func(tenant, server int64, page, size int) (any, int, error) {
+		return c.cfg.Store.ListSAServerWhitelistPage(r.Context(), tenant, server, page, size)
 	}, "whitelist")
 }
 
@@ -306,8 +316,8 @@ func (c *control) removeWhitelist(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *control) bans(w http.ResponseWriter, r *http.Request) {
-	c.listServerRows(w, r, func(tenant, server int64) (any, error) {
-		return c.cfg.Store.ListSAServerBans(r.Context(), tenant, server)
+	c.listServerRows(w, r, func(tenant, server int64, page, size int) (any, int, error) {
+		return c.cfg.Store.ListSAServerBansPage(r.Context(), tenant, server, page, size)
 	}, "bans")
 }
 
@@ -356,7 +366,7 @@ func (c *control) removeBan(w http.ResponseWriter, r *http.Request) {
 	writeSAJSON(w, http.StatusOK, map[string]any{"removed": true})
 }
 
-func (c *control) listServerRows(w http.ResponseWriter, r *http.Request, load func(int64, int64) (any, error), key string) {
+func (c *control) listServerRows(w http.ResponseWriter, r *http.Request, load func(int64, int64, int, int) (any, int, error), key string) {
 	id, ok := saID(r, "id")
 	if !ok {
 		writeSAError(w, http.StatusBadRequest, i18n.MsgBadID, "Invalid server id")
@@ -367,12 +377,13 @@ func (c *control) listServerRows(w http.ResponseWriter, r *http.Request, load fu
 		writeSAStoreError(w, err)
 		return
 	}
-	rows, err := load(who.TenantID, id)
+	page, size := saOwnerPage(r)
+	rows, total, err := load(who.TenantID, id, page, size)
 	if err != nil {
 		writeSAStoreError(w, err)
 		return
 	}
-	writeSAJSON(w, http.StatusOK, map[string]any{key: rows})
+	writeSAJSON(w, http.StatusOK, map[string]any{key: rows, "total": total, "page": page, "size": size})
 }
 
 func (c *control) removeServerUID(w http.ResponseWriter, r *http.Request, remove func(context.Context, int64, int64, int64) error) (int64, int64, bool) {

@@ -288,6 +288,7 @@ app 进程能看到哪些变量，取决于 compose 文件里 `environment:` 段
 
 `/servers` 使用普通网页会话，不接受管理员令牌；租户 owner/admin 可写，viewer 只读。以下端点要求有效的租户成员会话：
 
+- `GET /api/serveraccess/v1/servers?status={status}`、`GET /api/serveraccess/v1/tenants/me/invites`、`GET /api/serveraccess/v1/servers/{id}/whitelist`、`GET /api/serveraccess/v1/servers/{id}/bans`：服主列表按 `id DESC` 分页，`page` 默认 1，`size` 默认 50、最大 200；无法解析或小于 1 的值使用默认值。响应分别保留 `servers`、`invites`、`whitelist`、`bans` 键，并返回 `total`、`page`、`size`。服务器列表额外返回 `quotaUsed`，表示当前租户全部服务器数；`total` 则跟随 `status` 筛选，二者在筛选时可能不同。所有计数均限定当前成员租户，白名单与封禁还限定路径服务器。导出、恢复与验证的非分页路径不受影响。
 - `GET /api/serveraccess/v1/servers/{id}/events?before={event_id}&size={1..200}`：按 `id DESC` 游标分页，默认最近 24 小时。`before` 为上一页最后一个事件 id；响应包含 `events`、`nextBefore`、`hasMore`。每条事件只暴露 `id`、`createdAt`、`outcome`、`reasonCode`、`durationMs`、`sourceMode`，不返回玩家身份、IP、邮箱、令牌、全局角色或皮肤。可用 RFC3339 的 `from`/`to` 缩小时间范围，最长为 366 天。
 - `GET /api/serveraccess/v1/players/lookup?q={name-or-uuid}`：按角色名（不区分大小写）或 32 位 UUID 精确解析，成功只返回 `{uid,name,uuid}`，未找到返回 404。该端点不返回邮箱、IP 或全局资料。
 - `GET /api/serveraccess/v1/tenants/me/export`：owner/admin 可下载当前成员租户的 JSON 附件。仅包含租户元数据、服务器与策略、白名单 uid/note/时间、封禁 uid/reason/expiry/时间、owner 可见进服事件，以及凭据 id/mode/status/created/last_used/expires；不包含邮箱、IP、token、secret/hash、全局用户/玩家/纹理或邀请数据。审计只记录租户 id，不记录导出内容。首版按租户批量查询（非空租户固定 6 条数据查询，不随服务器数增长），并执行显式硬上限：1000 个服务器、10000 条白名单、10000 条封禁、100000 条进服事件、10000 条凭据元数据、16 MiB 最终 JSON（含末尾换行）。任一超限返回 `413` 与 `serveraccess.export_too_large`，错误消息注明超限集合及上限；不静默截断、不返回附件、不写导出审计。内部配置只能降低上限，不能抬高这些硬上限。

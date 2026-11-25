@@ -201,6 +201,12 @@ func (m *Mysql) AddSAServerWhitelist(ctx context.Context, tenantID, serverID, ui
 	return tx.Commit()
 }
 
+func scanSAServerWhitelist(s rowScanner) (SAServerWhitelist, error) {
+	var v SAServerWhitelist
+	err := s.Scan(&v.ID, &v.ServerID, &v.UID, &v.Note, &v.CreatedBy, &v.CreatedAt)
+	return v, err
+}
+
 func (m *Mysql) ListSAServerWhitelist(ctx context.Context, tenantID, serverID int64) ([]SAServerWhitelist, error) {
 	return m.listSAServerWhitelist(ctx, tenantID, serverID, 5000)
 }
@@ -221,8 +227,8 @@ func (m *Mysql) listSAServerWhitelist(ctx context.Context, tenantID, serverID in
 	defer rows.Close()
 	out := make([]SAServerWhitelist, 0)
 	for rows.Next() {
-		var v SAServerWhitelist
-		if err := rows.Scan(&v.ID, &v.ServerID, &v.UID, &v.Note, &v.CreatedBy, &v.CreatedAt); err != nil {
+		v, err := scanSAServerWhitelist(rows)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, v)
@@ -255,6 +261,12 @@ func (m *Mysql) AddSAServerBan(ctx context.Context, tenantID, serverID, uid int6
 	return nil
 }
 
+func scanSAServerBan(s rowScanner) (SAServerBan, error) {
+	var v SAServerBan
+	err := s.Scan(&v.ID, &v.ServerID, &v.UID, &v.Reason, &v.ExpiresAt, &v.CreatedBy, &v.CreatedAt)
+	return v, err
+}
+
 func (m *Mysql) ListSAServerBans(ctx context.Context, tenantID, serverID int64) ([]SAServerBan, error) {
 	return m.listSAServerBans(ctx, tenantID, serverID, 5000)
 }
@@ -275,8 +287,8 @@ func (m *Mysql) listSAServerBans(ctx context.Context, tenantID, serverID int64, 
 	defer rows.Close()
 	out := make([]SAServerBan, 0)
 	for rows.Next() {
-		var v SAServerBan
-		if err := rows.Scan(&v.ID, &v.ServerID, &v.UID, &v.Reason, &v.ExpiresAt, &v.CreatedBy, &v.CreatedAt); err != nil {
+		v, err := scanSAServerBan(rows)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, v)

@@ -38,6 +38,17 @@ SkinNexus 的服务器接入模块让一个站点为多个 Minecraft 服务器�
 
 平台租户与服务器列表的 `q` 参数按名称进行不区分大小写的子串搜索，首尾空白会被去除；空查询不加过滤条件。查询中的 `%`、`_` 与 `!` 都是字面字符，不是通配符或转义入口，因此搜索 `%` 只匹配名称中实际包含百分号的记录。该行为使用数据库方言自带的转义谓词，在 MySQL、PostgreSQL 与 SQLite 上保持一致。
 
+## 服主列表分页与配额
+
+服主的服务器、邀请、白名单与封禁列表统一接受 `page` 与 `size` 查询参数，按 `id DESC` 返回。页码默认 1，`page<1` 或无法解析时按 1；每页默认 50，`size<1` 或无法解析时按 50，超过 200 时钳制为 200。超出末页时返回空数组和完整的 `total`，不会静默截断或返回错误。
+
+- `GET /api/serveraccess/v1/servers?status={status}`：保留 `servers` 键，响应为 `{"servers":[],"total":0,"quotaUsed":0,"page":1,"size":50}`。`total` 是当前租户内符合 `status` 的服务器数；`quotaUsed` 始终是当前租户全部服务器数，不受状态筛选或分页影响。
+- `GET /api/serveraccess/v1/tenants/me/invites`：响应为 `{"invites":[],"total":0,"page":1,"size":50}`。
+- `GET /api/serveraccess/v1/servers/{id}/whitelist`：响应为 `{"whitelist":[],"total":0,"page":1,"size":50}`，总数只统计当前租户的指定服务器。
+- `GET /api/serveraccess/v1/servers/{id}/bans`：响应为 `{"bans":[],"total":0,"page":1,"size":50}`，总数只统计当前租户的指定服务器。
+
+平台租户、服务器与审计列表继续使用 `page`/`size`，默认每页 20、最大 200，响应保留 `total`、`page`、`size`。服主与平台的分页默认值互不影响。导出、恢复与验证仍使用原有非分页查询和独立上限，不调用这些分页方法。
+
 ## 服主组合更新
 
 `PATCH /api/serveraccess/v1/servers/{id}` 可稀疏更新 `name`、`status` 与 `policy.whitelistEnabled`、`policy.premiumFallbackEnabled`。未提供的字段保持锁定行中的当前值，不会用请求前的旧快照覆盖平台配额或另一项 owner 开关。

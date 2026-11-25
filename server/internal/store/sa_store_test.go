@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -115,6 +116,145 @@ func TestServerAccessStoreTenantServerAndMemberScope(t *testing.T) {
 	platform, total, err := st.PlatformSATenants(ctx, "", 1, 20)
 	if err != nil || total != 2 || len(platform) != 2 {
 		t.Fatalf("platform tenants = %+v total=%d err=%v", platform, total, err)
+	}
+}
+
+func TestServerAccessOwnerPagesCountScopeAndLegacyLists(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	tenant, _ := st.CreateSATenant(ctx, "pages", 10)
+	other, _ := st.CreateSATenant(ctx, "pages-other", 10)
+	server, _ := st.CreateSAServer(ctx, tenant, "srv_pages", "pages")
+	otherServer, _ := st.CreateSAServer(ctx, other, "srv_pages_other", "pages-other")
+	tx, err := st.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	insertID := func(query string, args ...any) (int64, error) {
+		var id int64
+		err := tx.QueryRowContext(ctx, query+` RETURNING id`, args...).Scan(&id)
+		return id, err
+	}
+	var firstServer int64
+	for i := 0; i < 204; i++ {
+		id, err := insertID(`INSERT INTO sa_servers (tenant_id,public_id,name,status,source_mode,created_at)
+			VALUES (?,?,?,?,'url_secret',?)`, tenant, fmt.Sprintf("srv_store_page_%d", i), fmt.Sprintf("page-%d", i), "active", time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO sa_server_policies (server_id) VALUES (?)`, id); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			firstServer = id
+		}
+	}
+	var firstInvite, firstWhitelist, firstBan int64
+	for i := 0; i < 201; i++ {
+		id, err := insertID(`INSERT INTO sa_tenant_invites (tenant_id,email,role,token_hash,expires_at,created_at)
+			VALUES (?,?,'viewer',?,?,?)`, tenant, fmt.Sprintf("store-page-%d@example.com", i), fmt.Sprintf("%064d", i), time.Now().UTC().Add(time.Hour), time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			firstInvite = id
+		}
+	}
+	for i := 1; i <= 5001; i++ {
+		id, err := insertID(`INSERT INTO sa_server_whitelist (server_id,uid,note,created_by,created_at) VALUES (?,?,?,1,?)`,
+			server.ID, i, fmt.Sprintf("page-%d", i), time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 1 {
+			firstWhitelist = id
+		}
+		id, err = insertID(`INSERT INTO sa_server_bans (server_id,uid,reason,created_by,created_at) VALUES (?,?,?,1,?)`,
+			server.ID, i, fmt.Sprintf("page-%d", i), time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 1 {
+			firstBan = id
+		}
+	}
+	// Decoys must affect neither tenant-scoped totals nor quota usage.
+	if _, err := insertID(`INSERT INTO sa_server_whitelist (server_id,uid,note,created_by,created_at) VALUES (?,999999,'decoy',1,?)`,
+		otherServer.ID, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := insertID(`INSERT INTO sa_server_bans (server_id,uid,reason,created_by,created_at) VALUES (?,999999,'decoy',1,?)`,
+		otherServer.ID, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := insertID(`INSERT INTO sa_tenant_invites (tenant_id,email,role,token_hash,expires_at,created_at)
+		VALUES (?,'store-decoy@example.com','viewer',?,?,?)`, other, strings.Repeat("f", 64), time.Now().UTC().Add(time.Hour), time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []struct {
+		tenant int64
+		count  int
+	}{{tenant, 205}, {other, 1}, {999999, 0}} {
+		got, err := st.CountSAServers(ctx, want.tenant)
+		if err != nil || got != want.count {
+			t.Fatalf("CountSAServers(%d) = %d, %v; want %d", want.tenant, got, err, want.count)
+		}
+	}
+
+	servers, total, err := st.ListSAServersPage(ctx, tenant, "active", 5, 50)
+	if err != nil || total != 205 || len(servers) != 5 || servers[3].ID != firstServer {
+		t.Fatalf("server page = %+v total=%d err=%v", servers, total, err)
+	}
+	for i := 0; i < 4; i++ {
+		if servers[i].ID <= servers[i+1].ID || servers[i].TenantID != tenant {
+			t.Fatalf("server page is not tenant-scoped id DESC: %+v", servers)
+		}
+	}
+	disabled, total, err := st.ListSAServersPage(ctx, tenant, "disabled", 1, 200)
+	if err != nil || total != 0 || len(disabled) != 0 || disabled == nil {
+		t.Fatalf("empty filtered server page = %+v total=%d err=%v", disabled, total, err)
+	}
+
+	invites, total, err := st.ListSATenantInvitesPage(ctx, tenant, 5, 50)
+	if err != nil || total != 201 || len(invites) != 1 || invites[0].ID != firstInvite || invites[0].TenantID != tenant {
+		t.Fatalf("invite page = %+v total=%d err=%v", invites, total, err)
+	}
+	whitelist, total, err := st.ListSAServerWhitelistPage(ctx, tenant, server.ID, 26, 200)
+	if err != nil || total != 5001 || len(whitelist) != 1 || whitelist[0].ID != firstWhitelist || whitelist[0].ServerID != server.ID {
+		t.Fatalf("whitelist page = %+v total=%d err=%v", whitelist, total, err)
+	}
+	bans, total, err := st.ListSAServerBansPage(ctx, tenant, server.ID, 26, 200)
+	if err != nil || total != 5001 || len(bans) != 1 || bans[0].ID != firstBan || bans[0].ServerID != server.ID {
+		t.Fatalf("ban page = %+v total=%d err=%v", bans, total, err)
+	}
+
+	if rows, total, err := st.ListSAServerWhitelistPage(ctx, other, server.ID, 1, 50); err != nil || total != 0 || len(rows) != 0 || rows == nil {
+		t.Fatalf("cross-tenant whitelist page = %+v total=%d err=%v", rows, total, err)
+	}
+	if rows, total, err := st.ListSAServerBansPage(ctx, other, server.ID, 1, 50); err != nil || total != 0 || len(rows) != 0 || rows == nil {
+		t.Fatalf("cross-tenant ban page = %+v total=%d err=%v", rows, total, err)
+	}
+	if rows, total, err := st.ListSAServersPage(ctx, tenant, "", 100, 200); err != nil || total != 205 || len(rows) != 0 || rows == nil {
+		t.Fatalf("out-of-range server page = %+v total=%d err=%v", rows, total, err)
+	}
+
+	// Export/restore/verification retain their existing unpaged entry points.
+	if rows, err := st.ListSAServers(ctx, tenant, ""); err != nil || len(rows) != 200 {
+		t.Fatalf("legacy server list length=%d err=%v", len(rows), err)
+	}
+	if rows, err := st.ListSATenantInvites(ctx, tenant); err != nil || len(rows) != 200 {
+		t.Fatalf("legacy invite list length=%d err=%v", len(rows), err)
+	}
+	if rows, err := st.ListSAServerWhitelist(ctx, tenant, server.ID); err != nil || len(rows) != 5000 {
+		t.Fatalf("legacy whitelist length=%d err=%v", len(rows), err)
+	}
+	if rows, err := st.ListSAServerBans(ctx, tenant, server.ID); err != nil || len(rows) != 5000 {
+		t.Fatalf("legacy bans length=%d err=%v", len(rows), err)
 	}
 }
 

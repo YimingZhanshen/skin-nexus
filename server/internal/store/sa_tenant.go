@@ -421,6 +421,12 @@ func (m *Mysql) CreateSATenantInvite(ctx context.Context, tenantID int64, email,
 		tenantID, strings.ToLower(strings.TrimSpace(email)), role, tokenHash, expiresAt.UTC(), m.now().UTC())
 }
 
+func scanSATenantInvite(s rowScanner) (SATenantInvite, error) {
+	var v SATenantInvite
+	err := s.Scan(&v.ID, &v.TenantID, &v.Email, &v.Role, &v.ExpiresAt, &v.AcceptedAt, &v.CreatedAt)
+	return v, err
+}
+
 func (m *Mysql) ListSATenantInvites(ctx context.Context, tenantID int64) ([]SATenantInvite, error) {
 	rows, err := m.db.QueryContext(ctx,
 		`SELECT id,tenant_id,email,role,expires_at,accepted_at,created_at FROM sa_tenant_invites
@@ -431,8 +437,8 @@ func (m *Mysql) ListSATenantInvites(ctx context.Context, tenantID int64) ([]SATe
 	defer rows.Close()
 	out := make([]SATenantInvite, 0)
 	for rows.Next() {
-		var v SATenantInvite
-		if err := rows.Scan(&v.ID, &v.TenantID, &v.Email, &v.Role, &v.ExpiresAt, &v.AcceptedAt, &v.CreatedAt); err != nil {
+		v, err := scanSATenantInvite(rows)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, v)
