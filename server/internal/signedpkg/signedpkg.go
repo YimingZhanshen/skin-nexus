@@ -81,25 +81,46 @@ func ContentDigest(zipPath, exclude string) (string, error) {
 		return "", err
 	}
 	defer zr.Close()
+	if len(zr.File) > MaxEntries {
+		return "", fmt.Errorf("zip has too many entries (%d)", len(zr.File))
+	}
 	type entry struct {
 		name string
 		sum  string
 	}
 	var entries []entry
+	var total int64
 	for _, f := range zr.File {
 		if f.FileInfo().IsDir() || f.Name == exclude {
 			continue
+		}
+		if f.UncompressedSize64 > uint64(MaxEntryBytes) {
+			return "", fmt.Errorf("zip entry %q exceeds %d bytes", f.Name, MaxEntryBytes)
+		}
+		if f.CompressedSize64 > 0 {
+			ratio := f.UncompressedSize64 / f.CompressedSize64
+			if ratio > uint64(MaxZipRatio) ||
+				(ratio == uint64(MaxZipRatio) && f.UncompressedSize64%f.CompressedSize64 != 0) {
+				return "", fmt.Errorf("zip entry %q has suspicious compression ratio", f.Name)
+			}
 		}
 		rc, err := f.Open()
 		if err != nil {
 			return "", err
 		}
 		h := sha256.New()
-		if _, err := io.Copy(h, rc); err != nil {
-			rc.Close()
-			return "", err
-		}
+		n, copyErr := io.Copy(h, io.LimitReader(rc, int64(MaxEntryBytes)+1))
 		rc.Close()
+		if copyErr != nil {
+			return "", copyErr
+		}
+		if n > int64(MaxEntryBytes) {
+			return "", fmt.Errorf("zip entry %q exceeds %d bytes", f.Name, MaxEntryBytes)
+		}
+		if n > int64(MaxTotalBytes)-total {
+			return "", fmt.Errorf("zip exceeds %d uncompressed bytes", MaxTotalBytes)
+		}
+		total += n
 		entries = append(entries, entry{name: f.Name, sum: hex.EncodeToString(h.Sum(nil))})
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].name < entries[j].name })

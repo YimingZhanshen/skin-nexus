@@ -8,11 +8,12 @@ import (
 )
 
 const (
-	MaxEntries     = 4096
-	MaxEntryBytes  = 32 << 20
-	MaxTotalBytes  = 64 << 20
-	MaxZipRatio    = 200
-	MaxZipNameSize = 512
+	MaxEntries       = 4096
+	MaxEntryBytes    = 32 << 20
+	MaxTotalBytes    = 64 << 20
+	MaxZipRatio      = 200
+	MaxMetadataBytes = 1 << 20
+	MaxZipNameSize   = 512
 )
 
 var windowsReserved = map[string]bool{

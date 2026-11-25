@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -40,6 +41,43 @@ func TestWriteAndVerifyBundle(t *testing.T) {
 	_ = zr.Close()
 	if _, err := VerifyBundle(path, Keyring{"other": pub}); err == nil {
 		t.Fatal("unknown key accepted")
+	}
+}
+
+func TestReadBundleMetaSizeLimit(t *testing.T) {
+	const limit = 1 << 20
+	body := `{"name":"demo","version":"1.0.0","keyId":"test","signature":"sig"}`
+	for _, tc := range []struct {
+		name    string
+		size    int
+		wantErr bool
+	}{
+		{name: "at_limit", size: limit},
+		{name: "over_limit", size: limit + 1, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "meta.zip")
+			makeZip(t, path, map[string]string{
+				"bundle.json": body + strings.Repeat(" ", tc.size-len(body)),
+			})
+			meta, err := ReadBundleMeta(path)
+			if tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "bundle.json exceeds 1048576 bytes") {
+					t.Fatalf("error = %v, want metadata size rejection", err)
+				}
+			} else if err != nil || meta.Name != "demo" {
+				t.Fatalf("metadata at limit rejected: meta=%+v err=%v", meta, err)
+			}
+		})
+	}
+}
+
+func TestReadBundleMetaMissingErrorPreserved(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "unsigned.zip")
+	makeZip(t, path, map[string]string{"index.js": "1"})
+	_, err := ReadBundleMeta(path)
+	if err == nil || err.Error() != "bundle.json missing (signed bundles only)" {
+		t.Fatalf("error = %v, want theme inspection compatibility error", err)
 	}
 }
 

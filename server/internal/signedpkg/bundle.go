@@ -2,11 +2,13 @@ package signedpkg
 
 import (
 	"archive/zip"
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -27,30 +29,21 @@ type Entry struct {
 }
 
 func ReadBundleMeta(zipPath string) (BundleMeta, error) {
-	zr, err := zip.OpenReader(zipPath)
+	raw, err := ReadEntry(zipPath, "bundle.json", MaxMetadataBytes)
+	if errors.Is(err, os.ErrNotExist) {
+		return BundleMeta{}, fmt.Errorf("bundle.json missing (signed bundles only)")
+	}
 	if err != nil {
 		return BundleMeta{}, err
 	}
-	defer zr.Close()
-	for _, f := range zr.File {
-		if f.Name != "bundle.json" {
-			continue
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return BundleMeta{}, err
-		}
-		defer rc.Close()
-		var meta BundleMeta
-		if err := json.NewDecoder(rc).Decode(&meta); err != nil {
-			return BundleMeta{}, fmt.Errorf("bundle.json: %w", err)
-		}
-		if meta.Name == "" || meta.Version == "" || meta.KeyID == "" || meta.Signature == "" {
-			return BundleMeta{}, fmt.Errorf("bundle.json is missing name/version/keyId/signature")
-		}
-		return meta, nil
+	var meta BundleMeta
+	if err := json.NewDecoder(bytes.NewReader(raw)).Decode(&meta); err != nil {
+		return BundleMeta{}, fmt.Errorf("bundle.json: %w", err)
 	}
-	return BundleMeta{}, fmt.Errorf("bundle.json missing (signed bundles only)")
+	if meta.Name == "" || meta.Version == "" || meta.KeyID == "" || meta.Signature == "" {
+		return BundleMeta{}, fmt.Errorf("bundle.json is missing name/version/keyId/signature")
+	}
+	return meta, nil
 }
 
 func VerifyBundle(zipPath string, ring Keyring) (BundleMeta, error) {
