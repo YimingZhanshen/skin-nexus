@@ -125,7 +125,7 @@ func Process(r io.Reader, typ Type) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	if w*h > MaxPixels {
+	if uint64(w)*uint64(h) > uint64(MaxPixels) {
 		return nil, ErrPixelBomb
 	}
 	if err := checkDimensions(typ, w, h); err != nil {
