@@ -25,6 +25,10 @@ func TestIntegrationServerAccessConcurrentQuotas(t *testing.T) {
 	})
 }
 
+func TestIntegrationServerAccessOwnerPagesCountScopeAndLegacyLists(t *testing.T) {
+	saExerciseOwnerPagesCountScopeAndLegacyLists(t, openTestStore(t))
+}
+
 func TestIntegrationServerAccessPlatformSearchTreatsWildcardsLiterally(t *testing.T) {
 	saExercisePlatformSearchTreatsWildcardsLiterally(t, openTestStore(t))
 }

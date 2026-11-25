@@ -200,12 +200,12 @@ func saOwnerPage(r *http.Request) (int, int) {
 }
 
 func saPageValues(r *http.Request, defaultSize int) (int, int) {
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	size, _ := strconv.Atoi(r.URL.Query().Get("size"))
-	if page < 1 {
+	page, err := strconv.Atoi(r.URL.Query().Get("page"))
+	if err != nil || page < 1 {
 		page = 1
 	}
-	if size < 1 {
+	size, err := strconv.Atoi(r.URL.Query().Get("size"))
+	if err != nil || size < 1 {
 		size = defaultSize
 	}
 	if size > 200 {

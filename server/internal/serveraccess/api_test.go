@@ -552,6 +552,65 @@ func TestServerAccessAPIPlatformUpdatesFallbackAndAudit(t *testing.T) {
 	}
 }
 
+func TestServerAccessAPIPaginationOverflowUsesParseFailureDefaults(t *testing.T) {
+	f := newSAFixture(t)
+	ctx := context.Background()
+	if _, err := f.st.CreateSATenantInvite(ctx, f.tenant, "overflow@example.com", "viewer", strings.Repeat("a", 64), f.now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.AddSAServerWhitelist(ctx, f.tenant, f.server, f.viewer, "overflow", f.owner); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.AddSAServerBan(ctx, f.tenant, f.server, f.admin, "overflow", sql.NullTime{}, f.owner); err != nil {
+		t.Fatal(err)
+	}
+
+	const overflowing = "99999999999999999999999"
+	cases := []struct {
+		name, path, key string
+		uid             int64
+		wantSize        int
+		wantTotal       int
+		wantRows        int
+	}{
+		{name: "owner servers page", path: "/api/serveraccess/v1/servers?page=" + overflowing + "&size=1", key: "servers", uid: f.owner, wantSize: 1, wantTotal: 1, wantRows: 1},
+		{name: "owner servers size", path: "/api/serveraccess/v1/servers?size=" + overflowing, key: "servers", uid: f.owner, wantSize: 50, wantTotal: 1, wantRows: 1},
+		{name: "owner invites page", path: "/api/serveraccess/v1/tenants/me/invites?page=" + overflowing + "&size=1", key: "invites", uid: f.owner, wantSize: 1, wantTotal: 1, wantRows: 1},
+		{name: "owner invites size", path: "/api/serveraccess/v1/tenants/me/invites?size=" + overflowing, key: "invites", uid: f.owner, wantSize: 50, wantTotal: 1, wantRows: 1},
+		{name: "owner whitelist page", path: fmt.Sprintf("/api/serveraccess/v1/servers/%d/whitelist?page=%s&size=1", f.server, overflowing), key: "whitelist", uid: f.owner, wantSize: 1, wantTotal: 1, wantRows: 1},
+		{name: "owner whitelist size", path: fmt.Sprintf("/api/serveraccess/v1/servers/%d/whitelist?size=%s", f.server, overflowing), key: "whitelist", uid: f.owner, wantSize: 50, wantTotal: 1, wantRows: 1},
+		{name: "owner bans page", path: fmt.Sprintf("/api/serveraccess/v1/servers/%d/bans?page=%s&size=1", f.server, overflowing), key: "bans", uid: f.owner, wantSize: 1, wantTotal: 1, wantRows: 1},
+		{name: "owner bans size", path: fmt.Sprintf("/api/serveraccess/v1/servers/%d/bans?size=%s", f.server, overflowing), key: "bans", uid: f.owner, wantSize: 50, wantTotal: 1, wantRows: 1},
+		{name: "platform servers page", path: "/api/admin/v1/serveraccess/servers?page=" + overflowing + "&size=1", key: "servers", uid: f.super, wantSize: 1, wantTotal: 2, wantRows: 1},
+		{name: "platform servers size", path: "/api/admin/v1/serveraccess/servers?size=" + overflowing, key: "servers", uid: f.super, wantSize: 20, wantTotal: 2, wantRows: 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := f.request(t, tc.uid, "GET", tc.path, "", "")
+			if rec.Code != http.StatusOK {
+				t.Fatalf("list = %d %s", rec.Code, rec.Body.String())
+			}
+			var got map[string]json.RawMessage
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			for key, want := range map[string]int{"page": 1, "size": tc.wantSize, "total": tc.wantTotal} {
+				var value int
+				if err := json.Unmarshal(got[key], &value); err != nil || value != want {
+					t.Fatalf("%s = %s, want %d (err=%v)", key, got[key], want, err)
+				}
+			}
+			var rows []json.RawMessage
+			if err := json.Unmarshal(got[tc.key], &rows); err != nil {
+				t.Fatal(err)
+			}
+			if len(rows) != tc.wantRows {
+				t.Fatalf("%s length = %d, want %d", tc.key, len(rows), tc.wantRows)
+			}
+		})
+	}
+}
+
 func TestServerAccessAPIOwnerListsPaginateBeyondLegacyCaps(t *testing.T) {
 	f := newSAFixture(t)
 	ctx := context.Background()

@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"skin-nexus/server/internal/dialect"
 )
 
 var saSeedSeq atomic.Int64
@@ -120,8 +122,13 @@ func TestServerAccessStoreTenantServerAndMemberScope(t *testing.T) {
 }
 
 func TestServerAccessOwnerPagesCountScopeAndLegacyLists(t *testing.T) {
-	st := openSQLiteStore(t)
+	saExerciseOwnerPagesCountScopeAndLegacyLists(t, openSQLiteStore(t))
+}
+
+func saExerciseOwnerPagesCountScopeAndLegacyLists(t *testing.T, st *Mysql) {
+	t.Helper()
 	ctx := context.Background()
+	actor := saSeedUser(t, st)
 	tenant, _ := st.CreateSATenant(ctx, "pages", 10)
 	other, _ := st.CreateSATenant(ctx, "pages-other", 10)
 	server, _ := st.CreateSAServer(ctx, tenant, "srv_pages", "pages")
@@ -132,6 +139,13 @@ func TestServerAccessOwnerPagesCountScopeAndLegacyLists(t *testing.T) {
 	}
 	defer tx.Rollback()
 	insertID := func(query string, args ...any) (int64, error) {
+		if st.Engine() == dialect.MySQL {
+			res, err := tx.ExecContext(ctx, query, args...)
+			if err != nil {
+				return 0, err
+			}
+			return res.LastInsertId()
+		}
 		var id int64
 		err := tx.QueryRowContext(ctx, query+` RETURNING id`, args...).Scan(&id)
 		return id, err
@@ -162,16 +176,16 @@ func TestServerAccessOwnerPagesCountScopeAndLegacyLists(t *testing.T) {
 		}
 	}
 	for i := 1; i <= 5001; i++ {
-		id, err := insertID(`INSERT INTO sa_server_whitelist (server_id,uid,note,created_by,created_at) VALUES (?,?,?,1,?)`,
-			server.ID, i, fmt.Sprintf("page-%d", i), time.Now().UTC())
+		id, err := insertID(`INSERT INTO sa_server_whitelist (server_id,uid,note,created_by,created_at) VALUES (?,?,?,?,?)`,
+			server.ID, i, fmt.Sprintf("page-%d", i), actor, time.Now().UTC())
 		if err != nil {
 			t.Fatal(err)
 		}
 		if i == 1 {
 			firstWhitelist = id
 		}
-		id, err = insertID(`INSERT INTO sa_server_bans (server_id,uid,reason,created_by,created_at) VALUES (?,?,?,1,?)`,
-			server.ID, i, fmt.Sprintf("page-%d", i), time.Now().UTC())
+		id, err = insertID(`INSERT INTO sa_server_bans (server_id,uid,reason,created_by,created_at) VALUES (?,?,?,?,?)`,
+			server.ID, i, fmt.Sprintf("page-%d", i), actor, time.Now().UTC())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -180,12 +194,12 @@ func TestServerAccessOwnerPagesCountScopeAndLegacyLists(t *testing.T) {
 		}
 	}
 	// Decoys must affect neither tenant-scoped totals nor quota usage.
-	if _, err := insertID(`INSERT INTO sa_server_whitelist (server_id,uid,note,created_by,created_at) VALUES (?,999999,'decoy',1,?)`,
-		otherServer.ID, time.Now().UTC()); err != nil {
+	if _, err := insertID(`INSERT INTO sa_server_whitelist (server_id,uid,note,created_by,created_at) VALUES (?,?,?,?,?)`,
+		otherServer.ID, 999999, "decoy", actor, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := insertID(`INSERT INTO sa_server_bans (server_id,uid,reason,created_by,created_at) VALUES (?,999999,'decoy',1,?)`,
-		otherServer.ID, time.Now().UTC()); err != nil {
+	if _, err := insertID(`INSERT INTO sa_server_bans (server_id,uid,reason,created_by,created_at) VALUES (?,?,?,?,?)`,
+		otherServer.ID, 999999, "decoy", actor, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := insertID(`INSERT INTO sa_tenant_invites (tenant_id,email,role,token_hash,expires_at,created_at)
