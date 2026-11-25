@@ -651,6 +651,14 @@ func TestServerAccessAPIOwnerCannotUndoPlatformSuspension(t *testing.T) {
 	if err != nil || server.Status != "suspended" {
 		t.Fatalf("platform suspension was undone: %+v %v", server, err)
 	}
+	rec = f.request(t, f.owner, "PATCH", fmt.Sprintf("/api/serveraccess/v1/servers/%d", f.server), `{"name":"renamed while suspended"}`, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("name-only update on suspended server = %d %s, want 200", rec.Code, rec.Body.String())
+	}
+	server, err = f.st.SAServerByID(context.Background(), f.tenant, f.server)
+	if err != nil || server.Status != "suspended" || server.Name != "renamed while suspended" {
+		t.Fatalf("name-only update changed suspension or lost name: %+v %v", server, err)
+	}
 }
 
 func TestServerAccessAPIRejectsMalformedAndViewerMutations(t *testing.T) {
@@ -701,7 +709,91 @@ func TestServerAccessAPIPlatformCanRevokeCredential(t *testing.T) {
 	}
 }
 
+func TestServerAccessAPIOwnerUpdateRollsBackServerAndPolicyTogether(t *testing.T) {
+	f := newSAFixture(t)
+	if _, err := f.st.DB().ExecContext(context.Background(), `CREATE TRIGGER fail_owner_policy
+		BEFORE UPDATE ON sa_server_policies WHEN NEW.whitelist_enabled=1
+		BEGIN SELECT RAISE(ABORT,'forced owner policy failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	path := fmt.Sprintf("/api/serveraccess/v1/servers/%d", f.server)
+	rec := f.request(t, f.owner, "PATCH", path,
+		`{"name":"partial","status":"disabled","policy":{"whitelistEnabled":true,"premiumFallbackEnabled":false}}`, "")
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("owner update with policy failure = %d %s, want 500", rec.Code, rec.Body.String())
+	}
+	server, err := f.st.SAServerByID(context.Background(), f.tenant, f.server)
+	if err != nil || server.Name != "one" || server.Status != "active" {
+		t.Fatalf("server fields survived policy failure: %+v %v", server, err)
+	}
+	policy, err := f.st.SAServerPolicy(context.Background(), f.tenant, f.server)
+	if err != nil || policy.WhitelistEnabled || !policy.PremiumFallbackEnabled {
+		t.Fatalf("policy partially changed after failure: %+v %v", policy, err)
+	}
+	_, auditTotal, err := f.st.PlatformServerAccessAudit(context.Background(), "serveraccess_server_update", 1, 20)
+	if err != nil || auditTotal != 0 {
+		t.Fatalf("failed owner update wrote audit: total=%d err=%v", auditTotal, err)
+	}
+}
+
 func TestServerAccessAPIEmergencyMutationsRollBackWhenAuditFails(t *testing.T) {
+	t.Run("owner server update", func(t *testing.T) {
+		f := newSAFixture(t)
+		if _, err := f.st.DB().ExecContext(context.Background(), `CREATE TRIGGER fail_owner_update_audit
+			BEFORE INSERT ON audit_log WHEN NEW.action='serveraccess_server_update'
+			BEGIN SELECT RAISE(ABORT,'forced audit failure'); END`); err != nil {
+			t.Fatal(err)
+		}
+		path := fmt.Sprintf("/api/serveraccess/v1/servers/%d", f.server)
+		rec := f.request(t, f.owner, "PATCH", path,
+			`{"name":"unaudited","status":"disabled","policy":{"whitelistEnabled":true,"premiumFallbackEnabled":false}}`, "")
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("owner update with audit failure = %d %s, want 500", rec.Code, rec.Body.String())
+		}
+		server, err := f.st.SAServerByID(context.Background(), f.tenant, f.server)
+		if err != nil || server.Name != "one" || server.Status != "active" {
+			t.Fatalf("server update survived audit failure: %+v %v", server, err)
+		}
+		policy, err := f.st.SAServerPolicy(context.Background(), f.tenant, f.server)
+		if err != nil || policy.WhitelistEnabled || !policy.PremiumFallbackEnabled {
+			t.Fatalf("policy update survived audit failure: %+v %v", policy, err)
+		}
+		_, auditTotal, err := f.st.PlatformServerAccessAudit(context.Background(), "serveraccess_server_update", 1, 20)
+		if err != nil || auditTotal != 0 {
+			t.Fatalf("failed owner audit unexpectedly exists: total=%d err=%v", auditTotal, err)
+		}
+	})
+
+	t.Run("tenant create", func(t *testing.T) {
+		f := newSAFixture(t)
+		uid := saUser(t, f.st, "audit-failure-owner@example.com", "audit-failure-owner", 0)
+		if _, err := f.st.DB().ExecContext(context.Background(), `CREATE TRIGGER fail_tenant_create_audit
+			BEFORE INSERT ON audit_log WHEN NEW.action='serveraccess_tenant_create'
+			BEGIN SELECT RAISE(ABORT,'forced audit failure'); END`); err != nil {
+			t.Fatal(err)
+		}
+		body := fmt.Sprintf(`{"name":"unaudited tenant","serverLimit":7,"ownerUid":%d}`, uid)
+		rec := f.request(t, f.super, "POST", "/api/admin/v1/serveraccess/tenants", body, "")
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("tenant create with audit failure = %d %s, want 500", rec.Code, rec.Body.String())
+		}
+		rows, total, err := f.st.PlatformSATenants(context.Background(), "", 1, 20)
+		if err != nil || total != 2 || len(rows) != 2 {
+			t.Fatalf("tenant survived audit failure: %+v total=%d err=%v", rows, total, err)
+		}
+		var ownerMemberships int
+		if err := f.st.DB().QueryRowContext(context.Background(), `SELECT COUNT(*) FROM sa_tenant_members WHERE uid=?`, uid).Scan(&ownerMemberships); err != nil {
+			t.Fatal(err)
+		}
+		if ownerMemberships != 0 {
+			t.Fatalf("owner membership survived audit failure: %d", ownerMemberships)
+		}
+		_, auditTotal, err := f.st.PlatformServerAccessAudit(context.Background(), "serveraccess_tenant_create", 1, 20)
+		if err != nil || auditTotal != 0 {
+			t.Fatalf("failed tenant audit unexpectedly exists: total=%d err=%v", auditTotal, err)
+		}
+	})
+
 	t.Run("server status", func(t *testing.T) {
 		f := newSAFixture(t)
 		if _, err := f.st.DB().ExecContext(context.Background(), `CREATE TRIGGER fail_server_status_audit

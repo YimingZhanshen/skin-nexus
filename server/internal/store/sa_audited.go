@@ -9,6 +9,119 @@ import (
 	"skin-nexus/server/internal/dbx"
 )
 
+// CreateSATenantWithOwnerAudited publishes the tenant and first owner only when
+// their create audit can be committed in the same transaction.
+func (m *Mysql) CreateSATenantWithOwnerAudited(ctx context.Context, name string, serverLimit int, ownerUID, actorUID int64) (SATenant, SATenantMember, error) {
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return SATenant{}, SATenantMember{}, err
+	}
+	defer tx.Rollback()
+	tenant, owner, err := m.createSATenantWithOwnerTx(ctx, tx, name, serverLimit, ownerUID)
+	if err != nil {
+		return SATenant{}, SATenantMember{}, err
+	}
+	if err := insertAuditTx(ctx, tx, actorUID, "serveraccess_tenant_create",
+		map[string]any{"tenantId": tenant.ID, "ownerUid": owner.UID, "serverLimit": tenant.ServerLimit}, m.now().UTC()); err != nil {
+		return SATenant{}, SATenantMember{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return SATenant{}, SATenantMember{}, err
+	}
+	return tenant, owner, nil
+}
+
+// UpdateSAServerOwnerAudited applies sparse server and owner-policy fields and
+// appends the existing serveraccess_server_update audit in one transaction.
+// Locks are always acquired tenant -> server -> policy. A requested status
+// transition cannot overwrite a platform suspension; name-only and policy-only
+// patches retain the established suspended-server behavior.
+func (m *Mysql) UpdateSAServerOwnerAudited(ctx context.Context, tenantID, serverID int64, patch SAOwnerServerPatch, actorUID int64) (SAServer, error) {
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return SAServer{}, err
+	}
+	defer tx.Rollback()
+	tenantStatus, _, err := saLockTenantRow(ctx, tx, tenantID)
+	if err != nil {
+		return SAServer{}, err
+	}
+	if tenantStatus == "deleting" {
+		return SAServer{}, ErrDeletionInProgress
+	}
+	if tenantStatus != "active" {
+		return SAServer{}, ErrNotFound
+	}
+	server, err := saLockSAServerRow(ctx, tx, tenantID, serverID)
+	if err != nil {
+		return SAServer{}, err
+	}
+	if patch.Status != nil && server.Status == "suspended" {
+		return SAServer{}, ErrForbidden
+	}
+	if _, err := saLockPolicyRow(ctx, tx, tenantID, serverID); err != nil {
+		return SAServer{}, err
+	}
+	serverSets, serverArgs := saOwnerServerFields(patch)
+	if len(serverSets) > 0 {
+		query := `UPDATE sa_servers SET ` + strings.Join(serverSets, ",") + ` WHERE tenant_id=? AND id=?`
+		args := append(serverArgs, tenantID, serverID)
+		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+			return SAServer{}, err
+		}
+	}
+	policySets, policyArgs := saOwnerPolicyFields(patch)
+	if len(policySets) > 0 {
+		query := `UPDATE sa_server_policies SET ` + strings.Join(policySets, ",") + ` WHERE server_id=?`
+		args := append(policyArgs, serverID)
+		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+			return SAServer{}, err
+		}
+	}
+	server, err = scanSAServer(tx.QueryRowContext(ctx,
+		`SELECT id,tenant_id,public_id,name,status,source_mode,created_at FROM sa_servers WHERE tenant_id=? AND id=?`,
+		tenantID, serverID))
+	if err != nil {
+		return SAServer{}, err
+	}
+	if err := insertAuditTx(ctx, tx, actorUID, "serveraccess_server_update",
+		map[string]any{"tenantId": tenantID, "serverId": serverID, "status": server.Status}, m.now().UTC()); err != nil {
+		return SAServer{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return SAServer{}, err
+	}
+	return server, nil
+}
+
+func saOwnerServerFields(patch SAOwnerServerPatch) ([]string, []any) {
+	var sets []string
+	var args []any
+	if patch.Name != nil {
+		sets = append(sets, `name=?`)
+		args = append(args, *patch.Name)
+	}
+	if patch.Status != nil {
+		sets = append(sets, `status=?`)
+		args = append(args, *patch.Status)
+	}
+	return sets, args
+}
+
+func saOwnerPolicyFields(patch SAOwnerServerPatch) ([]string, []any) {
+	var sets []string
+	var args []any
+	if patch.WhitelistEnabled != nil {
+		sets = append(sets, `whitelist_enabled=?`)
+		args = append(args, *patch.WhitelistEnabled)
+	}
+	if patch.PremiumFallbackEnabled != nil {
+		sets = append(sets, `premium_fallback_enabled=?`)
+		args = append(args, *patch.PremiumFallbackEnabled)
+	}
+	return sets, args
+}
+
 func (m *Mysql) UpdateSATenantPlatformAudited(ctx context.Context, tenantID int64, status string, serverLimit *int, actorUID int64) error {
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {

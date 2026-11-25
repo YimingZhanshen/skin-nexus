@@ -233,41 +233,35 @@ func (c *control) updateServer(w http.ResponseWriter, r *http.Request) {
 		writeSAStoreError(w, err)
 		return
 	}
-	name, status := current.Name, current.Status
+	patch := store.SAOwnerServerPatch{Name: body.Name, Status: body.Status}
 	if body.Name != nil {
-		name = saText(*body.Name, 191)
+		name := saText(*body.Name, 191)
 		if name == "" {
 			writeSAError(w, http.StatusBadRequest, i18n.MsgServerAccessInvalid, "Server name cannot be empty")
 			return
 		}
+		patch.Name = &name
 	}
 	if body.Status != nil {
-		status = *body.Status
 		if current.Status == "suspended" {
 			writeSAError(w, http.StatusForbidden, i18n.MsgServerAccessForbidden, "Only the platform can change a suspended server")
 			return
 		}
-		if status != "active" && status != "disabled" {
+		if *body.Status != "active" && *body.Status != "disabled" {
 			writeSAError(w, http.StatusBadRequest, i18n.MsgServerAccessInvalid, "Owner status must be active or disabled")
 			return
 		}
 	}
-	if body.Name != nil || body.Status != nil {
-		if err := c.cfg.Store.UpdateSAServerOwner(r.Context(), who.TenantID, id, name, body.Status); err != nil {
-			writeSAStoreError(w, err)
-			return
-		}
-	}
 	if body.Policy != nil {
-		if err := c.cfg.Store.UpdateSAServerOwnerPolicy(r.Context(), who.TenantID, id,
-			body.Policy.WhitelistEnabled, body.Policy.PremiumFallbackEnabled); err != nil {
-			writeSAStoreError(w, err)
-			return
-		}
+		patch.WhitelistEnabled = body.Policy.WhitelistEnabled
+		patch.PremiumFallbackEnabled = body.Policy.PremiumFallbackEnabled
 	}
-	c.cfg.Store.InsertAudit(r.Context(), who.UID, "serveraccess_server_update",
-		map[string]any{"tenantId": who.TenantID, "serverId": id, "status": status})
-	writeSAJSON(w, http.StatusOK, map[string]any{"id": id, "name": name, "status": status})
+	updated, err := c.cfg.Store.UpdateSAServerOwnerAudited(r.Context(), who.TenantID, id, patch, who.UID)
+	if err != nil {
+		writeSAStoreError(w, err)
+		return
+	}
+	writeSAJSON(w, http.StatusOK, map[string]any{"id": updated.ID, "name": updated.Name, "status": updated.Status})
 }
 
 func (c *control) whitelist(w http.ResponseWriter, r *http.Request) {

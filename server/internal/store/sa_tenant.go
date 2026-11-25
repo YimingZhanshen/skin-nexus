@@ -37,6 +37,23 @@ func (m *Mysql) CreateSATenantWithOwner(ctx context.Context, name string, server
 		return SATenant{}, SATenantMember{}, err
 	}
 	defer tx.Rollback()
+	tenant, owner, err := m.createSATenantWithOwnerTx(ctx, tx, name, serverLimit, ownerUID)
+	if err != nil {
+		return SATenant{}, SATenantMember{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return SATenant{}, SATenantMember{}, err
+	}
+	return tenant, owner, nil
+}
+
+// createSATenantWithOwnerTx is shared by the unaudited primitive and the
+// audited platform operation. It never commits, so an audit failure can roll
+// back both the tenant and its first owner membership.
+func (m *Mysql) createSATenantWithOwnerTx(ctx context.Context, tx *dbx.Tx, name string, serverLimit int, ownerUID int64) (SATenant, SATenantMember, error) {
+	if serverLimit < 1 {
+		serverLimit = 10
+	}
 	if err := saLockUserRow(ctx, tx, ownerUID); err != nil {
 		return SATenant{}, SATenantMember{}, err
 	}
@@ -73,9 +90,6 @@ func (m *Mysql) CreateSATenantWithOwner(ctx context.Context, name string, server
 		`SELECT tm.tenant_id,tm.uid,tm.role,tm.created_at,COALESCE(u.nickname,'')
 		 FROM sa_tenant_members tm LEFT JOIN users u ON u.id=tm.uid WHERE tm.tenant_id=? AND tm.uid=?`,
 		tenantID, ownerUID).Scan(&owner.TenantID, &owner.UID, &owner.Role, &owner.CreatedAt, &owner.Nickname); err != nil {
-		return SATenant{}, SATenantMember{}, err
-	}
-	if err := tx.Commit(); err != nil {
 		return SATenant{}, SATenantMember{}, err
 	}
 	return tenant, owner, nil
@@ -574,6 +588,22 @@ func (m *Mysql) SAServerByID(ctx context.Context, tenantID, serverID int64) (SAS
 	return scanSAServer(m.db.QueryRowContext(ctx,
 		`SELECT id,tenant_id,public_id,name,status,source_mode,created_at FROM sa_servers
 		 WHERE tenant_id=? AND id=?`, tenantID, serverID))
+}
+
+// saLockSAServerRow locks a scoped server after its tenant. SQLite uses a
+// no-op write to acquire its single writer lock; MySQL and PostgreSQL use
+// SELECT FOR UPDATE. Callers can then validate status and mutate without a
+// platform suspension changing the row underneath them.
+func saLockSAServerRow(ctx context.Context, tx *dbx.Tx, tenantID, serverID int64) (SAServer, error) {
+	if tx.Engine() == dialect.SQLite {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE sa_servers SET name=name WHERE tenant_id=? AND id=?`, tenantID, serverID); err != nil {
+			return SAServer{}, err
+		}
+	}
+	return scanSAServer(tx.QueryRowContext(ctx,
+		`SELECT id,tenant_id,public_id,name,status,source_mode,created_at FROM sa_servers
+		 WHERE tenant_id=? AND id=?`+tx.Engine().LockSQL(), tenantID, serverID))
 }
 
 // SAServerByPublicID resolves a header-mode route only inside the tenant

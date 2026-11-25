@@ -34,13 +34,11 @@ func (c *control) platformTenantCreate(w http.ResponseWriter, r *http.Request) {
 			"Name is required (at most 190 characters), server limit must be between 1 and 10000, and owner UID must be positive")
 		return
 	}
-	tenant, owner, err := c.cfg.Store.CreateSATenantWithOwner(r.Context(), body.Name, body.ServerLimit, body.OwnerUID)
+	tenant, owner, err := c.cfg.Store.CreateSATenantWithOwnerAudited(r.Context(), body.Name, body.ServerLimit, body.OwnerUID, saCaller(r).UID)
 	if err != nil {
 		writeSAStoreError(w, err)
 		return
 	}
-	c.cfg.Store.InsertAudit(r.Context(), saCaller(r).UID, "serveraccess_tenant_create",
-		map[string]any{"tenantId": tenant.ID, "ownerUid": owner.UID, "serverLimit": tenant.ServerLimit})
 	writeSAJSON(w, http.StatusCreated, map[string]any{"tenant": tenant, "owner": owner})
 }
 

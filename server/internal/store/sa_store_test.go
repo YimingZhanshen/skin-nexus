@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -162,6 +164,66 @@ func TestServerAccessCreateTenantWithOwner(t *testing.T) {
 	members, err := st.ListSATenantMembers(ctx, tenant.ID)
 	if err != nil || len(members) != 1 || members[0] != owner {
 		t.Fatalf("members = %+v err=%v", members, err)
+	}
+}
+
+func TestServerAccessCreateTenantWithOwnerAuditedRollsBackAuditFailure(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid := saSeedUser(t, st)
+	actor := saSeedUser(t, st)
+	if _, err := st.db.ExecContext(ctx, `CREATE TRIGGER fail_tenant_create_audit
+		BEFORE INSERT ON audit_log WHEN NEW.action='serveraccess_tenant_create'
+		BEGIN SELECT RAISE(ABORT,'forced audit failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	before, beforeTotal, err := st.PlatformSATenants(ctx, "", 1, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.CreateSATenantWithOwnerAudited(ctx, "unaudited-tenant", 7, uid, actor); err == nil {
+		t.Fatal("tenant creation unexpectedly succeeded without audit")
+	}
+	after, afterTotal, err := st.PlatformSATenants(ctx, "", 1, 20)
+	if err != nil || afterTotal != beforeTotal || len(after) != len(before) {
+		t.Fatalf("tenant survived audit failure: after=%+v total=%d before=%+v total=%d err=%v", after, afterTotal, before, beforeTotal, err)
+	}
+	var memberships int
+	if err := st.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sa_tenant_members WHERE uid=?`, uid).Scan(&memberships); err != nil {
+		t.Fatal(err)
+	}
+	if memberships != 0 {
+		t.Fatalf("owner membership survived audit failure: %d", memberships)
+	}
+	audit, total, err := st.PlatformServerAccessAudit(ctx, "serveraccess_tenant_create", 1, 20)
+	if err != nil || total != 0 || len(audit) != 0 {
+		t.Fatalf("failed tenant create audit = %+v total=%d err=%v", audit, total, err)
+	}
+}
+
+func TestServerAccessCreateTenantWithOwnerAuditedCommitsAudit(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid := saSeedUserAs(t, st, "audited-owner@example.com", "audited-owner")
+	actor := saSeedUser(t, st)
+	tenant, owner, err := st.CreateSATenantWithOwnerAudited(ctx, "audited-tenant", 7, uid, actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tenant.Status != "active" || tenant.ServerLimit != 7 || owner.TenantID != tenant.ID || owner.UID != uid || owner.Role != "owner" {
+		t.Fatalf("audited creation = %+v owner=%+v", tenant, owner)
+	}
+	audit, total, err := st.PlatformServerAccessAudit(ctx, "serveraccess_tenant_create", 1, 20)
+	if err != nil || total != 1 || len(audit) != 1 || audit[0]["actorUid"] != actor {
+		t.Fatalf("tenant create audit = %+v total=%d err=%v", audit, total, err)
+	}
+	var detail map[string]any
+	if err := json.Unmarshal([]byte(audit[0]["detail"].(string)), &detail); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"tenantId": float64(tenant.ID), "ownerUid": float64(uid), "serverLimit": float64(7)}
+	if !reflect.DeepEqual(detail, want) {
+		t.Fatalf("tenant create audit detail = %#v, want %#v", detail, want)
 	}
 }
 
@@ -681,6 +743,218 @@ func TestServerAccessOwnerServerUpdateCannotReactivateSuspended(t *testing.T) {
 	got, err = st.SAServerByID(ctx, tenant, server.ID)
 	if err != nil || got.Status != "suspended" || got.Name != "renamed" {
 		t.Fatalf("name-only update changed suspension: %+v %v", got, err)
+	}
+}
+
+func TestServerAccessOwnerServerUpdateAuditedRollsBackPolicyFailure(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	actor := saSeedUser(t, st)
+	tenant, _ := st.CreateSATenant(ctx, "owner-policy-failure", 2)
+	server, err := st.CreateSAServer(ctx, tenant, "srv_owner_policy_failure", "before")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `CREATE TRIGGER fail_owner_policy
+		BEFORE UPDATE ON sa_server_policies WHEN NEW.whitelist_enabled=1
+		BEGIN SELECT RAISE(ABORT,'forced policy failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	name, status, whitelist, fallback := "after", "disabled", true, false
+	if _, err := st.UpdateSAServerOwnerAudited(ctx, tenant, server.ID, SAOwnerServerPatch{
+		Name: &name, Status: &status, WhitelistEnabled: &whitelist, PremiumFallbackEnabled: &fallback,
+	}, actor); err == nil {
+		t.Fatal("owner update unexpectedly succeeded with failing policy")
+	}
+	got, err := st.SAServerByID(ctx, tenant, server.ID)
+	if err != nil || got.Name != "before" || got.Status != "active" {
+		t.Fatalf("server fields survived policy failure: %+v %v", got, err)
+	}
+	policy, err := st.SAServerPolicy(ctx, tenant, server.ID)
+	if err != nil || policy.WhitelistEnabled || !policy.PremiumFallbackEnabled {
+		t.Fatalf("policy changed after failure: %+v %v", policy, err)
+	}
+	_, auditTotal, err := st.PlatformServerAccessAudit(ctx, "serveraccess_server_update", 1, 20)
+	if err != nil || auditTotal != 0 {
+		t.Fatalf("failed owner update wrote audit: total=%d err=%v", auditTotal, err)
+	}
+}
+
+func TestServerAccessOwnerServerUpdateAuditedRollsBackAuditFailure(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	actor := saSeedUser(t, st)
+	tenant, _ := st.CreateSATenant(ctx, "owner-audit-failure", 2)
+	server, err := st.CreateSAServer(ctx, tenant, "srv_owner_audit_failure", "before")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `CREATE TRIGGER fail_owner_update_audit
+		BEFORE INSERT ON audit_log WHEN NEW.action='serveraccess_server_update'
+		BEGIN SELECT RAISE(ABORT,'forced audit failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	name, status, whitelist, fallback := "after", "disabled", true, false
+	if _, err := st.UpdateSAServerOwnerAudited(ctx, tenant, server.ID, SAOwnerServerPatch{
+		Name: &name, Status: &status, WhitelistEnabled: &whitelist, PremiumFallbackEnabled: &fallback,
+	}, actor); err == nil {
+		t.Fatal("owner update unexpectedly succeeded without audit")
+	}
+	got, err := st.SAServerByID(ctx, tenant, server.ID)
+	if err != nil || got.Name != "before" || got.Status != "active" {
+		t.Fatalf("server fields survived audit failure: %+v %v", got, err)
+	}
+	policy, err := st.SAServerPolicy(ctx, tenant, server.ID)
+	if err != nil || policy.WhitelistEnabled || !policy.PremiumFallbackEnabled {
+		t.Fatalf("policy survived audit failure: %+v %v", policy, err)
+	}
+	_, auditTotal, err := st.PlatformServerAccessAudit(ctx, "serveraccess_server_update", 1, 20)
+	if err != nil || auditTotal != 0 {
+		t.Fatalf("failed owner audit unexpectedly exists: total=%d err=%v", auditTotal, err)
+	}
+}
+
+func TestServerAccessOwnerServerUpdateAuditedSparseFieldsAndAudit(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	actor := saSeedUser(t, st)
+	tenant, _ := st.CreateSATenant(ctx, "owner-audited", 2)
+	server, err := st.CreateSAServer(ctx, tenant, "srv_owner_audited", "before")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rate, burst, concurrent, whitelistLimit, retention := 11, 12, 13, 14, 15
+	if err := st.UpdateSAServerPlatformPolicy(ctx, tenant, server.ID, &rate, &burst, &concurrent, &whitelistLimit, &retention); err != nil {
+		t.Fatal(err)
+	}
+	name, status, whitelist := "after", "disabled", true
+	got, err := st.UpdateSAServerOwnerAudited(ctx, tenant, server.ID, SAOwnerServerPatch{
+		Name: &name, Status: &status, WhitelistEnabled: &whitelist,
+	}, actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != server.ID || got.TenantID != tenant || got.PublicID != server.PublicID || got.Name != "after" || got.Status != "disabled" || got.SourceMode != server.SourceMode || !got.CreatedAt.Equal(server.CreatedAt) {
+		t.Fatalf("returned server = %+v, original=%+v", got, server)
+	}
+	stored, err := st.SAServerByID(ctx, tenant, server.ID)
+	if err != nil || stored != got {
+		t.Fatalf("stored server = %+v returned=%+v err=%v", stored, got, err)
+	}
+	policy, err := st.SAServerPolicy(ctx, tenant, server.ID)
+	if err != nil || !policy.WhitelistEnabled || !policy.PremiumFallbackEnabled || policy.VerifyRateLimit != rate ||
+		policy.VerifyBurst != burst || policy.MaxConcurrent != concurrent || policy.WhitelistLimit != whitelistLimit || policy.EventRetentionDays != retention {
+		t.Fatalf("sparse owner patch crossed policy fields: %+v %v", policy, err)
+	}
+	audit, total, err := st.PlatformServerAccessAudit(ctx, "serveraccess_server_update", 1, 20)
+	if err != nil || total != 1 || len(audit) != 1 || audit[0]["actorUid"] != actor {
+		t.Fatalf("owner update audit = %+v total=%d err=%v", audit, total, err)
+	}
+	var detail map[string]any
+	if err := json.Unmarshal([]byte(audit[0]["detail"].(string)), &detail); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"tenantId": float64(tenant), "serverId": float64(server.ID), "status": "disabled"}
+	if !reflect.DeepEqual(detail, want) {
+		t.Fatalf("owner update audit detail = %#v, want %#v", detail, want)
+	}
+}
+
+func TestServerAccessOwnerServerUpdateAuditedEnforcesLifecycleUnderLock(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	actor := saSeedUser(t, st)
+	tenant, _ := st.CreateSATenant(ctx, "owner-lifecycle", 2)
+	server, err := st.CreateSAServer(ctx, tenant, "srv_owner_lifecycle", "before")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpdateSATenantStatus(ctx, tenant, "suspended"); err != nil {
+		t.Fatal(err)
+	}
+	name, status, whitelist := "after", "active", true
+	if _, err := st.UpdateSAServerOwnerAudited(ctx, tenant, server.ID, SAOwnerServerPatch{
+		Name: &name, Status: &status, WhitelistEnabled: &whitelist,
+	}, actor); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("suspended tenant owner update = %v, want not found", err)
+	}
+	if err := st.UpdateSATenantStatus(ctx, tenant, "active"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpdateSAServer(ctx, tenant, server.ID, "before", "suspended"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpdateSAServerOwnerAudited(ctx, tenant, server.ID, SAOwnerServerPatch{
+		Name: &name, Status: &status, WhitelistEnabled: &whitelist,
+	}, actor); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("suspended server status update = %v, want forbidden", err)
+	}
+	got, err := st.SAServerByID(ctx, tenant, server.ID)
+	if err != nil || got.Name != "before" || got.Status != "suspended" {
+		t.Fatalf("suspended server changed: %+v %v", got, err)
+	}
+	policy, err := st.SAServerPolicy(ctx, tenant, server.ID)
+	if err != nil || policy.WhitelistEnabled {
+		t.Fatalf("rejected status update changed policy: %+v %v", policy, err)
+	}
+	if _, err := st.RequestSATenantDeletion(ctx, tenant, DefaultSATenantDeletionGrace, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpdateSAServerOwnerAudited(ctx, tenant, server.ID, SAOwnerServerPatch{Name: &name}, actor); !errors.Is(err, ErrDeletionInProgress) {
+		t.Fatalf("deleting tenant owner update = %v, want deletion in progress", err)
+	}
+	_, auditTotal, err := st.PlatformServerAccessAudit(ctx, "serveraccess_server_update", 1, 20)
+	if err != nil || auditTotal != 0 {
+		t.Fatalf("rejected owner updates wrote audit: total=%d err=%v", auditTotal, err)
+	}
+}
+
+func TestServerAccessOwnerServerUpdateAuditedCannotOverwriteConcurrentSuspension(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	actor := saSeedUser(t, st)
+	tenant, _ := st.CreateSATenant(ctx, "owner-suspension-race", 2)
+	server, err := st.CreateSAServer(ctx, tenant, "srv_owner_suspension_race", "before")
+	if err != nil {
+		t.Fatal(err)
+	}
+	holder, err := st.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Rollback()
+	if _, err := holder.ExecContext(ctx, `UPDATE sa_servers SET name=name WHERE id=?`, server.ID); err != nil {
+		t.Fatal(err)
+	}
+	name, status, whitelist := "owner-name", "active", true
+	ownerDone := make(chan error, 1)
+	go func() {
+		_, err := st.UpdateSAServerOwnerAudited(ctx, tenant, server.ID, SAOwnerServerPatch{
+			Name: &name, Status: &status, WhitelistEnabled: &whitelist,
+		}, actor)
+		ownerDone <- err
+	}()
+	select {
+	case err := <-ownerDone:
+		t.Fatalf("owner update did not wait for locked server: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	platformDone := make(chan error, 1)
+	go func() {
+		platformDone <- st.UpdateSAServerPlatformAudited(ctx, tenant, server.ID, "before", "suspended", nil, nil, nil, nil, nil, actor)
+	}()
+	if err := holder.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-ownerDone; err != nil && !errors.Is(err, ErrForbidden) {
+		t.Fatalf("owner update race err = %v, want success or forbidden", err)
+	}
+	if err := <-platformDone; err != nil {
+		t.Fatalf("platform suspension: %v", err)
+	}
+	got, err := st.SAServerByID(ctx, tenant, server.ID)
+	if err != nil || got.Status != "suspended" {
+		t.Fatalf("concurrent suspension was overwritten: %+v %v", got, err)
 	}
 }
 

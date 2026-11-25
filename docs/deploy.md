@@ -296,6 +296,8 @@ app 进程能看到哪些变量，取决于 compose 文件里 `environment:` 段
 
 服务器 id 始终从当前成员租户解析；跨租户服务器返回 404。模块关闭时上述 API 均返回 404；`/servers` 不受模块门禁拦截，仍返回 SPA 壳并显示明确的不可用状态。未知 `/servers/` 子路径仍为 404，不退化成 SPA 页面。
 
+平台创建租户时，租户、首位 owner 成员关系与 `serveraccess_tenant_create` 审计在同一事务中提交。服主 `PATCH /api/serveraccess/v1/servers/{id}` 的稀疏服务器字段、owner 策略字段与 `serveraccess_server_update` 审计也在同一事务中提交；store 按 tenant → server → policy 加锁，拒绝 deleting 租户更新，并防止 owner 状态更新覆盖平台停服。审计表写入失败时返回 5xx，相关业务写入全部回滚；排错时不要通过关闭审计或忽略审计错误来恢复写入。此修复不新增环境变量、表或列，也不需要数据迁移。
+
 **服务器接入验证与凭证运维**
 
 当前实现提供两个标准 `hasJoined` 入口，成功返回本地签名 profile 或官方原样响应，拒绝/未命中/故障返回空 204：

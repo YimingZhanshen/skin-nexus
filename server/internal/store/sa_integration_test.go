@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"skin-nexus/server/internal/dialect"
 )
 
 // TestIntegrationServerAccessControlPlane runs the same repository contract on
@@ -47,6 +49,123 @@ func TestIntegrationServerAccessAtomicTenantOwner(t *testing.T) {
 	_, afterTotal, err := m.PlatformSATenants(ctx, "", 1, 20)
 	if err != nil || afterTotal != beforeTotal {
 		t.Fatalf("tenant total after rollbacks = %d, before=%d, err=%v", afterTotal, beforeTotal, err)
+	}
+}
+
+func TestIntegrationServerAccessAuditedOwnerUpdate(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	actor := seedUser(t, m)
+	tenant, err := m.CreateSATenant(ctx, "audited-owner-update", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := m.CreateSAServer(ctx, tenant, "srv_audited_owner_update", "before")
+	if err != nil {
+		t.Fatal(err)
+	}
+	name, status, whitelist, fallback := "after", "disabled", true, false
+	got, err := m.UpdateSAServerOwnerAudited(ctx, tenant, server.ID, SAOwnerServerPatch{
+		Name: &name, Status: &status, WhitelistEnabled: &whitelist, PremiumFallbackEnabled: &fallback,
+	}, actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != server.ID || got.TenantID != tenant || got.Name != "after" || got.Status != "disabled" {
+		t.Fatalf("audited owner update = %+v", got)
+	}
+	policy, err := m.SAServerPolicy(ctx, tenant, server.ID)
+	if err != nil || !policy.WhitelistEnabled || policy.PremiumFallbackEnabled {
+		t.Fatalf("audited owner policy = %+v %v", policy, err)
+	}
+	audit, total, err := m.PlatformServerAccessAudit(ctx, "serveraccess_server_update", 1, 20)
+	if err != nil || total != 1 || len(audit) != 1 || audit[0]["actorUid"] != actor {
+		t.Fatalf("owner update audit = %+v total=%d err=%v", audit, total, err)
+	}
+}
+
+func TestIntegrationServerAccessAuditedOwnerUpdateRollsBackAuditFailure(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	actor := seedUser(t, m)
+	tenant, err := m.CreateSATenant(ctx, "audited-owner-rollback", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := m.CreateSAServer(ctx, tenant, "srv_audited_owner_rollback", "before")
+	if err != nil {
+		t.Fatal(err)
+	}
+	saFailAuditAction(t, m, "serveraccess_server_update")
+	name, status, whitelist := "after", "disabled", true
+	if _, err := m.UpdateSAServerOwnerAudited(ctx, tenant, server.ID, SAOwnerServerPatch{
+		Name: &name, Status: &status, WhitelistEnabled: &whitelist,
+	}, actor); err == nil {
+		t.Fatal("owner update unexpectedly succeeded without audit")
+	}
+	got, err := m.SAServerByID(ctx, tenant, server.ID)
+	if err != nil || got.Name != "before" || got.Status != "active" {
+		t.Fatalf("server survived audit failure: %+v %v", got, err)
+	}
+	policy, err := m.SAServerPolicy(ctx, tenant, server.ID)
+	if err != nil || policy.WhitelistEnabled {
+		t.Fatalf("policy survived audit failure: %+v %v", policy, err)
+	}
+	_, total, err := m.PlatformServerAccessAudit(ctx, "serveraccess_server_update", 1, 20)
+	if err != nil || total != 0 {
+		t.Fatalf("failed owner audit rows = %d, err=%v", total, err)
+	}
+}
+
+func TestIntegrationServerAccessAuditedTenantCreateRollsBackAuditFailure(t *testing.T) {
+	m := openTestStore(t)
+	ctx := context.Background()
+	actor := seedUser(t, m)
+	ownerUID := seedUser(t, m)
+	saFailAuditAction(t, m, "serveraccess_tenant_create")
+	if _, _, err := m.CreateSATenantWithOwnerAudited(ctx, "unaudited-tenant", 7, ownerUID, actor); err == nil {
+		t.Fatal("tenant creation unexpectedly succeeded without audit")
+	}
+	rows, total, err := m.PlatformSATenants(ctx, "", 1, 20)
+	if err != nil || total != 0 || len(rows) != 0 {
+		t.Fatalf("tenant survived audit failure: %+v total=%d err=%v", rows, total, err)
+	}
+	var memberships int
+	if err := m.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM sa_tenant_members WHERE uid=?`, ownerUID).Scan(&memberships); err != nil {
+		t.Fatal(err)
+	}
+	if memberships != 0 {
+		t.Fatalf("owner membership survived audit failure: %d", memberships)
+	}
+	_, auditTotal, err := m.PlatformServerAccessAudit(ctx, "serveraccess_tenant_create", 1, 20)
+	if err != nil || auditTotal != 0 {
+		t.Fatalf("failed tenant audit rows = %d, err=%v", auditTotal, err)
+	}
+}
+
+func saFailAuditAction(t *testing.T, m *Mysql, action string) {
+	t.Helper()
+	var statements []string
+	switch m.Engine() {
+	case dialect.SQLite:
+		statements = []string{`CREATE TRIGGER fail_audit_action BEFORE INSERT ON audit_log WHEN NEW.action='` + action + `'
+			BEGIN SELECT RAISE(ABORT,'forced audit failure'); END`}
+	case dialect.MySQL:
+		statements = []string{`CREATE TRIGGER fail_audit_action BEFORE INSERT ON audit_log FOR EACH ROW
+			BEGIN IF NEW.action='` + action + `' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='forced audit failure'; END IF; END`}
+	case dialect.Postgres:
+		statements = []string{
+			`CREATE OR REPLACE FUNCTION fail_audit_action() RETURNS trigger LANGUAGE plpgsql AS $$
+				BEGIN IF NEW.action='` + action + `' THEN RAISE EXCEPTION 'forced audit failure'; END IF; RETURN NEW; END; $$`,
+			`CREATE TRIGGER fail_audit_action BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION fail_audit_action()`,
+		}
+	default:
+		t.Fatalf("unsupported integration engine %q", m.Engine())
+	}
+	for _, statement := range statements {
+		if _, err := m.DB().ExecContext(context.Background(), statement); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

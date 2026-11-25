@@ -52,6 +52,16 @@ type SAServer struct {
 	CreatedAt  time.Time `json:"createdAt"`
 }
 
+// SAOwnerServerPatch contains only fields an owner/admin may change. Nil
+// pointers preserve the locked row's current value, including platform quotas
+// and owner switches that the request did not mention.
+type SAOwnerServerPatch struct {
+	Name                   *string
+	Status                 *string
+	WhitelistEnabled       *bool
+	PremiumFallbackEnabled *bool
+}
+
 type SACredential struct {
 	ID         int64        `json:"id"`
 	TenantID   int64        `json:"-"`
