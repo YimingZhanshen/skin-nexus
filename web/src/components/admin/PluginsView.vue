@@ -1,7 +1,7 @@
 <script setup>
 // PluginsView: read-only catalog for admins; enable/disable/reload are
 // SUPER_ADMIN-session-only (the backend rejects X-Admin-Token and perm<2).
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON, needToken } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
@@ -22,7 +22,10 @@ const configView = ref(null)
 const configValues = ref({})
 const configError = ref('')
 const configOk = ref('')
+const configLoading = ref(false)
 const configSaving = ref(false)
+let configGeneration = 0
+const configBusy = computed(() => configLoading.value || configSaving.value)
 const guardsBypassed = ref(false)
 // Row actions and the guard-bypass switch all compute "the opposite of what the
 // row currently says". A second click before the answer lands sends the same
@@ -36,6 +39,10 @@ const setRowBusy = (name, on) => {
   rowBusy.value = next
 }
 const bypassBusy = ref(false)
+
+function isCurrentConfig(name, generation) {
+  return generation === configGeneration && configTarget.value?.name === name
+}
 
 async function load() {
   loadError.value = ''
@@ -58,38 +65,61 @@ async function detectRole() {
 }
 
 async function openConfig(p) {
+  const name = p.name
+  const generation = ++configGeneration
   configTarget.value = p
   configView.value = null
   configValues.value = {}
   configError.value = ''
   configOk.value = ''
+  configLoading.value = true
+  configSaving.value = false
   try {
-    const d = await fetchJSON(`/api/admin/v1/plugins/${encodeURIComponent(p.name)}/config`)
+    const d = await fetchJSON(`/api/admin/v1/plugins/${encodeURIComponent(name)}/config`)
+    if (!isCurrentConfig(name, generation)) return
     configView.value = d
     configValues.value = { ...(d.values || {}) }
   } catch (e) {
+    if (!isCurrentConfig(name, generation)) return
     configError.value = e.message
+  } finally {
+    if (isCurrentConfig(name, generation)) configLoading.value = false
   }
 }
 
+function closeConfig() {
+  configGeneration++
+  configTarget.value = null
+  configView.value = null
+  configValues.value = {}
+  configError.value = ''
+  configOk.value = ''
+  configLoading.value = false
+  configSaving.value = false
+}
+
 async function saveConfig() {
-  if (!configTarget.value || !configView.value) return
+  if (!configTarget.value || !configView.value || configBusy.value) return
+  const name = configTarget.value.name
+  const generation = configGeneration
+  const body = JSON.stringify({ values: configValues.value })
   configSaving.value = true
   configError.value = ''
   configOk.value = ''
   try {
-    const d = await fetchJSON(`/api/admin/v1/plugins/${encodeURIComponent(configTarget.value.name)}/config`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: configValues.value }),
+    const d = await fetchJSON(`/api/admin/v1/plugins/${encodeURIComponent(name)}/config`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body,
     })
+    if (!isCurrentConfig(name, generation)) return
     configView.value = d
     configValues.value = { ...(d.values || {}) }
     configOk.value = t('admin.pluginsConfigSaved')
     await load()
   } catch (e) {
+    if (!isCurrentConfig(name, generation)) return
     configError.value = e.message
   } finally {
-    configSaving.value = false
+    if (isCurrentConfig(name, generation)) configSaving.value = false
   }
 }
 
@@ -244,15 +274,15 @@ onMounted(async () => {
     <div v-if="configTarget" class="card" style="margin-top: 16px;">
       <div class="row" style="justify-content: space-between; align-items: center;">
         <h3 style="margin: 0;">{{ t('admin.pluginsConfigTitle', { name: configTarget.title || configTarget.name }) }}</h3>
-        <button class="secondary" @click="configTarget = null">{{ t('common.close') }}</button>
+        <button class="secondary" @click="closeConfig">{{ t('common.close') }}</button>
       </div>
       <p class="muted">{{ t('admin.pluginsConfigHint') }}</p>
       <div class="error" role="alert" v-if="configError">{{ configError }}</div>
       <div class="success" role="status" v-if="configOk">{{ configOk }}</div>
       <template v-if="configView">
-        <SchemaForm :schema="configView.schema" v-model="configValues" :disabled="!isSuper || configSaving" />
+        <SchemaForm :schema="configView.schema" v-model="configValues" :disabled="!isSuper || configBusy" />
         <div class="row" style="margin-top: 12px;">
-          <button :disabled="!isSuper || configSaving" @click="saveConfig">{{ t('admin.pluginsConfigSave') }}</button>
+          <button :disabled="!isSuper || configBusy" @click="saveConfig">{{ t('admin.pluginsConfigSave') }}</button>
           <span v-if="!isSuper" class="muted">{{ t('admin.pluginsConfigReadOnly') }}</span>
         </div>
       </template>
