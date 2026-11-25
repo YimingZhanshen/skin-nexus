@@ -22,6 +22,7 @@ import (
 	"skin-nexus/server/internal/account"
 	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/jobs"
+	"skin-nexus/server/internal/origingate"
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/store"
 	"skin-nexus/server/internal/ygg"
@@ -295,6 +296,10 @@ func (b *Backend) auth(next http.HandlerFunc) http.HandlerFunc {
 		// browser session to the machine channel.
 		if uid, ok := sessionAdmin(r, b.Store); ok {
 			if b.pendingRefusal(w, r, uid) {
+				return
+			}
+			if uid > 0 && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions && !origingate.SameOrigin(r) {
+				writeErrCode(w, http.StatusForbidden, "origin check failed", i18n.MsgOriginMismatch)
 				return
 			}
 			next(w, r.WithContext(context.WithValue(r.Context(), actorUIDKey{}, uid)))

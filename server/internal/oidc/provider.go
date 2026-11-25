@@ -19,6 +19,7 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/op"
 
 	"skin-nexus/server/internal/i18n"
+	"skin-nexus/server/internal/origingate"
 	"skin-nexus/server/internal/webi18n"
 )
 
@@ -382,7 +383,19 @@ func (p *Provider) DeviceAPIHandler() http.Handler {
 	mux.HandleFunc("POST /api/v1/oidc/device/submit", p.deviceSubmit)
 	mux.HandleFunc("GET /api/v1/oidc/tokens", p.listTokens)
 	mux.HandleFunc("POST /api/v1/oidc/tokens/revoke", p.revokeToken)
-	return mux
+	return deviceOriginGate(mux)
+}
+
+// deviceOriginGate protects only the session-authenticated Device API POSTs.
+// Provider.Wrap and the standard OIDC protocol endpoints remain untouched.
+func deviceOriginGate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && !origingate.SameOrigin(r) {
+			writeErrStatus(w, http.StatusForbidden, "origin check failed", i18n.MsgOriginMismatch)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (p *Provider) deviceInfo(w http.ResponseWriter, r *http.Request) {

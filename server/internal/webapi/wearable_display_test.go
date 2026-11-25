@@ -41,6 +41,7 @@ func getWearable(t *testing.T, h http.Handler, typ string) []wearableRow {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/me/wearable?type="+typ, nil)
 	req.AddCookie(&http.Cookie{Name: "skin_session", Value: "sess-own"})
+	req.Header.Set("Origin", "http://example.com")
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("wearable(%s) = %d, body %s", typ, rec.Code, rec.Body.String())

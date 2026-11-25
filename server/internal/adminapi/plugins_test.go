@@ -57,6 +57,8 @@ func pluginAction(t *testing.T, b *Backend, actor int64, name, action string) *h
 	r := httptest.NewRequest(http.MethodPost, "/api/admin/v1/plugins/"+name+"/"+action, nil)
 	if actor == 0 {
 		r.Header.Set("X-Admin-Token", "sekret")
+	} else {
+		r.Header.Set("Origin", "http://example.com")
 	}
 	b.Handler().ServeHTTP(rec, r)
 	return rec

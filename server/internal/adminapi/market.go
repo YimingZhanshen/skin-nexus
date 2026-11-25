@@ -4,26 +4,18 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"skin-nexus/server/internal/i18n"
+	"skin-nexus/server/internal/origingate"
 	"skin-nexus/server/internal/plugin"
 )
 
-// SameOriginForAdmin is the P2 market CSRF gate: a browser mutation must carry
-// an Origin matching Host (or Sec-Fetch-Site: same-origin). The super-admin
-// session is still required; X-Admin-Token is rejected by pluginSuper. Other
-// cookie-authenticated admin surfaces reuse this exact gate.
+// SameOriginForAdmin is retained for existing callers. The shared predicate
+// lives in origingate so OIDC and other session boundaries can reuse it without
+// importing adminapi.
 func SameOriginForAdmin(r *http.Request) bool {
-	if origin := r.Header.Get("Origin"); origin != "" && origin != "null" {
-		u, err := url.Parse(origin)
-		return err == nil && strings.EqualFold(u.Host, r.Host)
-	}
-	if site := r.Header.Get("Sec-Fetch-Site"); site != "" {
-		return site == "same-origin" || site == "none"
-	}
-	return false
+	return origingate.SameOrigin(r)
 }
 
 func (b *Backend) pluginSuper(w http.ResponseWriter, r *http.Request) (int64, bool) {

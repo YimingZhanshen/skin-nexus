@@ -7,7 +7,7 @@
       "forbidden": "This operation is not allowed"
     },
     "admin": {
-      "origin_mismatch": "Origin check failed; make this request from the admin panel",
+      "origin_mismatch": "Request origin check failed",
       "rank_required": "You may only manage accounts with a strictly lower permission",
       "self_edit_forbidden": "You cannot edit your own admin entry",
       "super_admin_required": "A super admin account is required",

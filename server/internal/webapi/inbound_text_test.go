@@ -54,6 +54,7 @@ func TestClosetItemNameIsBoundedAndVisible(t *testing.T) {
 		req := httptest.NewRequest("POST", "/api/v1/me/closet", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.AddCookie(&http.Cookie{Name: "skin_session", Value: "sess-own"})
+		req.Header.Set("Origin", "http://example.com")
 		h.ServeHTTP(rec, req)
 		return rec
 	}

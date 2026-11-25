@@ -2,6 +2,7 @@ package adminapi
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -193,5 +194,62 @@ func TestAuthNonAdminSessionForbidden(t *testing.T) {
 	served, _, rec := authServed(t, b, r)
 	if served || rec.Code != http.StatusForbidden {
 		t.Fatalf("non-admin session: served=%v code=%d, want 403 (same as wrong token)", served, rec.Code)
+	}
+}
+
+func TestAuthSessionMutationOriginGate(t *testing.T) {
+	stubSession(t, func(*http.Request) (int64, bool) { return 7, true })
+	cases := []struct {
+		name       string
+		method     string
+		origin     string
+		site       string
+		wantStatus int
+	}{
+		{name: "session post without origin", method: http.MethodPost, wantStatus: http.StatusForbidden},
+		{name: "session post with external origin", method: http.MethodPost, origin: "https://other.test", wantStatus: http.StatusForbidden},
+		{name: "session post with same host origin", method: http.MethodPost, origin: "https://skin.test", wantStatus: http.StatusOK},
+		{name: "session post with same-origin metadata", method: http.MethodPost, site: "same-origin", wantStatus: http.StatusOK},
+		{name: "session get without origin", method: http.MethodGet, wantStatus: http.StatusOK},
+		{name: "session head without origin", method: http.MethodHead, wantStatus: http.StatusOK},
+		{name: "session options without origin", method: http.MethodOptions, wantStatus: http.StatusOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			b := &Backend{AdminTok: "machine-token"}
+			r := httptest.NewRequest(tc.method, "http://skin.test/api/admin/v1/mutate", nil)
+			r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session"})
+			if tc.origin != "" {
+				r.Header.Set("Origin", tc.origin)
+			}
+			if tc.site != "" {
+				r.Header.Set("Sec-Fetch-Site", tc.site)
+			}
+			served, actor, rec := authServed(t, b, r)
+			if rec.Code != tc.wantStatus || served != (tc.wantStatus == http.StatusOK) {
+				t.Fatalf("served=%v actor=%d code=%d, want status %d", served, actor, rec.Code, tc.wantStatus)
+			}
+			if tc.wantStatus == http.StatusForbidden {
+				var body struct {
+					Code string `json:"code"`
+				}
+				if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+					t.Fatal(err)
+				}
+				if body.Code != "admin.origin_mismatch" {
+					t.Fatalf("error code = %q, want admin.origin_mismatch", body.Code)
+				}
+			}
+		})
+	}
+}
+
+func TestAuthMachineTokenMutationDoesNotRequireOrigin(t *testing.T) {
+	b := &Backend{AdminTok: "machine-token"}
+	r := httptest.NewRequest(http.MethodPost, "http://skin.test/api/admin/v1/mutate", nil)
+	r.Header.Set("X-Admin-Token", "machine-token")
+	served, actor, rec := authServed(t, b, r)
+	if !served || actor != 0 || rec.Code != http.StatusOK {
+		t.Fatalf("served=%v actor=%d code=%d, want machine actor 0 and 200", served, actor, rec.Code)
 	}
 }

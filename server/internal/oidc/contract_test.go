@@ -728,6 +728,7 @@ func TestTokensListAndRevoke(t *testing.T) {
 		r := httptest.NewRequest("POST", "/api/v1/oidc/tokens/revoke", strings.NewReader(`{"jti":"`+jti+`"}`))
 		r.Header.Set("Content-Type", "application/json")
 		r.AddCookie(&http.Cookie{Name: "skin_session", Value: "s1"})
+		r.Header.Set("Origin", "http://example.com")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 		return w
@@ -759,6 +760,7 @@ func TestTokensListAndRevoke(t *testing.T) {
 	r := httptest.NewRequest("POST", "/api/v1/oidc/tokens/revoke", strings.NewReader(`{"all":true}`))
 	r.Header.Set("Content-Type", "application/json")
 	r.AddCookie(&http.Cookie{Name: "skin_session", Value: "s1"})
+	r.Header.Set("Origin", "http://example.com")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	if !strings.Contains(w.Body.String(), `"scope":"all"`) {

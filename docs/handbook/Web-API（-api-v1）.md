@@ -119,11 +119,13 @@ sequenceDiagram
 | 基础路径 | `/api/v1` |
 | 会话方式 | Cookie `skin_session`，服务端设置 `HttpOnly`、`SameSite=Lax`、`Secure`（HTTPS 环境） |
 | 认证要求 | 带 `me` 前缀的路径需要已登录；公开路径无需 Cookie |
-| CSRF | 当前路由未显式校验 CSRF Token；跨站请求需依赖 SameSite 与同源策略 |
+| CSRF | 携带非空 `skin_session` Cookie 的 `GET`/`HEAD`/`OPTIONS` 以外请求必须通过统一 Origin 校验；无会话 Cookie 的公共调用不受影响 |
 | 内容类型 | JSON 接口使用 `application/json`；材质上传使用 `multipart/form-data` |
 | 错误体格式 | `{ "error": "<code>", "message": "<人类可读消息>", "code": "<code>" }` |
 | 分页参数 | 默认 `page=1, pageSize=50`，最大页大小 200 |
 | 响应编码 | 除文件下载外均为 JSON |
+
+来源校验规则：非 `null` 的 `Origin` 必须与请求 `Host` 忽略大小写匹配；否则 `Sec-Fetch-Site` 必须是 `same-origin` 或 `none`。缺少有效证据时返回 `403`，稳定错误码为 `admin.origin_mismatch`，文案为通用“请求来源校验失败”。该门禁在写入状态前执行。
 
 **章节来源**
 - [server/internal/webapi/webapi.go:451-530](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/webapi/webapi.go#L451-L530)

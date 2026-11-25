@@ -87,6 +87,15 @@ graph TB
 
 当同时携带 `X-Admin-Token` 和 `skin_session` 时，认证层优先走 Web 会话身份，避免把人类操作降级为机器审计。
 
+### Cookie 会话的 Origin/CSRF 门禁
+当认证层解析出真实管理员会话（`actorUID > 0`）后，除 `GET`、`HEAD`、`OPTIONS` 外的请求必须通过统一来源校验：
+
+- 非 `null` 的 `Origin` 必须与请求 `Host` 忽略大小写完全匹配；
+- 否则 `Sec-Fetch-Site` 必须是 `same-origin` 或 `none`；
+- 缺少有效证据时拒绝请求，返回 `403` 和稳定错误码 `admin.origin_mismatch`。
+
+仅携带 `X-Admin-Token`、没有非空会话 Cookie 的机器调用审计 actor 为 0，不经过此门禁。管理 API、Web API 与 OIDC 设备 API 共用同一谓词，错误文案统一为“请求来源校验失败”。
+
 ### 权限等级
 - 普通管理员：`permission = 1`
 - 超级管理员：`permission = 2`

@@ -7,7 +7,7 @@
       "forbidden": "该操作不被允许"
     },
     "admin": {
-      "origin_mismatch": "请求来源校验失败，请在本站管理面板内操作",
+      "origin_mismatch": "请求来源校验失败",
       "rank_required": "只能操作权限严格低于自己的账号",
       "self_edit_forbidden": "不能修改自己的管理项",
       "super_admin_required": "需要超级管理员账号",

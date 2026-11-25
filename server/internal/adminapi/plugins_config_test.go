@@ -111,6 +111,8 @@ func configReq(t *testing.T, b *Backend, actor int64, method, body string) *http
 	}
 	if actor == 0 {
 		r.Header.Set("X-Admin-Token", "sekret")
+	} else {
+		r.Header.Set("Origin", "http://example.com")
 	}
 	rec := httptest.NewRecorder()
 	b.Handler().ServeHTTP(rec, r)

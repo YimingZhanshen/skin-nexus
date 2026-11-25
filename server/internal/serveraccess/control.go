@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"skin-nexus/server/internal/adminapi"
 	"skin-nexus/server/internal/i18n"
+	"skin-nexus/server/internal/origingate"
 	"skin-nexus/server/internal/store"
 )
 
@@ -75,7 +75,7 @@ func (s *Stack) controlHandler() http.Handler {
 	mux.Handle("PUT /api/admin/v1/serveraccess/fallback", c.platform(http.HandlerFunc(c.platformFallback)))
 	mux.Handle("GET /api/admin/v1/serveraccess/audit", c.platform(http.HandlerFunc(c.platformAudit)))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions && !adminapi.SameOriginForAdmin(r) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions && !origingate.SameOrigin(r) {
 			writeSAError(w, http.StatusForbidden, i18n.MsgOriginMismatch, "Origin check failed")
 			return
 		}

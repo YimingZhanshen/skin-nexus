@@ -78,6 +78,7 @@ func seedRevokeFixture(t *testing.T, wrap func(Backend) Backend) (http.Handler, 
 		r := httptest.NewRequest("POST", "/api/v1/oidc/tokens/revoke", strings.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")
 		r.AddCookie(&http.Cookie{Name: "skin_session", Value: "s1"})
+		r.Header.Set("Origin", "http://example.com")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 		return w
