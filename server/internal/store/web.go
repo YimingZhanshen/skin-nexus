@@ -93,11 +93,15 @@ func (m *Mysql) CreateSession(ctx context.Context, token string, uid int64, expi
 	return err
 }
 
-// SessionUser resolves a session token to a user (nil-safe: ErrNotFound if invalid).
+// SessionUser resolves a live session to a non-banned user (nil-safe:
+// ErrNotFound if invalid, expired, orphaned or belonging to a banned account).
 func (m *Mysql) SessionUser(ctx context.Context, token string) (int64, error) {
 	var uid int64
 	err := m.db.QueryRowContext(ctx,
-		`SELECT user_id FROM web_sessions WHERE token = ? AND expires_at > ?`, credentialDigest(token), m.now().UTC()).
+		`SELECT ws.user_id
+		 FROM web_sessions ws
+		 JOIN users u ON u.id = ws.user_id
+		 WHERE ws.token = ? AND ws.expires_at > ? AND u.permission >= 0`, credentialDigest(token), m.now().UTC()).
 		Scan(&uid)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNotFound

@@ -285,8 +285,8 @@ func invalidateUserTokens(ctx context.Context, db sqlExecer, uid int64) error {
 }
 
 // BanUser commits the permission change and every credential revocation in one
-// transaction. A failed revoke therefore leaves both the permission and all
-// credentials exactly as they were before the request.
+// transaction. A failed revoke therefore leaves both the permission, web
+// sessions and all other credentials exactly as they were before the request.
 func (m *Mysql) BanUser(ctx context.Context, uid int64) error {
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -304,9 +304,9 @@ func (m *Mysql) BanUser(ctx context.Context, uid int64) error {
 }
 
 // RevokeUserAccess invalidates every credential family that can authorize a
-// banned account and removes all of its short-lived join sessions. The updates
-// share one transaction: a failed join-session delete must not leave a caller
-// believing opaque/OIDC credentials were revoked when they were rolled back.
+// banned account, removes all of its web sessions and removes all of its
+// short-lived join sessions. The changes share one transaction: any failed
+// delete must not leave a caller believing access was revoked.
 func (m *Mysql) RevokeUserAccess(ctx context.Context, uid int64) error {
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -328,6 +328,9 @@ func revokeUserAccess(ctx context.Context, db sqlExecer, uid int64, now time.Tim
 		return err
 	}
 	if err := revokeUserRefreshTokens(ctx, db, uid); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM web_sessions WHERE user_id = ?`, uid); err != nil {
 		return err
 	}
 	// players has no uuid column; uuid_map is the persisted player identity.

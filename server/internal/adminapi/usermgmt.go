@@ -378,12 +378,6 @@ func (b *Backend) handleUserSetPermission(w http.ResponseWriter, r *http.Request
 	if prevErr == nil {
 		if perm == -1 && prevPerm != -1 {
 			b.notifyUser(r.Context(), id, store.NotifAccountBanned)
-			// A ban that leaves the web session alive only stops the launcher:
-			// the suspended account keeps publishing from the tab it already has
-			// open. Purge now — the login handler refuses the next one.
-			if err := b.Store.DeleteUserSessionsExcept(r.Context(), id, ""); err != nil {
-				slog.Info("admin ban: purge web sessions", "uid", id, "error", err)
-			}
 		} else if perm != -1 && prevPerm == -1 {
 			b.notifyUser(r.Context(), id, store.NotifAccountUnbanned)
 		}

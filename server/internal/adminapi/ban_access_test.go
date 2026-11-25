@@ -86,6 +86,88 @@ func TestBanRevokeFailureRollsBackPermissionAndCredentials(t *testing.T) {
 	}
 }
 
+func TestBanWebSessionRevokeFailureRollsBackPermissionAndCredentials(t *testing.T) {
+	b := newDiagBackend(t)
+	st := b.Store
+	ctx := context.Background()
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte("correct-password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
+	}
+	adminUID, err := st.CreateUserAdmin(ctx, "admin@example.test", "Admin", string(passwordHash), 3)
+	if err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+	targetUID, err := st.CreateUser(ctx, "target@example.test", "Target", string(passwordHash), 3, "")
+	if err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+	otherUID, err := st.CreateUser(ctx, "other@example.test", "Other", string(passwordHash), 3, "")
+	if err != nil {
+		t.Fatalf("create other user: %v", err)
+	}
+	now := time.Now().UTC()
+	expires := now.Add(time.Hour)
+	for _, session := range []struct {
+		token string
+		uid   int64
+	}{
+		{token: "target-session-one", uid: targetUID},
+		{token: "target-session-two", uid: targetUID},
+		{token: "other-session", uid: otherUID},
+	} {
+		if err := st.CreateSession(ctx, session.token, session.uid, expires); err != nil {
+			t.Fatalf("create session: %v", err)
+		}
+	}
+	if err := st.SaveToken(ctx, ygg.Token{UserID: targetUID, AccessToken: "opaque", ClientToken: "client", CreatedAt: now, ExpiresAt: expires}); err != nil {
+		t.Fatalf("save opaque token: %v", err)
+	}
+	if err := st.SaveAccessToken(ctx, oidc.AccessTokenRecord{JTI: "access", UserID: targetUID, ClientID: "2", ExpiresAt: expires, CreatedAt: now}); err != nil {
+		t.Fatalf("save OIDC access token: %v", err)
+	}
+	if err := st.SaveRefreshToken(ctx, oidc.RefreshTokenRecord{Token: "refresh", UserID: targetUID, ClientID: "2", ExpiresAt: expires, CreatedAt: now}); err != nil {
+		t.Fatalf("save OIDC refresh token: %v", err)
+	}
+	if _, err := st.DB().Exec(`CREATE TRIGGER fail_web_session_delete BEFORE DELETE ON web_sessions BEGIN SELECT RAISE(ABORT, 'forced web session delete failure'); END`); err != nil {
+		t.Fatalf("create failure trigger: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/admin/v1/users/%d/permission", targetUID), strings.NewReader(`{"permission":-1}`))
+	req.SetPathValue("id", strconv.FormatInt(targetUID, 10))
+	req = req.WithContext(context.WithValue(req.Context(), actorUIDKey{}, adminUID))
+	rec := httptest.NewRecorder()
+	b.handleUserSetPermission(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("ban with forced web-session revoke failure = %d %s, want 500", rec.Code, rec.Body.String())
+	}
+	permission, err := st.UserPermission(ctx, targetUID)
+	if err != nil || permission != 0 {
+		t.Fatalf("failed ban permission = %d, err = %v; want original 0", permission, err)
+	}
+	token, err := st.TokenByAccess(ctx, "opaque")
+	if err != nil || token.Invalidated {
+		t.Fatalf("failed ban changed opaque token: invalidated=%v err=%v", token.Invalidated, err)
+	}
+	access, err := st.GetAccessToken(ctx, "access")
+	if err != nil || !access.RevokedAt.IsZero() {
+		t.Fatalf("failed ban changed OIDC access token: revoked=%v err=%v", access.RevokedAt, err)
+	}
+	refresh, err := st.GetRefreshToken(ctx, "refresh")
+	if err != nil || refresh.Revoked {
+		t.Fatalf("failed ban changed OIDC refresh token: revoked=%v err=%v", refresh.Revoked, err)
+	}
+	for uid, want := range map[int64]int{targetUID: 2, otherUID: 1} {
+		var count int
+		if err := st.DB().QueryRow(`SELECT COUNT(*) FROM web_sessions WHERE user_id = ?`, uid).Scan(&count); err != nil {
+			t.Fatalf("count sessions for %d: %v", uid, err)
+		}
+		if count != want {
+			t.Fatalf("sessions for %d = %d, want %d after rollback", uid, count, want)
+		}
+	}
+}
+
 func TestYggValidateAndHasJoinedFailClosedForBannedAccount(t *testing.T) {
 	b := newDiagBackend(t)
 	st := b.Store

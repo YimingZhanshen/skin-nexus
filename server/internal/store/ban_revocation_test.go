@@ -9,6 +9,112 @@ import (
 	"skin-nexus/server/internal/ygg"
 )
 
+func TestSQLiteBanUserRevokesAllWebSessions(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid, err := st.CreateUser(ctx, "banned@example.test", "Banned", "hash", 3, "")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	otherUID, err := st.CreateUser(ctx, "other@example.test", "Other", "hash", 3, "")
+	if err != nil {
+		t.Fatalf("create other user: %v", err)
+	}
+	now := time.Now().UTC()
+	for _, session := range []struct {
+		token   string
+		uid     int64
+		expires time.Time
+	}{
+		{token: "banned-live-one", uid: uid, expires: now.Add(time.Hour)},
+		{token: "banned-live-two", uid: uid, expires: now.Add(time.Hour)},
+		{token: "banned-expired", uid: uid, expires: now.Add(-time.Hour)},
+		{token: "other-live", uid: otherUID, expires: now.Add(time.Hour)},
+	} {
+		if err := st.CreateSession(ctx, session.token, session.uid, session.expires); err != nil {
+			t.Fatalf("create session: %v", err)
+		}
+	}
+
+	if err := st.BanUser(ctx, uid); err != nil {
+		t.Fatalf("BanUser: %v", err)
+	}
+	permission, err := st.UserPermission(ctx, uid)
+	if err != nil || permission != -1 {
+		t.Fatalf("permission after ban = %d, err = %v; want -1", permission, err)
+	}
+	var count int
+	if err := st.DB().QueryRow(`SELECT COUNT(*) FROM web_sessions WHERE user_id = ?`, uid).Scan(&count); err != nil {
+		t.Fatalf("count banned sessions: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("banned user has %d web sessions, want 0", count)
+	}
+	if got, err := st.SessionUser(ctx, "other-live"); err != nil || got != otherUID {
+		t.Fatalf("other user's session = %d, err = %v; want %d", got, err, otherUID)
+	}
+}
+
+func TestSQLiteBanUserRollsBackOnWebSessionDeleteFailure(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid, err := st.CreateUser(ctx, "rollback@example.test", "Rollback", "hash", 3, "")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	_, uuid, err := st.CreatePlayer(ctx, uid, "RollbackPlayer")
+	if err != nil {
+		t.Fatalf("create player: %v", err)
+	}
+	now := time.Now().UTC()
+	expires := now.Add(time.Hour)
+	if err := st.CreateSession(ctx, "rollback-session", uid, expires); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	if err := st.SaveToken(ctx, ygg.Token{UserID: uid, AccessToken: "opaque", ClientToken: "client", CreatedAt: now, ExpiresAt: expires}); err != nil {
+		t.Fatalf("save opaque token: %v", err)
+	}
+	if err := st.SaveAccessToken(ctx, oidc.AccessTokenRecord{JTI: "access", UserID: uid, ClientID: "2", ExpiresAt: expires, CreatedAt: now}); err != nil {
+		t.Fatalf("save access token: %v", err)
+	}
+	if err := st.SaveRefreshToken(ctx, oidc.RefreshTokenRecord{Token: "refresh", UserID: uid, ClientID: "2", ExpiresAt: expires, CreatedAt: now}); err != nil {
+		t.Fatalf("save refresh token: %v", err)
+	}
+	if err := st.SaveJoin(ctx, ygg.JoinSession{AccessToken: "opaque", UUID: uuid, ServerID: "server", CreatedAt: now, ExpiresAt: now.Add(time.Minute)}); err != nil {
+		t.Fatalf("save join: %v", err)
+	}
+	if _, err := st.DB().Exec(`CREATE TRIGGER fail_web_session_delete BEFORE DELETE ON web_sessions BEGIN SELECT RAISE(ABORT, 'forced web session delete failure'); END`); err != nil {
+		t.Fatalf("create failure trigger: %v", err)
+	}
+
+	if err := st.BanUser(ctx, uid); err == nil {
+		t.Fatal("BanUser must report the forced web-session delete failure")
+	}
+	permission, err := st.UserPermission(ctx, uid)
+	if err != nil || permission != 0 {
+		t.Fatalf("transaction did not roll back permission: permission=%d err=%v", permission, err)
+	}
+	if got, err := st.SessionUser(ctx, "rollback-session"); err != nil || got != uid {
+		t.Fatalf("transaction did not preserve web session: uid=%d err=%v", got, err)
+	}
+	token, err := st.TokenByAccess(ctx, "opaque")
+	if err != nil || token.Invalidated {
+		t.Fatalf("transaction did not roll back opaque revocation: invalidated=%v err=%v", token.Invalidated, err)
+	}
+	access, err := st.GetAccessToken(ctx, "access")
+	if err != nil || !access.RevokedAt.IsZero() {
+		t.Fatalf("transaction did not roll back OIDC access revocation: revoked=%v err=%v", access.RevokedAt, err)
+	}
+	refresh, err := st.GetRefreshToken(ctx, "refresh")
+	if err != nil || refresh.Revoked {
+		t.Fatalf("transaction did not roll back OIDC refresh revocation: revoked=%v err=%v", refresh.Revoked, err)
+	}
+	joins, err := st.FindLiveJoins(ctx, uuid, now)
+	if err != nil || len(joins) != 1 {
+		t.Fatalf("transaction did not preserve join session: count=%d err=%v", len(joins), err)
+	}
+}
+
 func TestSQLiteBannedUserProjectionPreservesIndependentJoinFlag(t *testing.T) {
 	st := openSQLiteStore(t)
 	ctx := context.Background()

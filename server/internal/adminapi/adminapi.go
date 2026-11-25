@@ -5,7 +5,8 @@
 // account carries the legacy admin permission (users.permission > 0) — the
 // admin logs in normally and the panel works without ceremony — OR the
 // shared admin token (X-Admin-Token header, SKIN_ADMIN_TOKEN env) as the
-// machine/API fallback (empty env = token path locked).
+// machine/API fallback only when no non-empty web session cookie is present
+// (empty env = token path locked).
 package adminapi
 
 import (
@@ -266,32 +267,32 @@ var sessionAdmin = func(r *http.Request, st *store.Mysql) (int64, bool) {
 	return uid, true
 }
 
-// auth enforces admin access: EITHER the shared admin token (constant-time
-// compare; empty token = token path locked, unchanged behavior) OR a web
-// session of an admin account (blessing parity). A non-admin session gets
-// the same 403 as a wrong token.
+// auth enforces admin access: EITHER a valid admin web session OR the shared
+// admin token for a request with no non-empty session cookie (constant-time
+// compare; empty token = token path locked, unchanged behavior). A non-empty
+// session cookie makes the request session-only: invalid, expired, banned and
+// non-admin sessions get the same 403 as a wrong token and never fall back to
+// machine mode.
 func (b *Backend) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		got := r.Header.Get("X-Admin-Token")
-		if b.AdminTok != "" && subtle.ConstantTimeCompare([]byte(got), []byte(b.AdminTok)) == 1 {
-			// A token alone is a machine call, so the audit actor stays uid 0.
-			// But the panel attaches a stored token to *every* request, so a
-			// browser that once pasted one arrives with both credentials — and
-			// taking the machine channel there erases the person, which the
-			// super-admin actions read as "no web session" and refuse. When a
-			// session cookie rides along, the human wins.
-			if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
-				if uid, ok := sessionAdmin(r, b.Store); ok {
-					if b.pendingRefusal(w, r, uid) {
-						return
-					}
-					next(w, r.WithContext(context.WithValue(r.Context(), actorUIDKey{}, uid)))
-					return
-				}
+		hasSessionCookie := false
+		for _, c := range r.Cookies() {
+			if c.Name == sessionCookieName && c.Value != "" {
+				hasSessionCookie = true
+				break
 			}
-			next(w, r) // machine/API fallback: audit actor stays uid 0
+		}
+		got := r.Header.Get("X-Admin-Token")
+		validToken := b.AdminTok != "" && subtle.ConstantTimeCompare([]byte(got), []byte(b.AdminTok)) == 1
+		if !hasSessionCookie && validToken {
+			// A token alone is a machine call, so the audit actor stays uid 0.
+			next(w, r)
 			return
 		}
+		// The panel attaches its stored token to every request. When a session
+		// cookie rides along, the human wins: retain their audit identity and
+		// pending-verification verdict, and refuse rather than downgrade a bad
+		// browser session to the machine channel.
 		if uid, ok := sessionAdmin(r, b.Store); ok {
 			if b.pendingRefusal(w, r, uid) {
 				return
@@ -301,6 +302,14 @@ func (b *Backend) auth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		// Through the helper, not a hand-written body: a response built with
 		// w.Write is invisible to the envelope gate.
+		if validToken {
+			// A valid token cannot rescue a bad browser session. Keep the
+			// existing web-session-required refusal for this hybrid request.
+			writeErrCode(w, http.StatusForbidden,
+				"a valid admin web session is required (super admin web session actions never use X-Admin-Token)",
+				i18n.MsgWebSessionRequired)
+			return
+		}
 		writeErrCode(w, http.StatusForbidden, "admin token invalid", i18n.MsgAdminTokenInvalid)
 	}
 }

@@ -150,6 +150,30 @@ func TestSQLiteEngineWebSessionIsKeyedOnADigest(t *testing.T) {
 	}
 }
 
+func TestSQLiteEngineSessionUserRejectsBannedAccount(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	uid := newMeasureUser(t, st, "banned-session@example.com", "bannedsession")
+	expires := time.Now().UTC().Add(time.Hour)
+	if err := st.CreateSession(ctx, rawSessionToken, uid, expires); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	if got, err := st.SessionUser(ctx, rawSessionToken); err != nil || got != uid {
+		t.Fatalf("normal account session = %d, err = %v; want %d", got, err, uid)
+	}
+	if err := st.SetUserPermission(ctx, uid, -1); err != nil {
+		t.Fatalf("ban: %v", err)
+	}
+	if _, err := st.SessionUser(ctx, rawSessionToken); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("banned account session err = %v, want ErrNotFound", err)
+	}
+	// This is a read-side guard, independent of physical revocation: a live row
+	// left by an older binary or a direct database edit must not authenticate.
+	if got := countRows(t, st, "web_sessions"); got != 1 {
+		t.Fatalf("session rows after ban = %d, want the planted row preserved", got)
+	}
+}
+
 func TestSQLiteEngineJoinSessionStoresADigestAndNeverReturnsOneAsAToken(t *testing.T) {
 	st := openSQLiteStore(t)
 	ctx := context.Background()
