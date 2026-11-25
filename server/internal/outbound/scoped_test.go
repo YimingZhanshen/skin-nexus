@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -68,6 +69,99 @@ func TestScopedRejectsPrivatePeerInProduction(t *testing.T) {
 	url := strings.Replace(srv.URL, "127.0.0.1", "localhost", 1) + "/ok"
 	if _, err := s.Fetch(context.Background(), url); err == nil {
 		t.Fatal("loopback peer should be rejected without test override")
+	}
+}
+
+func TestScopedUserHostPathSafety(t *testing.T) {
+	var upstreamHits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamHits.Add(1)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+	base := strings.Replace(srv.URL, "127.0.0.1", "localhost", 1)
+
+	cases := []struct {
+		name    string
+		path    string
+		allowed bool
+	}{
+		{"plain path", "/ok", true},
+		{"reverse proxy subpath", "/sub/ok/...", true},
+		{"dots inside segment", "/ok/a..b", true},
+		{"dot-prefixed segment", "/ok/.well-known", true},
+		{"encoded dot-prefixed segment", "/ok/%2Ewell-known", true},
+		{"dot segments in query", "/ok/file?next=../admin", true},
+		{"plain parent segment", "/ok/../admin", false},
+		{"encoded parent segment", "/ok/%2e%2e/admin", false},
+		{"encoded current segment", "/ok/%2E/admin", false},
+		{"encoded separator", "/ok/..%2fadmin", false},
+		{"backslash separators", `/ok\..\admin`, false},
+		{"backslash inside allowed prefix", "/ok/..\\admin", false},
+		{"encoded backslash", "/ok/%5c..%5cadmin", false},
+		{"NUL", "/ok/%00/admin", false},
+		{"plain current segment", "/ok/./admin", false},
+		{"double encoded parent", "/ok/%252e%252e/admin", false},
+		{"double encoded current", "/ok/%252E/admin", false},
+		{"double encoded separator", "/ok/..%252fadmin", false},
+		{"double encoded backslash", "/ok/%255c..%255cadmin", false},
+		{"double encoded NUL", "/ok/%2500/admin", false},
+		{"malformed double encoding", "/ok/%25zz/admin", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := testScoped(t, 16)
+			before := upstreamHits.Load()
+			res, err := s.Fetch(context.Background(), base+c.path)
+			if c.allowed {
+				if err != nil || res.Status != 200 || string(res.Body) != "ok" {
+					t.Fatalf("fetch = %+v, %v; want upstream response", res, err)
+				}
+				if got := upstreamHits.Load() - before; got != 1 {
+					t.Fatalf("upstream hits = %d, want 1", got)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("unsafe path was allowed")
+			}
+			policyErr, ok := err.(*PolicyError)
+			if !ok || policyErr.Code != "net.blocked_host" {
+				t.Fatalf("error = %v, want net.blocked_host", err)
+			}
+			if got := upstreamHits.Load() - before; got != 0 {
+				t.Fatalf("unsafe path reached upstream %d times", got)
+			}
+		})
+	}
+}
+
+func TestScopedStaticHostKeepsPathPolicy(t *testing.T) {
+	var upstreamHits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamHits.Add(1)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+	base := strings.Replace(srv.URL, "127.0.0.1", "localhost", 1)
+
+	for _, allowUserHosts := range []bool{false, true} {
+		s := NewScoped(Policy{
+			Hosts:          []string{"localhost"},
+			AllowUserHosts: allowUserHosts,
+			UserHostPaths:  []string{"/ok"},
+			AllowLoopback:  true, // test-only
+			MaxBytes:       16,
+			Timeout:        time.Second,
+		})
+		before := upstreamHits.Load()
+		res, err := s.Fetch(context.Background(), base+"/ok/../admin")
+		if err != nil || res.Status != 200 || string(res.Body) != "ok" {
+			t.Fatalf("AllowUserHosts=%v: fetch = %+v, %v; static host must retain its policy", allowUserHosts, res, err)
+		}
+		if got := upstreamHits.Load() - before; got != 1 {
+			t.Fatalf("AllowUserHosts=%v: upstream hits = %d, want 1", allowUserHosts, got)
+		}
 	}
 }
 

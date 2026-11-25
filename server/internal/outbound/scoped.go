@@ -125,7 +125,10 @@ func (s *Scoped) Fetch(ctx context.Context, raw string) (FetchResult, error) {
 		return FetchResult{}, &PolicyError{Code: "net.blocked_host", Message: "IP literals are not allowed"}
 	}
 	staticOK := hostAllowed(host, s.policy.Hosts)
-	userOK := s.policy.AllowUserHosts && pathAllowed(u.Path, s.policy.UserHostPaths)
+	userOK := false
+	if s.policy.AllowUserHosts {
+		userOK = userHostPathSafe(u.Path) && pathAllowed(u.Path, s.policy.UserHostPaths)
+	}
 	if !staticOK && !userOK {
 		return FetchResult{}, &PolicyError{Code: "net.blocked_host", Message: "host or path is not allowed"}
 	}
@@ -190,6 +193,29 @@ func (s *Scoped) allow(host string) bool {
 		return false
 	}
 	s.hits[host] = append(keep, now)
+	return true
+}
+
+// userHostPathSafe rejects path syntax that downstream HTTP stacks may treat
+// as separators or traversal. url.Parse has already decoded u.Path once; the
+// second pass catches double-encoded variants without normalizing valid paths.
+func userHostPathSafe(p string) bool {
+	if !requestPathSafe(p) {
+		return false
+	}
+	decoded, err := url.PathUnescape(p)
+	return err == nil && requestPathSafe(decoded)
+}
+
+func requestPathSafe(p string) bool {
+	if strings.ContainsAny(p, "\\\x00") {
+		return false
+	}
+	for _, segment := range strings.Split(p, "/") {
+		if segment == "." || segment == ".." {
+			return false
+		}
+	}
 	return true
 }
 
