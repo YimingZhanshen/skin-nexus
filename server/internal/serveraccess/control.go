@@ -62,7 +62,7 @@ func (s *Stack) controlHandler() http.Handler {
 	mux.Handle("POST /api/serveraccess/v1/servers/{id}/credentials/{cid}/revoke", c.owner(http.HandlerFunc(c.revokeCredential), "admin", "owner"))
 	mux.Handle("GET /api/serveraccess/v1/servers/{id}/export", c.owner(http.HandlerFunc(c.exportStub)))
 	mux.Handle("GET /api/serveraccess/v1/servers/{id}/events", c.owner(http.HandlerFunc(c.events)))
-	mux.Handle("GET /api/serveraccess/v1/players/lookup", c.owner(http.HandlerFunc(c.playerLookup)))
+	mux.Handle("GET /api/serveraccess/v1/players/lookup", c.owner(http.HandlerFunc(c.playerLookup), "admin", "owner"))
 
 	mux.Handle("GET /api/admin/v1/serveraccess/tenants", c.platform(http.HandlerFunc(c.platformTenants)))
 	mux.Handle("POST /api/admin/v1/serveraccess/tenants", c.platform(http.HandlerFunc(c.platformTenantCreate)))

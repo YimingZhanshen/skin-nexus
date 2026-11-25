@@ -1318,7 +1318,7 @@ func TestServerAccessAPIOwnerEventsAreScopedMinimalAndCursorPaged(t *testing.T) 
 	}
 }
 
-func TestServerAccessAPIPlayerLookupUsesOwnerSessionAndReturnsOnlyIdentity(t *testing.T) {
+func TestServerAccessAPIPlayerLookupRequiresWriterAndReturnsOnlyIdentity(t *testing.T) {
 	f := newSAFixture(t)
 	_, uuid, err := f.st.CreatePlayer(context.Background(), f.outsider, "LookupPlayer")
 	if err != nil {
@@ -1326,9 +1326,11 @@ func TestServerAccessAPIPlayerLookupUsesOwnerSessionAndReturnsOnlyIdentity(t *te
 	}
 	want := fmt.Sprintf(`{"uid":%d,"name":"LookupPlayer","uuid":%q}`, f.outsider, uuid)
 	for _, q := range []string{"LookupPlayer", "lookupplayer", uuid} {
-		rec := f.request(t, f.viewer, "GET", "/api/serveraccess/v1/players/lookup?q="+q, "", "")
-		if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != want {
-			t.Fatalf("lookup %q = %d %s, want 200 %s", q, rec.Code, rec.Body.String(), want)
+		for _, uid := range []int64{f.admin, f.owner} {
+			rec := f.request(t, uid, "GET", "/api/serveraccess/v1/players/lookup?q="+q, "", "")
+			if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != want {
+				t.Fatalf("lookup %q as %d = %d %s, want 200 %s", q, uid, rec.Code, rec.Body.String(), want)
+			}
 		}
 	}
 	for _, tc := range []struct {
@@ -1338,6 +1340,7 @@ func TestServerAccessAPIPlayerLookupUsesOwnerSessionAndReturnsOnlyIdentity(t *te
 	}{
 		{0, "/api/serveraccess/v1/players/lookup?q=LookupPlayer", 401},
 		{f.legacyAdmin, "/api/serveraccess/v1/players/lookup?q=LookupPlayer", 403},
+		{f.viewer, "/api/serveraccess/v1/players/lookup?q=LookupPlayer", 403},
 		{f.owner, "/api/serveraccess/v1/players/lookup?q=MissingPlayer", 404},
 		{f.owner, "/api/serveraccess/v1/players/lookup", 400},
 		{f.owner, "/api/serveraccess/v1/players/lookup?q=" + strings.Repeat("x", 65), 400},
