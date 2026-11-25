@@ -22,6 +22,7 @@ const vite = await createServer({
   }],
 })
 const { serverAccessApi } = await vite.ssrLoadModule('/src/api/serverAccessApi.js')
+const { setUnauthorizedHandler } = await vite.ssrLoadModule('/src/session.js')
 await vite.close()
 
 function jsonResponse(status, body) {
@@ -184,6 +185,57 @@ test('platform tenant creation preserves conflict status and response data', asy
       return true
     })
   } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
+test('owner 401 and admin token_invalid notify the shell before rejection', async () => {
+  const previousFetch = globalThis.fetch
+  try {
+    for (const item of [
+      { call: () => serverAccessApi.servers(), status: 401, code: '' },
+      { call: () => serverAccessApi.setPlatformFallback(true), status: 403, code: 'admin.token_invalid' },
+    ]) {
+      const events = []
+      setUnauthorizedHandler(() => events.push('notified'))
+      globalThis.fetch = async () => jsonResponse(item.status, { code: item.code, message: 'session lost' })
+      await assert.rejects(item.call(), (error) => {
+        assert.equal(error.status, item.status)
+        assert.equal(error.data.code, item.code)
+        assert.deepEqual(events, ['notified'])
+        return true
+      })
+    }
+  } finally {
+    setUnauthorizedHandler(null)
+    globalThis.fetch = previousFetch
+  }
+})
+
+test('Server Access authorization, module, server, and network failures do not end the session', async () => {
+  const previousFetch = globalThis.fetch
+  const notifications = []
+  setUnauthorizedHandler(() => notifications.push('notified'))
+  try {
+    for (const item of [
+      { status: 403, code: 'serveraccess.forbidden' },
+      { status: 403, code: 'admin.super_admin_required' },
+      { status: 403, code: '' },
+      { status: 404, code: 'serveraccess.not_found' },
+      { status: 500, code: '' },
+    ]) {
+      globalThis.fetch = async () => jsonResponse(item.status, { code: item.code, message: item.code || 'failed' })
+      await assert.rejects(serverAccessApi.servers(), (error) => {
+        assert.equal(error.status, item.status)
+        assert.equal(error.data.code, item.code)
+        return true
+      })
+    }
+    globalThis.fetch = async () => { throw new Error('offline') }
+    await assert.rejects(serverAccessApi.servers(), /offline/)
+    assert.deepEqual(notifications, [])
+  } finally {
+    setUnauthorizedHandler(null)
     globalThis.fetch = previousFetch
   }
 })

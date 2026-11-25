@@ -45,6 +45,148 @@ test('tenant portal loads membership and invitation state without hiding failure
   assert.equal(failed.tenant.value, null)
 })
 
+test('tenant 401 clears loaded state and marks the load unsuccessful', async () => {
+  let cause
+  const portal = useServerTenant({
+    tenantMe: async () => {
+      if (!cause) return { tenant, role: 'owner' }
+      throw cause
+    },
+    members: async () => ({ members: [{ uid: 7 }] }),
+    invites: async () => ({ invites: [{ id: 1 }], total: 1 }),
+  })
+  await portal.load()
+  portal.pageInvites(3)
+  cause = Object.assign(new Error('session lost'), { status: 401 })
+  assert.equal(await portal.load(), false)
+  assert.equal(portal.tenant.value, null)
+  assert.equal(portal.role.value, '')
+  assert.deepEqual(portal.members.value, [])
+  assert.deepEqual(portal.invites.value, [])
+  assert.equal(portal.total.value, 0)
+  assert.equal(portal.page.value, 1)
+  assert.equal(portal.loading.value, false)
+  assert.equal(portal.error.value, '')
+  assert.equal(portal.unavailable.value, false)
+  assert.equal(portal.forbidden.value, false)
+})
+
+test('tenant mutation 401 clears state and invalidates an in-flight load', async () => {
+  let hold = false
+  let release
+  let failMutation = false
+  const portal = useServerTenant({
+    tenantMe: async () => {
+      if (hold) return new Promise((resolve) => { release = resolve })
+      return { tenant, role: 'owner' }
+    },
+    members: async () => ({ members: [{ uid: 7 }] }),
+    invites: async () => ({ invites: [{ id: 1 }], total: 1 }),
+    removeMember: async () => {
+      if (!failMutation) return { removed: true }
+      throw Object.assign(new Error('session lost'), { status: 401 })
+    },
+  })
+  await portal.load()
+  hold = true
+  const pending = portal.load()
+  failMutation = true
+  assert.equal(await portal.removeMember(7), null)
+  assert.equal(portal.tenant.value, null)
+  assert.deepEqual(portal.members.value, [])
+  assert.equal(portal.busy.value, false)
+  release({ tenant: { ...tenant, name: 'Stale tenant' }, role: 'owner' })
+  assert.equal(await pending, false)
+  assert.equal(portal.tenant.value, null)
+})
+
+test('tenant session loss invalidates an in-flight mutation without reloading', async () => {
+  let releaseMutation
+  let failLoad = false
+  let tenantCalls = 0
+  const portal = useServerTenant({
+    tenantMe: async () => {
+      tenantCalls += 1
+      if (failLoad) throw Object.assign(new Error('session lost'), { status: 401 })
+      return { tenant, role: 'owner' }
+    },
+    members: async () => ({ members: [{ uid: 7 }] }),
+    invites: async () => ({ invites: [{ id: 1 }], total: 1 }),
+    removeMember: async () => new Promise((resolve) => { releaseMutation = resolve }),
+  })
+  await portal.load()
+  const pendingMutation = portal.removeMember(7)
+  failLoad = true
+  assert.equal(await portal.load(), false)
+  const callsAfterLoss = tenantCalls
+  releaseMutation({ removed: true })
+  assert.equal(await pendingMutation, null)
+  assert.equal(tenantCalls, callsAfterLoss)
+  assert.equal(portal.tenant.value, null)
+  assert.deepEqual(portal.members.value, [])
+  assert.equal(portal.busy.value, false)
+})
+
+test('a stale mutation cannot clear the busy state of a post-session-loss mutation', async () => {
+  let failLoad = false
+  let releaseOld
+  let releaseNew
+  let removeCalls = 0
+  const portal = useServerTenant({
+    tenantMe: async () => {
+      if (failLoad) throw Object.assign(new Error('session lost'), { status: 401 })
+      return { tenant, role: 'owner' }
+    },
+    members: async () => ({ members: [{ uid: 7 }] }),
+    invites: async () => ({ invites: [], total: 0 }),
+    removeMember: async () => {
+      removeCalls += 1
+      return new Promise((resolve) => { if (removeCalls === 1) releaseOld = resolve; else releaseNew = resolve })
+    },
+  })
+  await portal.load()
+  const oldMutation = portal.removeMember(7)
+  failLoad = true
+  assert.equal(await portal.load(), false)
+  failLoad = false
+  const newMutation = portal.removeMember(7)
+  assert.equal(portal.busy.value, true)
+  releaseOld({ removed: true })
+  assert.equal(await oldMutation, null)
+  assert.equal(portal.busy.value, true)
+  releaseNew({ removed: true })
+  assert.deepEqual(await newMutation, { removed: true })
+  assert.equal(portal.busy.value, false)
+})
+
+test('tenant 403, 404, network, and 5xx failures preserve loaded tenant data', async () => {
+  for (const cause of [
+    Object.assign(new Error('forbidden'), { status: 403 }),
+    Object.assign(new Error('missing'), { status: 404 }),
+    new Error('offline'),
+    Object.assign(new Error('server error'), { status: 500 }),
+  ]) {
+    let fail = false
+    const portal = useServerTenant({
+      tenantMe: async () => {
+        if (fail) throw cause
+        return { tenant, role: 'viewer' }
+      },
+      members: async () => ({ members: [{ uid: 7 }] }),
+      invites: async () => ({ invites: [], total: 0 }),
+    })
+    await portal.load()
+    fail = true
+    assert.equal(await portal.load(), false)
+    assert.equal(portal.tenant.value.id, 1)
+    assert.equal(portal.role.value, 'viewer')
+    assert.equal(portal.members.value.length, 1)
+    assert.equal(portal.error.value, cause.message)
+    assert.equal(portal.forbidden.value, cause.status === 403)
+    assert.equal(portal.unavailable.value, cause.status === 404)
+  }
+})
+
 test('viewer portal never requests owner-only invitations', async () => {
   let inviteCalls = 0
   const portal = useServerTenant({

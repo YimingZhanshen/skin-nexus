@@ -1,4 +1,5 @@
 import { ref, shallowRef, readonly } from 'vue'
+import { isSessionLoss } from '../session.js'
 
 export function useServerTenant(api) {
   const tenant = shallowRef(null)
@@ -14,6 +15,25 @@ export function useServerTenant(api) {
   const page = shallowRef(1)
   const size = shallowRef(50)
   let request = 0
+  let mutation = 0
+
+  function clearSessionState() {
+    // Invalidate both the failing operation and any older request that may
+    // still resolve after the shell has dropped back to login.
+    request += 1
+    mutation += 1
+    tenant.value = null
+    role.value = ''
+    members.value = []
+    invites.value = []
+    total.value = 0
+    page.value = 1
+    loading.value = false
+    busy.value = false
+    error.value = ''
+    unavailable.value = false
+    forbidden.value = false
+  }
 
   async function load() {
     const current = ++request
@@ -41,6 +61,10 @@ export function useServerTenant(api) {
       return true
     } catch (cause) {
       if (current !== request) return false
+      if (isSessionLoss(cause)) {
+        clearSessionState()
+        return false
+      }
       error.value = cause.message
       unavailable.value = cause.status === 404
       forbidden.value = cause.status === 403
@@ -52,17 +76,29 @@ export function useServerTenant(api) {
 
   async function mutate(action) {
     if (busy.value) return null
+    const current = request
+    const currentMutation = ++mutation
     busy.value = true
     error.value = ''
     try {
       const result = await action()
+      // A concurrent load may have failed with session loss while this action
+      // was in flight. Do not publish its result or start a post-loss reload.
+      if (current !== request) return null
       await load()
       return result
     } catch (cause) {
+      if (current !== request) return null
+      if (isSessionLoss(cause)) {
+        clearSessionState()
+        return null
+      }
       error.value = cause.message
       return null
     } finally {
-      busy.value = false
+      // Session loss permits a fresh mutation while an older one is still
+      // settling; only the current mutation may release the busy guard.
+      if (currentMutation === mutation) busy.value = false
     }
   }
 

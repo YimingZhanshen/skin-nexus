@@ -3,7 +3,7 @@
 // SUPER_ADMIN-session-only (the backend rejects X-Admin-Token and perm<2).
 import { computed, ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { fetchJSON, needToken } from '../../adminApi.js'
+import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
 import { api } from '../../api.js'
 import { loadPluginUI } from '../../pluginUI.js'
@@ -56,8 +56,6 @@ async function load() {
 }
 
 async function detectRole() {
-  // Token-only sessions (machine fallback) can list but never mutate.
-  if (needToken.value) return
   try {
     const me = await api.me()
     isSuper.value = Number(me.permission) === 2

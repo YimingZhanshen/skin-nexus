@@ -2,6 +2,7 @@
 // It intentionally does not import adminApi or read the machine admin token.
 import { fetchWithTimeout } from '../net.js'
 import { describe } from '../errors.js'
+import { guard401 } from '../session.js'
 
 async function request(method, path, body, { blob = false } = {}) {
   const options = { method, credentials: 'same-origin', headers: {} }
@@ -15,6 +16,7 @@ async function request(method, path, body, { blob = false } = {}) {
     const error = new Error(describe(data, response.status))
     error.status = response.status
     error.data = data
+    guard401(error)
     throw error
   }
   return blob ? response.blob() : response.json().catch(() => ({}))

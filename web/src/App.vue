@@ -43,7 +43,7 @@ import TopBar from './components/shell/TopBar.vue'
 import UserSide from './components/shell/UserSide.vue'
 import SiteFooter from './components/shell/SiteFooter.vue'
 import { setLocale } from './i18n.js'
-import { setUnauthorizedHandler } from './session.js'
+import { clearLegacyAdminToken, setUnauthorizedHandler } from './session.js'
 
 const { t, locale } = useI18n()
 // Site capabilities live in one composable so the auth cards and the shell read
@@ -61,7 +61,7 @@ const {
   user, isAdmin, authErr, authBusy, locked, lockSecondsLeft, waitText, startWait,
   verifyPending, pendingBusy, pendingNote, pendingChangeOpen, pendingEmail,
   verifyMailTo, verifyMailBusy, verifyMailNote,
-  refreshMe, pendingResend, pendingSaveEmail, resendVerificationMail, onInboxRead,
+  refreshMe, setSessionUser, pendingResend, pendingSaveEmail, resendVerificationMail, onInboxRead,
 } = useSession()
 
 // Which view the shell is on, and every transition into another one. The URL
@@ -212,8 +212,36 @@ function onPopState() {
   syncingURL = false
 }
 
-// Session-drop handler: pages call notifyUnauthorized() on 401 → back to login.
-setUnauthorizedHandler(() => { user.value = null; view.value = 'login' })
+// Session loss invalidates /me work first, then drops every shell-owned route
+// and verification transient. Admin/tenant views unmount with `user`; the
+// tenant composable also clears its own loaded data when its transport sees 401.
+function clearSessionState() {
+  setSessionUser(null)
+  extPath.value = ''
+  pendingExt.value = ''
+  pendingView.value = ''
+  menuOpen.value = false
+  pendingBusy.value = false
+  pendingNote.value = ''
+  pendingChangeOpen.value = false
+  pendingEmail.value = ''
+  verifyToken.value = ''
+  verifyState.value = ''
+  verifyMailTo.value = ''
+  verifyMailBusy.value = false
+  verifyMailNote.value = ''
+  authErr.value = ''
+  authBusy.value = false
+  forgotSent.value = false
+  resetToken.value = ''
+  pluginFormData.value = {}
+  bootErr.value = ''
+  syncingURL = true
+  view.value = 'login'
+  history.replaceState(null, '', '/')
+  syncingURL = false
+}
+const unregisterUnauthorized = setUnauthorizedHandler(clearSessionState)
 
 // Launcher deep links (blessing route parity): PCL derives the skin-management
 // and profile pages by swapping the API root's yggdrasil path for
@@ -278,13 +306,14 @@ gateWatch.onVerifyRequired = refreshMe
 async function boot() {
   booting.value = true
   bootErr.value = ''
+  clearLegacyAdminToken()
   // One parallel round trip instead of four sequential ones: the login card
   // must not wait for setup→config→pluginUI before `me` even starts.
   const [setupR, confR, , meR] = await Promise.allSettled([
     withBootTimeout(fetch('/api/v1/setup/status').then((r) => r.json()), 8000),
     withBootTimeout(api.siteConfig(), 8000),
     loadPluginUI(),
-    withBootTimeout(api.me(), 10000),
+    withBootTimeout(refreshMe({ propagateErrors: true }), 10000),
   ])
   if (setupR.status === 'fulfilled' && setupR.value && setupR.value.needs_setup) {
     view.value = 'setup'
@@ -296,14 +325,9 @@ async function boot() {
     siteConf.value = { ...siteConf.value, ...conf, footer: normalizeFooter(conf.footer) }
     confLoaded.value = true
   }
-  if (meR.status === 'fulfilled') {
-    user.value = meR.value || null
-  } else if (meR.reason && meR.reason.status === 401) {
-    // A real "no session" answer — fall through to the login card.
-    user.value = null
-  } else {
-    // Network/5xx/timeout: a transient failure is NOT a logout. Showing the
-    // login card here made flaky high-latency links look like session loss.
+  // refreshMe commits through setSessionUser, or clears and notifies on 401.
+  // Network/5xx/timeout preserve any good session and show a retryable error.
+  if (meR.status === 'rejected' && !(meR.reason && meR.reason.status === 401)) {
     bootErr.value = (meR.reason && meR.reason.message) || 'network error'
     booting.value = false
     return
@@ -340,7 +364,7 @@ async function doEmailVerify() {
 // frozen injection key; the cards inject it and never reach into this file.
 provide('authState', {
   user, busy: authBusy, err: authErr, locked, waitText, startWait,
-  finishAuth, authWaitingElsewhere,
+  finishAuth, authWaitingElsewhere, setSessionUser, refreshMe,
   siteConf, confLoaded, mailEnabled, verifyGateEnabled, emailFieldShown,
   inviteFieldShown, inviteIsRequired,
   forgotSent, resetToken,
@@ -365,10 +389,10 @@ async function doLogout() {
   try {
     await api.logout()
   } catch { /* session may already be gone — still sign out locally */ }
-  user.value = null
-  extPath.value = ''
-  view.value = 'login'
+  clearSessionState()
 }
+
+onBeforeUnmount(() => unregisterUnauthorized())
 
 onMounted(() => {
   boot()
@@ -499,7 +523,7 @@ onMounted(() => {
           <UnionBindPage v-else-if="view === 'union'" />
           <ServersPage v-else-if="view === 'servers'" :enabled="serverAccessEnabled" />
           <PluginPage v-else-if="view === 'ext'" :path="extPath" />
-          <AdminPanel v-else-if="view === 'admin'" :user="user" :site-conf="siteConf" :conf-loaded="confLoaded" @settings-changed="onSettingsChanged" />
+          <AdminPanel v-else-if="view === 'admin' && isAdmin" :user="user" :site-conf="siteConf" :conf-loaded="confLoaded" @settings-changed="onSettingsChanged" />
         </main>
       </div>
     </template>

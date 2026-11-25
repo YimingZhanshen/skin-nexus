@@ -2,12 +2,31 @@
 // 401 hits their guard; App.vue registered the handler that drops the shell
 // back to the login card (review P1-6 semantics, now cross-component).
 let handler = null
-export function setUnauthorizedHandler(fn) { handler = fn }
+export function setUnauthorizedHandler(fn) {
+  const previous = handler
+  handler = fn
+  // App may be mounted more than once in tests or embedded shells. Restoring
+  // must not overwrite a newer handler installed after this one.
+  return () => { if (handler === fn) handler = previous }
+}
 export function notifyUnauthorized() { if (handler) handler() }
 
-// Shared 401 guard for page-level catch blocks: true when the error was a
-// session-drop (caller should stop its own error toast).
+export function clearLegacyAdminToken() {
+  try {
+    if (typeof localStorage !== 'undefined' && typeof localStorage.removeItem === 'function') {
+      localStorage.removeItem('admin_token')
+    }
+  } catch { /* blocked storage must not break the session flow */ }
+}
+
+export function isSessionLoss(e) {
+  return !!e && (e.status === 401 || (e.status === 403 && e.data && e.data.code === 'admin.token_invalid'))
+}
+
+// Shared session-loss guard for page-level catch blocks: true when the error
+// invalidated the session (caller should stop its own error toast).
 export function guard401(e) {
-  if (e && e.status === 401) { notifyUnauthorized(); return true }
-  return false
+  if (!isSessionLoss(e)) return false
+  notifyUnauthorized()
+  return true
 }

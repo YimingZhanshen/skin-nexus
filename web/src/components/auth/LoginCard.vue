@@ -16,7 +16,7 @@ const auth = inject('authState')
 const goto = inject('gotoView')
 const {
   user, busy: authBusy, err: authErr, locked, waitText, startWait, finishAuth,
-  mailEnabled, forgotSent,
+  setSessionUser, refreshMe, mailEnabled, forgotSent,
 } = auth
 
 const identifier = ref('')
@@ -27,14 +27,16 @@ async function doLogin() {
   if (locked.value) return
   authBusy.value = true
   try {
-    user.value = await api.login(identifier.value, password.value)
+    setSessionUser(await api.login(identifier.value, password.value))
     // New backends return `permission` on login; fall back to /me only for
     // older servers (saves one RTT on every login) — and for a blocked
     // account, which needs the address the screen has to name. login answers
     // with id/nickname/permission only, so without this the gate's own page
     // would read "the link is on its way to" and then nothing.
     if (user.value && (user.value.permission === undefined || user.value.verifyRequired)) {
-      try { user.value = await api.me() } catch { /* keep login payload */ }
+      // A failed /me keeps the login payload on transient errors; a 401 clears
+      // it and notifies the shell through refreshMe.
+      await refreshMe()
     }
   } catch (e) {
     // A lockout answers with the seconds left in the body: without it the
@@ -47,6 +49,7 @@ async function doLogin() {
     }
     return
   } finally { authBusy.value = false }
+  if (!user.value) return
   finishAuth()
 }
 </script>

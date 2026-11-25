@@ -13,11 +13,20 @@
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
+import { clearLegacyAdminToken, isSessionLoss, notifyUnauthorized } from '../session.js'
 
 export function useSession() {
   const { t } = useI18n()
 
   const user = ref(null)
+  let generation = 0
+  // Every account replacement invalidates older /me work. Login, boot, logout,
+  // account switches and local account updates all enter through this gate.
+  function setSessionUser(next) {
+    generation += 1
+    clearLegacyAdminToken()
+    user.value = next || null
+  }
   // Admin panel entry (blessing parity): only accounts with permission > 0 see
   // it — normal users never do. `permission` comes from GET /api/v1/me
   // (0 = normal, >0 = admin, -1 = banned).
@@ -42,7 +51,10 @@ export function useSession() {
       if (lockUntil.value <= nowTick.value) { clearInterval(tickTimer); tickTimer = null }
     }, 1000)
   }
-  onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
+  onBeforeUnmount(() => {
+    generation += 1
+    if (tickTimer) clearInterval(tickTimer)
+  })
 
   // The verdict, not the flag. /me, /login and /register all carry
   // `verifyRequired`, so the shell knows before it draws anything whether this
@@ -61,8 +73,27 @@ export function useSession() {
   const verifyMailBusy = ref(false)
   const verifyMailNote = ref('')
 
-  async function refreshMe() {
-    try { user.value = await api.me() } catch { /* the 401 path owns sign-out */ }
+  async function refreshMe(options) {
+    const current = ++generation
+    try {
+      const next = await api.me()
+      if (current !== generation) return false
+      setSessionUser(next)
+      return true
+    } catch (cause) {
+      // A response from an older account must not clear the newly selected one.
+      if (current !== generation) return false
+      if (isSessionLoss(cause)) {
+        setSessionUser(null)
+        notifyUnauthorized()
+        return false
+      }
+      // Network/5xx failures say nothing about the current cookie. Boot asks
+      // for propagation so it can show a retryable error; background refreshes
+      // keep the good session and stay quiet.
+      if (options && options.propagateErrors) throw cause
+      return false
+    }
   }
 
   async function pendingResend() {
@@ -113,7 +144,7 @@ export function useSession() {
   // The inbox clears its badge locally when the page marks rows read; the count
   // is re-fetched on the next boot anyway.
   function onInboxRead() {
-    if (user.value) user.value.unreadNotifications = 0
+    if (user.value) setSessionUser({ ...user.value, unreadNotifications: 0 })
   }
 
   return {
@@ -121,6 +152,6 @@ export function useSession() {
     locked, lockSecondsLeft, waitText, startWait,
     verifyPending, pendingBusy, pendingNote, pendingChangeOpen, pendingEmail,
     verifyMailTo, verifyMailBusy, verifyMailNote,
-    refreshMe, pendingResend, pendingSaveEmail, resendVerificationMail, onInboxRead,
+    refreshMe, setSessionUser, pendingResend, pendingSaveEmail, resendVerificationMail, onInboxRead,
   }
 }
