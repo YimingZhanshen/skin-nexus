@@ -118,6 +118,69 @@ func TestServerAccessStoreTenantServerAndMemberScope(t *testing.T) {
 	}
 }
 
+func TestServerAccessPlatformSearchTreatsWildcardsLiterally(t *testing.T) {
+	saExercisePlatformSearchTreatsWildcardsLiterally(t, openSQLiteStore(t))
+}
+
+func saExercisePlatformSearchTreatsWildcardsLiterally(t *testing.T, st *Mysql) {
+	t.Helper()
+	ctx := context.Background()
+	cases := []struct {
+		name, match, decoy, query string
+	}{
+		{name: "ordinary", match: "ordinary-needle", decoy: "ordinary-other", query: "  needle  "},
+		{name: "unicode", match: "磨砂团队-服务器", decoy: "ordinary-server", query: "磨砂团队"},
+		{name: "single quote", match: "owner's server", decoy: "owners server", query: "owner's"},
+		{name: "double quote", match: `say "hello"`, decoy: "say hello", query: `"hello"`},
+		{name: "percent", match: "literal-percent%tenant", decoy: "literal-percentXtenant", query: "percent%"},
+		{name: "underscore", match: "literal-under_score-tenant", decoy: "literal-underXscore-tenant", query: "under_score"},
+		{name: "bang", match: "literal-bang!tenant", decoy: "literal-bangtenant", query: "bang!"},
+		{name: "escaped bang and underscore", match: "escape!%_tenant", decoy: "escapeXXtenant", query: "!%_"},
+	}
+	type matchIDs struct {
+		tenant int64
+		server int64
+	}
+	want := make([]matchIDs, len(cases))
+	for i, tc := range cases {
+		tenant, err := st.CreateSATenant(ctx, tc.match, 1)
+		if err != nil {
+			t.Fatalf("create matching tenant %q: %v", tc.match, err)
+		}
+		server, err := st.CreateSAServer(ctx, tenant, fmt.Sprintf("srv_search_%d", i), tc.match)
+		if err != nil {
+			t.Fatalf("create matching server %q: %v", tc.match, err)
+		}
+		want[i] = matchIDs{tenant: tenant, server: server.ID}
+
+		decoyTenant, err := st.CreateSATenant(ctx, tc.decoy, 1)
+		if err != nil {
+			t.Fatalf("create decoy tenant %q: %v", tc.decoy, err)
+		}
+		if _, err := st.CreateSAServer(ctx, decoyTenant, fmt.Sprintf("srv_search_decoy_%d", i), tc.decoy); err != nil {
+			t.Fatalf("create decoy server %q: %v", tc.decoy, err)
+		}
+	}
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tenants, tenantTotal, err := st.PlatformSATenants(ctx, tc.query, 1, 20)
+			if err != nil {
+				t.Fatalf("tenant search %q: %v", tc.query, err)
+			}
+			if tenantTotal != 1 || len(tenants) != 1 || tenants[0].ID != want[i].tenant {
+				t.Fatalf("tenant search %q = %+v total=%d, want only tenant %d", tc.query, tenants, tenantTotal, want[i].tenant)
+			}
+			servers, serverTotal, err := st.PlatformSAServers(ctx, tc.query, 1, 20)
+			if err != nil {
+				t.Fatalf("server search %q: %v", tc.query, err)
+			}
+			if serverTotal != 1 || len(servers) != 1 || servers[0].ID != want[i].server {
+				t.Fatalf("server search %q = %+v total=%d, want only server %d", tc.query, servers, serverTotal, want[i].server)
+			}
+		})
+	}
+}
+
 func TestServerAccessRejectsSecondActiveTenantMembership(t *testing.T) {
 	st := openSQLiteStore(t)
 	ctx := context.Background()

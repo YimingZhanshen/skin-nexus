@@ -125,7 +125,7 @@ func scanSATenant(s rowScanner) (SATenant, error) {
 // PlatformSATenants is deliberately platform-only: owner handlers never call
 // an unscoped tenant list.
 func (m *Mysql) PlatformSATenants(ctx context.Context, q string, page, size int) ([]SATenant, int, error) {
-	where, args := saSearch(`name`, q)
+	where, args := m.saSearch(`name`, q)
 	var total int
 	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sa_tenants WHERE deleted_at IS NULL`+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
@@ -745,14 +745,14 @@ func (m *Mysql) DeleteSAServer(ctx context.Context, tenantID, serverID int64) er
 }
 
 func (m *Mysql) PlatformSAServers(ctx context.Context, q string, page, size int) ([]PlatformSAServer, int, error) {
-	where, args := saSearch(`s.name`, q)
+	where, args := m.saSearch(`s.name`, q)
 	var total int
-	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sa_servers s`+where, args...).Scan(&total); err != nil {
+	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sa_servers s WHERE 1=1`+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	rows, err := m.db.QueryContext(ctx,
 		`SELECT s.id,s.tenant_id,s.public_id,s.name,s.status,s.source_mode,s.created_at
-		 FROM sa_servers s`+where+` ORDER BY s.id DESC LIMIT ? OFFSET ?`,
+		 FROM sa_servers s WHERE 1=1`+where+` ORDER BY s.id DESC LIMIT ? OFFSET ?`,
 		append(args, size, dbx.Offset(page, size))...)
 	if err != nil {
 		return nil, 0, err
@@ -833,17 +833,14 @@ func (m *Mysql) PlatformServerAccessAudit(ctx context.Context, q string, page, s
 	return out, total, rows.Err()
 }
 
-func saSearch(column, q string) (string, []any) {
+func (m *Mysql) saSearch(column, q string) (string, []any) {
 	q = strings.TrimSpace(q)
 	if q == "" {
 		return "", nil
 	}
-	return ` AND ` + mCI(column) + ` LIKE ?`, []any{dialect.LikeContains(q)}
+	return " AND " + m.db.Dialect().CIContains(column),
+		[]any{dialect.LikeContains(q)}
 }
-
-// mCI is a tiny indirection so saSearch can use the store dialect without
-// threading a receiver through every list builder.
-func mCI(column string) string { return "LOWER(" + column + ") LIKE LOWER(?)" }
 
 func saAffected(res sql.Result, err error) error {
 	if err != nil {

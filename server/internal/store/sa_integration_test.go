@@ -25,6 +25,10 @@ func TestIntegrationServerAccessConcurrentQuotas(t *testing.T) {
 	})
 }
 
+func TestIntegrationServerAccessPlatformSearchTreatsWildcardsLiterally(t *testing.T) {
+	saExercisePlatformSearchTreatsWildcardsLiterally(t, openTestStore(t))
+}
+
 func TestIntegrationServerAccessAtomicTenantOwner(t *testing.T) {
 	m := openTestStore(t)
 	ctx := context.Background()
