@@ -54,6 +54,8 @@ Cookie 会话的写操作共用 `origingate.SameOrigin`：非空且非 `null` �
 
 服务端去除名称首尾空白，要求名称非空且不超过 190 个字符；拒绝未知字段，因此客户端不能指定 `tenant_id` 或 `tenantId`。owner 必须存在且不能已属于其他启用中的租户。租户、owner 成员关系与 `serveraccess_tenant_create` 审计在同一事务中提交，任一校验、写入或读取失败都会回滚；并发创建同一 UID 时只允许一个成功。成功返回 HTTP 201 和 `{"tenant": {...}, "owner": {...}}`。
 
+所有活跃成员关系写入先锁 `users` 行，再以普通读取检查其他活跃租户；检查本身不再对 joined membership/tenant 行加 `FOR UPDATE`，避免 tenant → user 与 user → tenant 的锁顺序反转。MySQL、MariaDB、PostgreSQL 与 SQLite 集成用例覆盖“激活 inactive tenant 与同 UID 创建 active tenant”并发时只有一个成功、最终仅一条活跃成员关系。
+
 ### 平台列表搜索
 
 平台租户与服务器列表的 `q` 参数按名称进行不区分大小写的子串搜索，首尾空白会被去除；空查询不加过滤条件。查询中的 `%`、`_` 与 `!` 都是字面字符，不是通配符或转义入口，因此搜索 `%` 只匹配名称中实际包含百分号的记录。该行为使用数据库方言自带的转义谓词，在 MySQL、PostgreSQL 与 SQLite 上保持一致。

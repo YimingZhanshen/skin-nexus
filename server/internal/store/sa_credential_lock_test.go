@@ -128,6 +128,28 @@ func openSARecordingSQLiteStore(t *testing.T) (*Mysql, *saRecordingDriver) {
 	return st, recorder
 }
 
+func TestServerAccessMembershipCheckUsesUserLockWithoutJoinedRowLock(t *testing.T) {
+	st, recorder := openSARecordingSQLiteStore(t)
+	ctx := context.Background()
+	uid := saSeedUser(t, st)
+	if _, _, err := st.CreateSATenantWithOwner(ctx, "membership-lock-existing", 2, uid); err != nil {
+		t.Fatal(err)
+	}
+	recorder.reset()
+	if _, _, err := st.CreateSATenantWithOwner(ctx, "membership-lock-second", 2, uid); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("second active owner err = %v, want ErrForbidden", err)
+	}
+	statements := recorder.statements()
+	userLock := saStatementIndex(statements, "UPDATE users SET id=id")
+	membershipRead := saStatementIndex(statements, "SELECT tm.tenant_id FROM sa_tenant_members")
+	if userLock < 0 || membershipRead < 0 || userLock >= membershipRead {
+		t.Fatalf("membership lock order = %v, want user lock before membership read", statements)
+	}
+	if strings.Contains(strings.ToUpper(statements[membershipRead]), "FOR UPDATE") {
+		t.Fatalf("membership read must not lock joined tenant rows: %s", statements[membershipRead])
+	}
+}
+
 func TestServerAccessCredentialCreateLocksTenantBeforeServerAndInsert(t *testing.T) {
 	st, recorder := openSARecordingSQLiteStore(t)
 	ctx := context.Background()

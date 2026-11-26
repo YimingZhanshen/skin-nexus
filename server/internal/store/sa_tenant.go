@@ -259,11 +259,10 @@ func saLockUserRow(ctx context.Context, tx *dbx.Tx, uid int64) error {
 }
 
 func saHasOtherActiveMembership(ctx context.Context, tx *dbx.Tx, uid, tenantID int64) (bool, error) {
+	// The caller holds saLockUserRow, which serializes every active-membership
+	// write for this uid. Locking joined tenant rows here would invert that order.
 	query := `SELECT tm.tenant_id FROM sa_tenant_members tm JOIN sa_tenants t ON t.id=tm.tenant_id
 		WHERE tm.uid=? AND tm.tenant_id<>? AND t.status='active' AND t.deleted_at IS NULL LIMIT 1`
-	if tx.Engine() != dialect.SQLite {
-		query += tx.Engine().LockSQL()
-	}
 	var other int64
 	err := tx.QueryRowContext(ctx, query, uid, tenantID).Scan(&other)
 	if errors.Is(err, sql.ErrNoRows) {
