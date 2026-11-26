@@ -91,7 +91,7 @@ function fakeClock(t, start) {
   const dateNow = t.mock.method(Date, 'now', () => time)
   t.mock.method(globalThis, 'setTimeout', (callback, delay = 0) => {
     const id = ++sequence
-    scheduled.push({ id, delay })
+    scheduled.push({ id, delay, callback })
     pending.set(id, { callback, due: time + delay })
     return id
   })
@@ -139,7 +139,7 @@ async function mountPage() {
   const profile = find(container, (node) => node.type === 'select')
   profile.props['onUpdate:modelValue']('0123456789abcdef0123456789abcdef')
   await settle()
-  return { app, container }
+  return { app, container, state: app._instance.setupState }
 }
 
 async function generate(container) {
@@ -226,6 +226,77 @@ test('Union expiry reschedules deadlines beyond the browser timeout limit', asyn
     app.unmount()
     delete globalThis.__unionBind
     delete globalThis.__beforeUnionBind
+  }
+})
+
+test('a bind response cannot publish state or schedule a timer after unmount', async (t) => {
+  const clock = fakeClock(t, 1_800_000_000_000)
+  const { app, container, state } = await mountPage()
+  let resolveBind
+  globalThis.__unionBind = () => new Promise((resolve) => { resolveBind = resolve })
+  try {
+    const action = find(container, (node) => node.type === 'button' && text(node).trim() === en.union.genBindCode)
+    const binding = action.props.onClick()
+    await settle()
+    assert.equal(state.loading, true)
+    app.unmount()
+
+    resolveBind({ token: 'late-token' })
+    await binding
+    await settle()
+    assert.deepEqual(clock.scheduled, [], 'a disposed page must not create an expiry timer')
+    assert.equal(state.bindToken, '')
+    assert.equal(state.bindTokenFor, '')
+    assert.equal(state.bindTokenExpire, 0)
+    assert.equal(state.success, '')
+    assert.equal(state.loading, true, 'finally must not publish after disposal')
+  } finally {
+    if (app._instance) app.unmount()
+    delete globalThis.__unionBind
+  }
+})
+
+test('a rejected bind cannot publish an error or finish loading after unmount', async (t) => {
+  const clock = fakeClock(t, 1_800_000_000_000)
+  const { app, container, state } = await mountPage()
+  let rejectBind
+  globalThis.__unionBind = () => new Promise((_resolve, reject) => { rejectBind = reject })
+  try {
+    const action = find(container, (node) => node.type === 'button' && text(node).trim() === en.union.genBindCode)
+    const binding = action.props.onClick()
+    await settle()
+    app.unmount()
+
+    rejectBind(new Error('late bind failure'))
+    await binding
+    await settle()
+    assert.deepEqual(clock.scheduled, [])
+    assert.equal(state.error, '')
+    assert.equal(state.loading, true, 'finally must not publish after disposal')
+  } finally {
+    if (app._instance) app.unmount()
+    delete globalThis.__unionBind
+  }
+})
+
+test('a stale expiry callback cannot mutate state after unmount', async (t) => {
+  const clock = fakeClock(t, 1_800_000_000_000)
+  const { app, container, state } = await mountPage()
+  try {
+    await generate(container)
+    const staleTimer = clock.scheduled[0]
+    assert.ok(staleTimer)
+    app.unmount()
+    clock.advance(120_000)
+    staleTimer.callback()
+    await settle()
+    assert.equal(state.now, 1_800_000_000_000)
+    assert.equal(state.bindToken, 'token-1')
+    assert.equal(state.bindTokenFor, 'Example player')
+    assert.equal(clock.scheduled.length, 1, 'a stale callback must not reschedule')
+  } finally {
+    if (app._instance) app.unmount()
+    delete globalThis.__unionBind
   }
 })
 

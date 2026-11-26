@@ -27,6 +27,7 @@ const canWrite = computed(() => ['owner', 'admin'].includes(portal.role.value))
 const canManageMembers = computed(() => portal.role.value === 'owner')
 const loading = computed(() => portal.loading.value || catalog.loading.value)
 const error = computed(() => portal.error.value || catalog.error.value)
+const updatingServers = new Set()
 
 async function load() {
   inviteToken.value = ''
@@ -51,12 +52,18 @@ async function acceptInvite(token) {
   if (!catalog.selected.value && catalog.servers.value.length) await catalog.select(catalog.servers.value[0].id)
 }
 async function updateServer(id, body) {
-  if (body.status === 'disabled') {
-    const current = catalog.servers.value.find((server) => server.id === id)
-    const name = current?.name || catalog.selected.value?.server.name || ''
-    if (!(await confirmDialog(t('serverAccess.confirmDisable', { name }), { danger: true }))) return
+  if (updatingServers.has(id)) return
+  updatingServers.add(id)
+  try {
+    if (body.status === 'disabled') {
+      const current = catalog.servers.value.find((server) => server.id === id)
+      const name = current?.name || catalog.selected.value?.server.name || ''
+      if (!(await confirmDialog(t('serverAccess.confirmDisable', { name }), { danger: true }))) return
+    }
+    await catalog.update(id, body)
+  } finally {
+    updatingServers.delete(id)
   }
-  await catalog.update(id, body)
 }
 async function removeMember(uid) {
   if (!(await confirmDialog(t('serverAccess.confirmRemoveMember', { uid }), { danger: true }))) return

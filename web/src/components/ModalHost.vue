@@ -10,16 +10,23 @@ import { dialogState, resolveDialog } from '../dialog.js'
 
 const { t } = useI18n()
 const field = ref(null)
+let handlingClose = false
 
 const isPrompt = computed(() => dialogState.kind === 'prompt')
 const isAlert = computed(() => dialogState.kind === 'alert')
 const okText = computed(() => (isAlert.value ? t('common.close') : t('common.confirm')))
 
-function dismiss() { resolveDialog(isPrompt.value ? null : false) }
+function close(result) {
+  if (handlingClose) return
+  handlingClose = true
+  resolveDialog(result)
+}
+function dismiss() { close(isPrompt.value ? null : false) }
 function accept() {
-  resolveDialog(isPrompt.value ? String(field.value ? field.value.value : '') : true)
+  close(isPrompt.value ? String(field.value ? field.value.value : '') : true)
 }
 function onOpened() {
+  handlingClose = false
   if (isPrompt.value && field.value) { field.value.focus(); field.value.select() }
 }
 </script>

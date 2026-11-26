@@ -73,7 +73,12 @@ const vite = await createServer({
 const { default: ServersPage } = await vite.ssrLoadModule(componentURLs.ServersPage)
 const { dialogState, resolveDialog } = await vite.ssrLoadModule(dialogPath)
 await vite.close()
-afterEach(() => resolveDialog(null))
+afterEach(async () => {
+  for (let i = 0; i < 4; i++) {
+    resolveDialog(null)
+    await nextTick()
+  }
+})
 
 function hostNode(type, text = '') {
   return { type, text, props: {}, children: [], parent: null, addEventListener() {}, removeEventListener() {} }
@@ -114,10 +119,13 @@ async function mountPage(status = 'active') {
   const server = { id: 9, publicId: 'srv_example', name: 'Example server', status, createdAt: '2027-01-01T00:00:00Z' }
   const detail = { server, policy: { whitelistEnabled: true } }
   const writes = []
+  const mutations = []
   globalThis.__serversPageApi = {
     servers: async () => ({ servers: [server], total: 1, quotaUsed: 1 }),
     server: async () => detail,
     updateServer: async (id, body) => {
+      mutations.push([id, body])
+      if (globalThis.__serversPageUpdateGate) await globalThis.__serversPageUpdateGate
       writes.push([id, body])
       Object.assign(server, body)
       return { id, ...body }
@@ -131,7 +139,7 @@ async function mountPage(status = 'active') {
   app.mount(container)
   await settle()
   if (errors.length) throw errors[0]
-  return { app, container, writes, server }
+  return { app, container, writes, mutations, server }
 }
 
 test('disabling a server waits for confirmation and cancel sends no PATCH', async () => {
@@ -153,6 +161,47 @@ test('disabling a server waits for confirmation and cancel sends no PATCH', asyn
   } finally {
     app.unmount()
     delete globalThis.__serversPageApi
+  }
+})
+
+test('duplicate disable calls cannot queue another confirmation or mutation for the same server', async () => {
+  const { app, container, writes, mutations, server } = await mountPage()
+  let release
+  globalThis.__serversPageUpdateGate = new Promise((resolve) => { release = resolve })
+  const actions = []
+  try {
+    const disable = button(container, en.serverAccess.disable)
+    actions.push(disable.props.onClick())
+    actions.push(disable.props.onClick())
+    await settle()
+    assert.equal(dialogState.open, true)
+    assert.deepEqual(mutations, [], 'confirmation must still precede the first mutation')
+
+    resolveDialog(true)
+    await nextTick()
+    assert.deepEqual(mutations, [[9, { status: 'disabled' }]])
+    assert.equal(dialogState.open, false, 'the duplicate call must not enqueue another confirmation')
+
+    actions.push(disable.props.onClick())
+    await settle()
+    assert.equal(dialogState.open, false, 're-entry during the mutation must not open a confirmation')
+    assert.deepEqual(mutations, [[9, { status: 'disabled' }]], 're-entry must not send another PATCH')
+
+    release()
+    await Promise.all(actions)
+    await settle()
+    assert.deepEqual(writes, [[9, { status: 'disabled' }]])
+    assert.equal(server.status, 'disabled')
+  } finally {
+    release?.()
+    for (let i = 0; i < 4; i++) {
+      resolveDialog(null)
+      await nextTick()
+    }
+    await Promise.allSettled(actions)
+    app.unmount()
+    delete globalThis.__serversPageApi
+    delete globalThis.__serversPageUpdateGate
   }
 })
 

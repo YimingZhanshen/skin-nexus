@@ -24,6 +24,7 @@ const bindTokenFor = ref('')
 const bindTokenExpire = ref(0)
 const now = ref(Date.now())
 let expiryTimer = null
+let disposed = false
 const bindtoToken = ref('')
 const selectedPID = ref(null)
 
@@ -53,6 +54,7 @@ function scheduleExpiry() {
   // Browsers clamp delays above a signed 32-bit integer to one millisecond.
   // Split long waits so a token cannot expire early or spin in a tight loop.
   expiryTimer = setTimeout(() => {
+    if (disposed) return
     expiryTimer = null
     now.value = Date.now()
     if (!bindToken.value) return
@@ -193,6 +195,7 @@ async function doBind() {
   loading.value = true; error.value = ''; success.value = ''
   try {
     const d = await union.bind(playerUUID(p))
+    if (disposed) return
     if (d.error) { error.value = d.error; return }
     bindToken.value = d.token
     bindTokenFor.value = playerName(p)
@@ -200,7 +203,7 @@ async function doBind() {
     now.value = Date.now()
     scheduleExpiry()
     success.value = t('union.bindCodeSuccess')
-  } catch (e) { if (!guard401(e)) error.value = e.message } finally { loading.value = false }
+  } catch (e) { if (!disposed && !guard401(e)) error.value = e.message } finally { if (!disposed) loading.value = false }
 }
 
 async function doBindTo() {
@@ -245,7 +248,10 @@ async function doRemap() {
 
 watch(selectedPID, loadRemapSuggestions) // reload suggestions per source profile
 onMounted(load)
-onBeforeUnmount(clearExpiryTimer)
+onBeforeUnmount(() => {
+  disposed = true
+  clearExpiryTimer()
+})
 </script>
 
 <template>
