@@ -3,7 +3,7 @@
 // the 外观 card. The server verifies registry/bundle signatures; installs and
 // uninstalls hot-reload the theme registry, so we re-emit `changed` to let
 // the parent refresh the theme <select>.
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
@@ -26,15 +26,22 @@ const inspection = ref(null)
 const riskAck = ref(false)
 const uploading = ref(false)
 const uploadNote = ref('')
+let seq = 0
+let roleSeq = 0
+let disposed = false
 
 async function load(refresh = false) {
+  if (disposed) return
+  const mine = ++seq
   loading.value = true
   loadError.value = ''
   marketOff.value = false
   try {
     const d = await fetchJSON(`/api/admin/v1/themes/market${refresh ? '?refresh=1' : ''}`)
+    if (mine !== seq) return
     packages.value = d.packages || []
   } catch (e) {
+    if (mine !== seq) return
     if (e.status === 404) {
       marketOff.value = true
       packages.value = []
@@ -42,7 +49,7 @@ async function load(refresh = false) {
       loadError.value = e.message
     }
   } finally {
-    loading.value = false
+    if (mine === seq) loading.value = false
   }
 }
 
@@ -141,12 +148,14 @@ function trustText(status) {
 }
 
 onMounted(async () => {
+  const mine = ++roleSeq
   try {
     const me = await api.me()
-    isSuper.value = Number(me && me.permission) === 2
+    if (mine === roleSeq) isSuper.value = Number(me && me.permission) === 2
   } catch { /* read-only */ }
-  load()
+  if (!disposed && mine === roleSeq) load()
 })
+onBeforeUnmount(() => { disposed = true; seq++; roleSeq++ })
 </script>
 
 <template>

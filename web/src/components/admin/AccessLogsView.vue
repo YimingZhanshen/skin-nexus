@@ -3,7 +3,7 @@
 // server traffic and Union traffic in one filterable page — the admin's
 // "what is happening right now" view. Read-only; retention is server-side
 // (90 days). Diagnostic-mode switch (2026-11-05, slice 5b): super admin only.
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import Pager from '../Pager.vue'
@@ -47,21 +47,33 @@ const detailsBusy = ref(false)
 const detailsError = ref('')
 const detailsLimited = ref(false)
 const expanded = ref({}) // id -> true while its detail sub-row is open
+let pageSeq = 0
+let detailsSeq = 0
+let detailModeSeq = 0
+let detailActionSeq = 0
+let disposed = false
 
 async function loadPageDetails() {
-  if (detailsLoaded.value || detailsBusy.value) return
+  if (disposed || detailsLoaded.value || detailsBusy.value) return
+  const epoch = pageSeq
+  const mine = ++detailsSeq
   const ids = logs.value.map((r) => r.id).filter((n) => Number.isFinite(n))
   if (!ids.length) { detailsLoaded.value = true; return }
   detailsError.value = ''
   detailsBusy.value = true
   try {
     const d = await fetchJSON(`/api/admin/v1/access-log/details?ids=${ids.join(',')}`)
+    if (mine !== detailsSeq || epoch !== pageSeq) return
     const map = {}
     for (const row of (d.rows || [])) map[row.id] = row
     details.value = map
     detailsLimited.value = !!d.limited
     detailsLoaded.value = true
-  } catch (e) { detailsError.value = e.message } finally { detailsBusy.value = false }
+  } catch (e) {
+    if (mine === detailsSeq && epoch === pageSeq) detailsError.value = e.message
+  } finally {
+    if (mine === detailsSeq && epoch === pageSeq) detailsBusy.value = false
+  }
 }
 
 function toggleDetail(id) {
@@ -92,6 +104,9 @@ function headersList(raw) {
 }
 
 async function load() {
+  if (disposed) return
+  const mine = ++pageSeq
+  detailsSeq++
   error.value = ''
   // A new page/filters invalidates the batch: clear the map, the expansion and
   // the loaded flag so the next expand re-fetches against the new visible ids.
@@ -99,28 +114,35 @@ async function load() {
   detailsLoaded.value = false
   detailsLimited.value = false
   detailsError.value = ''
+  detailsBusy.value = false
   expanded.value = {}
   try {
     const qs = new URLSearchParams({ page: String(page.value) })
     if (kind.value) qs.set('kind', kind.value)
     if (query.value.trim()) qs.set('q', query.value.trim())
     const d = await fetchJSON(`/api/admin/v1/access-logs?${qs}`)
+    if (mine !== pageSeq) return
     logs.value = d.logs || []
     total.value = d.total || 0
-  } catch (e) { error.value = e.message }
+  } catch (e) { if (mine === pageSeq) error.value = e.message }
 }
 
 async function loadDetail() {
+  if (disposed) return
+  const mine = ++detailModeSeq
   try {
     const d = await fetchJSON('/api/admin/v1/access-log/detail-mode')
+    if (mine !== detailModeSeq) return
     detailEnabled.value = !!d.enabled
     detailUntil.value = d.until || ''
     detailRemaining.value = d.seconds_remaining || 0
-  } catch (e) { detailError.value = e.message }
+  } catch (e) { if (mine === detailModeSeq) detailError.value = e.message }
 }
 
 // Post an absolute RFC3339 expiry and refresh the switch state.
 async function setDetailUntil(rfc) {
+  if (disposed) return
+  const mine = ++detailActionSeq
   detailError.value = ''
   detailBusy.value = true
   try {
@@ -128,8 +150,10 @@ async function setDetailUntil(rfc) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ until: rfc }),
     })
+    if (mine !== detailActionSeq) return
     await loadDetail()
-  } catch (e) { detailError.value = e.message } finally { detailBusy.value = false }
+  } catch (e) { if (mine === detailActionSeq) detailError.value = e.message }
+  finally { if (mine === detailActionSeq) detailBusy.value = false }
 }
 
 // A preset opens the window N hours from now; the backend rejects >24h, and
@@ -149,12 +173,16 @@ function applyCustom() {
 }
 
 async function disableDetail() {
+  if (disposed) return
+  const mine = ++detailActionSeq
   detailError.value = ''
   detailBusy.value = true
   try {
     await fetchJSON('/api/admin/v1/access-log/detail-mode', { method: 'DELETE' })
+    if (mine !== detailActionSeq) return
     await loadDetail()
-  } catch (e) { detailError.value = e.message } finally { detailBusy.value = false }
+  } catch (e) { if (mine === detailActionSeq) detailError.value = e.message }
+  finally { if (mine === detailActionSeq) detailBusy.value = false }
 }
 
 function search() { page.value = 1; load() }
@@ -184,6 +212,13 @@ function outcomeClass(o) {
 }
 
 onMounted(() => { load(); loadDetail() })
+onBeforeUnmount(() => {
+  disposed = true
+  pageSeq++
+  detailsSeq++
+  detailModeSeq++
+  detailActionSeq++
+})
 </script>
 
 <template>

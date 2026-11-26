@@ -2,7 +2,7 @@
 // SettingsView: the 站点设置 group — env-migrated site knobs + OAuth
 // clients + SEO + appearance/themes (moved out of the old card flow in B1;
 // semantics unchanged: bool normalization, refetch-on-error, one-click SEO).
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
@@ -20,6 +20,9 @@ const emit = defineEmits(['settings-changed'])
 const settings = ref([])
 const setError = ref('')
 const setOk = ref('')
+let settingsSeq = 0
+let appearanceSeq = 0
+let disposed = false
 
 // row widget routing (shared by loadSettings normalization + template)
 const boolKeys = new Set([
@@ -65,9 +68,12 @@ const groupTitle = (g) => {
 }
 
 async function loadSettings() {
+  if (disposed) return
+  const mine = ++settingsSeq
   setError.value = ''
   try {
     const d = await fetchJSON('/api/admin/v1/settings')
+    if (mine !== settingsSeq) return
     // Bool rows normalize to "1"/"0" on load (review B P2: the checkbox uses
     // true-value="1", so a stored "true"/"on"/"yes" rendered as UNCHECKED and
     // the next save silently wrote the feature back to "0").
@@ -76,7 +82,7 @@ async function loadSettings() {
         ? { ...s, value: ['1', 'true', 'on', 'yes'].includes(String(s.value).toLowerCase()) ? '1' : '0' }
         : s
     )
-  } catch (e) { setError.value = e.message }
+  } catch (e) { if (mine === settingsSeq) setError.value = e.message }
 }
 
 async function saveSetting(s) {
@@ -128,15 +134,18 @@ const appearError = ref('')
 const appearOk = ref('')
 const themes = ref([])
 async function loadAppearance() {
+  if (disposed) return
+  const mine = ++appearanceSeq
   appearError.value = ''
   try {
     const data = await fetchJSON('/api/admin/v1/appearance')
+    if (mine !== appearanceSeq) return
     if (!Array.isArray(data.footer_links)) data.footer_links = []
     if (typeof data.footer_text !== 'string') data.footer_text = ''
     appearance.value = data
     const th = await fetchJSON('/api/admin/v1/themes')
-    themes.value = th.themes || []
-  } catch (e) { appearError.value = e.message }
+    if (mine === appearanceSeq) themes.value = th.themes || []
+  } catch (e) { if (mine === appearanceSeq) appearError.value = e.message }
 }
 async function appearSave() {
   appearError.value = ''
@@ -162,6 +171,7 @@ async function load() {
   await loadAppearance()
 }
 onMounted(load)
+onBeforeUnmount(() => { disposed = true; settingsSeq++; appearanceSeq++ })
 </script>
 
 <template>

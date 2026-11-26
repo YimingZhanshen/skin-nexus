@@ -6,7 +6,7 @@
 // way to find a texture by name, uploader or verdict, and no action but paging
 // past it. The three columns that decide a texture's fate (uploader, visibility,
 // moderation) are now filters, and the verdict itself is one click away.
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog, promptDialog } from '../../dialog.js'
@@ -31,6 +31,8 @@ const copied = ref('')
 // belongs to an older request.
 let seq = 0
 let timer = null
+let copyTimer = null
+let disposed = false
 
 function url() {
   const p = new URLSearchParams({ page: String(page.value) })
@@ -41,6 +43,7 @@ function url() {
 }
 
 async function load() {
+  if (disposed) return
   const mine = ++seq
   loading.value = true
   error.value = ''
@@ -95,15 +98,18 @@ function verdict(row) {
 async function copyHash(row) {
   try {
     await navigator.clipboard.writeText(row.hash)
+    if (disposed) return
     copied.value = String(row.id)
     error.value = ''
   } catch {
+    if (disposed) return
     // A refused clipboard must say so where the operator is looking: the cell can
     // only show back the hash it just failed to copy, and silence reads as success.
     copied.value = ''
     error.value = t('dashboard.copyFail')
   }
-  setTimeout(() => { copied.value = '' }, 2000)
+  clearTimeout(copyTimer)
+  copyTimer = setTimeout(() => { copied.value = '' }, 2000)
 }
 
 // Every mutation reloads the list: the verdict column is the operator's proof
@@ -169,6 +175,12 @@ async function purge(row) {
 }
 
 onMounted(load)
+onBeforeUnmount(() => {
+  disposed = true
+  seq++
+  clearTimeout(timer)
+  clearTimeout(copyTimer)
+})
 </script>
 
 <template>

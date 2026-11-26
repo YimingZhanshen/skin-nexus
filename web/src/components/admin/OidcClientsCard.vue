@@ -4,7 +4,7 @@
 // The secret is shown exactly once (the server stores no readable copy), so
 // the card keeps the last one on screen until the next successful create —
 // never blanked by a second submit, never refetched.
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
@@ -16,13 +16,17 @@ const oidcError = ref('')
 const newClient = ref({ client_id: '', name: '', redirect_uris: '', public: true })
 const lastSecret = ref('') // shown once after create
 const oidcBusy = ref(false)
+let seq = 0
+let disposed = false
 
 async function loadOIDC() {
+  if (disposed) return
+  const mine = ++seq
   oidcError.value = ''
   try {
     const c = await fetchJSON('/api/admin/v1/oidc/clients')
-    oidcClients.value = c.clients || []
-  } catch (e) { oidcError.value = e.message }
+    if (mine === seq) oidcClients.value = c.clients || []
+  } catch (e) { if (mine === seq) oidcError.value = e.message }
 }
 async function createClient() {
   if (oidcBusy.value) return
@@ -52,14 +56,17 @@ async function createClient() {
 }
 async function deleteClient(id) {
   if (!(await confirmDialog(t('admin.oidcDeleteConfirm', { id }), { danger: true }))) return
+  if (disposed) return
+  const mine = ++seq
   oidcError.value = ''
   try {
     await fetchJSON(`/api/admin/v1/oidc/clients/${encodeURIComponent(id)}`, { method: 'DELETE' })
-    oidcClients.value = oidcClients.value.filter(c => c.client_id !== id)
-  } catch (e) { oidcError.value = e.message }
+    if (mine === seq) oidcClients.value = oidcClients.value.filter(c => c.client_id !== id)
+  } catch (e) { if (mine === seq) oidcError.value = e.message }
 }
 
 onMounted(loadOIDC)
+onBeforeUnmount(() => { disposed = true; seq++ })
 </script>
 
 <template>

@@ -45,8 +45,11 @@ export function useServerAccessPlatform(api) {
   let auditRequest = 0
   let fallbackRequest = 0
   let loadRequest = 0
+  let mutateRequest = 0
+  let disposed = false
 
   async function loadTenants() {
+    if (disposed) return false
     const current = ++tenantRequest
     try {
       const data = await api.platformTenants(tenantPage.value, tenantQuery.value)
@@ -64,6 +67,7 @@ export function useServerAccessPlatform(api) {
   }
 
   async function loadServers() {
+    if (disposed) return false
     const current = ++serverRequest
     try {
       const data = await api.platformServers(serverPage.value, serverQuery.value)
@@ -81,6 +85,7 @@ export function useServerAccessPlatform(api) {
   }
 
   async function loadAudit() {
+    if (disposed) return false
     const current = ++auditRequest
     try {
       const data = await api.platformAudit(auditPage.value, auditQuery.value)
@@ -98,6 +103,7 @@ export function useServerAccessPlatform(api) {
   }
 
   async function loadFallback() {
+    if (disposed) return false
     const current = ++fallbackRequest
     try {
       const data = await api.platformFallback()
@@ -107,6 +113,7 @@ export function useServerAccessPlatform(api) {
   }
 
   async function load() {
+    if (disposed) return
     const current = ++loadRequest
     loading.value = true
     error.value = ''
@@ -115,19 +122,31 @@ export function useServerAccessPlatform(api) {
   }
 
   async function mutate(action, refresh) {
-    if (busy.value) return false
+    if (disposed || busy.value) return false
+    const current = ++mutateRequest
     busy.value = true
     error.value = ''
     try {
       await action()
+      if (current !== mutateRequest) return false
       await refresh()
-      return true
+      return current === mutateRequest
     } catch (cause) {
-      error.value = cause.message
+      if (current === mutateRequest) error.value = cause.message
       return false
     } finally {
-      busy.value = false
+      if (current === mutateRequest) busy.value = false
     }
+  }
+
+  function dispose() {
+    disposed = true
+    tenantRequest++
+    serverRequest++
+    auditRequest++
+    fallbackRequest++
+    loadRequest++
+    mutateRequest++
   }
 
   return {
@@ -137,7 +156,7 @@ export function useServerAccessPlatform(api) {
     tenantSize: readonly(tenantSize), serverSize: readonly(serverSize), auditSize: readonly(auditSize),
     tenantQuery: readonly(tenantQuery), serverQuery: readonly(serverQuery), auditQuery: readonly(auditQuery),
     fallback: readonly(fallback), loading: readonly(loading), busy: readonly(busy), error: readonly(error),
-    load, loadTenants, loadServers, loadAudit,
+    load, loadTenants, loadServers, loadAudit, dispose,
     searchTenants: (query) => { tenantQuery.value = query; tenantPage.value = 1; return loadTenants() },
     searchServers: (query) => { serverQuery.value = query; serverPage.value = 1; return loadServers() },
     searchAudit: (query) => { auditQuery.value = query; auditPage.value = 1; return loadAudit() },
@@ -157,8 +176,9 @@ export function useServerAccessPlatform(api) {
     }),
     updateServer: (id, body) => mutate(() => api.updatePlatformServer(id, body), loadServers),
     setFallback: (enabled) => mutate(async () => {
+      const current = ++fallbackRequest
       const data = await api.setPlatformFallback(enabled)
-      fallback.value = !!data.enabled
+      if (current === fallbackRequest) fallback.value = !!data.enabled
     }, loadAudit),
     revokeCredential: (id, cid) => mutate(() => api.revokePlatformCredential(id, cid), async () => {
       await Promise.all([loadServers(), loadAudit()])

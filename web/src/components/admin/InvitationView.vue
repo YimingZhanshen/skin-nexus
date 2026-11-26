@@ -1,7 +1,7 @@
 <script setup>
 // InvitationView: generate form on top, then free codes, then used codes
 // (blessing 管理面板 邀请码 layout parity — B1).
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { promptDialog } from '../../dialog.js'
@@ -14,6 +14,8 @@ const invNew = ref({ amount: 1, description: '' })
 // Two clicks on the generate button makes two batches while the operator counted one, and the
 // list they then hand out has twice the codes they meant to issue.
 const invBusy = ref(new Set())
+let seq = 0
+let disposed = false
 const setInvBusy = (key, on) => {
   const next = new Set(invBusy.value)
   if (on) next.add(key)
@@ -22,12 +24,15 @@ const setInvBusy = (key, on) => {
 }
 
 async function load() {
+  if (disposed) return
+  const mine = ++seq
   invError.value = ''
   try {
     const d = await fetchJSON('/api/admin/v1/invitation-codes')
+    if (mine !== seq) return
     invFree.value = d.free || []
     invUsed.value = d.used || []
-  } catch (e) { invError.value = e.message }
+  } catch (e) { if (mine === seq) invError.value = e.message }
 }
 
 async function invGenerate() {
@@ -62,6 +67,7 @@ async function invEdit(ic) {
 }
 
 onMounted(load)
+onBeforeUnmount(() => { disposed = true; seq++ })
 </script>
 
 <template>

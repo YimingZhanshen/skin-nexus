@@ -7,7 +7,7 @@
 // status load before fetching: the card only exists when the module is on,
 // and asking a disabled module for its blacklist is a 404 the operator
 // should never see.
-import { ref, watch } from 'vue'
+import { ref, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
@@ -38,11 +38,16 @@ function blGoPage(p) {
 const blQ = ref('')
 const blEmail = ref('')
 const blReason = ref('')
+let seq = 0
+let disposed = false
 
 async function loadBlacklist() {
+  if (disposed) return
+  const mine = ++seq
   emit('error', '')
   try {
     const d = await fetchJSON(`/api/admin/v1/union/blacklist?q=${encodeURIComponent(blQ.value)}&page=${blPage.value}`)
+    if (mine !== seq) return
     // hub returns Laravel pagination JSON; tolerate both shaped answers
     blRows.value = d.data || d.items || []
     blTotal.value = d.total || (d.data ? d.data.length : 0)
@@ -50,6 +55,7 @@ async function loadBlacklist() {
     const per = d.per_page || (d.data && d.data.length) || 1
     blTotalPages.value = d.last_page || Math.max(1, Math.ceil((blTotal.value || 0) / per))
   } catch (e) {
+    if (mine !== seq) return
     blRows.value = []
     emit('error', e.message)
   }
@@ -89,6 +95,7 @@ async function blDelete(row) {
 }
 
 watch(() => props.unionStatus, (v) => { if (v) loadBlacklist() }, { immediate: true })
+onBeforeUnmount(() => { disposed = true; seq++ })
 </script>
 
 <template>

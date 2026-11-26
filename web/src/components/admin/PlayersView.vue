@@ -3,7 +3,7 @@
 // texture thumbnails, and admin ops: rename (UUID zero-drift guaranteed
 // server-side), re-home, texture swap/unmount, delete (confirm-gated,
 // audited, union hub announced best-effort).
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog, promptDialog } from '../../dialog.js'
@@ -18,16 +18,21 @@ const pageSize = 50
 const query = ref('')
 const error = ref('')
 const busy = ref(false)
+let seq = 0
+let disposed = false
 
 async function load() {
+  if (disposed) return
+  const mine = ++seq
   error.value = ''
   try {
     const qs = new URLSearchParams({ page: String(page.value) })
     if (query.value.trim()) qs.set('q', query.value.trim())
     const d = await fetchJSON(`/api/admin/v1/players?${qs}`)
+    if (mine !== seq) return
     players.value = d.players || []
     total.value = d.total || 0
-  } catch (e) { error.value = e.message }
+  } catch (e) { if (mine === seq) error.value = e.message }
 }
 
 function search() { page.value = 1; load() }
@@ -98,6 +103,7 @@ async function deletePlayer(p) {
 function texURL(hash) { return hash ? `/textures/${hash}` : '' }
 
 onMounted(load)
+onBeforeUnmount(() => { disposed = true; seq++ })
 </script>
 
 <template>

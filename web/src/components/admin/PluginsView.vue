@@ -1,7 +1,7 @@
 <script setup>
 // PluginsView: read-only catalog for admins; enable/disable/reload are
 // SUPER_ADMIN-session-only (the backend rejects X-Admin-Token and perm<2).
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
@@ -39,26 +39,34 @@ const setRowBusy = (name, on) => {
   rowBusy.value = next
 }
 const bypassBusy = ref(false)
+let seq = 0
+let roleSeq = 0
+let disposed = false
 
 function isCurrentConfig(name, generation) {
-  return generation === configGeneration && configTarget.value?.name === name
+  return !disposed && generation === configGeneration && configTarget.value?.name === name
 }
 
 async function load() {
+  if (disposed) return
+  const mine = ++seq
   loadError.value = ''
   try {
     const d = await fetchJSON('/api/admin/v1/plugins')
+    if (mine !== seq) return
     plugins.value = d.plugins || []
     guardsBypassed.value = !!d.guardsBypassed
   } catch (e) {
-    loadError.value = e.message
+    if (mine === seq) loadError.value = e.message
   }
 }
 
 async function detectRole() {
+  if (disposed) return
+  const mine = ++roleSeq
   try {
     const me = await api.me()
-    isSuper.value = Number(me.permission) === 2
+    if (mine === roleSeq) isSuper.value = Number(me.permission) === 2
   } catch { /* stay read-only */ }
 }
 
@@ -206,8 +214,15 @@ function morePerms(p) { return Math.max(0, (p.permissions || []).length - 5) }
 
 onMounted(async () => {
   await detectRole()
+  if (disposed) return
   readOnly.value = !isSuper.value
   await load()
+})
+onBeforeUnmount(() => {
+  disposed = true
+  seq++
+  roleSeq++
+  configGeneration++
 })
 </script>
 

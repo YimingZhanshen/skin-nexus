@@ -48,7 +48,7 @@ onMounted(() => {
   platform.load()
   clock = setInterval(() => { now.value = Date.now() }, 1000)
 })
-onBeforeUnmount(() => clearInterval(clock))
+onBeforeUnmount(() => { clearInterval(clock); platform.dispose() })
 
 function statusLabel(status) {
   const key = `serverAccess.statusMap.${status}`
