@@ -13,7 +13,7 @@
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
-import { clearLegacyAdminToken, isSessionLoss, notifyUnauthorized } from '../session.js'
+import { bumpSessionVersion, clearLegacyAdminToken, isSessionLoss, notifyUnauthorized } from '../session.js'
 
 export function useSession() {
   const { t } = useI18n()
@@ -24,6 +24,7 @@ export function useSession() {
   // account switches and local account updates all enter through this gate.
   function setSessionUser(next) {
     generation += 1
+    bumpSessionVersion()
     clearLegacyAdminToken()
     user.value = next || null
   }

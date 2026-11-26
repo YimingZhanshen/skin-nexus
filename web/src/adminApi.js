@@ -2,13 +2,14 @@
 // contract for cookie-less clients, but are never persisted or sent here.
 import { fetchWithTimeout } from './net.js'
 import { describe } from './errors.js'
-import { clearLegacyAdminToken, guard401 } from './session.js'
+import { captureSessionVersion, clearLegacyAdminToken, guard401 } from './session.js'
 
 clearLegacyAdminToken()
 
 export async function fetchJSON(path, opts) {
   // Also remove a key written by an older open tab; it is never read or sent.
   clearLegacyAdminToken()
+  const epoch = captureSessionVersion()
   const headers = {}
   for (const [key, value] of Object.entries((opts && opts.headers) || {})) {
     if (key.toLowerCase() !== 'x-admin-token') headers[key] = value
@@ -19,7 +20,7 @@ export async function fetchJSON(path, opts) {
     const err = new Error(describe(data, res.status))
     err.status = res.status
     err.data = data
-    guard401(err)
+    guard401(err, epoch)
     throw err
   }
   return data

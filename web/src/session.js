@@ -2,6 +2,12 @@
 // 401 hits their guard; App.vue registered the handler that drops the shell
 // back to the login card (review P1-6 semantics, now cross-component).
 let handler = null
+// A request belongs to the account/session that started it. Account replacement,
+// login and logout advance this monotonic epoch so a late 401 from the previous
+// cookie cannot sign out the newly selected account.
+let sessionVersion = 0
+export function captureSessionVersion() { return sessionVersion }
+export function bumpSessionVersion() { return ++sessionVersion }
 export function setUnauthorizedHandler(fn) {
   const previous = handler
   handler = fn
@@ -25,8 +31,9 @@ export function isSessionLoss(e) {
 
 // Shared session-loss guard for page-level catch blocks: true when the error
 // invalidated the session (caller should stop its own error toast).
-export function guard401(e) {
+export function guard401(e, epoch) {
   if (!isSessionLoss(e)) return false
+  if (epoch !== undefined && epoch !== sessionVersion) return false
   notifyUnauthorized()
   return true
 }

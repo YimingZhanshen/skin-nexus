@@ -74,13 +74,9 @@ export function useServerCatalog(api) {
     error.value = ''
     try {
       const created = await api.createServer(name)
-      quotaUsed.value++
-      if (page.value === 1 && (!status.value || created.status === status.value)) {
-        servers.value = [created, ...servers.value].slice(0, size.value)
-        total.value++
-      } else {
-        await load(1, size.value, status.value)
-      }
+      // The list and quota are server-owned snapshots. A fresh load both
+      // invalidates older reads and avoids counting the same create twice.
+      await load()
       return created
     } catch (cause) {
       error.value = cause.message
@@ -96,12 +92,14 @@ export function useServerCatalog(api) {
     error.value = ''
     try {
       const updated = await api.updateServer(id, body)
-      servers.value = servers.value.map((item) => item.id === id ? { ...item, ...updated } : item)
       if (selected.value?.server.id === id) {
         const nextPolicy = body.policy ? { ...selected.value.policy, ...body.policy } : selected.value.policy
         selected.value = { ...selected.value, server: { ...selected.value.server, ...updated }, policy: nextPolicy }
         policy.value = nextPolicy
       }
+      // Keep the selected detail above, but never patch the paginated list
+      // from a mutation response: an older load must not win after this reload.
+      await load()
       return updated
     } catch (cause) {
       error.value = cause.message

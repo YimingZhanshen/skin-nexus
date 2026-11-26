@@ -45,11 +45,17 @@ async function load() {
 }
 
 async function resumeRotation() {
+  if (disposed) return
   if (!(await confirmDialog(t('admin.unionResumeConfirm'), { danger: true }))) return
+  if (disposed) return
+  const mine = ++opSeq
   try {
     await fetchJSON('/api/admin/v1/union/rotation/resume', { method: 'POST' })
+    if (disposed || mine !== opSeq) return
     await load()
-  } catch (e) { error.value = e.message }
+  } catch (e) {
+    if (!disposed && mine === opSeq) error.value = e.message
+  }
 }
 
 async function runOp(name, path, confirmMsg) {

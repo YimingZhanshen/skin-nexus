@@ -6,7 +6,6 @@ import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { api } from '../../api.js'
 import { loadPluginUI } from '../../pluginUI.js'
-import { describe } from '../../errors.js'
 import Pager from '../Pager.vue'
 import FilePicker from '../FilePicker.vue'
 import EmptyState from '../EmptyState.vue'
@@ -106,10 +105,7 @@ async function uploadBundle() {
     const fd = new FormData()
     fd.append('file', uploadFile.value)
     fd.append('inspect', '1')
-    const r = await fetch('/api/admin/v1/market/upload', { method: 'POST', body: fd, credentials: 'same-origin' })
-    const d = await r.json().catch(() => ({}))
-    if (!r.ok) throw new Error(describe(d, r.status))
-    inspection.value = d
+    inspection.value = await fetchJSON('/api/admin/v1/market/upload', { method: 'POST', body: fd })
     riskAck.value = false
   } catch (e) {
     actionError.value = e.message
@@ -135,9 +131,7 @@ async function installInspected() {
     fd.append('consent', '1')
     fd.append('acceptUnverified', inspection.value.status === 'verified' ? '0' : '1')
     fd.append('expectDigest', inspection.value.zipSha || '')
-    const r = await fetch('/api/admin/v1/market/upload', { method: 'POST', body: fd, credentials: 'same-origin' })
-    const d = await r.json().catch(() => ({}))
-    if (!r.ok) throw new Error(describe(d, r.status))
+    await fetchJSON('/api/admin/v1/market/upload', { method: 'POST', body: fd })
     cancelInspection()
     await load()
   } catch (e) {

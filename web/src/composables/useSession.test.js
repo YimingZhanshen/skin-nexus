@@ -26,7 +26,7 @@ const vite = await createServer({
   }],
 })
 const { useSession } = await vite.ssrLoadModule('/src/composables/useSession.js')
-const { setUnauthorizedHandler } = await vite.ssrLoadModule('/src/session.js')
+const { captureSessionVersion, setUnauthorizedHandler } = await vite.ssrLoadModule('/src/session.js')
 await vite.close()
 
 function hostNode(type, text = '') {
@@ -100,6 +100,24 @@ test('setSessionUser replaces the user, updates admin readiness, and removes leg
     session.setSessionUser(null)
     assert.equal(session.user.value, null)
     assert.equal(values.has('admin_token'), false)
+  } finally {
+    app.unmount()
+  }
+})
+
+test('every setSessionUser call advances the transport session epoch', async () => {
+  storedToken('')
+  const { app, session } = await mountSession()
+  try {
+    const initial = captureSessionVersion()
+    session.setSessionUser({ id: 1, nickname: 'First', permission: 1 })
+    const loggedIn = captureSessionVersion()
+    assert.ok(loggedIn > initial)
+    session.setSessionUser({ id: 2, nickname: 'Second', permission: 1 })
+    const replaced = captureSessionVersion()
+    assert.ok(replaced > loggedIn)
+    session.setSessionUser(null)
+    assert.ok(captureSessionVersion() > replaced)
   } finally {
     app.unmount()
   }

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { guard401, notifyUnauthorized, setUnauthorizedHandler } from './session.js'
+import { bumpSessionVersion, captureSessionVersion, guard401, notifyUnauthorized, setUnauthorizedHandler } from './session.js'
 
 function responseError(status, code) {
   return Object.assign(new Error(code || `HTTP ${status}`), { status, data: code ? { code } : {} })
@@ -35,6 +35,24 @@ test('authorization, module, server, and network failures do not end the session
       assert.equal(guard401(error), false)
     }
     assert.deepEqual(notifications, [])
+  } finally {
+    setUnauthorizedHandler(null)
+  }
+})
+
+test('a session-loss response from an older session epoch is ignored', () => {
+  const notifications = []
+  setUnauthorizedHandler(() => notifications.push('unauthorized'))
+  try {
+    const first = captureSessionVersion()
+    const second = bumpSessionVersion()
+    assert.ok(second > first)
+    assert.equal(captureSessionVersion(), second)
+    assert.equal(guard401(responseError(401), first), false)
+    assert.equal(guard401(responseError(403, 'admin.token_invalid'), first), false)
+    assert.deepEqual(notifications, [])
+    assert.equal(guard401(responseError(401), second), true)
+    assert.deepEqual(notifications, ['unauthorized'])
   } finally {
     setUnauthorizedHandler(null)
   }

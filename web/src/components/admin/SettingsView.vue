@@ -22,6 +22,7 @@ const setError = ref('')
 const setOk = ref('')
 let settingsSeq = 0
 let appearanceSeq = 0
+let appearanceActionSeq = 0
 let disposed = false
 
 // row widget routing (shared by loadSettings normalization + template)
@@ -148,16 +149,25 @@ async function loadAppearance() {
   } catch (e) { if (mine === appearanceSeq) appearError.value = e.message }
 }
 async function appearSave() {
+  if (disposed) return
+  const mine = ++appearanceActionSeq
+  // The save owns the next canonical snapshot; an older appearance/themes
+  // loader may no longer publish over the draft or its post-save refresh.
+  appearanceSeq++
   appearError.value = ''
   appearOk.value = ''
   try {
     await fetchJSON('/api/admin/v1/appearance', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(appearance.value),
     })
+    if (disposed || mine !== appearanceActionSeq) return
     appearOk.value = t('common.saved')
+    await loadAppearance()
   } catch (e) {
+    if (disposed || mine !== appearanceActionSeq) return
     // review P2-10: refetch so the UI doesn't keep unsaved values
     await loadAppearance()
+    if (disposed || mine !== appearanceActionSeq) return
     appearError.value = e.message
   }
 }
@@ -171,7 +181,7 @@ async function load() {
   await loadAppearance()
 }
 onMounted(load)
-onBeforeUnmount(() => { disposed = true; settingsSeq++; appearanceSeq++ })
+onBeforeUnmount(() => { disposed = true; settingsSeq++; appearanceSeq++; appearanceActionSeq++ })
 </script>
 
 <template>

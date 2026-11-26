@@ -11,6 +11,13 @@ import { buildServerQuotaPatch, isTenantDeletionDue, useServerAccessPlatform } f
 const tenant = { id: 1, name: 'Example tenant', status: 'active', serverLimit: 5 }
 const server = { id: 9, publicId: 'srv_example', name: 'Example server', status: 'active', sourceMode: 'url_secret' }
 
+function deferred() {
+  let resolve
+  let reject
+  const promise = new Promise((res, rej) => { resolve = res; reject = rej })
+  return { promise, resolve, reject }
+}
+
 test('deletion due gating accepts only the exact deadline or later for a deleting tenant', () => {
   const due = '2027-01-31T00:00:00Z'
   const row = { status: 'deleting', deletionDueAt: due }
@@ -273,10 +280,11 @@ test('viewer portal never requests owner-only invitations', async () => {
 
 test('server catalog selects scoped detail and creates through the owner client', async () => {
   const calls = []
+  let createdServer = null
   const catalog = useServerCatalog({
-    servers: async () => ({ servers: [server] }),
+    servers: async () => ({ servers: createdServer ? [server, createdServer] : [server], total: createdServer ? 2 : 1 }),
     server: async (id) => { calls.push(id); return { server: { ...server, name: 'Loaded' }, policy: { whitelistEnabled: true } } },
-    createServer: async (name) => ({ ...server, id: 10, name }),
+    createServer: async (name) => (createdServer = { ...server, id: 10, name }),
     updateServer: async () => ({ id: 9, name: 'Renamed', status: 'disabled' }),
   })
   await catalog.load()
@@ -341,6 +349,134 @@ test('server catalog keeps the selected server when another page is viewed', asy
   await catalog.goPage(2)
   assert.equal(catalog.selected.value.server.id, 1)
 })
+
+test('server catalog create invalidates an older load and adopts canonical quota without double counting', async () => {
+  const staleLoad = deferred()
+  const canonicalLoad = deferred()
+  const pendingCreate = deferred()
+  const calls = []
+  const created = { ...server, id: 10, name: 'Created' }
+  const catalog = useServerCatalog({
+    servers: async (...args) => {
+      calls.push(args)
+      if (calls.length === 1) return { servers: [{ ...server, id: 1 }], total: 1, quotaUsed: 1, page: 1, size: 50 }
+      if (calls.length === 2) return staleLoad.promise
+      return canonicalLoad.promise
+    },
+    createServer: async () => pendingCreate.promise,
+  })
+  await catalog.load()
+  const olderLoad = catalog.load()
+  const creation = catalog.create('Created')
+  pendingCreate.resolve(created)
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(calls.length, 3, 'create success must invalidate and reload the current list')
+  assert.equal(catalog.quotaUsed.value, 1, 'the mutation response must not pre-increment canonical quota')
+  assert.deepEqual(catalog.servers.value.map((row) => row.id), [1], 'the mutation response must not patch the list snapshot')
+
+  staleLoad.resolve({ servers: [{ ...server, id: 99 }], total: 99, quotaUsed: 99, page: 1, size: 50 })
+  assert.equal(await olderLoad, false)
+  assert.deepEqual(catalog.servers.value.map((row) => row.id), [1])
+  canonicalLoad.resolve({ servers: [{ ...server, id: 1 }, created], total: 2, quotaUsed: 2, page: 1, size: 50 })
+  assert.equal(await creation, created)
+  assert.deepEqual(catalog.servers.value.map((row) => row.id), [1, 10])
+  assert.equal(catalog.total.value, 2)
+  assert.equal(catalog.quotaUsed.value, 2)
+})
+
+test('server catalog update invalidates an older load and preserves selected detail semantics', async () => {
+  const staleLoad = deferred()
+  const canonicalLoad = deferred()
+  const pendingUpdate = deferred()
+  const calls = []
+  const updated = { ...server, name: 'Renamed', status: 'disabled' }
+  const catalog = useServerCatalog({
+    servers: async (...args) => {
+      calls.push(args)
+      if (calls.length === 1) return { servers: [server], total: 51, quotaUsed: 7, page: 2, size: 25 }
+      if (calls.length === 2) return staleLoad.promise
+      return canonicalLoad.promise
+    },
+    server: async () => ({ server, policy: { whitelistEnabled: true } }),
+    updateServer: async () => pendingUpdate.promise,
+  })
+  await catalog.load(2, 25, 'disabled')
+  await catalog.select(9)
+  const olderLoad = catalog.load()
+  const mutation = catalog.update(9, { name: 'Renamed', status: 'disabled', policy: { whitelistEnabled: false } })
+  pendingUpdate.resolve(updated)
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(calls.length, 3)
+  assert.deepEqual(calls[2], [2, 25, 'disabled'], 'update must reload the current page, size and filter')
+  assert.equal(catalog.selected.value.server.name, 'Renamed')
+  assert.equal(catalog.policy.value.whitelistEnabled, false)
+
+  staleLoad.resolve({ servers: [{ ...server, id: 99 }], total: 99, quotaUsed: 99, page: 2, size: 25 })
+  assert.equal(await olderLoad, false)
+  assert.deepEqual(catalog.servers.value.map((row) => row.id), [9])
+  canonicalLoad.resolve({ servers: [updated], total: 51, quotaUsed: 7, page: 2, size: 25 })
+  assert.equal(await mutation, updated)
+  assert.deepEqual(catalog.servers.value.map((row) => row.id), [9])
+  assert.equal(catalog.selected.value.server.name, 'Renamed')
+  assert.equal(catalog.policy.value.whitelistEnabled, false)
+})
+
+for (const kind of ['create', 'update']) {
+  test(`server catalog ${kind} reloads the current page, size and status after success`, async () => {
+    const calls = []
+    const pendingMutation = deferred()
+    const changed = { ...server, id: kind === 'create' ? 10 : 9, status: 'disabled' }
+    const catalog = useServerCatalog({
+      servers: async (...args) => {
+        calls.push(args)
+        return { servers: kind === 'update' && calls.length > 1 ? [changed] : [server], total: 51, quotaUsed: calls.length > 1 ? 8 : 7, page: args[0], size: args[1] }
+      },
+      createServer: async () => pendingMutation.promise,
+      updateServer: async () => pendingMutation.promise,
+    })
+    await catalog.load(2, 25, 'disabled')
+    const mutation = catalog[kind](kind === 'create' ? 'Created' : 9, { status: 'disabled' })
+    pendingMutation.resolve(changed)
+    await mutation
+    assert.deepEqual(calls, [[2, 25, 'disabled'], [2, 25, 'disabled']])
+    assert.deepEqual([catalog.page.value, catalog.size.value, catalog.status.value], [2, 25, 'disabled'])
+    assert.equal(catalog.quotaUsed.value, 8)
+  })
+
+  test(`server catalog ${kind} finishing after a filter change reloads past the stale filter response`, async () => {
+    const staleFilter = deferred()
+    const canonicalLoad = deferred()
+    const pendingMutation = deferred()
+    const changed = { ...server, id: kind === 'create' ? 10 : 9, name: 'Changed', status: 'disabled' }
+    let listCalls = 0
+    const catalog = useServerCatalog({
+      servers: async () => {
+        listCalls++
+        if (listCalls === 1) return { servers: [server], total: 1, quotaUsed: 1, page: 1, size: 25 }
+        if (listCalls === 2) return staleFilter.promise
+        return canonicalLoad.promise
+      },
+      createServer: async () => pendingMutation.promise,
+      updateServer: async () => pendingMutation.promise,
+    })
+    await catalog.load(1, 25, '')
+    const mutation = catalog[kind](kind === 'create' ? 'Changed' : 9, { status: 'disabled' })
+    const filtered = catalog.filter('disabled')
+    assert.equal(listCalls, 2)
+    pendingMutation.resolve(changed)
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(listCalls, 3, `${kind} success must invalidate the in-flight filter load`)
+
+    staleFilter.resolve({ servers: [{ ...server, id: 99 }], total: 99, quotaUsed: 99, page: 1, size: 25 })
+    assert.equal(await filtered, false)
+    assert.deepEqual(catalog.servers.value.map((row) => row.id), [9])
+    canonicalLoad.resolve({ servers: [changed], total: 1, quotaUsed: 2, page: 1, size: 25 })
+    await mutation
+    assert.deepEqual(catalog.servers.value.map((row) => row.id), [kind === 'create' ? 10 : 9])
+    assert.equal(catalog.status.value, 'disabled')
+    assert.equal(catalog.quotaUsed.value, 2)
+  })
+}
 
 test('owner invitations paginate independently and retain their page on refresh', async () => {
   const calls = []

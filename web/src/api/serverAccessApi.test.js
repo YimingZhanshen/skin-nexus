@@ -22,7 +22,7 @@ const vite = await createServer({
   }],
 })
 const { serverAccessApi } = await vite.ssrLoadModule('/src/api/serverAccessApi.js')
-const { setUnauthorizedHandler } = await vite.ssrLoadModule('/src/session.js')
+const { bumpSessionVersion, setUnauthorizedHandler } = await vite.ssrLoadModule('/src/session.js')
 await vite.close()
 
 function jsonResponse(status, body) {
@@ -227,6 +227,24 @@ test('owner 401 and admin token_invalid notify the shell before rejection', asyn
         return true
       })
     }
+  } finally {
+    setUnauthorizedHandler(null)
+    globalThis.fetch = previousFetch
+  }
+})
+
+test('server access transport ignores a delayed A-request 401 after switching to B', async () => {
+  const previousFetch = globalThis.fetch
+  let resolveRequest
+  const notifications = []
+  setUnauthorizedHandler(() => notifications.push('notified'))
+  globalThis.fetch = async () => new Promise((resolve) => { resolveRequest = resolve })
+  try {
+    const request = serverAccessApi.servers()
+    bumpSessionVersion()
+    resolveRequest(jsonResponse(401, { code: '', message: 'old session lost' }))
+    await assert.rejects(request, (error) => error.status === 401)
+    assert.deepEqual(notifications, [])
   } finally {
     setUnauthorizedHandler(null)
     globalThis.fetch = previousFetch

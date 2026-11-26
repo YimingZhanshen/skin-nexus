@@ -19,6 +19,11 @@ const fixtures = [
   { name: 'AuditView', file: 'AuditView.vue', list: 'rows', error: 'error', response: (id) => ({ audit: [{ id, action: 'test.action' }], total: 101, actions: [] }) },
   { name: 'ServerAccessAdminView', file: 'ServerAccessAdminView.vue', platform: true },
   { name: 'OidcClientsCard', file: 'OidcClientsCard.vue', standalone: true },
+  { name: 'JobsView', file: 'JobsView.vue', custom: true },
+  { name: 'InvitationView', file: 'InvitationView.vue', custom: true },
+  { name: 'ThemeMarketSection', file: 'ThemeMarketSection.vue', custom: true },
+  { name: 'UnionBlacklistSection', file: 'UnionBlacklistSection.vue', custom: true },
+  { name: 'UnionView', file: 'UnionView.vue', custom: true },
 ]
 const modules = new Map()
 const virtualModules = new Map([
@@ -27,6 +32,9 @@ const virtualModules = new Map([
   ['\0admin-request-test-dialog', 'export const confirmDialog = async () => true; export const promptDialog = async () => null; export const alertDialog = async () => {}'],
   ['\0admin-request-test-pager', 'import { h } from "vue"; export default { props: ["page", "pages", "total"], emits: ["update:page"], setup: (props, { emit }) => () => h("div", { class: "test-pager", page: props.page, pages: props.pages, total: props.total, onUpdatePage: (page) => emit("update:page", page) }) }'],
   ['\0admin-request-test-empty', 'import { h } from "vue"; export default { props: ["text"], setup: (props) => () => h("div", { class: "test-empty" }, props.text) }'],
+  ['\0admin-request-test-file', 'import { h } from "vue"; export default { props: ["file"], emits: ["update:file"], setup: () => () => h("div") }'],
+  ['\0admin-request-test-blacklist', 'import { h } from "vue"; export default { props: ["unionStatus"], emits: ["error"], setup: () => () => h("div") }'],
+  ['\0admin-request-test-format', 'export function formatWhen(){return "now"}'],
 ])
 
 for (const fixture of fixtures) {
@@ -61,7 +69,11 @@ const vite = await createServer({
       if (source.endsWith('/dialog.js')) return '\0admin-request-test-dialog'
       if (source === '../Pager.vue') return '\0admin-request-test-pager'
       if (source === '../EmptyState.vue') return '\0admin-request-test-empty'
+      if (source === '../FilePicker.vue') return '\0admin-request-test-file'
+      if (source === './UnionBlacklistSection.vue') return '\0admin-request-test-blacklist'
       if (source.endsWith('/useServerAccessPlatform.js')) return fileURLToPath(new URL(source, pathToFileURL(fileURLToPath(new URL('./ServerAccessAdminView.vue', import.meta.url)))))
+      if (source.endsWith('/diagModel.js')) return fileURLToPath(new URL('../../diagModel.js', import.meta.url))
+      if (source.endsWith('/format.js')) return '\0admin-request-test-format'
     },
     load(id) {
       if (modules.has(id)) return modules.get(id)
@@ -121,9 +133,9 @@ function deferred() {
   const promise = new Promise((res, rej) => { resolve = res; reject = rej })
   return { promise, resolve, reject }
 }
-async function mount(fixture, fetchHandler) {
+async function mount(fixture, fetchHandler, props = {}) {
   globalThis.__adminRequestFetch = fetchHandler
-  const app = renderer.createApp(fixture.component)
+  const app = renderer.createApp(fixture.component, props)
   const errors = []
   app.config.errorHandler = (error) => errors.push(error)
   app.use(createI18n({ legacy: false, locale: 'en', messages: { en }, warnHtmlMessage: false }))
@@ -161,7 +173,7 @@ function setSearch(fixture, container, value) {
   else if (!input.props.onInput) button(container, 'Search').props.onClick()
 }
 
-for (const fixture of fixtures.filter((item) => !item.platform && !item.standalone)) {
+for (const fixture of fixtures.filter((item) => !item.platform && !item.standalone && !item.custom)) {
   test(`${fixture.name}: a late page 1 response cannot replace page 2`, async () => {
     const page2 = deferred()
     const latePage1 = deferred()
@@ -605,6 +617,281 @@ test('useServerAccessPlatform: dispose invalidates all four families and their l
     tenantTotal: platform.tenantTotal.value, serverTotal: platform.serverTotal.value, auditTotal: platform.auditTotal.value,
     fallback: platform.fallback.value, loading: platform.loading.value, error: platform.error.value,
   }, before)
+})
+
+const customFamilies = [
+  {
+    name: 'JobsView', load: 'load', keys: ['rows', 'total', 'error', 'loading', 'unavailable'],
+    response: (id) => ({ jobs: [{ id: `job-${id}`, handler: 'importer', state: 'queued', progress: 0, attempts: 0, maxAttempts: 3 }], total: 1 }),
+    rowId: (state) => state.rows[0]?.id,
+  },
+  {
+    name: 'InvitationView', load: 'load', keys: ['invFree', 'invUsed', 'invError'],
+    response: (id) => ({ free: [{ id, code: `code-${id}`, description: `Invite ${id}` }], used: [] }),
+    rowId: (state) => state.invFree[0]?.id,
+  },
+  {
+    name: 'ThemeMarketSection', load: 'load', keys: ['packages', 'loadError', 'loading', 'marketOff'],
+    response: (id) => ({ packages: [{ name: `theme-${id}`, version: '1.0.0', installed: '' }] }),
+    rowId: (state) => state.packages[0]?.name,
+  },
+  {
+    name: 'UnionBlacklistSection', load: 'loadBlacklist', keys: ['blRows', 'blTotal', 'blPage', 'blTotalPages'],
+    response: (id) => ({ data: [{ id, email: `user-${id}@example.test` }], total: 1, per_page: 20, last_page: 1 }),
+    rowId: (state) => state.blRows[0]?.id,
+    props: { unionStatus: { mode: 'member' } },
+  },
+  {
+    name: 'UnionView', load: 'load', keys: ['unionStatus', 'error', 'loadFailed', 'opBusy', 'opResult'],
+    response: (id) => ({ mode: 'member', server_list_version: id, rotation_suspended: false }),
+    rowId: (state) => state.unionStatus?.server_list_version,
+  },
+]
+
+for (const family of customFamilies) {
+  const fixture = fixtures.find((item) => item.name === family.name)
+  test(`${family.name}: a newer loader wins over a delayed older response`, async () => {
+    const older = deferred()
+    const newer = deferred()
+    let calls = 0
+    const { app, state } = await mount(fixture, () => {
+      calls++
+      if (calls === 1) return family.response(1)
+      if (calls === 2) return older.promise
+      return newer.promise
+    }, family.props)
+    try {
+      assert.equal(family.rowId(state), family.name === 'UnionView' ? 1 : family.name === 'ThemeMarketSection' ? 'theme-1' : family.name === 'JobsView' ? 'job-1' : 1)
+      const oldLoad = state[family.load]()
+      const newLoad = state[family.load]()
+      newer.resolve(family.response(2))
+      await newLoad
+      older.resolve(family.response(1))
+      await oldLoad
+      await settle()
+      assert.equal(family.rowId(state), family.name === 'UnionView' ? 2 : family.name === 'ThemeMarketSection' ? 'theme-2' : family.name === 'JobsView' ? 'job-2' : 2)
+    } finally { cleanup(app) }
+  })
+
+  test(`${family.name}: unmount blocks late loader success and rejection writes`, async () => {
+    for (const outcome of ['success', 'rejection']) {
+      const pending = deferred()
+      const { app, state } = await mount(fixture, () => pending.promise, family.props)
+      const before = Object.fromEntries(family.keys.map((key) => [key, state[key]]))
+      app.unmount()
+      if (outcome === 'success') pending.resolve(family.response(99))
+      else pending.reject(new Error('late loader failure'))
+      await settle()
+      assert.deepEqual(Object.fromEntries(family.keys.map((key) => [key, state[key]])), before, `${outcome} after unmount must not publish`)
+      delete globalThis.__adminRequestFetch
+    }
+  })
+}
+
+test('JobsView: a successful cancel reloads past an older list request', async () => {
+  const fixture = fixtures.find((item) => item.name === 'JobsView')
+  const staleList = deferred()
+  const canonicalList = deferred()
+  const pendingCancel = deferred()
+  let listCalls = 0
+  const { app, state } = await mount(fixture, (path, options) => {
+    if (options?.method === 'POST') return pendingCancel.promise
+    listCalls++
+    if (listCalls === 1) return customFamilies[0].response(1)
+    if (listCalls === 2) return staleList.promise
+    return canonicalList.promise
+  })
+  try {
+    const action = state.act(state.rows[0], 'cancel')
+    await settle()
+    const olderLoad = state.load()
+    pendingCancel.resolve({})
+    await settle()
+    assert.equal(listCalls, 3)
+    staleList.resolve(customFamilies[0].response(1))
+    await olderLoad
+    canonicalList.resolve({ jobs: [{ id: 'job-1', handler: 'importer', state: 'cancelled', progress: 0, attempts: 0, maxAttempts: 3 }], total: 1 })
+    await action
+    assert.equal(state.rows[0].state, 'cancelled')
+    assert.equal(state.ok, en.admin.jobCancelSent)
+  } finally { cleanup(app) }
+})
+
+test('InvitationView: generation reloads past an older invitation snapshot', async () => {
+  const fixture = fixtures.find((item) => item.name === 'InvitationView')
+  const staleList = deferred()
+  const canonicalList = deferred()
+  const pendingGenerate = deferred()
+  let listCalls = 0
+  const { app, state } = await mount(fixture, (_path, options) => {
+    if (options?.method === 'POST') return pendingGenerate.promise
+    listCalls++
+    if (listCalls === 1) return customFamilies[1].response(1)
+    if (listCalls === 2) return staleList.promise
+    return canonicalList.promise
+  })
+  try {
+    state.invNew = { amount: 2, description: 'Batch' }
+    const generation = state.invGenerate()
+    await settle()
+    const olderLoad = state.load()
+    pendingGenerate.resolve({})
+    await settle()
+    assert.equal(listCalls, 3)
+    staleList.resolve(customFamilies[1].response(1))
+    await olderLoad
+    canonicalList.resolve(customFamilies[1].response(3))
+    await generation
+    assert.equal(state.invFree[0].id, 3)
+    assert.deepEqual(state.invNew, { amount: 1, description: '' })
+  } finally { cleanup(app) }
+})
+
+test('ThemeMarketSection: install reloads past an older catalog snapshot', async () => {
+  const fixture = fixtures.find((item) => item.name === 'ThemeMarketSection')
+  const staleList = deferred()
+  const canonicalList = deferred()
+  const pendingInstall = deferred()
+  let listCalls = 0
+  const { app, state } = await mount(fixture, (path, options) => {
+    if (path === '/api/admin/v1/themes/market/install') return pendingInstall.promise
+    listCalls++
+    if (listCalls === 1) return customFamilies[2].response(1)
+    if (listCalls === 2) return staleList.promise
+    return canonicalList.promise
+  })
+  try {
+    const installation = state.install(state.packages[0])
+    await settle()
+    const olderLoad = state.load()
+    pendingInstall.resolve({})
+    await settle()
+    assert.equal(listCalls, 3)
+    staleList.resolve(customFamilies[2].response(1))
+    await olderLoad
+    canonicalList.resolve({ packages: [{ name: 'theme-1', version: '1.0.0', installed: '1.0.0' }] })
+    await installation
+    assert.equal(state.packages[0].installed, '1.0.0')
+  } finally { cleanup(app) }
+})
+
+test('UnionBlacklistSection: add reloads past an older blacklist snapshot', async () => {
+  const family = customFamilies.find((item) => item.name === 'UnionBlacklistSection')
+  const fixture = fixtures.find((item) => item.name === family.name)
+  const staleList = deferred()
+  const canonicalList = deferred()
+  const pendingAdd = deferred()
+  let listCalls = 0
+  const { app, state } = await mount(fixture, (path, options) => {
+    if (path === '/api/admin/v1/union/blacklist' && options?.method === 'POST') return pendingAdd.promise
+    listCalls++
+    if (listCalls === 1) return family.response(1)
+    if (listCalls === 2) return staleList.promise
+    return canonicalList.promise
+  }, family.props)
+  try {
+    state.blEmail = 'new@example.test'
+    state.blReason = 'Abuse'
+    const addition = state.blAdd()
+    await settle()
+    const olderLoad = state.loadBlacklist()
+    pendingAdd.resolve({})
+    await settle()
+    assert.equal(listCalls, 3)
+    staleList.resolve(family.response(1))
+    await olderLoad
+    canonicalList.resolve(family.response(3))
+    await addition
+    assert.equal(state.blRows[0].id, 3)
+    assert.equal(state.blEmail, '')
+    assert.equal(state.blReason, '')
+  } finally { cleanup(app) }
+})
+
+test('UnionView: a successful operation reloads past an older status snapshot', async () => {
+  const family = customFamilies.find((item) => item.name === 'UnionView')
+  const fixture = fixtures.find((item) => item.name === family.name)
+  const staleList = deferred()
+  const canonicalList = deferred()
+  const pendingOp = deferred()
+  let listCalls = 0
+  const { app, state } = await mount(fixture, (path, options) => {
+    if (path === '/api/admin/v1/union/ops/serverlist') return pendingOp.promise
+    listCalls++
+    if (listCalls === 1) return family.response(1)
+    if (listCalls === 2) return staleList.promise
+    return canonicalList.promise
+  })
+  try {
+    const operation = state.runOp('admin.unionOpServerList', '/api/admin/v1/union/ops/serverlist')
+    await settle()
+    const olderLoad = state.load()
+    pendingOp.resolve({ servers: 2 })
+    await settle()
+    assert.equal(listCalls, 3)
+    staleList.resolve(family.response(1))
+    await olderLoad
+    canonicalList.resolve(family.response(3))
+    await operation
+    assert.equal(state.unionStatus.server_list_version, 3)
+    assert.match(state.opResult, /servers/)
+  } finally { cleanup(app) }
+})
+
+test('UnionView: resume rotation is coordinated with newer operations', async () => {
+  const family = customFamilies.find((item) => item.name === 'UnionView')
+  const fixture = fixtures.find((item) => item.name === family.name)
+  const staleList = deferred()
+  const canonicalList = deferred()
+  const pendingResume = deferred()
+  const pendingOp = deferred()
+  let listCalls = 0
+  const { app, state } = await mount(fixture, (path) => {
+    if (path === '/api/admin/v1/union/rotation/resume') return pendingResume.promise
+    if (path === '/api/admin/v1/union/ops/serverlist') return pendingOp.promise
+    listCalls++
+    if (listCalls === 1) return family.response(1)
+    if (listCalls === 2) return staleList.promise
+    return canonicalList.promise
+  })
+  try {
+    const olderLoad = state.load()
+    const resume = state.resumeRotation()
+    await settle()
+    const operation = state.runOp('admin.unionOpServerList', '/api/admin/v1/union/ops/serverlist')
+    pendingResume.resolve({})
+    await settle()
+    assert.equal(listCalls, 2, 'an older resume must not start a competing status reload')
+    await resume
+
+    pendingOp.resolve({ servers: 3 })
+    await settle()
+    assert.equal(listCalls, 3)
+    staleList.resolve(family.response(1))
+    await olderLoad
+    canonicalList.resolve(family.response(3))
+    await operation
+    assert.equal(state.unionStatus.server_list_version, 3)
+  } finally { cleanup(app) }
+})
+
+test('UnionView: resume rotation success and rejection do not write after unmount', async () => {
+  const family = customFamilies.find((item) => item.name === 'UnionView')
+  const fixture = fixtures.find((item) => item.name === family.name)
+  for (const outcome of ['success', 'rejection']) {
+    const pendingResume = deferred()
+    const { app, state } = await mount(fixture, (path) => path === '/api/admin/v1/union/rotation/resume' ? pendingResume.promise : family.response(1))
+    const resume = state.resumeRotation()
+    await settle()
+    const before = { status: state.unionStatus, error: state.error, result: state.opResult, busy: state.opBusy }
+    app.unmount()
+    if (outcome === 'success') pendingResume.resolve({})
+    else pendingResume.reject(new Error('late resume failure'))
+    await resume
+    await settle()
+    assert.deepEqual({ status: state.unionStatus, error: state.error, result: state.opResult, busy: state.opBusy }, before)
+    delete globalThis.__adminRequestFetch
+  }
 })
 
 test('ServerAccessAdminView: view unmount disposes all platform request families', async () => {

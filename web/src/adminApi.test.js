@@ -31,7 +31,7 @@ const vite = await createServer({
   }],
 })
 const { fetchJSON } = await vite.ssrLoadModule('/src/adminApi.js')
-const { setUnauthorizedHandler } = await vite.ssrLoadModule('/src/session.js')
+const { bumpSessionVersion, setUnauthorizedHandler } = await vite.ssrLoadModule('/src/session.js')
 await vite.close()
 
 function jsonResponse(status, body) {
@@ -85,6 +85,24 @@ test('admin transport notifies before throwing only for session-loss responses',
         return true
       })
     }
+  } finally {
+    setUnauthorizedHandler(null)
+    globalThis.fetch = previousFetch
+  }
+})
+
+test('admin transport ignores a delayed A-request 401 after switching to B', async () => {
+  const previousFetch = globalThis.fetch
+  let resolveRequest
+  const notifications = []
+  setUnauthorizedHandler(() => notifications.push('notified'))
+  globalThis.fetch = async () => new Promise((resolve) => { resolveRequest = resolve })
+  try {
+    const request = fetchJSON('/api/admin/v1/test')
+    bumpSessionVersion()
+    resolveRequest(jsonResponse(401, { code: '', message: 'old session lost' }))
+    await assert.rejects(request, (error) => error.status === 401)
+    assert.deepEqual(notifications, [])
   } finally {
     setUnauthorizedHandler(null)
     globalThis.fetch = previousFetch

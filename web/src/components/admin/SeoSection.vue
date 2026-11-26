@@ -37,6 +37,9 @@ async function seoOneClick() {
 async function seoSave() {
   if (disposed) return
   const mine = ++actionSeq
+  // A save invalidates any older read before the POST starts; its successful
+  // reload below becomes the canonical SEO snapshot.
+  seq++
   seoError.value = ''
   seoOk.value = ''
   try {
@@ -47,11 +50,12 @@ async function seoSave() {
     // Saving used to be silent on success: the operator was left staring at the
     // same fields, unsure whether the click had landed or the page had frozen.
     seoOk.value = t('common.saved')
+    await loadSEO()
   } catch (e) {
-    if (mine !== actionSeq) return
+    if (mine !== actionSeq || disposed) return
     // review P2-10: refetch so the UI doesn't keep unsaved values
     await loadSEO()
-    if (mine === actionSeq) seoError.value = e.message
+    if (mine === actionSeq && !disposed) seoError.value = e.message
   }
 }
 
