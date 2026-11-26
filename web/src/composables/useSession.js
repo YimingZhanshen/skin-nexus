@@ -20,13 +20,17 @@ export function useSession() {
 
   const user = ref(null)
   let generation = 0
-  // Every account replacement invalidates older /me work. Login, boot, logout,
-  // account switches and local account updates all enter through this gate.
+  // Every set invalidates older /me work, but only an authentication identity
+  // change invalidates in-flight transport responses from the previous account.
   function setSessionUser(next) {
+    const previous = user.value
+    const nextUser = next || null
     generation += 1
-    bumpSessionVersion()
+    if ((previous === null) !== (nextUser === null) || previous?.id !== nextUser?.id) {
+      bumpSessionVersion()
+    }
     clearLegacyAdminToken()
-    user.value = next || null
+    user.value = nextUser
   }
   // Admin panel entry (blessing parity): only accounts with permission > 0 see
   // it — normal users never do. `permission` comes from GET /api/v1/me

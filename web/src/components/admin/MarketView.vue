@@ -18,6 +18,7 @@ const actionError = ref('')
 const search = ref('')
 const page = ref(1)
 const pageSize = 10
+const UPLOAD_TIMEOUT_MS = 120000
 const installings = ref(new Set())
 const selected = ref(null)
 const consent = ref(false)
@@ -105,7 +106,11 @@ async function uploadBundle() {
     const fd = new FormData()
     fd.append('file', uploadFile.value)
     fd.append('inspect', '1')
-    inspection.value = await fetchJSON('/api/admin/v1/market/upload', { method: 'POST', body: fd })
+    inspection.value = await fetchJSON(
+      '/api/admin/v1/market/upload',
+      { method: 'POST', body: fd },
+      UPLOAD_TIMEOUT_MS,
+    )
     riskAck.value = false
   } catch (e) {
     actionError.value = e.message
@@ -131,7 +136,11 @@ async function installInspected() {
     fd.append('consent', '1')
     fd.append('acceptUnverified', inspection.value.status === 'verified' ? '0' : '1')
     fd.append('expectDigest', inspection.value.zipSha || '')
-    await fetchJSON('/api/admin/v1/market/upload', { method: 'POST', body: fd })
+    await fetchJSON(
+      '/api/admin/v1/market/upload',
+      { method: 'POST', body: fd },
+      UPLOAD_TIMEOUT_MS,
+    )
     cancelInspection()
     await load()
   } catch (e) {

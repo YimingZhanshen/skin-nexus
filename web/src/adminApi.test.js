@@ -62,6 +62,25 @@ test('admin requests use same-origin cookies and never send an admin token heade
   }
 })
 
+test('admin transport keeps the 20s default and honors an explicit timeout', async () => {
+  const previousFetch = globalThis.fetch
+  const previousSetTimeout = globalThis.setTimeout
+  const timeouts = []
+  globalThis.fetch = async () => jsonResponse(200, {})
+  globalThis.setTimeout = (callback, delay, ...args) => {
+    timeouts.push(delay)
+    return previousSetTimeout(callback, delay, ...args)
+  }
+  try {
+    await fetchJSON('/api/admin/v1/default')
+    await fetchJSON('/api/admin/v1/upload', { method: 'POST', body: new FormData() }, 120000)
+    assert.deepEqual(timeouts, [20000, 120000])
+  } finally {
+    globalThis.fetch = previousFetch
+    globalThis.setTimeout = previousSetTimeout
+  }
+})
+
 test('admin transport notifies before throwing only for session-loss responses', async () => {
   const previousFetch = globalThis.fetch
   const cases = [

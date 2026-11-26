@@ -95,9 +95,15 @@ function jsonResponse(status, body) {
 }
 async function mountMarket(uploadResponse, catalogHandler = async () => jsonResponse(200, { packages: [] })) {
   const previousFetch = globalThis.fetch
+  const previousSetTimeout = globalThis.setTimeout
   const shellUser = ref({ id: 1, permission: 2 })
   const notifications = []
   const uploads = []
+  const timeouts = []
+  globalThis.setTimeout = (callback, delay, ...args) => {
+    timeouts.push(delay)
+    return previousSetTimeout(callback, delay, ...args)
+  }
   globalThis.fetch = async (path, options) => {
     if (path === '/api/v1/me') return jsonResponse(200, { id: 1, permission: 2 })
     if (path === '/api/admin/v1/market/catalog') return catalogHandler()
@@ -122,6 +128,7 @@ async function mountMarket(uploadResponse, catalogHandler = async () => jsonResp
   function restore() {
     setUnauthorizedHandler(null)
     globalThis.fetch = previousFetch
+    globalThis.setTimeout = previousSetTimeout
   }
   return {
     app,
@@ -129,6 +136,7 @@ async function mountMarket(uploadResponse, catalogHandler = async () => jsonResp
     shellUser,
     notifications,
     uploads,
+    timeouts,
     cleanup() {
       app.unmount()
       restore()
@@ -196,6 +204,23 @@ test('MarketView: inspected install reloads past an older catalog snapshot', asy
     await installation
     assert.deepEqual(mounted.state.packages.map((item) => item.name), ['canonical'])
     assert.equal(mounted.state.inspection, null)
+  } finally { mounted.cleanup() }
+})
+
+test('MarketView uses 120s for both FormData uploads while catalog requests keep the 20s default', async () => {
+  const mounted = await mountMarket(jsonResponse(200, { status: 'verified', zipSha: 'digest' }))
+  try {
+    assert.deepEqual(mounted.timeouts, [15000, 20000])
+    mounted.state.uploadFile = new File(['signed bundle'], 'bundle.zip', { type: 'application/zip' })
+    await mounted.state.uploadBundle()
+    assert.equal(mounted.state.inspection.zipSha, 'digest')
+    await mounted.state.installInspected()
+    assert.deepEqual(mounted.timeouts, [15000, 20000, 120000, 120000, 20000])
+    assert.equal(mounted.uploads.length, 2)
+    for (const upload of mounted.uploads) {
+      assert.equal(upload.credentials, 'same-origin')
+      assert.ok(upload.body instanceof FormData)
+    }
   } finally { mounted.cleanup() }
 })
 

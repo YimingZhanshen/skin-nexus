@@ -17,15 +17,20 @@ const vite = await createServer({
     enforce: 'pre',
     resolveId(source) {
       if (source === '../api.js') return '\0session-composable-test-api'
+      if (source === './errors.js') return '\0session-composable-test-errors'
     },
     load(id) {
       if (id === '\0session-composable-test-api') {
         return 'export const api = new Proxy({}, { get: (_target, key) => (...args) => globalThis.__sessionApi[key](...args) })'
       }
+      if (id === '\0session-composable-test-errors') {
+        return 'export function describe(data,status){return data.message || data.code || `HTTP ${status}`}; export function transportError(){return "network"}'
+      }
     },
   }],
 })
 const { useSession } = await vite.ssrLoadModule('/src/composables/useSession.js')
+const { fetchJSON } = await vite.ssrLoadModule('/src/adminApi.js')
 const { captureSessionVersion, setUnauthorizedHandler } = await vite.ssrLoadModule('/src/session.js')
 await vite.close()
 
@@ -105,7 +110,7 @@ test('setSessionUser replaces the user, updates admin readiness, and removes leg
   }
 })
 
-test('every setSessionUser call advances the transport session epoch', async () => {
+test('setSessionUser advances the transport epoch only when authentication identity changes', async () => {
   storedToken('')
   const { app, session } = await mountSession()
   try {
@@ -113,13 +118,107 @@ test('every setSessionUser call advances the transport session epoch', async () 
     session.setSessionUser({ id: 1, nickname: 'First', permission: 1 })
     const loggedIn = captureSessionVersion()
     assert.ok(loggedIn > initial)
+
+    session.setSessionUser({ id: 1, nickname: 'Updated', permission: 0, unreadNotifications: 0 })
+    assert.equal(captureSessionVersion(), loggedIn)
+    assert.equal(session.user.value.nickname, 'Updated')
+    assert.equal(session.isAdmin.value, false)
+
     session.setSessionUser({ id: 2, nickname: 'Second', permission: 1 })
     const replaced = captureSessionVersion()
     assert.ok(replaced > loggedIn)
     session.setSessionUser(null)
-    assert.ok(captureSessionVersion() > replaced)
+    const loggedOut = captureSessionVersion()
+    assert.ok(loggedOut > replaced)
+    session.setSessionUser(null)
+    assert.equal(captureSessionVersion(), loggedOut)
+    session.setSessionUser({ id: 1, nickname: 'First again', permission: 1 })
+    assert.ok(captureSessionVersion() > loggedOut)
   } finally {
     app.unmount()
+  }
+})
+
+test('a same-account local update keeps an earlier transport 401 current', async () => {
+  storedToken('')
+  const pending = deferred()
+  const previousFetch = globalThis.fetch
+  const notifications = []
+  let session
+  globalThis.fetch = () => pending.promise
+  setUnauthorizedHandler(() => {
+    notifications.push('notified')
+    session.setSessionUser(null)
+  })
+  const mounted = await mountSession()
+  session = mounted.session
+  try {
+    session.setSessionUser({ id: 1, nickname: 'First', permission: 1, unreadNotifications: 3 })
+    const request = fetchJSON('/api/admin/v1/notifications/read')
+    session.onInboxRead()
+    assert.equal(session.user.value.unreadNotifications, 0)
+    pending.resolve(new Response(JSON.stringify({ code: '', message: 'session lost' }), {
+      status: 401, headers: { 'Content-Type': 'application/json' },
+    }))
+    await assert.rejects(request, (error) => error.status === 401)
+    assert.deepEqual(notifications, ['notified'])
+    assert.equal(session.user.value, null)
+  } finally {
+    setUnauthorizedHandler(null)
+    globalThis.fetch = previousFetch
+    mounted.app.unmount()
+  }
+})
+
+test('account replacement and logout invalidate earlier transport 401s', async () => {
+  const previousFetch = globalThis.fetch
+  try {
+    for (const transition of ['replace', 'logout']) {
+      storedToken('')
+      const pending = deferred()
+      const notifications = []
+      let session
+      globalThis.fetch = () => pending.promise
+      setUnauthorizedHandler(() => notifications.push('notified'))
+      const mounted = await mountSession()
+      session = mounted.session
+      try {
+        session.setSessionUser({ id: 1, nickname: 'First', permission: 1 })
+        const request = fetchJSON('/api/admin/v1/test')
+        if (transition === 'replace') session.setSessionUser({ id: 2, nickname: 'Second', permission: 1 })
+        else session.setSessionUser(null)
+        pending.resolve(new Response(JSON.stringify({ code: '', message: 'old session lost' }), {
+          status: 401, headers: { 'Content-Type': 'application/json' },
+        }))
+        await assert.rejects(request, (error) => error.status === 401)
+        assert.deepEqual(notifications, [])
+        assert.equal(session.user.value?.id ?? null, transition === 'replace' ? 2 : null)
+      } finally {
+        mounted.app.unmount()
+      }
+    }
+  } finally {
+    setUnauthorizedHandler(null)
+    globalThis.fetch = previousFetch
+  }
+})
+
+test('a same-account local update still invalidates earlier /me work', async () => {
+  storedToken('')
+  const pending = deferred()
+  globalThis.__sessionApi = { me: () => pending.promise }
+  const { app, session } = await mountSession()
+  try {
+    session.setSessionUser({ id: 1, nickname: 'Current', permission: 1, unreadNotifications: 2 })
+    const refresh = session.refreshMe()
+    session.onInboxRead()
+    pending.resolve({ id: 1, nickname: 'Stale refresh', permission: 1, unreadNotifications: 2 })
+    assert.equal(await refresh, false)
+    assert.equal(session.user.value.nickname, 'Current')
+    assert.equal(session.user.value.unreadNotifications, 0)
+  } finally {
+    app.unmount()
+    delete globalThis.__sessionApi
   }
 })
 

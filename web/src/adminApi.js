@@ -6,7 +6,7 @@ import { captureSessionVersion, clearLegacyAdminToken, guard401 } from './sessio
 
 clearLegacyAdminToken()
 
-export async function fetchJSON(path, opts) {
+export async function fetchJSON(path, opts, timeoutMS = 20000) {
   // Also remove a key written by an older open tab; it is never read or sent.
   clearLegacyAdminToken()
   const epoch = captureSessionVersion()
@@ -14,7 +14,7 @@ export async function fetchJSON(path, opts) {
   for (const [key, value] of Object.entries((opts && opts.headers) || {})) {
     if (key.toLowerCase() !== 'x-admin-token') headers[key] = value
   }
-  const res = await fetchWithTimeout(path, { ...opts, credentials: 'same-origin', headers }, 20000)
+  const res = await fetchWithTimeout(path, { ...opts, credentials: 'same-origin', headers }, timeoutMS)
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     const err = new Error(describe(data, res.status))
