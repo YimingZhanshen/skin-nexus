@@ -125,6 +125,30 @@ test('a delayed /me response cannot replace a user selected later', async () => 
   }
 })
 
+test('refreshMe preserves an account selected after readMe validates but before commit', async () => {
+  storedToken('')
+  const pending = deferred()
+  globalThis.__sessionApi = { me: () => pending.promise }
+  const { app, session } = await mountSession()
+  try {
+    session.setSessionUser({ id: 1, nickname: 'First', permission: 0 })
+    const refresh = session.refreshMe()
+    pending.resolve({ id: 1, nickname: 'Refreshed first', permission: 1 })
+    // Resolving /me queues readMe's continuation first. This continuation then
+    // selects B after readMe validates A but before refreshMe resumes.
+    queueMicrotask(() => {
+      session.setSessionUser({ id: 2, nickname: 'Second', permission: 2 })
+    })
+    await refresh
+    assert.equal(session.user.value.id, 2)
+    assert.equal(session.user.value.nickname, 'Second')
+    assert.equal(session.isAdmin.value, true)
+  } finally {
+    app.unmount()
+    delete globalThis.__sessionApi
+  }
+})
+
 test('refreshMe commits only the most recently started request', async () => {
   storedToken('')
   const first = deferred()

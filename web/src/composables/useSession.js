@@ -76,17 +76,20 @@ export function useSession() {
   // Page-level account reads share the shell's generation gate. A stale value
   // (including a stale 401) is discarded before it can mutate page or shell
   // state; only a current session-loss response notifies the shell.
-  async function readMe() {
+  // Keep the generation beside the value until the caller commits it. A plain
+  // value alone leaves a microtask gap in which another account can be selected
+  // after validation but before the shell is updated.
+  async function readMeResult() {
     const current = ++generation
     try {
       const next = await api.me()
-      return current === generation ? next : null
+      return { current, next: current === generation ? next : null }
     } catch (cause) {
-      if (current !== generation) return null
+      if (current !== generation) return { current, next: null }
       if (isSessionLoss(cause)) {
         setSessionUser(null)
         notifyUnauthorized()
-        return null
+        return { current, next: null }
       }
       // Network/5xx failures say nothing about the current cookie. Callers
       // that own an error surface decide whether to display the failure.
@@ -94,10 +97,16 @@ export function useSession() {
     }
   }
 
+  // Page-level reads expose only the account value, never the internal token.
+  async function readMe() {
+    const { next } = await readMeResult()
+    return next
+  }
+
   async function refreshMe(options) {
     try {
-      const next = await readMe()
-      if (!next) return false
+      const { current, next } = await readMeResult()
+      if (!next || current !== generation) return false
       setSessionUser(next)
       return true
     } catch (cause) {
