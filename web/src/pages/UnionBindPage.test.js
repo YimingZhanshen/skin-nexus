@@ -46,6 +46,7 @@ const vite = await createServer({
   }],
 })
 const { default: UnionBindPage } = await vite.ssrLoadModule(componentURL)
+const { setUnauthorizedHandler } = await vite.ssrLoadModule('/src/session.js')
 await vite.close()
 
 function hostNode(type, text = '') {
@@ -274,6 +275,33 @@ test('a rejected bind cannot publish an error or finish loading after unmount', 
     assert.equal(state.error, '')
     assert.equal(state.loading, true, 'finally must not publish after disposal')
   } finally {
+    if (app._instance) app.unmount()
+    delete globalThis.__unionBind
+  }
+})
+
+test('a late bind 401 still notifies global session loss after unmount', async (t) => {
+  const clock = fakeClock(t, 1_800_000_000_000)
+  const { app, container, state } = await mountPage()
+  let rejectBind
+  globalThis.__unionBind = () => new Promise((_resolve, reject) => { rejectBind = reject })
+  const notifications = []
+  setUnauthorizedHandler(() => notifications.push('session lost'))
+  try {
+    const action = find(container, (node) => node.type === 'button' && text(node).trim() === en.union.genBindCode)
+    const binding = action.props.onClick()
+    await settle()
+    app.unmount()
+
+    rejectBind(Object.assign(new Error('unauthorized'), { status: 401, data: {} }))
+    await binding
+    await settle()
+    assert.deepEqual(notifications, ['session lost'])
+    assert.deepEqual(clock.scheduled, [])
+    assert.equal(state.error, '')
+    assert.equal(state.loading, true, 'finally must not publish after disposal')
+  } finally {
+    setUnauthorizedHandler(null)
     if (app._instance) app.unmount()
     delete globalThis.__unionBind
   }

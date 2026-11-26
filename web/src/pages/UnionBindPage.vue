@@ -203,7 +203,7 @@ async function doBind() {
     now.value = Date.now()
     scheduleExpiry()
     success.value = t('union.bindCodeSuccess')
-  } catch (e) { if (!disposed && !guard401(e)) error.value = e.message } finally { if (!disposed) loading.value = false }
+  } catch (e) { if (!guard401(e) && !disposed) error.value = e.message } finally { if (!disposed) loading.value = false }
 }
 
 async function doBindTo() {
