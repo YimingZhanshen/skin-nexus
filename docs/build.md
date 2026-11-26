@@ -97,11 +97,12 @@ docker build -t skin-nexus:latest .   # 本地源码构建（离线/内网场景
 
 ## 五、CI 产物（推荐部署来源）
 
-`.github/workflows/ci.yml` 定义 11 个 job，push 与 PR 各跑 10 个（`docker` 仅 push、`docker-build` 仅 PR；integration 三腿内含矩阵，实际容器数更多）：
+`.github/workflows/ci.yml` 定义 12 个 job，push 与 PR 各跑 11 个（`docker` 仅 push、`docker-build` 仅 PR；integration 三腿内含矩阵，实际容器数更多）：
 
 | job | 触发 | 内容 |
 |---|---|---|
 | server | 两者 | `gofmt` 空输出 + `go build` + `go vet`（含 `-tags integration`）+ `go test ./...` 覆盖率地板与 0% 包集合比对 + 插件工具链测试 |
+| serveraccess-e2e | 两者 | Ubuntu + Node 22 + Go：`node scripts/e2e-serveraccess.mjs` 在一次性 SQLite 与回环端口上跑真实 HTTP 邀请、201 行分页、字面搜索、导出、角色与删除生命周期；随后跑 `go -C server test ./internal/ygg/ ./internal/serveraccess/` |
 | race | 两者 | Ubuntu + CGO：`CGO_ENABLED=1 go test -race ./...`；独立于覆盖率 leg，检测共享状态并发访问 |
 | integration | 两者 | MySQL 8.0 / 5.7 各跑 `-p 1 -tags integration ./internal/store/ ./internal/account/`。`-p 1` 是必需的：两套用例共用同一个库，而 store 那套在迁移前会把所有表 DROP 掉，并行时互相打断（sqlite、postgres、mariadb 三条腿同一签名报错）。5.7 专抓版本差异 SQL（login COLLATE / prepared 1267） |
 | integration-mariadb | 两者 | MariaDB 11.4 / 10.11，同一条命令；抓只有 MySQL 自家扩展能吃下的写法 |
@@ -117,7 +118,7 @@ docker build -t skin-nexus:latest .   # 本地源码构建（离线/内网场景
 （改名后旧名仍持有原 OfflineUUID，重建同名角色必须答 409 而非 500），且跨引擎成立——
 `dbx.IsDupKey` 对 MySQL/MariaDB/PostgreSQL/SQLite 的唯一键冲突都能归类。
 
-server/race/web 三个 job 启用 Go modules 与 npm 依赖缓存（`cache-dependency-path`），
+server/race/serveraccess-e2e 三个 Go job 与 web job 分别启用 Go modules 或 npm 依赖缓存（`cache-dependency-path`），
 workflow 级 `concurrency` 会在同一 ref 有新推送时取消旧运行，避免排队浪费额度。
 
 **部署机推荐只拉不编**（compose 已默认 `pull_policy: always`）：
@@ -158,8 +159,9 @@ cd web && npm run dev
 ## 八、给 AI agent 的最短路径
 
 ```bash
-cd server && go build ./... && go vet ./... && go test ./...   # 后端改动自检
-cd web && npm ci && npm test && npm run build                        # 前端改动自检
+(cd server && go build ./... && go vet ./... && go test ./...)   # 后端改动自检
+(cd web && npm ci && npm test && npm run build)                     # 前端改动自检
+node scripts/e2e-serveraccess.mjs                                  # Server Access 真实进程 E2E（一次性 SQLite + 回环）
 ```
 
 改动 Yggdrasil 面必须额外跑 `go test ./internal/ygg/` 且不动契约断言；改动 union 包前先读该包 doc 注的冻结区说明（[`AGENTS.md`](https://github.com/YimingZhanshen/skin-nexus/blob/main/AGENTS.md) 铁律 1/6）。

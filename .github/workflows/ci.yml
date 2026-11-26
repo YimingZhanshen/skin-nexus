@@ -62,6 +62,25 @@ jobs:
       - name: Test plugin tooling
         run: go test ./cmd/skin-plugin/... ./internal/marketfmt/... ./internal/signedpkg/...
 
+  # Real HTTP lifecycle coverage against a disposable SQLite file and loopback
+  # only. Node 22 supplies node:sqlite (the script has a one-shot Python fallback).
+  serveraccess-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26'
+          cache-dependency-path: server/go.sum
+      - name: Server Access E2E
+        run: node scripts/e2e-serveraccess.mjs
+      - name: Server Access and Yggdrasil tests
+        run: go -C server test ./internal/ygg/ ./internal/serveraccess/
+
   # The race detector needs CGO and a C compiler; Ubuntu runners provide both.
   # Keep this separate from the coverage run so instrumentation cannot distort
   # the coverage floor or slow the ordinary unit-test leg.
