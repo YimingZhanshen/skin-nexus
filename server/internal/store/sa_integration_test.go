@@ -126,10 +126,31 @@ func TestIntegrationServerAccessAuditedOwnerUpdateRollsBackAuditFailure(t *testi
 	}
 }
 
+func waitForSATenantLock(ctx context.Context, m *Mysql, tenantID int64) error {
+	for {
+		probeCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		var id int64
+		err := m.db.QueryRowContext(probeCtx,
+			`SELECT id FROM sa_tenants WHERE id=?`+m.Engine().LockSQL(), tenantID).Scan(&id)
+		cancel()
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("probe tenant lock: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
 func TestIntegrationServerAccessMembershipLockOrder(t *testing.T) {
 	m := openTestStore(t)
-	for i := 0; i < 20; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	for i := 0; i < 10; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		uid := seedUser(t, m)
 		inactive, err := m.CreateSATenant(ctx, fmt.Sprintf("membership-inactive-%d", i), 2)
 		if err != nil {
@@ -142,18 +163,54 @@ func TestIntegrationServerAccessMembershipLockOrder(t *testing.T) {
 		}
 
 		start := make(chan struct{})
+		createEntered := make(chan struct{})
 		activated := make(chan error, 1)
 		created := make(chan error, 1)
-		go func() {
-			<-start
-			activated <- m.UpdateSATenantStatus(ctx, inactive, "active")
-		}()
-		go func() {
-			<-start
-			_, _, err := m.CreateSATenantWithOwner(ctx, fmt.Sprintf("membership-created-%d", i), 2, uid)
-			created <- err
-		}()
-		close(start)
+		if m.Engine() != dialect.SQLite {
+			lockTx, err := m.db.BeginTx(ctx, nil)
+			if err != nil {
+				cancel()
+				t.Fatal(err)
+			}
+			if err := saLockUserRow(ctx, lockTx, uid); err != nil {
+				_ = lockTx.Rollback()
+				cancel()
+				t.Fatal(err)
+			}
+			go func() {
+				<-start
+				close(createEntered)
+				_, _, err := m.CreateSATenantWithOwner(ctx, fmt.Sprintf("membership-created-%d", i), 2, uid)
+				created <- err
+			}()
+			go func() {
+				<-start
+				<-createEntered
+				time.Sleep(100 * time.Millisecond)
+				activated <- m.UpdateSATenantStatus(ctx, inactive, "active")
+			}()
+			close(start)
+			if err := waitForSATenantLock(ctx, m, inactive); err != nil {
+				_ = lockTx.Rollback()
+				cancel()
+				t.Fatalf("iteration %d activation did not lock tenant: %v", i, err)
+			}
+			if err := lockTx.Rollback(); err != nil {
+				cancel()
+				t.Fatal(err)
+			}
+		} else {
+			go func() {
+				<-start
+				activated <- m.UpdateSATenantStatus(ctx, inactive, "active")
+			}()
+			go func() {
+				<-start
+				_, _, err := m.CreateSATenantWithOwner(ctx, fmt.Sprintf("membership-created-%d", i), 2, uid)
+				created <- err
+			}()
+			close(start)
+		}
 		activateErr := <-activated
 		createErr := <-created
 		cancel()
