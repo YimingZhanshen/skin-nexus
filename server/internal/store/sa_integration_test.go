@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -122,6 +123,59 @@ func TestIntegrationServerAccessAuditedOwnerUpdateRollsBackAuditFailure(t *testi
 	_, total, err := m.PlatformServerAccessAudit(ctx, "serveraccess_server_update", 1, 20)
 	if err != nil || total != 0 {
 		t.Fatalf("failed owner audit rows = %d, err=%v", total, err)
+	}
+}
+
+func TestIntegrationServerAccessMembershipLockOrder(t *testing.T) {
+	m := openTestStore(t)
+	for i := 0; i < 20; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		uid := seedUser(t, m)
+		inactive, err := m.CreateSATenant(ctx, fmt.Sprintf("membership-inactive-%d", i), 2)
+		if err != nil {
+			cancel()
+			t.Fatal(err)
+		}
+		if err := m.AddSATenantMember(ctx, inactive, uid, "owner"); err != nil {
+			cancel()
+			t.Fatal(err)
+		}
+
+		start := make(chan struct{})
+		activated := make(chan error, 1)
+		created := make(chan error, 1)
+		go func() {
+			<-start
+			activated <- m.UpdateSATenantStatus(ctx, inactive, "active")
+		}()
+		go func() {
+			<-start
+			_, _, err := m.CreateSATenantWithOwner(ctx, fmt.Sprintf("membership-created-%d", i), 2, uid)
+			created <- err
+		}()
+		close(start)
+		activateErr := <-activated
+		createErr := <-created
+		cancel()
+
+		if activateErr != nil && !errors.Is(activateErr, ErrForbidden) {
+			t.Fatalf("iteration %d activation err = %v, want nil or ErrForbidden", i, activateErr)
+		}
+		if createErr != nil && !errors.Is(createErr, ErrForbidden) {
+			t.Fatalf("iteration %d create err = %v, want nil or ErrForbidden", i, createErr)
+		}
+		if activateErr == nil && createErr == nil {
+			t.Fatalf("iteration %d allowed two active memberships", i)
+		}
+		var active int
+		if err := m.db.QueryRowContext(context.Background(),
+			`SELECT COUNT(*) FROM sa_tenant_members tm JOIN sa_tenants t ON t.id=tm.tenant_id
+			 WHERE tm.uid=? AND t.status='active' AND t.deleted_at IS NULL`, uid).Scan(&active); err != nil {
+			t.Fatal(err)
+		}
+		if active != 1 {
+			t.Fatalf("iteration %d active memberships = %d, want 1", i, active)
+		}
 	}
 }
 
