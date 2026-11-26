@@ -96,7 +96,9 @@ KaTeX `0.18.11`。不得用 `--force`、`--legacy-peer-deps`、audit ignore 或�
 
 需要注意：npm 会将 `katex@0.18.11` 标记为 deprecated（发布说明称误发了破坏性变更，并建议
 `0.19.0`）。当前版本已通过 Node 22 下的 KaTeX 渲染与 Mermaid 图表实测；升级 KaTeX 时必须
-重新验证 Mermaid，不能仅按告警归零认定兼容。
+重新验证 Mermaid，不能仅按告警归零认定兼容。`npm ci` 还会提示 llms 插件传递依赖
+`tokenx@2.2.1` 声明 `node >=24`；这是 engine 警告，不是审计告警，Node 22.23.5 的 clean install
+与完整构建均已实测通过。
 
 完整构建必须生成并保留以下产物（均不入库）：
 
@@ -106,7 +108,7 @@ KaTeX `0.18.11`。不得用 `--force`、`--legacy-peer-deps`、audit ignore 或�
 
 Mermaid 代码块必须在浏览器中渲染成 SVG；Pagefind 中文查询必须能返回并打开对应页面。
 `docs/.vitepress/config.mts` 仍保持 `withMermaid(defineConfig(...), { mermaid: {} })` 形状；
-其中源码链接适配只把 `docs/` 外且本地存在的 `web/`、`server/` 引用改为 GitHub 链接，
+其中源码链接适配只把 `docs/` 外且本地存在的仓库文件引用改为 GitHub 链接，
 不会关闭 VitePress 死链检查。仓库侧还需通过 `check-docs.mjs`、`check-theme-contract.mjs`、
 `check-modal-chrome.mjs`、`check-a11y.mjs` 与 `check-locales.mjs`。
 
