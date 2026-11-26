@@ -13,7 +13,10 @@ const { t } = useI18n()
 
 // Same gating rule as the forgot-password link: a surface that cannot possibly
 // work on this deployment is not shown.
-defineProps({ mailEnabled: { type: Boolean, default: false } })
+const props = defineProps({
+  mailEnabled: { type: Boolean, default: false },
+  readMe: { type: Function, required: true },
+})
 
 const me = ref(null)
 const avatarPickOpen = ref(false)
@@ -40,13 +43,22 @@ const avatarUrl = computed(() => (me.value && me.value.avatarHash)
 // 头像就是衣柜里的一张皮肤，所以候选集与「穿到角色」用的是同一个弹窗：以前这里
 // 是一条把整个衣柜摊进 <option> 的下拉，几百项时既没图也没法搜。
 
+async function refreshProfileMe() {
+  try {
+    const u = await props.readMe()
+    if (u) me.value = u
+  } catch (e) { err.value = e.message }
+}
+
 async function load() {
   err.value = ''
   try {
-    const u = await api.me()
-    me.value = u
-    newNickname.value = u.nickname || ''
-  } catch (e) { if (!guard401(e)) err.value = e.message }
+    const u = await props.readMe()
+    if (u) {
+      me.value = u
+      newNickname.value = u.nickname || ''
+    }
+  } catch (e) { err.value = e.message }
 }
 
 async function saveProfile() {
@@ -56,7 +68,7 @@ async function saveProfile() {
     if (d.ok) {
       ok.value = t('profile.saved')
       newEmail.value = ''
-      try { me.value = await api.me() } catch (e) { if (!guard401(e)) err.value = e.message }
+      await refreshProfileMe()
     }
   } catch (e) { if (!guard401(e)) err.value = e.message }
 }
@@ -89,7 +101,7 @@ async function setAvatarTid(tid) {
   try {
     await api.setAvatar(tid)
     ok.value = t('closet.avatarSet')
-    try { me.value = await api.me() } catch (e) { if (!guard401(e)) err.value = e.message }
+    await refreshProfileMe()
   } catch (e) { if (!guard401(e)) err.value = e.message }
 }
 
@@ -98,7 +110,7 @@ async function resetAvatar() {
   try {
     await api.resetAvatar()
     ok.value = t('profile.avatarReset')
-    try { me.value = await api.me() } catch (e) { if (!guard401(e)) err.value = e.message }
+    await refreshProfileMe()
   } catch (e) { if (!guard401(e)) err.value = e.message }
 }
 

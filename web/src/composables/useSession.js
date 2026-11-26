@@ -73,24 +73,36 @@ export function useSession() {
   const verifyMailBusy = ref(false)
   const verifyMailNote = ref('')
 
-  async function refreshMe(options) {
+  // Page-level account reads share the shell's generation gate. A stale value
+  // (including a stale 401) is discarded before it can mutate page or shell
+  // state; only a current session-loss response notifies the shell.
+  async function readMe() {
     const current = ++generation
     try {
       const next = await api.me()
-      if (current !== generation) return false
-      setSessionUser(next)
-      return true
+      return current === generation ? next : null
     } catch (cause) {
-      // A response from an older account must not clear the newly selected one.
-      if (current !== generation) return false
+      if (current !== generation) return null
       if (isSessionLoss(cause)) {
         setSessionUser(null)
         notifyUnauthorized()
-        return false
+        return null
       }
-      // Network/5xx failures say nothing about the current cookie. Boot asks
-      // for propagation so it can show a retryable error; background refreshes
-      // keep the good session and stay quiet.
+      // Network/5xx failures say nothing about the current cookie. Callers
+      // that own an error surface decide whether to display the failure.
+      throw cause
+    }
+  }
+
+  async function refreshMe(options) {
+    try {
+      const next = await readMe()
+      if (!next) return false
+      setSessionUser(next)
+      return true
+    } catch (cause) {
+      // Boot asks for propagation so it can show a retryable error; background
+      // refreshes keep the good session and stay quiet.
       if (options && options.propagateErrors) throw cause
       return false
     }
@@ -152,6 +164,6 @@ export function useSession() {
     locked, lockSecondsLeft, waitText, startWait,
     verifyPending, pendingBusy, pendingNote, pendingChangeOpen, pendingEmail,
     verifyMailTo, verifyMailBusy, verifyMailNote,
-    refreshMe, setSessionUser, pendingResend, pendingSaveEmail, resendVerificationMail, onInboxRead,
+    readMe, refreshMe, setSessionUser, pendingResend, pendingSaveEmail, resendVerificationMail, onInboxRead,
   }
 }

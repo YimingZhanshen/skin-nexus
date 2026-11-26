@@ -61,7 +61,7 @@ const {
   user, isAdmin, authErr, authBusy, locked, lockSecondsLeft, waitText, startWait,
   verifyPending, pendingBusy, pendingNote, pendingChangeOpen, pendingEmail,
   verifyMailTo, verifyMailBusy, verifyMailNote,
-  refreshMe, setSessionUser, pendingResend, pendingSaveEmail, resendVerificationMail, onInboxRead,
+  readMe, refreshMe, setSessionUser, pendingResend, pendingSaveEmail, resendVerificationMail, onInboxRead,
 } = useSession()
 
 // Which view the shell is on, and every transition into another one. The URL
@@ -511,11 +511,11 @@ onMounted(() => {
                   :nav-groups="navGroups" :user="user"
                   @open-ext="openExt" @logout="doLogout" />
         <main class="user-main">
-          <DashboardPage v-if="view === 'dashboard'" />
+          <DashboardPage v-if="view === 'dashboard'" :read-me="readMe" />
           <SkinlibPage v-else-if="view === 'skinlib'" :user="user" @login="skinlibLogin" />
           <ClosetPage v-else-if="view === 'closet'" />
           <PlayersPage v-else-if="view === 'players'" />
-          <ProfilePage v-else-if="view === 'profile'" :mail-enabled="mailEnabled" />
+          <ProfilePage v-else-if="view === 'profile'" :mail-enabled="mailEnabled" :read-me="readMe" />
           <NotificationsPage v-else-if="view === 'notifications'" @read="onInboxRead" />
           <MyReportsPage v-else-if="view === 'myreports'" />
           <AuthorizedAppsPage v-else-if="view === 'apps'" :oidc-enabled="oidcEnabled" />
@@ -523,7 +523,7 @@ onMounted(() => {
           <UnionBindPage v-else-if="view === 'union'" />
           <ServersPage v-else-if="view === 'servers'" :enabled="serverAccessEnabled" />
           <PluginPage v-else-if="view === 'ext'" :path="extPath" />
-          <AdminPanel v-else-if="view === 'admin' && isAdmin" :user="user" :site-conf="siteConf" :conf-loaded="confLoaded" @settings-changed="onSettingsChanged" />
+          <AdminPanel v-else-if="view === 'admin'" :user="user" :site-conf="siteConf" :conf-loaded="confLoaded" @settings-changed="onSettingsChanged" />
         </main>
       </div>
     </template>

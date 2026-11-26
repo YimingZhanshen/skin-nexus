@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
-import { createRenderer, h, nextTick, ref } from 'vue'
+import { createRenderer, getCurrentInstance, h, nextTick, onBeforeUnmount, ref } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { createServer } from 'vite'
 import en from './locales/en.json' with { type: 'json' }
@@ -39,9 +39,11 @@ function compile(filename, id) {
 const appCode = compile('./App.vue', 'app-session-cleanup-test')
   .replace(/const (\w+) = asyncPage\(\(\) => import\((['"])[^'"]+\2\)\)/g, 'const $1 = globalThis.__appPages.$1')
 assert.doesNotMatch(appCode, /asyncPage\(\(\) => import/)
+const realAdminAppCode = appCode.replace('const AdminPanel = globalThis.__appPages.AdminPanel', 'const AdminPanel = globalThis.__appRealAdminPanel')
 const adminCode = compile('./components/AdminPanel.vue', 'admin-session-only-test')
 const compiled = new Map([
   ['/src/App.test-compiled.js', appCode],
+  ['/src/App.real-admin-test-compiled.js', realAdminAppCode],
   ['/src/components/AdminPanel.test-compiled.js', adminCode],
 ])
 const stubs = new Map()
@@ -98,14 +100,27 @@ const vite = await createServer({
   }],
 })
 const { default: AdminPanel } = await vite.ssrLoadModule('/src/components/AdminPanel.test-compiled.js')
+globalThis.__appRealAdminPanel = AdminPanel
 const pageNames = ['AdminPanel', 'DevicePage', 'AuthorizedAppsPage', 'NotificationsPage', 'MyReportsPage', 'UnionBindPage', 'ServersPage', 'SetupPage', 'DashboardPage', 'ClosetPage', 'SkinlibPage', 'PlayersPage', 'ProfilePage', 'HelpPage', 'PluginPage']
+const ServerPageStub = {
+  setup() {
+    const lifecycle = globalThis.__appServerLifecycle = { disposed: false, actions: 0 }
+    globalThis.__appServerInstance = getCurrentInstance()
+    onBeforeUnmount(() => { lifecycle.disposed = true })
+    return () => h('section', { class: 'tenant-surface' }, [
+      h('span', {}, 'Tenant controls'),
+      h('button', { class: 'tenant-action', onClick: () => { if (!lifecycle.disposed) lifecycle.actions++ } }, 'Create server'),
+    ])
+  },
+}
 globalThis.__appPages = Object.fromEntries(pageNames.map((name) => [name, name === 'AdminPanel' ? {
   props: ['user'],
   setup: (props) => () => h('section', { class: 'admin-surface', permission: props.user?.permission }, 'Admin controls'),
-} : {
+} : name === 'ServersPage' ? ServerPageStub : {
   setup: () => () => h('div', { class: 'stub-view' }, 'Stub'),
 }]))
 const { default: App } = await vite.ssrLoadModule('/src/App.test-compiled.js')
+const { default: RealAdminApp } = await vite.ssrLoadModule('/src/App.real-admin-test-compiled.js')
 const sessionURL = pathToFileURL(fileURLToPath(new URL('./session.js', import.meta.url))).href
 const { notifyUnauthorized, setUnauthorizedHandler } = await vite.ssrLoadModule(sessionURL)
 after(() => vite.close())
@@ -143,12 +158,12 @@ async function settle() {
   await new Promise((resolve) => setImmediate(resolve))
   await nextTick()
 }
-async function mountApp(me = async () => ({ id: 1, nickname: 'Administrator', permission: 1 }), path = '/admin/users') {
+async function mountApp(me = async () => ({ id: 1, nickname: 'Administrator', permission: 1 }), path = '/admin/users', { realAdminPanel = false } = {}) {
   globalThis.__appMe = me
   globalThis.location.pathname = path
   globalThis.location.search = ''
   stored.set('admin_token', 'legacy-machine-token')
-  const app = renderer.createApp(App)
+  const app = renderer.createApp(realAdminPanel ? RealAdminApp : App)
   const errors = []
   app.config.errorHandler = (error) => errors.push(error)
   app.use(createI18n({ legacy: false, locale: 'en', messages: { en }, warnHtmlMessage: false }))
@@ -173,17 +188,17 @@ function disposeApp(app) {
   app._instance = null
 }
 
-test('App boot removes legacy admin tokens and admin controls unmount on session loss', async () => {
-  const { app, container } = await mountApp()
+test('App boot removes legacy admin tokens and disposes tenant controls on session loss', async () => {
+  const { app, container } = await mountApp(undefined, '/servers')
   try {
     assert.equal(stored.has('admin_token'), false)
-    assert.ok(find(container, (node) => node.props.class === 'admin-surface'))
     const session = globalThis.__appSession
     const goto = globalThis.__appGoto
     session.setSessionUser({ id: 2, nickname: 'Other', permission: 1 })
-    goto.view.value = 'servers'
     await settle()
-    assert.ok(find(container, (node) => text(node) === 'Stub'))
+    assert.ok(find(container, (node) => node.props.class === 'tenant-surface'), text(container))
+    assert.equal(globalThis.__appServerLifecycle.disposed, false)
+    const tenantAction = find(container, (node) => node.props.class === 'tenant-action')
     goto.extPath.value = '/ext/example'
     goto.pendingExt.value = '/ext/pending'
     goto.pendingView.value = 'admin'
@@ -216,7 +231,9 @@ test('App boot removes legacy admin tokens and admin controls unmount on session
     assert.equal(session.authBusy.value, false)
     assert.equal(globalThis.location.pathname, '/')
     assert.ok(find(container, (node) => node.props.class === 'login-surface'))
-    assert.equal(find(container, (node) => node.props.class === 'admin-surface'), undefined)
+    assert.equal(globalThis.__appServerLifecycle.disposed, true)
+    tenantAction.props.onClick()
+    assert.equal(globalThis.__appServerLifecycle.actions, 0)
   } finally {
     disposeApp(app)
   }
@@ -261,11 +278,31 @@ test('App unregisters its unauthorized handler on unmount', async () => {
   }
 })
 
-test('non-admin users cannot mount admin controls', async () => {
+test('non-admin users on a non-admin route do not mount admin controls', async () => {
   const { app, container } = await mountApp(async () => ({ id: 2, nickname: 'Member', permission: 0 }), '/')
   try {
     assert.equal(find(container, (node) => node.props.class === 'admin-surface'), undefined)
     assert.ok(find(container, (node) => node.props.class === 'app-shell'))
+  } finally {
+    disposeApp(app)
+  }
+})
+
+test('App keeps the AdminPanel forbidden surface when admin permission is lost', async () => {
+  const { app, container, errors } = await mountApp(undefined, '/admin', { realAdminPanel: true })
+  try {
+    assert.equal(globalThis.__appSession.user.value?.permission, 1)
+    assert.equal(globalThis.__appGoto.view.value, 'admin')
+    assert.ok(find(container, (node) => node.props.class === 'admin-shell'), text(container))
+    assert.ok(find(container, (node) => node.props.class === 'admin-dashboard'), text(container))
+    globalThis.__appSession.setSessionUser({ id: 1, nickname: 'Former admin', permission: 0 })
+    await settle()
+    assert.equal(globalThis.__appGoto.view.value, 'admin')
+    assert.ok(find(container, (node) => node.props.class === 'admin-shell'))
+    assert.equal(find(container, (node) => node.props.class === 'admin-dashboard'), undefined)
+    const main = find(container, (node) => node.props.class === 'admin-main')
+    assert.ok(text(main).includes(en.errors.common.forbidden))
+    assert.deepEqual(errors, [])
   } finally {
     disposeApp(app)
   }

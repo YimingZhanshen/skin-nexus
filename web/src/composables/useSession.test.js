@@ -187,6 +187,87 @@ test('a stale /me 401 cannot clear a newly selected user', async () => {
   }
 })
 
+test('readMe returns a current account value without replacing the shell user', async () => {
+  storedToken('')
+  globalThis.__sessionApi = { me: async () => ({ id: 1, nickname: 'Updated shell name', permission: 0 }) }
+  const { app, session } = await mountSession()
+  try {
+    session.setSessionUser({ id: 1, nickname: 'Shell name', permission: 1 })
+    const value = await session.readMe()
+    assert.equal(value.id, 1)
+    assert.equal(value.nickname, 'Updated shell name')
+    assert.equal(session.user.value.nickname, 'Shell name')
+    assert.equal(session.isAdmin.value, true)
+  } finally {
+    app.unmount()
+    delete globalThis.__sessionApi
+  }
+})
+
+test('readMe ignores a delayed success from an account that was replaced', async () => {
+  storedToken('')
+  const pending = deferred()
+  globalThis.__sessionApi = { me: () => pending.promise }
+  const { app, session } = await mountSession()
+  try {
+    const read = session.readMe()
+    session.setSessionUser({ id: 2, nickname: 'Second', permission: 1 })
+    pending.resolve({ id: 1, nickname: 'Stale first', permission: 0 })
+    assert.equal(await read, null)
+    assert.equal(session.user.value.id, 2)
+  } finally {
+    app.unmount()
+    delete globalThis.__sessionApi
+  }
+})
+
+test('readMe ignores a delayed 401 from an account that was replaced', async () => {
+  storedToken('')
+  const pending = deferred()
+  const notifications = []
+  setUnauthorizedHandler(() => notifications.push('notified'))
+  globalThis.__sessionApi = { me: () => pending.promise }
+  const { app, session } = await mountSession()
+  try {
+    const read = session.readMe()
+    session.setSessionUser({ id: 2, nickname: 'Second', permission: 1 })
+    pending.reject(responseError(401))
+    assert.equal(await read, null)
+    assert.equal(session.user.value.id, 2)
+    assert.deepEqual(notifications, [])
+  } finally {
+    setUnauthorizedHandler(null)
+    app.unmount()
+    delete globalThis.__sessionApi
+  }
+})
+
+test('readMe clears and notifies for a current 401 but preserves network and 5xx errors', async () => {
+  storedToken('')
+  const notifications = []
+  setUnauthorizedHandler(() => notifications.push('notified'))
+  const { app, session } = await mountSession()
+  try {
+    globalThis.__sessionApi = { me: async () => { throw responseError(401) } }
+    session.setSessionUser({ id: 1, nickname: 'First', permission: 1 })
+    assert.equal(await session.readMe(), null)
+    assert.equal(session.user.value, null)
+    assert.deepEqual(notifications, ['notified'])
+
+    for (const cause of [new Error('offline'), responseError(500), responseError(503)]) {
+      globalThis.__sessionApi = { me: async () => { throw cause } }
+      session.setSessionUser({ id: 7, nickname: 'Still signed in', permission: 1 })
+      await assert.rejects(session.readMe(), (error) => error === cause)
+      assert.equal(session.user.value.id, 7)
+    }
+    assert.deepEqual(notifications, ['notified'])
+  } finally {
+    setUnauthorizedHandler(null)
+    app.unmount()
+    delete globalThis.__sessionApi
+  }
+})
+
 test('network and 5xx /me failures preserve the current session without notifying', async () => {
   storedToken('')
   const notifications = []
