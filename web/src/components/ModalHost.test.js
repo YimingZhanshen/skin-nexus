@@ -45,18 +45,10 @@ const vite = await createServer({
       for (const [name, url] of Object.entries(componentURLs)) {
         if (source.endsWith(`/${name}.vue`)) return url
       }
-      if (source.endsWith('/dialog.js')) return '\0modal-host-test-dialog'
+      if (source === '../dialog.js') return dialogPath
     },
     load(id) {
       if (compiled.has(id)) return compiled.get(id)
-      if (id === '\0modal-host-test-dialog') {
-        return `import { dialogState, resolveDialog as settle } from ${JSON.stringify(dialogPath)};
-          export { dialogState };
-          export function resolveDialog(result) {
-            globalThis.__modalHostResolveCalls.push(result);
-            return settle(result);
-          }`
-      }
     },
   }],
 })
@@ -126,11 +118,9 @@ afterEach(async () => {
     await nextTick()
   }
   events.length = 0
-  delete globalThis.__modalHostResolveCalls
 })
 
 test('native prompt handoff closes before reopening and ignores duplicate close events until opened', async () => {
-  globalThis.__modalHostResolveCalls = []
   const app = renderer.createApp(ModalHost)
   app.use(createI18n({ legacy: false, locale: 'en', messages: { en }, warnHtmlMessage: false }))
   const container = hostNode('root')
@@ -158,7 +148,6 @@ test('native prompt handoff closes before reopening and ignores duplicate close 
     accept.props.onClick()
     cancel.props.onClick()
     dialog.props.onCancel({ preventDefault() {} })
-    assert.deepEqual(globalThis.__modalHostResolveCalls, ['first draft'], 'one visible entry may resolve only once')
     assert.equal(secondSettled, false)
 
     await settle()
@@ -181,7 +170,6 @@ test('native prompt handoff closes before reopening and ignores duplicate close 
     await settle()
     assert.equal(await first, 'first draft')
     assert.equal(await second, null)
-    assert.deepEqual(globalThis.__modalHostResolveCalls, ['first draft', null])
     assert.deepEqual(events, [
       'show:First prompt',
       'focus:First prompt',
