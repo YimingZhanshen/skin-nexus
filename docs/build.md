@@ -7,7 +7,7 @@ description: "从源码构建 SkinNexus：Go 单二进制、前端构建、Docke
 > 目标读者：想从源码构建 SkinNexus 的皮肤站站长、贡献者与 AI agent。
 > 部署与环境变量见 [`deploy.md`](deploy.md)；从老站迁数据见 [`migration.md`](migration.md)。
 
-**本手册怎么读**：只想构建 → [§二](#二、源码构建-单二进制)（后端）+ [§三](#三、前端构建)（前端）
+**本手册怎么读**：只想构建 → [§二](#二、源码构建-单二进制)（后端）+ [§三](#三、前端与文档站构建)（前端与文档站）
 两条命令块就够；部署用镜像、不想本地编 → [§五](#五、ci-产物-推荐部署来源)；
 日常开发 → [§六](#六、本地开发联调)；出错 → [§七](#七、构建排错)；
 AI agent / 自检 → [§八](#八、给-ai-agent-的最短路径)。
@@ -16,7 +16,7 @@ AI agent / 自检 → [§八](#八、给-ai-agent-的最短路径)。
 |---|---|
 | [一](#一、环境要求) 环境要求 | Go / Node / Docker / 数据库版本线 |
 | [二](#二、源码构建-单二进制) 源码构建 | 单二进制编译、自检门禁、运行时附件 |
-| [三](#三、前端构建) 前端构建 | npm ci / build / dev，SSR 三页文案归属 |
+| [三](#三、前端与文档站构建) 前端 / 文档站构建 | npm ci / build / dev，VitePress 审计与产物，SSR 三页文案归属 |
 | [四](#四、docker-构建与镜像) Docker 镜像 | 多阶段构建内幕与 /data 卷 |
 | [五](#五、ci-产物-推荐部署来源) CI 产物 | 10 个 job 各拦什么，部署机只拉不编 |
 | [六](#六、本地开发联调) 本地联调 | 后端 + Vite dev 双终端 |
@@ -29,7 +29,7 @@ AI agent / 自检 → [§八](#八、给-ai-agent-的最短路径)。
 | 工具 | 版本 | 说明 |
 |---|---|---|
 | Go | ≥ 1.26（`server/go.mod` 的 `go` 指令） | 低于该版本时 Go 工具链会按 `GOTOOLCHAIN` 自动下载；国内建议 `GOPROXY=https://goproxy.cn,direct` |
-| Node.js | ≥ 22 | 前端构建（CI 与 Dockerfile 均用 22） |
+| Node.js | 22 | 前端与文档站构建（CI 与 Dockerfile 均用 22；文档站已在 Node 22.23.5 实测） |
 | npm | 随 Node | `npm ci` 按 lockfile 严格安装 |
 | Docker（可选） | 20+ / Compose v2 | 路径 A 部署与镜像构建 |
 | 数据库 | MySQL 5.7 / 8.0、MariaDB 10.11 / 11.4、PostgreSQL 14+、SQLite | 四家都由 CI 的 `-tags integration` 存储层往返矩阵跑通；MySQL 5.7.44 另有生产实测。构建侧不需要任何数据库服务 |
@@ -58,7 +58,7 @@ SKIN_TEST_DSN='user:pass@tcp(127.0.0.1:3306)/skin_nexus_test?parseTime=true' \
 - `web/dist/` —— 前端构建产物（缺失时站点返回占位页，API 仍可用）
 - `migrations/` —— DDL 目录（`SKIN_MIGRATIONS_DIR` 默认 `./migrations`；二进制工作目录须能读到，Docker 镜像内固定在 `/app/migrations`）
 
-## 三、前端构建
+## 三、前端与文档站构建
 
 ```bash
 cd web
@@ -77,6 +77,38 @@ npm run dev       # 本地开发（Vite 热更新；API 代理按 vite.config.js
 文案平价由 `scripts/check-locales.mjs`（CI 的 web job）钉住，三处一起查：SPA 词典
 `web/src/locales/`、后端错误码目录（`internal/i18n` + `internal/account` 声明的码）、服务端渲染页的
 `internal/webi18n` 目录。规则是两边键集相等、每个后端码都有中英词条、渲染模板里不留未入表的中文。
+
+### 文档站（VitePress）
+
+文档站固定使用 **Node 22**；不要用更高主版本替代文档运行时。安装、审计与完整构建：
+
+```bash
+cd docs
+npm ci
+npm audit --audit-level=low   # 当前 lockfile：0 条 low 及以上告警
+npm run docs:build
+```
+
+当前依赖策略保留 VitePress `1.6.4`、Mermaid `11.17.2` 和
+`vitepress-plugin-mermaid@2.0.17` 的现有 peer 关系，不引入 Mermaid 12 或本地 wrapper；
+`docs/package.json` 用精确 overrides 将传递依赖固定为 Vite `6.4.6`、esbuild `0.25.12`、
+KaTeX `0.18.11`。不得用 `--force`、`--legacy-peer-deps`、audit ignore 或删除依赖来绕过审计。
+
+需要注意：npm 会将 `katex@0.18.11` 标记为 deprecated（发布说明称误发了破坏性变更，并建议
+`0.19.0`）。当前版本已通过 Node 22 下的 KaTeX 渲染与 Mermaid 图表实测；升级 KaTeX 时必须
+重新验证 Mermaid，不能仅按告警归零认定兼容。
+
+完整构建必须生成并保留以下产物（均不入库）：
+
+- `docs/.vitepress/dist/llms.txt` 与 `llms-full.txt`
+- `docs/.vitepress/dist/sitemap.xml`
+- `docs/.vitepress/dist/pagefind/`（含 `zh-cn` 索引与 Pagefind UI）
+
+Mermaid 代码块必须在浏览器中渲染成 SVG；Pagefind 中文查询必须能返回并打开对应页面。
+`docs/.vitepress/config.mts` 仍保持 `withMermaid(defineConfig(...), { mermaid: {} })` 形状；
+其中源码链接适配只把 `docs/` 外且本地存在的 `web/`、`server/` 引用改为 GitHub 链接，
+不会关闭 VitePress 死链检查。仓库侧还需通过 `check-docs.mjs`、`check-theme-contract.mjs`、
+`check-modal-chrome.mjs`、`check-a11y.mjs` 与 `check-locales.mjs`。
 
 ## 四、Docker 构建与镜像
 

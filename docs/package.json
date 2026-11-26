@@ -14,5 +14,10 @@
     "vitepress-plugin-llms": "^1",
     "vitepress-plugin-mermaid": "^2",
     "vitepress-plugin-pagefind": "^0.4"
+  },
+  "overrides": {
+    "vite": "6.4.6",
+    "esbuild": "0.25.12",
+    "katex": "0.18.11"
   }
 }
