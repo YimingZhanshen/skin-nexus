@@ -26,6 +26,8 @@ export function useServerCatalog(api) {
       if (current !== request) return false
       servers.value = data.servers || []
       total.value = data.total || 0
+      page.value = data.page ?? nextPage
+      size.value = data.size ?? nextSize
       quotaUsed.value = data.quotaUsed ?? total.value
       if (selected.value && total.value === 0) {
         selected.value = null

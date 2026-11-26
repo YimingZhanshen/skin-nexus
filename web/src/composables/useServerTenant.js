@@ -55,6 +55,8 @@ export function useServerTenant(api) {
       members.value = memberData.members || []
       invites.value = inviteData.invites || []
       total.value = inviteData.total || 0
+      page.value = inviteData.page ?? page.value
+      size.value = inviteData.size ?? size.value
       const lastPage = Math.max(1, Math.ceil(total.value / size.value))
       if (page.value > lastPage) {
         page.value = lastPage

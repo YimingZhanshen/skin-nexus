@@ -363,6 +363,42 @@ test('owner invitations paginate independently and retain their page on refresh'
   assert.deepEqual(calls[2], [3, 50])
 })
 
+test('server access lists adopt server-normalized page and size metadata', async () => {
+  const metadata = { total: 101, page: 2, size: 25 }
+  const catalog = useServerCatalog({ servers: async () => ({ servers: [], ...metadata }) })
+  await catalog.load(7, 100)
+  assert.deepEqual([catalog.page.value, catalog.size.value, catalog.total.value], [2, 25, 101])
+
+  const portal = useServerTenant({
+    tenantMe: async () => ({ tenant, role: 'owner' }),
+    members: async () => ({ members: [] }),
+    invites: async () => ({ invites: [], ...metadata }),
+  })
+  await portal.pageInvites(7)
+  assert.deepEqual([portal.page.value, portal.size.value, portal.total.value], [2, 25, 101])
+
+  const whitelist = useServerWhitelist({ whitelist: async () => ({ whitelist: [], ...metadata }) })
+  await whitelist.load(9, 7, 100)
+  assert.deepEqual([whitelist.page.value, whitelist.size.value, whitelist.total.value], [2, 25, 101])
+
+  const bans = useServerBans({ bans: async () => ({ bans: [], ...metadata }) })
+  await bans.load(9, 7, 100)
+  assert.deepEqual([bans.page.value, bans.size.value, bans.total.value], [2, 25, 101])
+
+  const platform = useServerAccessPlatform({
+    platformTenants: async () => ({ tenants: [], ...metadata }),
+    platformServers: async () => ({ servers: [], ...metadata }),
+    platformAudit: async () => ({ audit: [], ...metadata }),
+    platformFallback: async () => ({ enabled: false }),
+  })
+  await platform.load()
+  for (const state of [
+    [platform.tenantPage.value, platform.tenantSize.value, platform.tenantTotal.value],
+    [platform.serverPage.value, platform.serverSize.value, platform.serverTotal.value],
+    [platform.auditPage.value, platform.auditSize.value, platform.auditTotal.value],
+  ]) assert.deepEqual(state, [2, 25, 101])
+})
+
 test('whitelist paginates, resets on server changes, and ignores an older page response', async () => {
   let releaseOld
   const calls = []

@@ -31,10 +31,14 @@ export function useServerWhitelist(api) {
       if (current !== request) return false
       rows.value = data.whitelist || []
       total.value = data.total || 0
-      const lastPage = Math.max(1, Math.ceil(total.value / nextSize))
-      if (nextPage > lastPage) {
+      const normalizedPage = data.page ?? nextPage
+      const normalizedSize = data.size ?? nextSize
+      page.value = normalizedPage
+      size.value = normalizedSize
+      const lastPage = Math.max(1, Math.ceil(total.value / normalizedSize))
+      if (normalizedPage > lastPage) {
         page.value = lastPage
-        return load(serverId, lastPage, nextSize)
+        return load(serverId, lastPage, normalizedSize)
       }
       return true
     } catch (cause) {

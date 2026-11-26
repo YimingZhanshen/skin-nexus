@@ -56,6 +56,8 @@ export function useServerAccessPlatform(api) {
       if (current === tenantRequest) {
         tenants.value = data.tenants || []
         tenantTotal.value = data.total || 0
+        tenantPage.value = data.page ?? tenantPage.value
+        tenantSize.value = data.size ?? tenantSize.value
         const lastPage = Math.max(1, Math.ceil(tenantTotal.value / tenantSize.value))
         if (tenantPage.value > lastPage) {
           tenantPage.value = lastPage
@@ -74,6 +76,8 @@ export function useServerAccessPlatform(api) {
       if (current === serverRequest) {
         servers.value = data.servers || []
         serverTotal.value = data.total || 0
+        serverPage.value = data.page ?? serverPage.value
+        serverSize.value = data.size ?? serverSize.value
         const lastPage = Math.max(1, Math.ceil(serverTotal.value / serverSize.value))
         if (serverPage.value > lastPage) {
           serverPage.value = lastPage
@@ -92,6 +96,8 @@ export function useServerAccessPlatform(api) {
       if (current === auditRequest) {
         audit.value = data.audit || []
         auditTotal.value = data.total || 0
+        auditPage.value = data.page ?? auditPage.value
+        auditSize.value = data.size ?? auditSize.value
         const lastPage = Math.max(1, Math.ceil(auditTotal.value / auditSize.value))
         if (auditPage.value > lastPage) {
           auditPage.value = lastPage
