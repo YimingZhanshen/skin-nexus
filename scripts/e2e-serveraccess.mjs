@@ -64,6 +64,7 @@ function sqliteRequest(mode, payload) {
   assert(resolve(dbPath).startsWith(resolve(work) + sep), 'SQLite fixture escaped its disposable work directory')
   if (DatabaseSync) {
     const db = new DatabaseSync(dbPath)
+    db.exec('PRAGMA busy_timeout=5000')
     let committed = false
     try {
       if (mode === 'exec') {
@@ -758,7 +759,8 @@ try {
   }
 
   const identityBeforeDelete = globalIdentitySnapshot()
-  for (const confirmation of ['', `${tenantA.name} `]) {
+  const wrongConfirmations = ['', tenantA.name.slice(0, -1), tenantA.name.toLowerCase(), tenantA.name.toUpperCase(), `${tenantA.name} `]
+  for (const confirmation of wrongConfirmations) {
     r = await admin.request('/api/serveraccess/v1/tenants/me/delete-request', { method: 'POST', body: { confirmation } })
     expectStatus(r, 400, 'delete request requires exact tenant name', 'serveraccess.invalid')
   }
@@ -799,8 +801,10 @@ try {
   const deletePath = `/api/admin/v1/serveraccess/tenants/${tenantA.id}/delete`
   r = await superadmin.request(deletePath, { method: 'POST', body: { confirmation: tenantA.name } })
   expectStatus(r, 409, 'early physical tenant delete', 'serveraccess.conflict')
-  r = await superadmin.request(deletePath, { method: 'POST', body: { confirmation: `${tenantA.name} ` } })
-  expectStatus(r, 400, 'early physical delete exact-name check', 'serveraccess.invalid')
+  for (const confirmation of wrongConfirmations) {
+    r = await superadmin.request(deletePath, { method: 'POST', body: { confirmation } })
+    expectStatus(r, 400, 'early physical delete exact-name check', 'serveraccess.invalid')
+  }
   r = await superadmin.request(`/api/admin/v1/serveraccess/tenants?q=${encodeURIComponent(tenantA.name)}`)
   expectStatus(r, 200, 'tenant remains before due delete')
   assert(r.json.total === 1 && r.json.tenants[0].status === 'deleting', `tenant disappeared before due delete: ${r.text}`)
@@ -817,8 +821,10 @@ try {
   }
   await restartChild()
 
-  r = await superadmin.request(deletePath, { method: 'POST', body: { confirmation: `${tenantA.name} ` } })
-  expectStatus(r, 400, 'due physical delete exact-name check', 'serveraccess.invalid')
+  for (const confirmation of wrongConfirmations) {
+    r = await superadmin.request(deletePath, { method: 'POST', body: { confirmation } })
+    expectStatus(r, 400, 'due physical delete exact-name check', 'serveraccess.invalid')
+  }
   r = await superadmin.request(`/api/admin/v1/serveraccess/tenants?q=${encodeURIComponent(tenantA.name)}`)
   expectStatus(r, 200, 'due tenant remains after mismatched delete')
   assert(r.json.total === 1 && r.json.tenants[0].id === tenantA.id, `mismatched due delete removed tenant: ${r.text}`)
