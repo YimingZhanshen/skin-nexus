@@ -1175,6 +1175,32 @@ func TestServerAccessOwnerServerUpdateAuditedCannotOverwriteConcurrentSuspension
 	}
 }
 
+func TestServerAccessPlatformSuspensionPreservesConcurrentOwnerRename(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	actor := saSeedUser(t, st)
+	tenant, _ := st.CreateSATenant(ctx, "platform-stale-name", 2)
+	server, err := st.CreateSAServer(ctx, tenant, "srv_platform_stale_name", "before")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate the platform handler's pre-read, followed by an owner rename
+	// before the audited suspension acquires its transaction locks.
+	preReadName := server.Name
+	name := "owner-renamed"
+	if _, err := st.UpdateSAServerOwnerAudited(ctx, tenant, server.ID, SAOwnerServerPatch{Name: &name}, actor); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpdateSAServerPlatformAudited(ctx, tenant, server.ID, preReadName, "suspended", nil, nil, nil, nil, nil, actor); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.SAServerByID(ctx, tenant, server.ID)
+	if err != nil || got.Name != "owner-renamed" || got.Status != "suspended" {
+		t.Fatalf("platform suspension restored stale name: got=%+v err=%v", got, err)
+	}
+}
+
 func TestServerAccessPolicyUpdatesRespectRoleFieldBoundaries(t *testing.T) {
 	st := openSQLiteStore(t)
 	ctx := context.Background()

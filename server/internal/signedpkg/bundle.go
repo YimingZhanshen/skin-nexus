@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -29,8 +28,8 @@ type Entry struct {
 }
 
 func ReadBundleMeta(zipPath string) (BundleMeta, error) {
-	raw, err := ReadEntry(zipPath, "bundle.json", MaxMetadataBytes)
-	if errors.Is(err, os.ErrNotExist) {
+	raw, missing, err := readEntry(zipPath, "bundle.json", MaxMetadataBytes)
+	if missing {
 		return BundleMeta{}, fmt.Errorf("bundle.json missing (signed bundles only)")
 	}
 	if err != nil {
@@ -66,9 +65,19 @@ func VerifyBundle(zipPath string, ring Keyring) (BundleMeta, error) {
 }
 
 func ReadEntry(zipPath, name string, max int64) ([]byte, error) {
+	b, missing, err := readEntry(zipPath, name, max)
+	if missing {
+		return nil, os.ErrNotExist
+	}
+	return b, err
+}
+
+// readEntry distinguishes an absent entry from failures opening or reading the
+// archive so callers do not mislabel a broken archive as an unsigned bundle.
+func readEntry(zipPath, name string, max int64) ([]byte, bool, error) {
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer zr.Close()
 	for _, f := range zr.File {
@@ -76,11 +85,11 @@ func ReadEntry(zipPath, name string, max int64) ([]byte, error) {
 			continue
 		}
 		if max > 0 && int64(f.UncompressedSize64) > max {
-			return nil, fmt.Errorf("%s exceeds %d bytes", name, max)
+			return nil, false, fmt.Errorf("%s exceeds %d bytes", name, max)
 		}
 		rc, err := f.Open()
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		defer rc.Close()
 		limit := max + 1
@@ -89,14 +98,14 @@ func ReadEntry(zipPath, name string, max int64) ([]byte, error) {
 		}
 		b, err := io.ReadAll(io.LimitReader(rc, limit))
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if max > 0 && int64(len(b)) > max {
-			return nil, fmt.Errorf("%s exceeds %d bytes", name, max)
+			return nil, false, fmt.Errorf("%s exceeds %d bytes", name, max)
 		}
-		return b, nil
+		return b, false, nil
 	}
-	return nil, os.ErrNotExist
+	return nil, true, nil
 }
 
 // WriteNamedBundle writes a deterministic zip plus a signed root bundle.json.

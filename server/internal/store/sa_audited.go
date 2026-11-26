@@ -153,7 +153,10 @@ func (m *Mysql) UpdateSATenantPlatformAudited(ctx context.Context, tenantID int6
 	return tx.Commit()
 }
 
-func (m *Mysql) UpdateSAServerPlatformAudited(ctx context.Context, tenantID, serverID int64, name, status string,
+// UpdateSAServerPlatformAudited applies platform status and policy fields. The
+// legacy name argument is ignored: platform status updates must never restore a
+// handler pre-read name over a concurrent owner rename.
+func (m *Mysql) UpdateSAServerPlatformAudited(ctx context.Context, tenantID, serverID int64, _ string, status string,
 	verifyRateLimit, verifyBurst, maxConcurrent, whitelistLimit, eventRetentionDays *int, actorUID int64) error {
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -162,7 +165,7 @@ func (m *Mysql) UpdateSAServerPlatformAudited(ctx context.Context, tenantID, ser
 	defer tx.Rollback()
 	now := m.now().UTC()
 	if status != "" {
-		if err := updateSAServerTx(ctx, tx, tenantID, serverID, name, status); err != nil {
+		if err := updateSAServerTx(ctx, tx, tenantID, serverID, "", status); err != nil {
 			return err
 		}
 		if err := insertAuditTx(ctx, tx, actorUID, "serveraccess_server_status_update",

@@ -673,6 +673,8 @@ func (m *Mysql) UpdateSAServer(ctx context.Context, tenantID, serverID int64, na
 	return tx.Commit()
 }
 
+// updateSAServerTx preserves the stored name when name is empty so platform
+// status-only updates cannot write a stale pre-read name.
 func updateSAServerTx(ctx context.Context, tx *dbx.Tx, tenantID, serverID int64, name, status string) error {
 	tenantStatus, _, err := saLockTenantRow(ctx, tx, tenantID)
 	if err != nil {
@@ -681,8 +683,15 @@ func updateSAServerTx(ctx context.Context, tx *dbx.Tx, tenantID, serverID int64,
 	if tenantStatus == "deleting" {
 		return ErrDeletionInProgress
 	}
-	res, err := tx.ExecContext(ctx,
-		`UPDATE sa_servers SET name=?,status=? WHERE tenant_id=? AND id=?`, name, status, tenantID, serverID)
+	query := `UPDATE sa_servers SET status=?`
+	args := []any{status}
+	if name != "" {
+		query += `,name=?`
+		args = append(args, name)
+	}
+	query += ` WHERE tenant_id=? AND id=?`
+	args = append(args, tenantID, serverID)
+	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
