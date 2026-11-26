@@ -48,7 +48,7 @@ async function requestDeletion() {
   requesting.value = true
   error.value = ''
   try {
-    const result = await props.api.requestTenantDeletion()
+    const result = await props.api.requestTenantDeletion(confirmation.value)
     deletion.value = result
     closeDeletion()
     emit('changed', result)

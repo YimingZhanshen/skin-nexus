@@ -40,7 +40,7 @@ const vite = await createServer({
     },
     load(id) {
       if (id === componentURL) return componentCode
-      if (id === '\0server-access-test-dialog') return 'export const confirmDialog = (...args) => globalThis.__serverAccessConfirm(...args)'
+      if (id === '\0server-access-test-dialog') return 'export const confirmDialog = (...args) => globalThis.__serverAccessConfirm(...args); export const promptDialog = (...args) => globalThis.__serverAccessPrompt(...args)'
       if (id === '\0server-access-test-api') return 'export const serverAccessApi = new Proxy({}, { get: (_target, key) => globalThis.__serverAccessApi[key] })'
       if (id === '\0server-access-test-empty') return 'import { h } from "vue"; export default { props: ["text"], setup: (props) => () => h("div", { class: "empty-state" }, props.text) }'
       if (id === '\0server-access-test-pager') return 'import { h } from "vue"; export default { props: ["page", "pages", "total"], emits: ["update:page"], setup: (props, { emit }) => () => h("div", { class: "test-pager", page: props.page, pages: props.pages, total: props.total, onUpdatePage: (page) => emit("update:page", page) }) }'
@@ -127,7 +127,7 @@ const servers = [
 ]
 
 async function mountView(overrides = {}) {
-  const state = { servers: structuredClone(servers), writes: [], confirmations: [] }
+  const state = { servers: structuredClone(servers), writes: [], confirmations: [], prompts: [], promptResult: 'Example tenant' }
   const api = {
     platformTenants: async () => ({ tenants: [], total: 0 }),
     platformServers: async () => ({ servers: state.servers, total: state.servers.length }),
@@ -146,6 +146,7 @@ async function mountView(overrides = {}) {
   }
   globalThis.__serverAccessApi = api
   globalThis.__serverAccessConfirm = async (message, options) => { state.confirmations.push([message, options]); return true }
+  globalThis.__serverAccessPrompt = async (...args) => { state.prompts.push(args); return state.promptResult }
   const app = renderer.createApp(ServerAccessAdminView)
   const errors = []
   app.config.errorHandler = (error) => errors.push(error)
@@ -174,6 +175,7 @@ test('platform pagers use totals and a page size of 20 and request the selected 
     app.unmount()
     delete globalThis.__serverAccessApi
     delete globalThis.__serverAccessConfirm
+    delete globalThis.__serverAccessPrompt
   }
 })
 
@@ -205,6 +207,7 @@ test('platform tenant creation sends numeric fields, refreshes tenants and audit
     app.unmount()
     delete globalThis.__serverAccessApi
     delete globalThis.__serverAccessConfirm
+    delete globalThis.__serverAccessPrompt
   }
 })
 
@@ -238,6 +241,7 @@ test('platform tenant creation keeps input and shows an accessible error when re
     app.unmount()
     delete globalThis.__serverAccessApi
     delete globalThis.__serverAccessConfirm
+    delete globalThis.__serverAccessPrompt
   }
 })
 
@@ -264,6 +268,7 @@ test('platform server view shows current policy and quota beside explicit sparse
     app.unmount()
     delete globalThis.__serverAccessApi
     delete globalThis.__serverAccessConfirm
+    delete globalThis.__serverAccessPrompt
   }
 })
 
@@ -274,10 +279,10 @@ test('platform deletion displays both timestamps and enables deletion only for a
     { id: 3, name: 'Active tenant', status: 'active', serverLimit: 5, deletionRequestedAt: null, deletionDueAt: '2000-01-08T00:00:00Z' },
   ]
   const state = { tenants: structuredClone(tenants), deletes: [] }
-  const { app, container } = await mountView({
+  const { app, container, state: viewState } = await mountView({
     platformTenants: async () => ({ tenants: state.tenants, total: state.tenants.length }),
-    deletePlatformTenant: async (id) => {
-      state.deletes.push(id)
+    deletePlatformTenant: async (id, confirmation) => {
+      state.deletes.push([id, confirmation])
       state.tenants = state.tenants.filter((row) => row.id !== id)
       return { deleted: true }
     },
@@ -294,11 +299,40 @@ test('platform deletion displays both timestamps and enables deletion only for a
     button(row(2), 'Delete tenant').props.onClick()
     await settle()
     assert.deepEqual(state.deletes, [])
+    viewState.promptResult = 'Due tenant'
     button(row(1), 'Delete tenant').props.onClick()
     await settle()
-    assert.deepEqual(state.deletes, [1])
+    assert.deepEqual(state.deletes, [[1, 'Due tenant']])
+    assert.equal(viewState.prompts.length, 1)
+    assert.match(viewState.prompts[0][0], /Due tenant/)
+    assert.equal(viewState.prompts[0][1], '')
+    assert.deepEqual(viewState.prompts[0][2], { danger: true })
   } finally {
     app.unmount()
+  }
+})
+
+test('platform deletion cancellation keeps the tenant and sends no request', async () => {
+  const tenant = { id: 4, name: 'Keep tenant', status: 'deleting', serverLimit: 5, deletionRequestedAt: '2000-01-01T00:00:00Z', deletionDueAt: '2000-01-08T00:00:00Z' }
+  const deletes = []
+  const { app, container, state } = await mountView({
+    platformTenants: async () => ({ tenants: [tenant], total: 1 }),
+    deletePlatformTenant: async (...args) => { deletes.push(args) },
+  })
+  state.promptResult = null
+  try {
+    const row = descendants(container).find((node) => node.type === 'tr' && descendants(node).some((cell) => cell.type === 'td' && text(cell) === '4'))
+    button(row, 'Delete tenant').props.onClick()
+    await settle()
+    assert.equal(state.prompts.length, 1)
+    assert.match(state.prompts[0][0], /Keep tenant/)
+    assert.deepEqual(deletes, [])
+    assert.match(text(row), /Keep tenant/)
+  } finally {
+    app.unmount()
+    delete globalThis.__serverAccessApi
+    delete globalThis.__serverAccessConfirm
+    delete globalThis.__serverAccessPrompt
   }
 })
 
@@ -339,5 +373,6 @@ test('emergency revocation selects a listed credential and displays its current 
     app.unmount()
     delete globalThis.__serverAccessApi
     delete globalThis.__serverAccessConfirm
+    delete globalThis.__serverAccessPrompt
   }
 })

@@ -768,7 +768,7 @@
     "deletionDueAt": "删除截止时间",
     "deleteTenant": "删除租户",
     "deleteDueHint": "只有到达显示的截止时间后才能执行物理删除。",
-    "confirmDelete": "永久删除租户 #{id} 及其服务器接入数据？宽限期截止时间为 {due}。全局账号、角色与皮肤会保留。",
+    "confirmDelete": "永久删除租户 {name}（#{id}）及其服务器接入数据？宽限期截止时间为 {due}。请输入完全一致的租户名称以确认。全局账号、角色与皮肤会保留。",
     "servers": "服务器紧急状态与配额",
     "server": "服务器",
     "serverQuota": "服务器配额",

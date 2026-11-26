@@ -40,7 +40,7 @@ export const serverAccessApi = {
   removeMember: (uid) => request('DELETE', `${ownerBase}/tenants/me/members/${uid}`),
   revokeInvite: (id) => request('DELETE', `${ownerBase}/tenants/me/invites/${id}`),
   exportTenant: () => request('GET', `${ownerBase}/tenants/me/export`, undefined, { blob: true }),
-  requestTenantDeletion: () => request('POST', `${ownerBase}/tenants/me/delete-request`, {}),
+  requestTenantDeletion: (confirmation) => request('POST', `${ownerBase}/tenants/me/delete-request`, { confirmation }),
 
   servers: (page = 1, size = 50, status = '') => ownerList(`${ownerBase}/servers`, page, size, status),
   createServer: (name) => request('POST', `${ownerBase}/servers`, { name }),
@@ -71,7 +71,7 @@ export const serverAccessApi = {
   createPlatformTenant: (body) => request('POST', `${platformBase}/tenants`, body),
   platformServers: (page = 1, q = '') => request('GET', `${platformBase}/servers?page=${page}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
   updatePlatformTenant: (id, body) => request('PATCH', `${platformBase}/tenants/${id}`, body),
-  deletePlatformTenant: (id) => request('POST', `${platformBase}/tenants/${id}/delete`, {}),
+  deletePlatformTenant: (id, confirmation) => request('POST', `${platformBase}/tenants/${id}/delete`, { confirmation }),
   updatePlatformServer: (id, body) => request('PATCH', `${platformBase}/servers/${id}`, body),
   revokePlatformCredential: (id, cid) => request('POST', `${platformBase}/servers/${id}/credentials/${cid}/revoke`, {}),
   platformFallback: () => request('GET', `${platformBase}/fallback`),

@@ -385,7 +385,7 @@ func (m *Mysql) SATenantMemberByUID(ctx context.Context, uid int64) (SATenantMem
 }
 
 // SATenantLifecycleMemberByUID also resolves membership while a tenant is in
-// its deletion grace period. It is only for the read-only export surface.
+// its deletion grace period. It is only for export and deletion-request replay.
 func (m *Mysql) SATenantLifecycleMemberByUID(ctx context.Context, uid int64) (SATenantMember, bool, error) {
 	return m.saTenantMemberByUID(ctx, uid, "t.status IN ('active','deleting')")
 }

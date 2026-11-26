@@ -14,6 +14,17 @@ const DefaultSATenantDeletionGrace = 7 * 24 * time.Hour
 // and credential in one transaction. A replay returns the original deadline and
 // never extends it.
 func (m *Mysql) RequestSATenantDeletion(ctx context.Context, tenantID int64, grace time.Duration, now time.Time) (SATenant, error) {
+	return m.requestSATenantDeletion(ctx, tenantID, nil, grace, now)
+}
+
+// RequestSATenantDeletionConfirmed requires an exact, untrimmed tenant-name
+// match under the lifecycle row lock, including when replaying an existing
+// request. A successful replay still returns the original deadline.
+func (m *Mysql) RequestSATenantDeletionConfirmed(ctx context.Context, tenantID int64, confirmation string, grace time.Duration, now time.Time) (SATenant, error) {
+	return m.requestSATenantDeletion(ctx, tenantID, &confirmation, grace, now)
+}
+
+func (m *Mysql) requestSATenantDeletion(ctx context.Context, tenantID int64, confirmation *string, grace time.Duration, now time.Time) (SATenant, error) {
 	if grace <= 0 {
 		grace = DefaultSATenantDeletionGrace
 	}
@@ -26,6 +37,9 @@ func (m *Mysql) RequestSATenantDeletion(ctx context.Context, tenantID int64, gra
 	tenant, err := saLockTenantLifecycleRow(ctx, tx, tenantID)
 	if err != nil {
 		return SATenant{}, err
+	}
+	if confirmation != nil && *confirmation != tenant.Name {
+		return SATenant{}, ErrConfirmationMismatch
 	}
 	if tenant.Status == "deleting" {
 		if tenant.DeletionRequestedAt == nil || tenant.DeletionDueAt == nil {
@@ -70,7 +84,7 @@ func (m *Mysql) DeleteDueSATenant(ctx context.Context, tenantID int64, now time.
 		return err
 	}
 	defer tx.Rollback()
-	if err := deleteDueSATenantTx(ctx, tx, tenantID, now); err != nil {
+	if err := deleteDueSATenantTx(ctx, tx, tenantID, nil, now); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -78,14 +92,25 @@ func (m *Mysql) DeleteDueSATenant(ctx context.Context, tenantID int64, now time.
 
 func (m *Mysql) DeleteDueSATenantAudited(ctx context.Context, tenantID int64, now time.Time, actorUID int64, action string, detail any) error {
 	return m.withSAAudit(ctx, actorUID, action, detail, func(tx *dbx.Tx) error {
-		return deleteDueSATenantTx(ctx, tx, tenantID, now)
+		return deleteDueSATenantTx(ctx, tx, tenantID, nil, now)
 	})
 }
 
-func deleteDueSATenantTx(ctx context.Context, tx *dbx.Tx, tenantID int64, now time.Time) error {
+// DeleteDueSATenantConfirmedAudited validates the exact tenant name under the
+// same lifecycle lock as the grace check, cascade delete and audit write.
+func (m *Mysql) DeleteDueSATenantConfirmedAudited(ctx context.Context, tenantID int64, confirmation string, now time.Time, actorUID int64, action string, detail any) error {
+	return m.withSAAudit(ctx, actorUID, action, detail, func(tx *dbx.Tx) error {
+		return deleteDueSATenantTx(ctx, tx, tenantID, &confirmation, now)
+	})
+}
+
+func deleteDueSATenantTx(ctx context.Context, tx *dbx.Tx, tenantID int64, confirmation *string, now time.Time) error {
 	tenant, err := saLockTenantLifecycleRow(ctx, tx, tenantID)
 	if err != nil {
 		return err
+	}
+	if confirmation != nil && *confirmation != tenant.Name {
+		return ErrConfirmationMismatch
 	}
 	if tenant.Status != "deleting" || tenant.DeletionDueAt == nil || now.UTC().Before(*tenant.DeletionDueAt) {
 		return ErrDeletionNotDue

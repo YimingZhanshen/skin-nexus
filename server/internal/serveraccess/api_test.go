@@ -1174,7 +1174,7 @@ func TestServerAccessAPIEmergencyMutationsRollBackWhenAuditFails(t *testing.T) {
 
 	t.Run("tenant delete", func(t *testing.T) {
 		f := newSAFixture(t)
-		if rec := f.request(t, f.owner, "POST", "/api/serveraccess/v1/tenants/me/delete-request", `{}`, ""); rec.Code != http.StatusOK {
+		if rec := f.request(t, f.owner, "POST", "/api/serveraccess/v1/tenants/me/delete-request", `{"confirmation":"one"}`, ""); rec.Code != http.StatusOK {
 			t.Fatalf("delete request = %d %s", rec.Code, rec.Body.String())
 		}
 		if _, err := f.st.DB().ExecContext(context.Background(), `CREATE TRIGGER fail_delete_audit
@@ -1184,7 +1184,7 @@ func TestServerAccessAPIEmergencyMutationsRollBackWhenAuditFails(t *testing.T) {
 		}
 		*f.clock = f.now.Add(7 * 24 * time.Hour)
 		path := fmt.Sprintf("/api/admin/v1/serveraccess/tenants/%d/delete", f.tenant)
-		rec := f.request(t, f.super, "POST", path, `{}`, "")
+		rec := f.request(t, f.super, "POST", path, `{"confirmation":"one"}`, "")
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("delete with audit failure = %d %s, want 500", rec.Code, rec.Body.String())
 		}

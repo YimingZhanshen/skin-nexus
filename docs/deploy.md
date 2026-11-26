@@ -292,8 +292,8 @@ app 进程能看到哪些变量，取决于 compose 文件里 `environment:` 段
 - `GET /api/serveraccess/v1/servers/{id}/events?before={event_id}&size={1..200}`：按 `id DESC` 游标分页，默认最近 24 小时。`before` 为上一页最后一个事件 id；响应包含 `events`、`nextBefore`、`hasMore`。每条事件只暴露 `id`、`createdAt`、`outcome`、`reasonCode`、`durationMs`、`sourceMode`，不返回玩家身份、IP、邮箱、令牌、全局角色或皮肤。可用 RFC3339 的 `from`/`to` 缩小时间范围，最长为 366 天。
 - `GET /api/serveraccess/v1/players/lookup?q={name-or-uuid}`：仅限当前租户 admin/owner；viewer 返回 403。按角色名（不区分大小写）或 32 位 UUID 精确解析，成功只返回 `{uid,name,uuid}`，未找到返回 404。该端点不返回邮箱、IP 或全局资料，服务端门禁不依赖前端是否显示查询表单。
 - `GET /api/serveraccess/v1/tenants/me/export`：owner/admin 可下载当前成员租户的 JSON 附件。仅包含租户元数据、服务器与策略、白名单 uid/note/时间、封禁 uid/reason/expiry/时间、owner 可见进服事件，以及凭据 id/mode/status/created/last_used/expires；不包含邮箱、IP、token、secret/hash、全局用户/玩家/纹理或邀请数据。审计只记录租户 id，不记录导出内容。首版按租户批量查询（非空租户固定 6 条数据查询，不随服务器数增长），并执行显式硬上限：1000 个服务器、10000 条白名单、10000 条封禁、100000 条进服事件、10000 条凭据元数据、16 MiB 最终 JSON（含末尾换行）。任一超限返回 `413` 与 `serveraccess.export_too_large`，错误消息注明超限集合及上限；不静默截断、不返回附件、不写导出审计。内部配置只能降低上限，不能抬高这些硬上限。
-- `POST /api/serveraccess/v1/tenants/me/delete-request`：仅 owner。原子把租户置为 `deleting`、暂停全部服务器、吊销全部凭据并固定删除截止时间；默认宽限期 7 天。viewer/admin 返回 403。
-- `POST /api/admin/v1/serveraccess/tenants/{id}/delete`：仅 permission=2 网页超管会话。租户未请求删除或截止时间未到时返回 409；到期后在事务内执行既有 `sa_*` 级联删除，重复删除返回 404。全局用户、玩家和纹理始终保留。
+- `POST /api/serveraccess/v1/tenants/me/delete-request`：仅 owner。要求 `application/json` 请求体 `{"confirmation":"<精确租户名>"}`。服务端在锁定生命周期行后直接比较，不 trim、不忽略大小写；缺失、部分名称或首尾空格返回 400 且不写状态。精确匹配时原子把租户置为 `deleting`、暂停全部服务器、吊销全部凭据并固定删除截止时间；默认宽限期 7 天。重放仍要求精确确认并返回原截止时间。viewer/admin 返回 403。
+- `POST /api/admin/v1/serveraccess/tenants/{id}/delete`：仅 permission=2 网页超管会话。要求 `application/json` 请求体 `{"confirmation":"<精确租户名>"}`，按同一锁定行精确比较；确认错误（含 `{}`）返回 400，不删除任何 `sa_*` 数据、不写删除审计。租户未请求删除或截止时间未到时返回 409；到期后在事务内执行既有 `sa_*` 级联删除，重复删除返回 404。全局用户、玩家和纹理始终保留。
 
 服务器 id 始终从当前成员租户解析；跨租户服务器返回 404。模块关闭时上述 API 均返回 404；`/servers` 不受模块门禁拦截，仍返回 SPA 壳并显示明确的不可用状态。未知 `/servers/` 子路径仍为 404，不退化成 SPA 页面。
 

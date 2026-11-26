@@ -73,8 +73,8 @@ JWT access token 实测形状：`aud="2"（shared_client_id）、sub=uid、scope
 | `GET /v/<secret>/sessionserver/session/minecraft/hasJoined` | 按服 URL secret；有效策略拒绝/未命中/故障为空 204，无效/吊销/过期为 404 | ✅ |
 | `GET /api/serveraccess/v1/servers/<public_id>/hasJoined` | 可选 Header 模式，`Authorization: Bearer <secret>`；与 URL 模式共用策略链 | ✅ |
 | `GET /api/serveraccess/v1/tenants/me/export` | 租户 owner/admin；字段白名单 JSON 附件，超限 413，不含 secret 或全局玩家资料 | ✅ |
-| `POST /api/serveraccess/v1/tenants/me/delete-request` | 仅 owner；事务暂停服务器、吊销凭据并固定宽限期截止时间 | ✅ |
-| `POST /api/admin/v1/serveraccess/tenants/<id>/delete` | 仅网页超管；未到期 409，到期级联删除 `sa_*`，保留全局身份 | ✅ |
+| `POST /api/serveraccess/v1/tenants/me/delete-request` | 仅 owner；要求 `confirmation` 精确等于租户名，错误确认 400 且不写状态；事务暂停服务器、吊销凭据并固定宽限期截止时间，重放仍校验并返回原期限 | ✅ |
+| `POST /api/admin/v1/serveraccess/tenants/<id>/delete` | 仅网页超管；要求 `confirmation` 精确等于租户名，错误确认（含 `{}`）400 且保留 `sa_*`；未到期 409，到期级联删除 `sa_*`，保留全局身份 | ✅ |
 | `attested` 组件身份证明 | 未实现；URL secret 与 Header 都只证明持有凭据，Header 不构成 attested | ➖ |
 
 完整字段、上限、角色与运维约束见 [服务器接入手册](server-access.md)。

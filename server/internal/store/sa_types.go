@@ -7,10 +7,11 @@ import (
 )
 
 var (
-	ErrLastOwner          = errors.New("store: last tenant owner")
-	ErrQuota              = errors.New("store: server access quota exceeded")
-	ErrDeletionNotDue     = errors.New("store: tenant deletion is not due")
-	ErrDeletionInProgress = errors.New("store: tenant deletion is in progress")
+	ErrLastOwner            = errors.New("store: last tenant owner")
+	ErrQuota                = errors.New("store: server access quota exceeded")
+	ErrDeletionNotDue       = errors.New("store: tenant deletion is not due")
+	ErrDeletionInProgress   = errors.New("store: tenant deletion is in progress")
+	ErrConfirmationMismatch = errors.New("store: tenant deletion confirmation does not match tenant name")
 )
 
 type SATenant struct {

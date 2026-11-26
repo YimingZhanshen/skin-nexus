@@ -768,7 +768,7 @@
     "deletionDueAt": "Deletion due at",
     "deleteTenant": "Delete tenant",
     "deleteDueHint": "Physical deletion is enabled only after the displayed due time.",
-    "confirmDelete": "Permanently delete tenant #{id} and its server-access data? The grace deadline was {due}. Global accounts, profiles and skins are kept.",
+    "confirmDelete": "Permanently delete tenant {name} (#{id}) and its server-access data? The grace deadline was {due}. Type the exact tenant name to confirm. Global accounts, profiles and skins are kept.",
     "servers": "Emergency server status and quotas",
     "server": "Server",
     "serverQuota": "Server quotas",

@@ -1313,6 +1313,85 @@ func TestServerAccessDeletingTenantRejectsNewCredentials(t *testing.T) {
 	}
 }
 
+func TestServerAccessDeletionRequiresExactTenantConfirmation(t *testing.T) {
+	st := openSQLiteStore(t)
+	ctx := context.Background()
+	actor := saSeedUser(t, st)
+	const name = "Confirmation Tenant"
+	tenant, err := st.CreateSATenant(ctx, name, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := st.CreateSAServer(ctx, tenant, "srv_confirmation", "before")
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentialID, err := st.CreateSAServerCredential(ctx, tenant, server.ID, SACredential{
+		Mode: "header", SecretHash: saTestHash("confirmation-secret"), Scopes: `["verify:join"]`, Status: "active",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+	for _, confirmation := range []string{"", "Confirmation", "Confirmation Tenant ", " Confirmation Tenant"} {
+		if _, err := st.RequestSATenantDeletionConfirmed(ctx, tenant, confirmation, 7*24*time.Hour, now); !errors.Is(err, ErrConfirmationMismatch) {
+			t.Fatalf("request with confirmation %q = %v, want mismatch", confirmation, err)
+		}
+	}
+	row, err := st.SATenantByID(ctx, tenant)
+	if err != nil || row.Status != "active" || row.DeletionRequestedAt != nil || row.DeletionDueAt != nil {
+		t.Fatalf("mismatched request changed tenant: %+v %v", row, err)
+	}
+	serverRow, err := st.SAServerByID(ctx, tenant, server.ID)
+	if err != nil || serverRow.Status != "active" {
+		t.Fatalf("mismatched request changed server: %+v %v", serverRow, err)
+	}
+	credentials, err := st.ListSAServerCredentials(ctx, tenant, server.ID)
+	if err != nil || len(credentials) != 1 || credentials[0].ID != credentialID || credentials[0].Status != "active" {
+		t.Fatalf("mismatched request changed credentials: %+v %v", credentials, err)
+	}
+
+	deleting, err := st.RequestSATenantDeletionConfirmed(ctx, tenant, name, 7*24*time.Hour, now)
+	if err != nil || deleting.Status != "deleting" || deleting.DeletionDueAt == nil || !deleting.DeletionDueAt.Equal(now.Add(7*24*time.Hour)) {
+		t.Fatalf("confirmed request = %+v %v", deleting, err)
+	}
+	for _, confirmation := range []string{"", "confirmation tenant", name + " "} {
+		if _, err := st.RequestSATenantDeletionConfirmed(ctx, tenant, confirmation, time.Hour, now.Add(time.Hour)); !errors.Is(err, ErrConfirmationMismatch) {
+			t.Fatalf("replay with confirmation %q = %v, want mismatch", confirmation, err)
+		}
+	}
+	replay, err := st.RequestSATenantDeletionConfirmed(ctx, tenant, name, time.Hour, now.Add(time.Hour))
+	if err != nil || replay.DeletionDueAt == nil || !replay.DeletionDueAt.Equal(*deleting.DeletionDueAt) {
+		t.Fatalf("confirmed replay = %+v %v, want original deadline", replay, err)
+	}
+
+	due := *deleting.DeletionDueAt
+	const action = "serveraccess_tenant_delete"
+	detail := map[string]any{"tenantId": tenant}
+	for _, confirmation := range []string{"", "Confirmation", name + " "} {
+		if err := st.DeleteDueSATenantConfirmedAudited(ctx, tenant, confirmation, due, actor, action, detail); !errors.Is(err, ErrConfirmationMismatch) {
+			t.Fatalf("delete with confirmation %q = %v, want mismatch", confirmation, err)
+		}
+	}
+	if _, err := st.SATenantByID(ctx, tenant); err != nil {
+		t.Fatalf("mismatched physical delete removed tenant: %v", err)
+	}
+	_, auditTotal, err := st.PlatformServerAccessAudit(ctx, action, 1, 20)
+	if err != nil || auditTotal != 0 {
+		t.Fatalf("mismatched physical delete wrote audit: total=%d err=%v", auditTotal, err)
+	}
+	if err := st.DeleteDueSATenantConfirmedAudited(ctx, tenant, name, due, actor, action, detail); err != nil {
+		t.Fatalf("confirmed physical delete: %v", err)
+	}
+	if _, err := st.SATenantByID(ctx, tenant); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("confirmed physical delete lookup = %v, want not found", err)
+	}
+	audit, total, err := st.PlatformServerAccessAudit(ctx, action, 1, 20)
+	if err != nil || total != 1 || len(audit) != 1 || audit[0]["actorUid"] != actor || audit[0]["detail"] != fmt.Sprintf(`{"tenantId":%d}`, tenant) {
+		t.Fatalf("confirmed delete audit = %+v total=%d err=%v", audit, total, err)
+	}
+}
+
 func TestServerAccessScopedDeletesRetainGlobalUsers(t *testing.T) {
 	st := openSQLiteStore(t)
 	ctx := context.Background()

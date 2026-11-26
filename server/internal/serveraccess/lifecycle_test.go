@@ -399,7 +399,7 @@ func TestServerAccessAPIDeleteRequestAtomicallySuspendsAndRevokes(t *testing.T) 
 		t.Fatal(err)
 	}
 	path := "/api/serveraccess/v1/tenants/me/delete-request?tenant_id=" + fmt.Sprint(f.otherTenant)
-	rec := f.request(t, f.owner, http.MethodPost, path, `{}`, "")
+	rec := f.request(t, f.owner, http.MethodPost, path, `{"confirmation":"one"}`, "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete request = %d %s, want 200", rec.Code, rec.Body.String())
 	}
@@ -446,6 +446,85 @@ func TestServerAccessAPIDeleteRequestAtomicallySuspendsAndRevokes(t *testing.T) 
 	rec = f.request(t, f.viewer, http.MethodGet, "/api/serveraccess/v1/tenants/me/export", "", "")
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("viewer export during deletion grace = %d %s, want 403", rec.Code, rec.Body.String())
+	}
+}
+
+func TestServerAccessAPIDeleteRequestRequiresExactConfirmationWithoutWrites(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{"missing confirmation", `{}`},
+		{"empty confirmation", `{"confirmation":""}`},
+		{"partial name", `{"confirmation":"on"}`},
+		{"wrong case", `{"confirmation":"One"}`},
+		{"leading space", `{"confirmation":" one"}`},
+		{"trailing space", `{"confirmation":"one "}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newSAFixture(t)
+			ctx := context.Background()
+			credentialID, err := f.st.CreateSAServerCredential(ctx, f.tenant, f.server, store.SACredential{
+				Mode: "header", SecretHash: strings.Repeat("a", 64), Scopes: `["verify:join"]`, Status: "active",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			rec := f.request(t, f.owner, http.MethodPost, "/api/serveraccess/v1/tenants/me/delete-request", tc.body, "")
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("delete request with %s = %d %s, want 400", tc.name, rec.Code, rec.Body.String())
+			}
+			tenant, err := f.st.SATenantByID(ctx, f.tenant)
+			if err != nil || tenant.Status != "active" || tenant.DeletionRequestedAt != nil || tenant.DeletionDueAt != nil {
+				t.Fatalf("rejected request changed tenant: %+v %v", tenant, err)
+			}
+			server, err := f.st.SAServerByID(ctx, f.tenant, f.server)
+			if err != nil || server.Status != "active" {
+				t.Fatalf("rejected request changed server: %+v %v", server, err)
+			}
+			credentials, err := f.st.ListSAServerCredentials(ctx, f.tenant, f.server)
+			if err != nil || len(credentials) != 1 || credentials[0].ID != credentialID || credentials[0].Status != "active" {
+				t.Fatalf("rejected request changed credentials: %+v %v", credentials, err)
+			}
+			_, auditTotal, err := f.st.PlatformServerAccessAudit(ctx, "serveraccess_tenant_delete_request", 1, 20)
+			if err != nil || auditTotal != 0 {
+				t.Fatalf("rejected request wrote audit: total=%d err=%v", auditTotal, err)
+			}
+		})
+	}
+}
+
+func TestServerAccessAPIDeleteRequestReplayStillRequiresExactConfirmation(t *testing.T) {
+	f := newSAFixture(t)
+	path := "/api/serveraccess/v1/tenants/me/delete-request"
+	rec := f.request(t, f.owner, http.MethodPost, path, `{"confirmation":"one"}`, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("initial delete request = %d %s", rec.Code, rec.Body.String())
+	}
+	var first struct {
+		DeletionDueAt time.Time `json:"deletionDueAt"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &first); err != nil {
+		t.Fatal(err)
+	}
+	for _, body := range []string{`{}`, `{"confirmation":"One"}`, `{"confirmation":"one "}`} {
+		if rec := f.request(t, f.owner, http.MethodPost, path, body, ""); rec.Code != http.StatusBadRequest {
+			t.Fatalf("delete replay with %s = %d %s, want 400", body, rec.Code, rec.Body.String())
+		}
+	}
+	*f.clock = f.now.Add(48 * time.Hour)
+	rec = f.request(t, f.owner, http.MethodPost, path, `{"confirmation":"one"}`, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("confirmed delete replay = %d %s", rec.Code, rec.Body.String())
+	}
+	var replay struct {
+		DeletionDueAt time.Time `json:"deletionDueAt"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &replay); err != nil {
+		t.Fatal(err)
+	}
+	if !replay.DeletionDueAt.Equal(first.DeletionDueAt) || !replay.DeletionDueAt.Equal(f.now.Add(7*24*time.Hour)) {
+		t.Fatalf("replay due = %s, want original %s", replay.DeletionDueAt, first.DeletionDueAt)
 	}
 }
 
@@ -532,7 +611,7 @@ func TestServerAccessAPIDeleteRequestRollsBackOnCredentialFailure(t *testing.T) 
 		BEGIN SELECT RAISE(ABORT,'forced credential revoke failure'); END`); err != nil {
 		t.Fatal(err)
 	}
-	rec := f.request(t, f.owner, http.MethodPost, "/api/serveraccess/v1/tenants/me/delete-request", `{}`, "")
+	rec := f.request(t, f.owner, http.MethodPost, "/api/serveraccess/v1/tenants/me/delete-request", `{"confirmation":"one"}`, "")
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("delete request with revoke failure = %d %s, want 500", rec.Code, rec.Body.String())
 	}
@@ -584,11 +663,11 @@ func TestServerAccessAPIPlatformDeletionEnforcesGraceAndPreservesGlobalIdentity(
 	if _, _, err := f.st.AdmitSAQuota(ctx, f.server, f.now, "verify", 10, f.now); err != nil {
 		t.Fatal(err)
 	}
-	if rec := f.request(t, f.owner, http.MethodPost, "/api/serveraccess/v1/tenants/me/delete-request", `{}`, ""); rec.Code != http.StatusOK {
+	if rec := f.request(t, f.owner, http.MethodPost, "/api/serveraccess/v1/tenants/me/delete-request", `{"confirmation":"one"}`, ""); rec.Code != http.StatusOK {
 		t.Fatalf("delete request = %d %s", rec.Code, rec.Body.String())
 	}
 	path := fmt.Sprintf("/api/admin/v1/serveraccess/tenants/%d/delete", f.tenant)
-	if rec := f.request(t, f.super, http.MethodPost, path, `{}`, ""); rec.Code != http.StatusConflict {
+	if rec := f.request(t, f.super, http.MethodPost, path, `{"confirmation":"one"}`, ""); rec.Code != http.StatusConflict {
 		t.Fatalf("early platform delete = %d %s, want 409", rec.Code, rec.Body.String())
 	}
 	if _, err := f.st.SATenantByID(ctx, f.tenant); err != nil {
@@ -604,15 +683,46 @@ func TestServerAccessAPIPlatformDeletionEnforcesGraceAndPreservesGlobalIdentity(
 		{"legacy admin", f.legacyAdmin, ""},
 		{"machine token", 0, "machine-secret"},
 	} {
-		if rec := f.request(t, tc.uid, http.MethodPost, path, `{}`, tc.token); rec.Code != http.StatusForbidden {
+		if rec := f.request(t, tc.uid, http.MethodPost, path, `{"confirmation":"one"}`, tc.token); rec.Code != http.StatusForbidden {
 			t.Fatalf("platform delete as %s = %d %s, want 403", tc.name, rec.Code, rec.Body.String())
 		}
 	}
 	*f.clock = f.now.Add(7 * 24 * time.Hour)
-	if rec := f.request(t, f.super, http.MethodPost, path, `{}`, ""); rec.Code != http.StatusOK {
+	for _, body := range []string{`{}`, `{"confirmation":""}`, `{"confirmation":"on"}`, `{"confirmation":"One"}`, `{"confirmation":" one"}`, `{"confirmation":"one "}`} {
+		if rec := f.request(t, f.super, http.MethodPost, path, body, ""); rec.Code != http.StatusBadRequest {
+			t.Fatalf("due platform delete with %s = %d %s, want 400", body, rec.Code, rec.Body.String())
+		}
+	}
+	for _, query := range []struct {
+		table string
+		where string
+		arg   any
+		want  int
+	}{
+		{"sa_tenants", "id=?", f.tenant, 1},
+		{"sa_tenant_members", "tenant_id=?", f.tenant, 3},
+		{"sa_tenant_invites", "tenant_id=?", f.tenant, 1},
+		{"sa_servers", "tenant_id=?", f.tenant, 1},
+		{"sa_server_policies", "server_id=?", f.server, 1},
+		{"sa_server_credentials", "server_id=?", f.server, 1},
+		{"sa_server_whitelist", "server_id=?", f.server, 1},
+		{"sa_server_bans", "server_id=?", f.server, 1},
+		{"sa_join_events", "tenant_id=?", f.tenant, 1},
+		{"sa_quota_usage", "server_id=?", f.server, 1},
+	} {
+		var count int
+		if err := f.st.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM `+query.table+` WHERE `+query.where, query.arg).Scan(&count); err != nil || count != query.want {
+			t.Errorf("%s rows after rejected platform delete = %d, err %v; want %d", query.table, count, err, query.want)
+		}
+	}
+	var auditTotal int
+	if err := f.st.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM audit_log WHERE action='serveraccess_tenant_delete'`).Scan(&auditTotal); err != nil || auditTotal != 0 {
+		t.Fatalf("rejected platform delete wrote audit: total=%d err=%v", auditTotal, err)
+	}
+	if rec := f.request(t, f.super, http.MethodPost, path, `{"confirmation":"one"}`, ""); rec.Code != http.StatusOK {
 		t.Fatalf("due platform delete = %d %s, want 200", rec.Code, rec.Body.String())
 	}
-	if rec := f.request(t, f.super, http.MethodPost, path, `{}`, ""); rec.Code != http.StatusNotFound {
+	if rec := f.request(t, f.super, http.MethodPost, path, `{"confirmation":"one"}`, ""); rec.Code != http.StatusNotFound {
 		t.Fatalf("repeated platform delete = %d %s, want 404", rec.Code, rec.Body.String())
 	}
 	if _, err := f.st.SATenantByID(ctx, f.tenant); !errors.Is(err, store.ErrNotFound) {
@@ -655,7 +765,7 @@ func TestServerAccessAPIPlatformDeletionEnforcesGraceAndPreservesGlobalIdentity(
 		t.Fatalf("platform delete audit detail = %s", detail)
 	}
 	otherPath := fmt.Sprintf("/api/admin/v1/serveraccess/tenants/%d/delete", f.otherTenant)
-	if rec := f.request(t, f.super, http.MethodPost, otherPath, `{}`, ""); rec.Code != http.StatusConflict {
+	if rec := f.request(t, f.super, http.MethodPost, otherPath, `{"confirmation":"two"}`, ""); rec.Code != http.StatusConflict {
 		t.Fatalf("platform delete without request = %d %s, want 409", rec.Code, rec.Body.String())
 	}
 	if _, err := f.st.SATenantByID(ctx, f.otherTenant); err != nil {
@@ -668,7 +778,7 @@ func TestServerAccessAPIDeleteRequestUsesConfiguredGrace(t *testing.T) {
 	cfg := Config{Enabled: true, Store: f.st, Now: f.stack.cfg.Now, DeletionGracePeriod: 48 * time.Hour}
 	stack := NewStack(cfg)
 	f.h = stack.Gate(stack.Handler())
-	rec := f.request(t, f.owner, http.MethodPost, "/api/serveraccess/v1/tenants/me/delete-request", `{}`, "")
+	rec := f.request(t, f.owner, http.MethodPost, "/api/serveraccess/v1/tenants/me/delete-request", `{"confirmation":"one"}`, "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete request = %d %s, want 200", rec.Code, rec.Body.String())
 	}
@@ -683,7 +793,7 @@ func TestServerAccessAPIDeleteRequestUsesConfiguredGrace(t *testing.T) {
 
 func TestServerAccessAPIDeletingTenantCannotBeReactivated(t *testing.T) {
 	f := newSAFixture(t)
-	if rec := f.request(t, f.owner, http.MethodPost, "/api/serveraccess/v1/tenants/me/delete-request", `{}`, ""); rec.Code != http.StatusOK {
+	if rec := f.request(t, f.owner, http.MethodPost, "/api/serveraccess/v1/tenants/me/delete-request", `{"confirmation":"one"}`, ""); rec.Code != http.StatusOK {
 		t.Fatalf("delete request = %d %s", rec.Code, rec.Body.String())
 	}
 	path := fmt.Sprintf("/api/admin/v1/serveraccess/tenants/%d", f.tenant)
@@ -699,7 +809,7 @@ func TestServerAccessAPIDeletingTenantCannotBeReactivated(t *testing.T) {
 
 func TestServerAccessAPIDeletingTenantServersCannotBeReactivated(t *testing.T) {
 	f := newSAFixture(t)
-	if rec := f.request(t, f.owner, http.MethodPost, "/api/serveraccess/v1/tenants/me/delete-request", `{}`, ""); rec.Code != http.StatusOK {
+	if rec := f.request(t, f.owner, http.MethodPost, "/api/serveraccess/v1/tenants/me/delete-request", `{"confirmation":"one"}`, ""); rec.Code != http.StatusOK {
 		t.Fatalf("delete request = %d %s", rec.Code, rec.Body.String())
 	}
 	path := fmt.Sprintf("/api/admin/v1/serveraccess/servers/%d", f.server)

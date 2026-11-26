@@ -22,7 +22,8 @@ func TestIntegrationServerAccessLifecycleMigrationAndScopedCascade(t *testing.T)
 	m := openTestStore(t)
 	ctx := context.Background()
 	uid := seedUser(t, m)
-	tenant, err := m.CreateSATenant(ctx, "lifecycle-integration", 2)
+	const tenantName = "lifecycle-integration"
+	tenant, err := m.CreateSATenant(ctx, tenantName, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,17 +67,34 @@ func TestIntegrationServerAccessLifecycleMigrationAndScopedCascade(t *testing.T)
 		t.Fatal(err)
 	}
 	due := now.Add(7 * 24 * time.Hour)
-	if _, err := m.RequestSATenantDeletion(ctx, tenant, 7*24*time.Hour, now); err != nil {
+	if _, err := m.RequestSATenantDeletionConfirmed(ctx, tenant, tenantName+" ", 7*24*time.Hour, now); !errors.Is(err, ErrConfirmationMismatch) {
+		t.Fatalf("mismatched tenant deletion request = %v, want mismatch", err)
+	}
+	if _, err := m.RequestSATenantDeletionConfirmed(ctx, tenant, tenantName, 7*24*time.Hour, now); err != nil {
 		t.Fatalf("request tenant deletion: %v", err)
 	}
-	replay, err := m.RequestSATenantDeletion(ctx, tenant, time.Hour, now.Add(time.Hour))
+	if _, err := m.RequestSATenantDeletionConfirmed(ctx, tenant, "", time.Hour, now.Add(time.Hour)); !errors.Is(err, ErrConfirmationMismatch) {
+		t.Fatalf("mismatched delete request replay = %v, want mismatch", err)
+	}
+	replay, err := m.RequestSATenantDeletionConfirmed(ctx, tenant, tenantName, time.Hour, now.Add(time.Hour))
 	if err != nil || replay.DeletionDueAt == nil || !replay.DeletionDueAt.Equal(due) {
 		t.Fatalf("delete request replay = %+v %v, want original due %s", replay, err, due.Format(time.RFC3339))
 	}
-	if err := m.DeleteDueSATenant(ctx, tenant, due.Add(-time.Nanosecond)); !errors.Is(err, ErrDeletionNotDue) {
+	const action = "serveraccess_tenant_delete"
+	detail := map[string]any{"tenantId": tenant}
+	if err := m.DeleteDueSATenantConfirmedAudited(ctx, tenant, "Lifecycle-integration", due.Add(-time.Nanosecond), uid, action, detail); !errors.Is(err, ErrConfirmationMismatch) {
+		t.Fatalf("mismatched early tenant delete = %v, want mismatch", err)
+	}
+	if err := m.DeleteDueSATenantConfirmedAudited(ctx, tenant, tenantName, due.Add(-time.Nanosecond), uid, action, detail); !errors.Is(err, ErrDeletionNotDue) {
 		t.Fatalf("early tenant delete = %v, want not due", err)
 	}
-	if err := m.DeleteDueSATenant(ctx, tenant, due); err != nil {
+	if err := m.DeleteDueSATenantConfirmedAudited(ctx, tenant, tenantName+" ", due, uid, action, detail); !errors.Is(err, ErrConfirmationMismatch) {
+		t.Fatalf("mismatched due tenant delete = %v, want mismatch", err)
+	}
+	if _, err := m.SATenantByID(ctx, tenant); err != nil {
+		t.Fatalf("mismatched delete removed tenant: %v", err)
+	}
+	if err := m.DeleteDueSATenantConfirmedAudited(ctx, tenant, tenantName, due, uid, action, detail); err != nil {
 		t.Fatalf("delete due tenant: %v", err)
 	}
 	for _, query := range []struct {

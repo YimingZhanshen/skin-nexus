@@ -572,8 +572,9 @@ test('platform pagination keeps the backend default page size of 20', async () =
   assert.deepEqual(calls, [['tenants', 1, ''], ['servers', 1, ''], ['audit', 1, '']])
 })
 
-test('platform tenant deletion clamps an empty last page', async () => {
+test('platform tenant deletion forwards exact confirmation and clamps an empty last page', async () => {
   const calls = []
+  const deletes = []
   let rows = Array.from({ length: 21 }, (_, index) => ({ ...tenant, id: index + 1 }))
   const platform = useServerAccessPlatform({
     platformTenants: async (page) => {
@@ -583,11 +584,12 @@ test('platform tenant deletion clamps an empty last page', async () => {
     platformServers: async () => ({ servers: [], total: 0 }),
     platformAudit: async () => ({ audit: [], total: 0 }),
     platformFallback: async () => ({ enabled: false }),
-    deletePlatformTenant: async (id) => { rows = rows.filter((row) => row.id !== id) },
+    deletePlatformTenant: async (id, confirmation) => { deletes.push([id, confirmation]); rows = rows.filter((row) => row.id !== id) },
   })
   await platform.load()
   await platform.pageTenants(2)
-  await platform.deleteTenant(21)
+  await platform.deleteTenant(21, 'Tenant 21')
+  assert.deepEqual(deletes, [[21, 'Tenant 21']])
   assert.deepEqual(calls, [1, 2, 2, 1])
   assert.equal(platform.tenantPage.value, 1)
   assert.equal(platform.tenants.value.length, 20)

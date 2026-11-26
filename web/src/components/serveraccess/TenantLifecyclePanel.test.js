@@ -119,14 +119,14 @@ test('read-only members cannot delete and export failures stay visible with the 
 })
 
 test('tenant deletion requires the exact tenant name and then shows the server-assigned grace deadline', async () => {
-  let calls = 0
+  const confirmations = []
   const changes = []
   const due = '2027-02-01T03:04:05Z'
   const { app, container } = await mountPanel({
     api: {
       exportTenant: async () => new Blob(),
-      requestTenantDeletion: async () => {
-        calls++
+      requestTenantDeletion: async (confirmation) => {
+        confirmations.push(confirmation)
         return { status: 'deleting', deletionRequestedAt: '2027-01-25T03:04:05Z', deletionDueAt: due }
       },
     },
@@ -146,13 +146,13 @@ test('tenant deletion requires the exact tenant name and then shows the server-a
     await nextTick()
     confirm.props.onClick()
     await settle()
-    assert.equal(calls, 0, 'partial name must not request deletion')
+    assert.deepEqual(confirmations, [], 'partial name must not request deletion')
 
     input.props['onUpdate:modelValue']('Example tenant')
     await nextTick()
     confirm.props.onClick()
     await settle()
-    assert.equal(calls, 1)
+    assert.deepEqual(confirmations, ['Example tenant'])
     assert.match(text(container), /Deletion requested/)
     assert.match(text(container), /2027-02-01T03:04:05Z/)
     assert.equal(requestButton.props.disabled, true)

@@ -190,14 +190,14 @@ func (w *saExportByteWriter) Write(p []byte) (int, error) {
 }
 
 func (c *control) tenantDeleteRequest(w http.ResponseWriter, r *http.Request) {
-	if r.ContentLength != 0 {
-		var body struct{}
-		if !decodeSAJSON(w, r, &body) {
-			return
-		}
+	var body struct {
+		Confirmation string `json:"confirmation"`
+	}
+	if !decodeSAJSON(w, r, &body) {
+		return
 	}
 	who := saCaller(r)
-	tenant, err := c.cfg.Store.RequestSATenantDeletion(r.Context(), who.TenantID, c.cfg.DeletionGracePeriod, c.now())
+	tenant, err := c.cfg.Store.RequestSATenantDeletionConfirmed(r.Context(), who.TenantID, body.Confirmation, c.cfg.DeletionGracePeriod, c.now())
 	if err != nil {
 		writeSAStoreError(w, err)
 		return
@@ -216,7 +216,13 @@ func (c *control) platformTenantDelete(w http.ResponseWriter, r *http.Request) {
 		writeSAError(w, http.StatusBadRequest, i18n.MsgBadID, "Invalid tenant id")
 		return
 	}
-	if err := c.cfg.Store.DeleteDueSATenantAudited(r.Context(), id, c.now(), saCaller(r).UID,
+	var body struct {
+		Confirmation string `json:"confirmation"`
+	}
+	if !decodeSAJSON(w, r, &body) {
+		return
+	}
+	if err := c.cfg.Store.DeleteDueSATenantConfirmedAudited(r.Context(), id, body.Confirmation, c.now(), saCaller(r).UID,
 		"serveraccess_tenant_delete", map[string]any{"tenantId": id}); err != nil {
 		if errors.Is(err, store.ErrDeletionNotDue) {
 			writeSAError(w, http.StatusConflict, i18n.MsgServerAccessConflict, "Tenant deletion is not requested or its grace period has not elapsed")

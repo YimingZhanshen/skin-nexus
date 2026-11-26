@@ -1,7 +1,7 @@
 <script setup>
 import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { confirmDialog } from '../../dialog.js'
+import { confirmDialog, promptDialog } from '../../dialog.js'
 import { serverAccessApi } from '../../api/serverAccessApi.js'
 import { buildServerQuotaPatch, isTenantDeletionDue, useServerAccessPlatform } from '../../composables/useServerAccessPlatform.js'
 import EmptyState from '../EmptyState.vue'
@@ -95,9 +95,10 @@ async function toggleTenant(row) {
 }
 async function deleteTenant(row) {
   if (!isTenantDeletionDue(row, now.value) || platform.busy.value) return
-  const message = t('adminServerAccess.confirmDelete', { id: row.id, due: row.deletionDueAt })
-  if (!(await confirmDialog(message, { danger: true }))) return
-  await platform.deleteTenant(row.id)
+  const message = t('adminServerAccess.confirmDelete', { id: row.id, name: row.name, due: row.deletionDueAt })
+  const confirmation = await promptDialog(message, '', { danger: true })
+  if (confirmation === null) return
+  await platform.deleteTenant(row.id, confirmation)
 }
 async function toggleServer(row) {
   const suspending = row.status !== 'suspended'

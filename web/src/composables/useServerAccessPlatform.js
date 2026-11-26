@@ -152,7 +152,7 @@ export function useServerAccessPlatform(api) {
       await Promise.all([loadTenants(), loadAudit()])
     }),
     updateTenant: (id, body) => mutate(() => api.updatePlatformTenant(id, body), loadTenants),
-    deleteTenant: (id) => mutate(() => api.deletePlatformTenant(id), async () => {
+    deleteTenant: (id, confirmation) => mutate(() => api.deletePlatformTenant(id, confirmation), async () => {
       await Promise.all([loadTenants(), loadAudit()])
     }),
     updateServer: (id, body) => mutate(() => api.updatePlatformServer(id, body), loadServers),

@@ -163,11 +163,11 @@ test('deletion requests use only the existing owner and platform lifecycle endpo
     return jsonResponse(200, path.includes('/api/admin/') ? { deleted: true } : { status: 'deleting', deletionDueAt: '2027-01-31T00:00:00Z' })
   }
   try {
-    await serverAccessApi.requestTenantDeletion()
-    await serverAccessApi.deletePlatformTenant(7)
+    await serverAccessApi.requestTenantDeletion('Example tenant')
+    await serverAccessApi.deletePlatformTenant(7, 'Example tenant')
     assert.deepEqual(calls, [
-      ['/api/serveraccess/v1/tenants/me/delete-request', 'POST', '{}'],
-      ['/api/admin/v1/serveraccess/tenants/7/delete', 'POST', '{}'],
+      ['/api/serveraccess/v1/tenants/me/delete-request', 'POST', '{"confirmation":"Example tenant"}'],
+      ['/api/admin/v1/serveraccess/tenants/7/delete', 'POST', '{"confirmation":"Example tenant"}'],
     ])
   } finally {
     globalThis.fetch = previousFetch
