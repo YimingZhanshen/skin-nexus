@@ -139,7 +139,7 @@ func TestIntegrationServerAccessAuditedTenantCreateRollsBackAuditFailure(t *test
 		t.Fatalf("tenant survived audit failure: %+v total=%d err=%v", rows, total, err)
 	}
 	var memberships int
-	if err := m.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM sa_tenant_members WHERE uid=?`, ownerUID).Scan(&memberships); err != nil {
+	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sa_tenant_members WHERE uid=?`, ownerUID).Scan(&memberships); err != nil {
 		t.Fatal(err)
 	}
 	if memberships != 0 {

@@ -133,7 +133,7 @@ func saExerciseOwnerPagesCountScopeAndLegacyLists(t *testing.T, st *Mysql) {
 	other, _ := st.CreateSATenant(ctx, "pages-other", 10)
 	server, _ := st.CreateSAServer(ctx, tenant, "srv_pages", "pages")
 	otherServer, _ := st.CreateSAServer(ctx, other, "srv_pages_other", "pages-other")
-	tx, err := st.DB().BeginTx(ctx, nil)
+	tx, err := st.db.BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

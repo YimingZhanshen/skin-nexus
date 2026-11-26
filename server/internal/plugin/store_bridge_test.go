@@ -43,11 +43,13 @@ func TestStoreServiceAndInstallMigration(t *testing.T) {
 	if err := host.Enable(context.Background(), "store"); err != nil {
 		t.Fatal(err)
 	}
-	if st.migrations["store"] != 1 {
-		t.Fatalf("migration = %d", st.migrations["store"])
+	migration, err := st.PluginMigrationLatest(context.Background(), "store")
+	if err != nil || migration != 1 {
+		t.Fatalf("migration = %d, err=%v", migration, err)
 	}
-	if st.kvs["store//installed"].Value != "1" {
-		t.Fatalf("kv = %+v", st.kvs)
+	installed, _, ok, err := st.GetPluginKV(context.Background(), "store", "", "installed")
+	if err != nil || !ok || installed != "1" {
+		t.Fatalf("kv = %q, ok=%v, err=%v", installed, ok, err)
 	}
 	rec := httptest.NewRecorder()
 	host.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/plugins/store/notes", nil))
