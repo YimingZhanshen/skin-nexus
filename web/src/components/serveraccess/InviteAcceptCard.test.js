@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
-import { createRenderer, h, nextTick, shallowRef } from 'vue'
+import { createRenderer, h, nextTick, ref, shallowRef } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { createServer } from 'vite'
 import en from '../../locales/en.json' with { type: 'json' }
@@ -33,14 +33,19 @@ const vite = await createServer({
     enforce: 'pre',
     resolveId(source) {
       if (source === componentURL) return componentURL
+      if (source.endsWith('/i18n.js')) return '\0invite-card-i18n'
     },
     load(id) {
       if (id === componentURL) return componentCode
+      if (id === '\0invite-card-i18n') return 'export const i18n = globalThis.__inviteCardI18n'
     },
   }],
 })
+globalThis.__inviteCardI18n = createI18n({ legacy: false, locale: 'en', messages: { en, 'zh-CN': zhCN } })
 const { default: InviteAcceptCard } = await vite.ssrLoadModule(componentURL)
+const { serverAccessApi } = await vite.ssrLoadModule('/src/api/serverAccessApi.js')
 await vite.close()
+delete globalThis.__inviteCardI18n
 
 function hostNode(type, text = '') {
   return { type, text, props: {}, children: [], parent: null, addEventListener() {}, removeEventListener() {}, getRootNode() { return this } }
@@ -115,6 +120,73 @@ test('invalid, unverified, and replayed invitation errors are announced accessib
     } finally {
       app.unmount()
     }
+  }
+})
+
+test('invitation API codes are translated through the real transport into the card alert', async () => {
+  const previousFetch = globalThis.fetch
+  const previousDocument = globalThis.Document
+  const previousShadowRoot = globalThis.ShadowRoot
+  globalThis.Document = class Document {}
+  globalThis.ShadowRoot = class ShadowRoot {}
+  try {
+    for (const item of [
+      { status: 404, code: 'serveraccess.invite_invalid', expected: en.errors.serveraccess.invite_invalid },
+      { status: 403, code: 'auth.email_verify_required', expected: en.errors.auth.email_verify_required },
+    ]) {
+      globalThis.fetch = async (path, options) => {
+        assert.equal(path, '/api/serveraccess/v1/invites/accept')
+        assert.equal(options.method, 'POST')
+        assert.equal(options.credentials, 'same-origin')
+        return new Response(JSON.stringify({ code: item.code, message: 'Untranslated server prose' }), {
+          status: item.status, headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      const app = renderer.createApp({
+        setup() {
+          const error = ref('')
+          const busy = ref(false)
+          return () => h(InviteAcceptCard, {
+            busy: busy.value,
+            error: error.value,
+            onAccept: async (token) => {
+              busy.value = true
+              try {
+                await serverAccessApi.acceptInvite(token)
+              } catch (cause) {
+                error.value = cause.message
+              } finally {
+                busy.value = false
+              }
+            },
+          })
+        },
+      })
+      const errors = []
+      app.config.errorHandler = (error) => errors.push(error)
+      app.use(createI18n({ legacy: false, locale: 'en', messages: { en } }))
+      const container = hostNode('root')
+      try {
+        app.mount(container)
+        await settle()
+        const input = byId(container, 'sa-accept-invite-token')
+        input.props['onUpdate:modelValue']('pasted-invite-token')
+        await nextTick()
+        find(container, (node) => node.type === 'form').props.onSubmit({ preventDefault() {} })
+        await settle()
+        if (errors.length) throw errors[0]
+        const alert = find(container, (node) => node.props.role === 'alert')
+        assert.ok(alert)
+        assert.equal(text(alert), item.expected)
+        assert.equal(input.props['aria-invalid'], 'true')
+      } finally {
+        app.unmount()
+      }
+    }
+  } finally {
+    globalThis.fetch = previousFetch
+    globalThis.Document = previousDocument
+    globalThis.ShadowRoot = previousShadowRoot
   }
 })
 

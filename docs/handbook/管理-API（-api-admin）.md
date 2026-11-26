@@ -96,6 +96,10 @@ graph TB
 
 仅携带 `X-Admin-Token`、没有非空会话 Cookie 的机器调用审计 actor 为 0，不经过此门禁。管理 API、Web API 与 OIDC 设备 API 共用同一谓词，错误文案统一为“请求来源校验失败”。
 
+本节来源：
+- [server/internal/adminapi/adminapi.go:298-305](https://github.com/YimingZhanshen/skin-nexus/blob/0a1b074/server/internal/adminapi/adminapi.go#L298-L305)
+- [server/internal/origingate/origin.go:11-24](https://github.com/YimingZhanshen/skin-nexus/blob/0a1b074/server/internal/origingate/origin.go#L11-L24)
+
 ### 权限等级
 - 普通管理员：`permission = 1`
 - 超级管理员：`permission = 2`

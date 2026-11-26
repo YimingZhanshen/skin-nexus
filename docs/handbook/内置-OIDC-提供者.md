@@ -199,6 +199,8 @@ classDiagram
 | `/api/v1/oidc/` | 设备查询、提交和用户授权管理 | 设备 info/submit、tokens 列表、revoke；仅 POST 变异请求执行统一 Origin 校验。 |
 
 **章节来源**
+- [provider.go:383-397](https://github.com/YimingZhanshen/skin-nexus/blob/0a1b074/server/internal/oidc/provider.go#L383-L397)
+- [origin_gate_test.go:53-189](https://github.com/YimingZhanshen/skin-nexus/blob/0a1b074/server/internal/oidc/origin_gate_test.go#L53-L189)
 - [provider.go:97-152](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/oidc/provider.go#L97-L152)
 - [provider.go:152-200](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/oidc/provider.go#L152-L200)
 - [storage.go:200-360](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/oidc/storage.go#L200-L360)
@@ -522,6 +524,8 @@ graph LR
 - 控制公开客户端权限：共享启动器客户端不应被删除，也不应随意扩大其 grant types 或 scopes。
 
 **章节来源**
+- [provider.go:389-397](https://github.com/YimingZhanshen/skin-nexus/blob/0a1b074/server/internal/oidc/provider.go#L389-L397)
+- [origin_gate_test.go:145-189](https://github.com/YimingZhanshen/skin-nexus/blob/0a1b074/server/internal/oidc/origin_gate_test.go#L145-L189)
 - [client.go:18-101](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/oidc/client.go#L18-L101)
 - [provider.go:22-68](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/oidc/provider.go#L22-L68)
 - [userapi.go:60-124](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/oidc/userapi.go#L60-L124)

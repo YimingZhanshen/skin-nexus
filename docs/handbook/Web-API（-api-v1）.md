@@ -128,7 +128,9 @@ sequenceDiagram
 来源校验规则：非 `null` 的 `Origin` 必须与请求 `Host` 忽略大小写匹配；否则 `Sec-Fetch-Site` 必须是 `same-origin` 或 `none`。缺少有效证据时返回 `403`，稳定错误码为 `admin.origin_mismatch`，文案为通用“请求来源校验失败”。该门禁在写入状态前执行。
 
 **章节来源**
-- [server/internal/webapi/webapi.go:451-530](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/webapi/webapi.go#L451-L530)
+- [server/internal/webapi/webapi.go:421-433](https://github.com/YimingZhanshen/skin-nexus/blob/0a1b074/server/internal/webapi/webapi.go#L421-L433)
+- [server/internal/origingate/origin.go:11-24](https://github.com/YimingZhanshen/skin-nexus/blob/0a1b074/server/internal/origingate/origin.go#L11-L24)
+- [server/internal/webapi/origin_gate_test.go:39-121](https://github.com/YimingZhanshen/skin-nexus/blob/0a1b074/server/internal/webapi/origin_gate_test.go#L39-L121)
 - [server/internal/webapi/errorshape_test.go:1-96](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/webapi/errorshape_test.go#L1-L96)
 
 ---
@@ -728,12 +730,12 @@ graph LR
 ## 附录：最佳实践与集成清单
 
 - **会话维持**
-  - 所有 `/api/v1/me/*` 请求必须携带 Cookie；浏览器端使用 `credentials: include` 或 `withCredentials = true`。
+  - 所有 `/api/v1/me/*` 请求必须携带 Cookie；浏览器端从同源页面使用默认 `credentials: same-origin` 的 `fetch` 即可自动携带。
   - 登出后应清理本地缓存，避免旧用户数据污染。
 
-- **跨域配置**
-  - 当前实现依赖同源与 SameSite Cookie；跨域时请确保后端正确配置 CORS，并允许携带凭据。
-  - 若前端与后端不同源，必须同时允许 `Set-Cookie`、`Access-Control-Allow-Credentials` 与指定 Origin。
+- **同源与跨域**
+  - 会话型 Web API 只支持同源前端集成；带非空 `skin_session` 的变异请求必须通过统一 Origin 校验，跨源 Origin 会被拒绝。
+  - 不要用 CORS、`Access-Control-Allow-Credentials` 或 `credentials: include` 绕过该门禁；仅无会话 Cookie 的公开调用不受此门禁影响。
 
 - **限流与重试**
   - 遇到 429 时不要立即重试；登录失败时读取 `Retry-After` 或 `retry_after_seconds`。
