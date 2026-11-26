@@ -143,7 +143,7 @@ docker build -t skin-nexus:latest .   # 本地源码构建（离线/内网场景
 | integration-portable | 两者 | PostgreSQL 16 与 SQLite 文件库，同一条命令；抓方言与序列差异 |
 | web | 两者 | `npm ci` + `npm test`（`web/src` 下现有 node:test 用例）+ `check-locales.mjs` + `check-modal-chrome.mjs` + `check-a11y.mjs`（th scope / table caption / img alt）+ `npm run build` + `npm audit --audit-level=high`（low 及以上另写 step summary，不阻断） |
 | codesql | 两者 | CodeQL（go + javascript-typescript），告警进 security tab 作审查队列，非发布门禁 |
-| docs | 两者 | `check-docs.mjs`：死链 / 表格 / 快照 dating / env 双向真源；`check-theme-contract.mjs`：`theme-spec.md` §3 契约默认值与 `theme-base.css` 逐键比对 + 主题包对宿主令牌的悬空引用（包在姊妹仓，本 checkout 里没有时明确打印跳过而不算通过） |
+| docs | 两者 | Node 22 + npm 缓存（`docs/package-lock.json`，超时 10 分钟）：`npm ci` + `npm audit --audit-level=low` + `npm run docs:build`，并断言 `llms.txt`、`llms-full.txt`、`sitemap.xml` 非空且 `pagefind/` 目录存在；`check-docs.mjs`：死链 / 表格 / 快照 dating / env 双向真源；`check-theme-contract.mjs`：`theme-spec.md` §3 契约默认值与 `theme-base.css` 逐键比对 + 主题包对宿主令牌的悬空引用（包在姊妹仓，本 checkout 里没有时明确打印跳过而不算通过）；`check-modal-chrome.mjs` + `check-a11y.mjs` + `node --test scripts/diag-model.test.mjs` |
 | zizmor | 两者 | workflow 自身卫生（模板注入、未固定第三方 action），`continue-on-error`，非阻断 |
 | docker-build | **仅 PR** | `docker build --pull`，不登录 registry、不推送、不打 tag、不写 registry 缓存——只证明多阶段 Dockerfile 仍可构建 |
 | docker | **仅 push** | 多阶段镜像推 GHCR：`ghcr.io/yimingzhanshen/skin-nexus:latest` 与 `:sha-<commit>`（registry + GHA 缓存） |
@@ -152,7 +152,7 @@ docker build -t skin-nexus:latest .   # 本地源码构建（离线/内网场景
 （改名后旧名仍持有原 OfflineUUID，重建同名角色必须答 409 而非 500），且跨引擎成立——
 `dbx.IsDupKey` 对 MySQL/MariaDB/PostgreSQL/SQLite 的唯一键冲突都能归类。
 
-server/race/serveraccess-e2e 三个 Go job 与 web job 分别启用 Go modules 或 npm 依赖缓存（`cache-dependency-path`），
+server/race/serveraccess-e2e 三个 Go job 与 web/docs 两个 npm job 分别启用 Go modules 或 npm 依赖缓存（`cache-dependency-path`），
 workflow 级 `concurrency` 会在同一 ref 有新推送时取消旧运行，避免排队浪费额度。
 
 **部署机推荐只拉不编**（compose 已默认 `pull_policy: always`）：

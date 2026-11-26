@@ -28,6 +28,16 @@ updates:
         patterns: ["*"]
         update-types: [minor, patch]
 
+  - package-ecosystem: npm
+    directory: /docs
+    schedule: { interval: weekly, day: monday, time: "09:00", timezone: Asia/Shanghai }
+    open-pull-requests-limit: 3
+    commit-message: { prefix: "chore(deps)" }
+    groups:
+      docs-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
   # Covers the Dockerfile FROM lines (runtime base + both build stages).
   # mysql:8.0 in docker-compose.yml is *not* tracked here — the docker ecosystem
   # reads Dockerfiles only, so that one stays a manual §6.1 item.
