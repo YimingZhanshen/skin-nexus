@@ -48,13 +48,14 @@ const detailsError = ref('')
 const detailsLimited = ref(false)
 const expanded = ref({}) // id -> true while its detail sub-row is open
 let pageSeq = 0
+let loadedPageSeq = 0
 let detailsSeq = 0
 let detailModeSeq = 0
 let detailActionSeq = 0
 let disposed = false
 
 async function loadPageDetails() {
-  if (disposed || detailsLoaded.value || detailsBusy.value) return
+  if (disposed || loadedPageSeq !== pageSeq || detailsLoaded.value || detailsBusy.value) return
   const epoch = pageSeq
   const mine = ++detailsSeq
   const ids = logs.value.map((r) => r.id).filter((n) => Number.isFinite(n))
@@ -77,6 +78,7 @@ async function loadPageDetails() {
 }
 
 function toggleDetail(id) {
+  if (disposed || loadedPageSeq !== pageSeq) return
   const next = { ...expanded.value }
   if (next[id]) {
     delete next[id]
@@ -106,6 +108,7 @@ function headersList(raw) {
 async function load() {
   if (disposed) return
   const mine = ++pageSeq
+  loadedPageSeq = 0
   detailsSeq++
   error.value = ''
   // A new page/filters invalidates the batch: clear the map, the expansion and
@@ -124,6 +127,7 @@ async function load() {
     if (mine !== pageSeq) return
     logs.value = d.logs || []
     total.value = d.total || 0
+    loadedPageSeq = mine
   } catch (e) { if (mine === pageSeq) error.value = e.message }
 }
 

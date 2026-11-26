@@ -176,10 +176,11 @@ export function useServerAccessPlatform(api) {
     }),
     updateServer: (id, body) => mutate(() => api.updatePlatformServer(id, body), loadServers),
     setFallback: (enabled) => mutate(async () => {
-      const current = ++fallbackRequest
-      const data = await api.setPlatformFallback(enabled)
-      if (current === fallbackRequest) fallback.value = !!data.enabled
-    }, loadAudit),
+      fallbackRequest++
+      await api.setPlatformFallback(enabled)
+    }, async () => {
+      await Promise.all([loadFallback(), loadAudit()])
+    }),
     revokeCredential: (id, cid) => mutate(() => api.revokePlatformCredential(id, cid), async () => {
       await Promise.all([loadServers(), loadAudit()])
     }),

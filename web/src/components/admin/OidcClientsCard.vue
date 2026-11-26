@@ -61,7 +61,7 @@ async function deleteClient(id) {
   oidcError.value = ''
   try {
     await fetchJSON(`/api/admin/v1/oidc/clients/${encodeURIComponent(id)}`, { method: 'DELETE' })
-    if (mine === seq) oidcClients.value = oidcClients.value.filter(c => c.client_id !== id)
+    await loadOIDC()
   } catch (e) { if (mine === seq) oidcError.value = e.message }
 }
 

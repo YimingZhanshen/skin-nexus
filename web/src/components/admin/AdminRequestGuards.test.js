@@ -18,6 +18,7 @@ const fixtures = [
   { name: 'ReportsView', file: 'ReportsView.vue', list: 'reports', error: 'error', response: (id) => ({ reports: [{ id, textureId: id, reason: 'other', status: 'open' }], total: 101 }) },
   { name: 'AuditView', file: 'AuditView.vue', list: 'rows', error: 'error', response: (id) => ({ audit: [{ id, action: 'test.action' }], total: 101, actions: [] }) },
   { name: 'ServerAccessAdminView', file: 'ServerAccessAdminView.vue', platform: true },
+  { name: 'OidcClientsCard', file: 'OidcClientsCard.vue', standalone: true },
 ]
 const modules = new Map()
 const virtualModules = new Map([
@@ -160,7 +161,7 @@ function setSearch(fixture, container, value) {
   else if (!input.props.onInput) button(container, 'Search').props.onClick()
 }
 
-for (const fixture of fixtures.filter((item) => !item.platform)) {
+for (const fixture of fixtures.filter((item) => !item.platform && !item.standalone)) {
   test(`${fixture.name}: a late page 1 response cannot replace page 2`, async () => {
     const page2 = deferred()
     const latePage1 = deferred()
@@ -257,6 +258,180 @@ for (const name of ['TexturesView', 'AuditView']) {
     } finally { cleanup(app) }
   })
 }
+
+for (const trigger of ['page', 'filter']) {
+  test(`AccessLogsView: old rows cannot start details while a new ${trigger} is pending`, async () => {
+    const fixture = fixtures.find((item) => item.name === 'AccessLogsView')
+    const pendingPage = deferred()
+    const detailUrls = []
+    let listCalls = 0
+    const { app, container, state } = await mount(fixture, (path) => {
+      if (path === '/api/admin/v1/access-log/detail-mode') return { enabled: false }
+      if (path.startsWith('/api/admin/v1/access-logs?')) {
+        listCalls++
+        if (listCalls === 2) return pendingPage.promise
+        return fixture.response(listCalls === 1 ? 11 : 22)
+      }
+      if (path.startsWith('/api/admin/v1/access-log/details?')) {
+        detailUrls.push(path)
+        return { rows: [{ id: 22, status_code: 201 }], limited: false }
+      }
+      throw new Error(`unexpected request: ${path}`)
+    })
+    try {
+      assert.equal(rowId(state, fixture), 11)
+      if (trigger === 'page') pager(container).props.onUpdatePage(2)
+      else setSearch(fixture, container, 'new filter')
+      await settle()
+      assert.equal(rowId(state, fixture), 11, 'the old rows remain visible while loading')
+
+      button(container, 'Show detail').props.onClick()
+      await settle()
+      assert.deepEqual(detailUrls, [], 'details must not start against the old visible rows')
+      assert.deepEqual(state.expanded, {}, 'old rows must not expand while their page is pending')
+
+      pendingPage.resolve(fixture.response(22))
+      await settle()
+      button(container, 'Show detail').props.onClick()
+      await settle()
+      assert.equal(detailUrls.length, 1)
+      assert.equal(new URL(detailUrls[0], 'https://example.test').searchParams.get('ids'), '22')
+      assert.equal(state.details[22].status_code, 201)
+    } finally { cleanup(app) }
+  })
+}
+
+function userResponse(id, nickname = `User ${id}`, emailVerified = 0) {
+  return { users: [{ id, nickname, email: `${id}@example.test`, emailVerified, permission: 0 }], total: 101 }
+}
+
+function setModelValue(node, value) {
+  assert.ok(node, 'model input')
+  if (node.props['onUpdate:modelValue']) node.props['onUpdate:modelValue'](value)
+  else node.props.onInput({ target: { value } })
+}
+
+test('UsersView: a successful inline PUT invalidates an older list snapshot and reloads canonical state', async () => {
+  const fixture = fixtures.find((item) => item.name === 'UsersView')
+  const staleList = deferred()
+  const canonicalList = deferred()
+  const pendingPut = deferred()
+  const puts = []
+  let listCalls = 0
+  const { app, container, state } = await mount(fixture, (path, options) => {
+    if (path.startsWith('/api/admin/v1/users?')) {
+      listCalls++
+      if (listCalls === 1) return userResponse(1, 'Before')
+      if (listCalls === 2) return staleList.promise
+      return canonicalList.promise
+    }
+    if (path === '/api/admin/v1/users/1/nickname' && options?.method === 'PUT') {
+      puts.push(JSON.parse(options.body))
+      return pendingPut.promise
+    }
+    throw new Error(`unexpected request: ${path}`)
+  })
+  try {
+    button(container, 'Search').props.onClick()
+    await settle()
+    assert.equal(listCalls, 2)
+    const nickname = find(container, (node) => node.type === 'input' && node.props.class === 'cell-input')
+    setModelValue(nickname, 'Draft')
+    await nextTick()
+    nickname.props.onBlur()
+    await settle()
+    assert.deepEqual(puts, [{ nickname: 'Draft' }])
+
+    pendingPut.resolve({})
+    await settle()
+    assert.equal(listCalls, 3, 'mutation success must start a newer canonical list generation')
+
+    staleList.resolve(userResponse(1, 'Stale snapshot'))
+    await settle()
+    assert.equal(state.users[0].nickname, 'Draft', 'the old snapshot may keep the pre-reload row but cannot publish stale state')
+    canonicalList.resolve(userResponse(1, 'Draft'))
+    await settle()
+    assert.equal(state.users[0].nickname, 'Draft')
+  } finally { cleanup(app) }
+})
+
+test('UsersView: a PUT finishing after a page change never patches the stale row and reloads the current page', async () => {
+  const fixture = fixtures.find((item) => item.name === 'UsersView')
+  const pendingPut = deferred()
+  const pageTwo = deferred()
+  const currentReload = deferred()
+  const listUrls = []
+  let pageTwoCalls = 0
+  const { app, container, state } = await mount(fixture, (path, options) => {
+    if (path.startsWith('/api/admin/v1/users?')) {
+      listUrls.push(path)
+      if (listUrls.length === 1) return userResponse(1)
+      pageTwoCalls++
+      return pageTwoCalls === 1 ? pageTwo.promise : currentReload.promise
+    }
+    if (path === '/api/admin/v1/users/1/verification' && options?.method === 'PUT') return pendingPut.promise
+    throw new Error(`unexpected request: ${path}`)
+  })
+  try {
+    const staleRow = state.users[0]
+    find(container, (node) => node.type === 'button' && node.props.class === 'veri-btn').props.onClick()
+    await settle()
+    pager(container).props.onUpdatePage(2)
+    await settle()
+    pageTwo.resolve(userResponse(2))
+    await settle()
+    assert.equal(state.users[0].id, 2)
+
+    pendingPut.resolve({})
+    await settle()
+    assert.equal(staleRow.emailVerified, 0, 'a detached row must not be patched')
+    assert.equal(listUrls.length, 3, 'the current page must be refreshed after the stale-page mutation')
+    assert.equal(new URL(listUrls[2], 'https://example.test').searchParams.get('page'), '2')
+
+    currentReload.resolve(userResponse(2))
+    await settle()
+    assert.equal(state.users[0].id, 2)
+  } finally { cleanup(app) }
+})
+
+test('OidcClientsCard: a successful DELETE reloads past a list request started while it was pending', async () => {
+  const fixture = fixtures.find((item) => item.name === 'OidcClientsCard')
+  const pendingDelete = deferred()
+  const staleList = deferred()
+  const canonicalList = deferred()
+  let listCalls = 0
+  const { app, container, state } = await mount(fixture, (path, options) => {
+    if (path === '/api/admin/v1/oidc/clients') {
+      if (options?.method === 'POST') return { secret: '' }
+      listCalls++
+      if (listCalls === 1) return { clients: [{ client_id: 'old', name: 'Old', public: true }] }
+      if (listCalls === 2) return staleList.promise
+      return canonicalList.promise
+    }
+    if (path === '/api/admin/v1/oidc/clients/old' && options?.method === 'DELETE') return pendingDelete.promise
+    throw new Error(`unexpected request: ${path}`)
+  })
+  try {
+    button(container, 'Delete').props.onClick()
+    await settle()
+    const clientId = find(container, (node) => node.type === 'input' && node.props.placeholder === 'client_id')
+    setModelValue(clientId, 'new')
+    await nextTick()
+    button(container, 'Create').props.onClick()
+    await settle()
+    assert.equal(listCalls, 2)
+
+    pendingDelete.resolve({})
+    await settle()
+    assert.equal(listCalls, 3, 'DELETE success must start a newer canonical list generation')
+
+    staleList.resolve({ clients: [{ client_id: 'old', name: 'Old', public: true }] })
+    await settle()
+    canonicalList.resolve({ clients: [{ client_id: 'new', name: 'new', public: true }] })
+    await settle()
+    assert.deepEqual(state.oidcClients.map((client) => client.client_id), ['new'])
+  } finally { cleanup(app) }
+})
 
 test('AccessLogsView: page details inherit the page epoch and cannot overwrite a newer selection', async () => {
   const fixture = fixtures.find((item) => item.name === 'AccessLogsView')
@@ -370,6 +545,43 @@ test('useServerAccessPlatform: fallback uses its own request generation', async 
   first.resolve({ enabled: true })
   await firstLoad
   assert.equal(platform.fallback.value, false)
+})
+
+test('useServerAccessPlatform: a fallback mutation reloads past a newer in-flight fallback snapshot', async () => {
+  const pendingMutation = deferred()
+  const staleFallback = deferred()
+  const canonicalFallback = deferred()
+  let fallbackCalls = 0
+  let auditCalls = 0
+  const platform = useServerAccessPlatform(platformApi({
+    platformFallback: async () => {
+      fallbackCalls++
+      if (fallbackCalls === 1) return { enabled: false }
+      if (fallbackCalls === 2) return staleFallback.promise
+      return canonicalFallback.promise
+    },
+    platformAudit: async () => { auditCalls++; return { audit: [], total: 0 } },
+    setPlatformFallback: async () => pendingMutation.promise,
+  }))
+  try {
+    await platform.load()
+    const mutation = platform.setFallback(true)
+    const concurrentLoad = platform.load()
+    assert.equal(fallbackCalls, 2)
+
+    pendingMutation.resolve({ enabled: true })
+    await settle()
+    assert.equal(fallbackCalls, 3, 'mutation success must invalidate and reload the fallback family')
+    assert.equal(auditCalls, 3, 'audit refresh must still run alongside fallback refresh')
+
+    staleFallback.resolve({ enabled: false })
+    await concurrentLoad
+    canonicalFallback.resolve({ enabled: true })
+    assert.equal(await mutation, true)
+    assert.equal(platform.fallback.value, true)
+  } finally {
+    platform.dispose()
+  }
 })
 
 test('useServerAccessPlatform: dispose invalidates all four families and their loading/error writes', async () => {

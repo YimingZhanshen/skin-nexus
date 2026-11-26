@@ -152,9 +152,9 @@ function configResponse(name, value) {
   }
 }
 
-async function mountView(configRequest) {
+async function mountView(configRequest, listRequest = async () => ({ plugins, guardsBypassed: false })) {
   globalThis.__pluginsFetchJSON = async (path, options) => {
-    if (path === '/api/admin/v1/plugins') return { plugins, guardsBypassed: false }
+    if (path === '/api/admin/v1/plugins') return listRequest(path, options)
     return configRequest(path, options)
   }
   const app = renderer.createApp(PluginsView)
@@ -165,7 +165,7 @@ async function mountView(configRequest) {
   app.mount(container)
   await settle()
   if (errors.length) throw errors[0]
-  return { app, container, errors }
+  return { app, container, state: app._instance.setupState, errors }
 }
 
 function cleanup(app) {
@@ -340,6 +340,50 @@ test('a late Alpha PUT rejection does not show an error on the Beta config', asy
     assert.equal(schemaInput(container).props['data-schema'], 'Beta schema')
     assert.equal(schemaInput(container).props.value, 'beta value')
     assert.equal(button(container, 'Save config').props.disabled, false)
+  } finally {
+    cleanup(app)
+  }
+})
+
+test('a successful guard-bypass mutation invalidates an older plugin list snapshot', async () => {
+  const staleList = deferred()
+  const canonicalList = deferred()
+  const pendingBypass = deferred()
+  const bypassWrites = []
+  let listCalls = 0
+  const { app, container, state } = await mountView((path, options) => {
+    if (path === '/api/admin/v1/plugins/alpha/reload' && options?.method === 'POST') return {}
+    if (path === '/api/admin/v1/plugins/guards/bypass' && options?.method === 'POST') {
+      bypassWrites.push(JSON.parse(options.body))
+      return pendingBypass.promise
+    }
+    throw new Error(`unexpected request: ${path}`)
+  }, async () => {
+    listCalls++
+    if (listCalls === 1) return { plugins, guardsBypassed: false }
+    if (listCalls === 2) return staleList.promise
+    return canonicalList.promise
+  })
+  try {
+    button(container, 'Reload').props.onClick()
+    await settle()
+    assert.equal(listCalls, 2)
+    const bypass = find(container, (node) => node.type === 'input' && node.props.type === 'checkbox')
+    assert.ok(bypass, 'guard-bypass checkbox')
+    bypass.props.onChange()
+    await settle()
+    assert.deepEqual(bypassWrites, [{ enabled: true }])
+
+    pendingBypass.resolve({ guardsBypassed: true })
+    await settle()
+    assert.equal(listCalls, 3, 'bypass success must start a newer canonical list generation')
+
+    staleList.resolve({ plugins, guardsBypassed: false })
+    await settle()
+    canonicalList.resolve({ plugins, guardsBypassed: true })
+    await settle()
+    assert.equal(state.guardsBypassed, true)
+    assert.equal(bypass.props.checked, true)
   } finally {
     cleanup(app)
   }

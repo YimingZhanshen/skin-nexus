@@ -162,11 +162,11 @@ async function toggleBypass() {
   if (next && !(await confirmDialog(t('admin.pluginsGuardBypassConfirm'), { danger: true }))) return
   bypassBusy.value = true
   try {
-    const d = await fetchJSON('/api/admin/v1/plugins/guards/bypass', {
+    await fetchJSON('/api/admin/v1/plugins/guards/bypass', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: next }),
     })
-    guardsBypassed.value = !!d.guardsBypassed
+    await load()
   } catch (e) { actionError.value = e.message }
   finally { bypassBusy.value = false }
 }
