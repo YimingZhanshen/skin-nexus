@@ -50,6 +50,14 @@ async function acceptInvite(token) {
   await catalog.load()
   if (!catalog.selected.value && catalog.servers.value.length) await catalog.select(catalog.servers.value[0].id)
 }
+async function updateServer(id, body) {
+  if (body.status === 'disabled') {
+    const current = catalog.servers.value.find((server) => server.id === id)
+    const name = current?.name || catalog.selected.value?.server.name || ''
+    if (!(await confirmDialog(t('serverAccess.confirmDisable', { name }), { danger: true }))) return
+  }
+  await catalog.update(id, body)
+}
 async function removeMember(uid) {
   if (!(await confirmDialog(t('serverAccess.confirmRemoveMember', { uid }), { danger: true }))) return
   await portal.removeMember(uid)
@@ -73,9 +81,9 @@ async function removeMember(uid) {
         <TenantLifecyclePanel v-if="portal.tenant.value" :tenant="portal.tenant.value" :api="serverAccessApi" :can-export="canWrite" :can-delete="canManageMembers" :busy="portal.busy.value" @changed="load" />
         <ServerMembersPanel :members="portal.members.value" :invites="portal.invites.value" :page="portal.page.value" :size="portal.size.value" :total="portal.total.value" :busy="portal.busy.value" :can-manage-members="canManageMembers" :invite-token="inviteToken" @invite="invite" @remove-member="removeMember" @revoke-invite="portal.revokeInvite" @update:page="portal.pageInvites" @hide-invite="inviteToken = ''" />
         <div class="portal-grid">
-          <ServerListPanel :servers="catalog.servers.value" :selected-id="selectedId" :used="catalog.quotaUsed.value" :limit="portal.tenant.value?.serverLimit || 0" :page="catalog.page.value" :size="catalog.size.value" :total="catalog.total.value" :loading="catalog.loading.value" :busy="catalog.busy.value" :can-write="canWrite" :error="catalog.error.value" @select="catalog.select" @create="create" @update="(id, body) => catalog.update(id, body)" @update:page="catalog.goPage" @retry="load" />
+          <ServerListPanel :servers="catalog.servers.value" :selected-id="selectedId" :used="catalog.quotaUsed.value" :limit="portal.tenant.value?.serverLimit || 0" :page="catalog.page.value" :size="catalog.size.value" :total="catalog.total.value" :loading="catalog.loading.value" :busy="catalog.busy.value" :can-write="canWrite" :error="catalog.error.value" @select="catalog.select" @create="create" @update="updateServer" @update:page="catalog.goPage" @retry="load" />
           <div v-if="catalog.selected.value" class="detail-column">
-            <ServerDetailPanel :detail="catalog.selected.value" :can-write="canWrite" :busy="catalog.busy.value" :error="catalog.error.value" @update="catalog.update(selectedId, $event)" @credentials="credentialOpen = true" />
+            <ServerDetailPanel :detail="catalog.selected.value" :can-write="canWrite" :busy="catalog.busy.value" :error="catalog.error.value" @update="updateServer(selectedId, $event)" @credentials="credentialOpen = true" />
             <ServerWhitelistPanel :server-id="selectedId" :api="serverAccessApi" :can-write="canWrite" />
             <ServerBansPanel :server-id="selectedId" :api="serverAccessApi" :can-write="canWrite" />
             <ServerEventsPanel :server-id="selectedId" :api="serverAccessApi" />

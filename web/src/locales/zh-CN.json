@@ -701,6 +701,7 @@
     "invitations": "邀请记录",
     "removeMember": "移除成员",
     "confirmRemoveMember": "确认移除 #{uid}？该成员将立即失去门户访问权限。",
+    "confirmDisable": "确认停用 #{name}？玩家将无法继续访问该服务器。",
     "revokeInvite": "撤销邀请",
     "noMembers": "没有可显示的成员",
     "noInvites": "没有邀请",

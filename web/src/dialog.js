@@ -20,20 +20,33 @@ const state = reactive({
   danger: false,
 })
 
-let settle = null
+const queue = []
+let active = null
 
-function open(next) {
-  Object.assign(state, next, { open: true })
-  return new Promise((resolve) => { settle = resolve })
+function show(entry) {
+  active = entry
+  Object.assign(state, entry.options, { open: true })
 }
 
-// resolveDialog is called by the host component exactly once per dialog; a
-// second call (Escape fires cancel, then close) finds nothing to settle.
+function open(next) {
+  return new Promise((resolve) => {
+    const entry = { options: next, resolve }
+    if (active) queue.push(entry)
+    else show(entry)
+  })
+}
+
+// Only the active entry can settle. Once it does, the next queued dialog owns
+// the resolver and is shown immediately; stale calls with no active entry do
+// nothing and cannot consume a future dialog's resolver.
 export function resolveDialog(result) {
+  if (!active) return
+  const done = active
+  active = null
   state.open = false
-  const done = settle
-  settle = null
-  if (done) done(result)
+  done.resolve(result)
+  const next = queue.shift()
+  if (next) show(next)
 }
 
 export const dialogState = readonly(state)

@@ -701,6 +701,7 @@
     "invitations": "Invitations",
     "removeMember": "Remove member",
     "confirmRemoveMember": "Remove member #{uid}? Their portal access ends immediately.",
+    "confirmDisable": "Disable #{name}? Players will no longer be able to access this server.",
     "revokeInvite": "Revoke invitation",
     "noMembers": "No members to show",
     "noInvites": "No invitations",

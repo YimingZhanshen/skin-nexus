@@ -104,7 +104,7 @@ function goHome() {
       <input id="s-base-url" v-model="baseURL" placeholder="https://skin.example.com" />
       <template v-if="tokenRequired">
         <label for="s-setup-token">{{ t('setup.setupToken') }}</label>
-        <input id="s-setup-token" v-model="setupToken" autocomplete="off" spellcheck="false" />
+        <input id="s-setup-token" v-model="setupToken" type="password" autocomplete="new-password" spellcheck="false" />
         <div class="muted" style="font-size: var(--fs-xs); margin-top: 8px;">
           {{ t('setup.setupTokenHint') }}
         </div>

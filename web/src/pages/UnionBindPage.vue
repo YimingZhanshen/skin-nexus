@@ -3,7 +3,7 @@
 // bind (get 2-min token) / bindto / unbind / UUID remap.
 // All endpoints exist only when SKIN_UNION_ENABLED; otherwise the API 404s
 // and this page shows a friendly notice (zero surface for non-alliance sites).
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api, union } from '../api.js'
 import { guard401 } from '../session.js'
@@ -22,6 +22,8 @@ const loading = ref(false)
 const bindToken = ref('')
 const bindTokenFor = ref('')
 const bindTokenExpire = ref(0)
+const now = ref(Date.now())
+let expiryTimer = null
 const bindtoToken = ref('')
 const selectedPID = ref(null)
 
@@ -32,7 +34,35 @@ const remapTarget = ref('')
 const remapSuggestions = ref([]) // [{ value, label }]
 
 const bindTokenAlive = computed(() =>
-  bindToken.value && Date.now() < bindTokenExpire.value)
+  bindToken.value && now.value < bindTokenExpire.value)
+
+function clearExpiryTimer() {
+  if (expiryTimer !== null) clearTimeout(expiryTimer)
+  expiryTimer = null
+}
+
+function scheduleExpiry() {
+  clearExpiryTimer()
+  if (!bindToken.value) return
+  const remaining = bindTokenExpire.value - now.value
+  if (remaining <= 0) {
+    bindToken.value = ''
+    bindTokenFor.value = ''
+    return
+  }
+  // Browsers clamp delays above a signed 32-bit integer to one millisecond.
+  // Split long waits so a token cannot expire early or spin in a tight loop.
+  expiryTimer = setTimeout(() => {
+    expiryTimer = null
+    now.value = Date.now()
+    if (!bindToken.value) return
+    if (now.value < bindTokenExpire.value) scheduleExpiry()
+    else {
+      bindToken.value = ''
+      bindTokenFor.value = ''
+    }
+  }, Math.min(remaining, 2_147_483_647))
+}
 
 const selectedPlayer = computed(() =>
   players.value.find(p => playerUUID(p) === selectedPID.value) || null)
@@ -167,6 +197,8 @@ async function doBind() {
     bindToken.value = d.token
     bindTokenFor.value = playerName(p)
     bindTokenExpire.value = Date.now() + 2 * 60 * 1000 // hub TTL 2min
+    now.value = Date.now()
+    scheduleExpiry()
     success.value = t('union.bindCodeSuccess')
   } catch (e) { if (!guard401(e)) error.value = e.message } finally { loading.value = false }
 }
@@ -213,6 +245,7 @@ async function doRemap() {
 
 watch(selectedPID, loadRemapSuggestions) // reload suggestions per source profile
 onMounted(load)
+onBeforeUnmount(clearExpiryTimer)
 </script>
 
 <template>
