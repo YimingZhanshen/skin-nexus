@@ -107,6 +107,15 @@ func TestScopedUserHostPathSafety(t *testing.T) {
 		{"double encoded backslash", "/ok/%255c..%255cadmin", false},
 		{"double encoded NUL", "/ok/%2500/admin", false},
 		{"malformed double encoding", "/ok/%25zz/admin", false},
+		{"double encoded dot-prefixed segment", "/ok/%252Ewell-known", true},
+		{"triple encoded parent", "/ok/%25252e%25252e/admin", false},
+		{"triple encoded current", "/ok/%25252E/admin", false},
+		{"triple encoded separator", "/ok/..%25252fadmin", false},
+		{"triple encoded backslash", "/ok/%252525c..%252525cadmin", false},
+		{"triple encoded NUL", "/ok/%25252500/admin", false},
+		{"quadruple encoded parent", "/ok/%2525252e%2525252e/admin", false},
+		{"malformed triple encoding", "/ok/%2525zz/admin", false},
+		{"deeply encoded parent", "/ok/" + encodeOutboundTestPath("..", 12) + "/admin", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -134,6 +143,32 @@ func TestScopedUserHostPathSafety(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUserHostPathSafeBoundsRepeatedDecoding(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		passes int
+		want   bool
+	}{
+		{"safe residual stable at the decode bound", 8, true},
+		{"safe residual still changing after the decode bound", 9, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := "/ok/" + encodeOutboundTestPath(".well-known", tc.passes)
+			if got := userHostPathSafe(path); got != tc.want {
+				t.Fatalf("userHostPathSafe(%q) = %v, want %v", path, got, tc.want)
+			}
+		})
+	}
+}
+
+func encodeOutboundTestPath(value string, passes int) string {
+	for i := 0; i < passes; i++ {
+		value = strings.ReplaceAll(value, "%", "%25")
+		value = strings.ReplaceAll(value, ".", "%2e")
+	}
+	return value
 }
 
 func TestScopedStaticHostKeepsPathPolicy(t *testing.T) {

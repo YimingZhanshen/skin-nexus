@@ -197,14 +197,11 @@ func (c *control) tenantDeleteRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	who := saCaller(r)
-	tenant, err := c.cfg.Store.RequestSATenantDeletionConfirmed(r.Context(), who.TenantID, body.Confirmation, c.cfg.DeletionGracePeriod, c.now())
+	tenant, err := c.cfg.Store.RequestSATenantDeletionConfirmedAudited(r.Context(), who.TenantID, body.Confirmation, c.cfg.DeletionGracePeriod, c.now(), who.UID, "serveraccess_tenant_delete_request")
 	if err != nil {
 		writeSAStoreError(w, err)
 		return
 	}
-	c.cfg.Store.InsertAudit(r.Context(), who.UID, "serveraccess_tenant_delete_request", map[string]any{
-		"tenantId": who.TenantID, "deletionDueAt": tenant.DeletionDueAt.Format(time.RFC3339),
-	})
 	writeSAJSON(w, http.StatusOK, map[string]any{
 		"status": tenant.Status, "deletionRequestedAt": tenant.DeletionRequestedAt, "deletionDueAt": tenant.DeletionDueAt,
 	})

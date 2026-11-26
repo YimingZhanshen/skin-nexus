@@ -24,16 +24,52 @@ func (m *Mysql) RequestSATenantDeletionConfirmed(ctx context.Context, tenantID i
 	return m.requestSATenantDeletion(ctx, tenantID, &confirmation, grace, now)
 }
 
-func (m *Mysql) requestSATenantDeletion(ctx context.Context, tenantID int64, confirmation *string, grace time.Duration, now time.Time) (SATenant, error) {
-	if grace <= 0 {
-		grace = DefaultSATenantDeletionGrace
-	}
-	now = now.UTC()
+// RequestSATenantDeletionConfirmedAudited performs exact confirmation, the
+// lifecycle transition and its audit append in one transaction. Replays keep
+// the original deadline and still append an audit row; any audit failure rolls
+// the entire request back.
+func (m *Mysql) RequestSATenantDeletionConfirmedAudited(ctx context.Context, tenantID int64, confirmation string, grace time.Duration, now time.Time, actorUID int64, action string) (SATenant, error) {
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return SATenant{}, err
 	}
 	defer tx.Rollback()
+	tenant, err := requestSATenantDeletionTx(ctx, tx, tenantID, &confirmation, grace, now)
+	if err != nil {
+		return SATenant{}, err
+	}
+	if err := insertAuditTx(ctx, tx, actorUID, action, map[string]any{
+		"tenantId": tenantID, "deletionDueAt": tenant.DeletionDueAt.Format(time.RFC3339),
+	}, m.now()); err != nil {
+		return SATenant{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return SATenant{}, err
+	}
+	return tenant, nil
+}
+
+func (m *Mysql) requestSATenantDeletion(ctx context.Context, tenantID int64, confirmation *string, grace time.Duration, now time.Time) (SATenant, error) {
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return SATenant{}, err
+	}
+	defer tx.Rollback()
+	tenant, err := requestSATenantDeletionTx(ctx, tx, tenantID, confirmation, grace, now)
+	if err != nil {
+		return SATenant{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return SATenant{}, err
+	}
+	return tenant, nil
+}
+
+func requestSATenantDeletionTx(ctx context.Context, tx *dbx.Tx, tenantID int64, confirmation *string, grace time.Duration, now time.Time) (SATenant, error) {
+	if grace <= 0 {
+		grace = DefaultSATenantDeletionGrace
+	}
+	now = now.UTC()
 	tenant, err := saLockTenantLifecycleRow(ctx, tx, tenantID)
 	if err != nil {
 		return SATenant{}, err
@@ -63,9 +99,6 @@ func (m *Mysql) requestSATenantDeletion(ctx context.Context, tenantID int64, con
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE sa_server_credentials SET status='revoked'
 		 WHERE server_id IN (SELECT id FROM sa_servers WHERE tenant_id=?)`, tenantID); err != nil {
-		return SATenant{}, err
-	}
-	if err := tx.Commit(); err != nil {
 		return SATenant{}, err
 	}
 	tenant.Status = "deleting"

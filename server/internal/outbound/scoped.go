@@ -196,15 +196,29 @@ func (s *Scoped) allow(host string) bool {
 	return true
 }
 
+const maxUserHostPathDecodePasses = 8
+
 // userHostPathSafe rejects path syntax that downstream HTTP stacks may treat
-// as separators or traversal. url.Parse has already decoded u.Path once; the
-// second pass catches double-encoded variants without normalizing valid paths.
+// as separators or traversal. url.Parse has already decoded u.Path once, so
+// inspect every further decoding layer without normalizing valid paths. The
+// pass limit bounds work and rejects residuals that still contain escapes.
 func userHostPathSafe(p string) bool {
 	if !requestPathSafe(p) {
 		return false
 	}
-	decoded, err := url.PathUnescape(p)
-	return err == nil && requestPathSafe(decoded)
+	for pass := 0; pass < maxUserHostPathDecodePasses; pass++ {
+		decoded, err := url.PathUnescape(p)
+		if err != nil || !requestPathSafe(decoded) {
+			return false
+		}
+		if decoded == p {
+			return true
+		}
+		p = decoded
+	}
+	// A residual without '%' cannot change under PathUnescape. Do not accept a
+	// still-changing (or malformed) residual just because it hit the cap.
+	return !strings.Contains(p, "%")
 }
 
 func requestPathSafe(p string) bool {

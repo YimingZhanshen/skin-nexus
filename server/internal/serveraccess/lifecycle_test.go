@@ -526,6 +526,10 @@ func TestServerAccessAPIDeleteRequestReplayStillRequiresExactConfirmation(t *tes
 	if !replay.DeletionDueAt.Equal(first.DeletionDueAt) || !replay.DeletionDueAt.Equal(f.now.Add(7*24*time.Hour)) {
 		t.Fatalf("replay due = %s, want original %s", replay.DeletionDueAt, first.DeletionDueAt)
 	}
+	_, auditTotal, err := f.st.PlatformServerAccessAudit(context.Background(), "serveraccess_tenant_delete_request", 1, 20)
+	if err != nil || auditTotal != 2 {
+		t.Fatalf("delete request replay audit total = %d, want 2 (initial and replay): %v", auditTotal, err)
+	}
 }
 
 func TestServerAccessAPILifecycleExportPrefersActiveMembership(t *testing.T) {
@@ -625,6 +629,51 @@ func TestServerAccessAPIDeleteRequestRollsBackOnCredentialFailure(t *testing.T) 
 	credentials, credentialErr := f.st.ListSAServerCredentials(ctx, f.tenant, f.server)
 	if status != "active" || requested.Valid || due.Valid || serverErr != nil || server.Status != "active" || credentialErr != nil || len(credentials) != 1 || credentials[0].Status != "active" {
 		t.Fatalf("partial deletion state: tenant=%q requested=%+v due=%+v server=%+v credentials=%+v", status, requested, due, server, credentials)
+	}
+}
+
+func TestServerAccessAPIDeleteRequestRollsBackOnAuditFailure(t *testing.T) {
+	f := newSAFixture(t)
+	ctx := context.Background()
+	credentialID, err := f.st.CreateSAServerCredential(ctx, f.tenant, f.server, store.SACredential{
+		Mode: "header", SecretHash: strings.Repeat("a", 64), Scopes: `["verify:join"]`, Status: "active",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.st.DB().ExecContext(ctx, `CREATE TRIGGER lifecycle_fail_delete_request_audit
+		BEFORE INSERT ON audit_log WHEN NEW.action='serveraccess_tenant_delete_request'
+		BEGIN SELECT RAISE(ABORT,'forced delete request audit failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	rec := f.request(t, f.owner, http.MethodPost, "/api/serveraccess/v1/tenants/me/delete-request", `{"confirmation":"one"}`, "")
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("delete request with audit failure = %d %s, want 500", rec.Code, rec.Body.String())
+	}
+	var status string
+	var requested, due sql.NullTime
+	if err := f.st.DB().QueryRowContext(ctx,
+		`SELECT status,deletion_requested_at,deletion_due_at FROM sa_tenants WHERE id=?`, f.tenant).Scan(&status, &requested, &due); err != nil {
+		t.Fatal(err)
+	}
+	if status != "active" || requested.Valid || due.Valid {
+		t.Errorf("tenant state survived audit failure: status=%q requested=%+v due=%+v", status, requested, due)
+	}
+	server, serverErr := f.st.SAServerByID(ctx, f.tenant, f.server)
+	if serverErr != nil || server.Status != "active" {
+		t.Errorf("server state survived audit failure: server=%+v err=%v", server, serverErr)
+	}
+	credentials, credentialErr := f.st.ListSAServerCredentials(ctx, f.tenant, f.server)
+	if credentialErr != nil || len(credentials) != 1 || credentials[0].ID != credentialID || credentials[0].Status != "active" {
+		t.Errorf("credential state survived audit failure: credentials=%+v err=%v", credentials, credentialErr)
+	}
+	var auditTotal int
+	if err := f.st.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM audit_log WHERE action='serveraccess_tenant_delete_request'`).Scan(&auditTotal); err != nil {
+		t.Fatal(err)
+	}
+	if auditTotal != 0 {
+		t.Errorf("audit rows survived failed insert: total=%d", auditTotal)
 	}
 }
 
