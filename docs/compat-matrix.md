@@ -1,8 +1,8 @@
 ---
-description: "SkinNexus 与 blessing / yggdrasil-connect 的兼容矩阵：Yggdrasil 硬契约、OIDC 免密、联盟兼容面与刻意偏差台账。"
+description: "SkinNexus 与 blessing / yggdrasil-connect 的兼容矩阵：Yggdrasil 硬契约、OIDC 免密、联盟兼容面、可选服务器接入与刻意偏差台账。"
 ---
 
-# 兼容矩阵 —— blessing / yggdrasil-connect 1:1 复刻进度
+# 兼容矩阵 —— blessing / yggdrasil-connect 契约对照
 
 > 依据：2026-10-23 对线上 legacy 站点全量只读实测（报文留档于维护者本地，不随仓库分发）
 > 与上游源码级审计。图例：✅ 达成 / 🔧 实测后修复 / ⚠️ 缺口 / ➖ 不复刻。
@@ -35,7 +35,8 @@ JWT access token 实测形状：`aud="2"（shared_client_id）、sub=uid、scope
 - **skinDomains 公式**：按旧站公式（配置 ∪ Union 成员站 ∪ site_url host ∪ 请求 host，2026-10-23 对齐）。
 - **两种拼写各自注册**：不带斜杠才是规范地址（`X-Authlib-Injector-API-Location` 广告的就是它，
   启动器配置框里粘贴的也是它），而 Go 的 ServeMux 对 `{$}` 模式的不带斜杠形式会自己回一个 307——
-  那条重定向上没有任何处理器头，跨源读它的浏览器直接按 CORS 失败处理。2026-11-09 补
+  那条重定向上没有任何处理器头，跨源读它的浏览器直接按 CORS 失败处理。2026-11-09 补齐 Yggdrasil
+  与 Union 的规范地址注册，并增加组装层回归，确保裸地址直接返回 200 且恰好一个 ACAO。
 
 </details>
 
@@ -72,15 +73,19 @@ JWT access token 实测形状：`aud="2"（shared_client_id）、sub=uid、scope
 |---|---|---|
 | `GET /v/<secret>/sessionserver/session/minecraft/hasJoined` | 按服 URL secret；有效策略拒绝/未命中/故障为空 204，无效/吊销/过期为 404 | ✅ |
 | `GET /api/serveraccess/v1/servers/<public_id>/hasJoined` | 可选 Header 模式，`Authorization: Bearer <secret>`；与 URL 模式共用策略链 | ✅ |
+| `POST /api/serveraccess/v1/invites/accept` | 已登录且已验证邮箱；显式提交 `{token}`，未验证 403，无效/过期/已使用 404，成功后刷新成员关系与服务器目录 | ✅ |
+| `GET /api/serveraccess/v1/players/lookup?q=...` | 仅当前租户 admin/owner；viewer 403，按角色名或 32 位 UUID 精确查询，只返回 `{uid,name,uuid}` | ✅ |
+| 服主服务器/邀请/白名单/封禁列表 | `page` 默认 1、`size` 默认 50/最大 200；响应含 `total`、`page`、`size`，服务器列表另含租户总用量 `quotaUsed` | ✅ |
+| 平台租户/服务器/审计列表 | `page` 默认 1、`size` 默认 20/最大 200；响应含对应列表键及 `total`、`page`、`size` | ✅ |
 | `GET /api/serveraccess/v1/tenants/me/export` | 租户 owner/admin；字段白名单 JSON 附件，超限 413，不含 secret 或全局玩家资料 | ✅ |
 | `POST /api/serveraccess/v1/tenants/me/delete-request` | 仅 owner；要求 `confirmation` 精确等于租户名，错误确认 400 且不写状态；事务暂停服务器、吊销凭据并固定宽限期截止时间，重放仍校验并返回原期限 | ✅ |
 | `POST /api/admin/v1/serveraccess/tenants/<id>/delete` | 仅网页超管；要求 `confirmation` 精确等于租户名，错误确认（含 `{}`）400 且保留 `sa_*`；未到期 409，到期级联删除 `sa_*`，保留全局身份 | ✅ |
 | `attested` 组件身份证明 | 未实现；URL secret 与 Header 都只证明持有凭据，Header 不构成 attested | ➖ |
 
-完整字段、上限、角色与运维约束见 [服务器接入手册](server-access.md)。
+完整字段、上限、角色与运维约束见 [服务器接入手册](server-access.md)。隔离 SQLite E2E 覆盖邀请、viewer 玩家查询 403、201 行分页/配额、字面搜索、导出隔离、权限矩阵和精确名称删除生命周期；它不替代真实 Minecraft/authlib-injector 客户端或外部数据库验收。
 
 <details>
-<summary>§3 表注：六行的 legacy 行为与我方实现全量考据——可以先不读</summary>
+<summary>§3 表注：legacy 行为与我方实现考据——可以先不读</summary>
 
 **联盟 hub 的浏览器端成员站取名**
 
@@ -246,8 +251,8 @@ JWT access token 实测形状：`aud="2"（shared_client_id）、sub=uid、scope
 - **`uploadableTextures` 属性的签名**：本站每条 property 都签（`textures` 与 `signatures.textures`
   成对），**唯独 `uploadableTextures` 不签**——值恒为 `skin,cape`，与本站不按类型设限的上传策略一致，
   所以它不携带任何需要证明的授权信息。参考实现的两侧（yggdrasil-connect `Profile.php:90-96`、
-  AsterYggdrasil `properties.rs:66-71`）是逐条签所有 property。要不要补齐到"每条都签"，
-  属客户端可见的 wire 面变更：先要确认现网启动器在校验签名集时对**多出来的签名**怎么处理，
-  不在无人值守里改。出处：仓库外 `analysis/g10-e3-protocol-surface.md`。
+  AsterYggdrasil `properties.rs:66-71`）是逐条签所有 property。该偏差保持现状：补齐签名会改变
+  客户端可见的 wire 面，只有具备启动器兼容性证据时才作为独立协议变更评估，不混入常规维护。
+  出处：仓库外 `analysis/g10-e3-protocol-surface.md`。
 
 </details>

@@ -24,9 +24,19 @@ SkinNexus 的服务器接入模块让一个站点为多个 Minecraft 服务器�
 | 租户 viewer | 查看本租户成员、服务器、策略、白名单、封禁、事件与凭据元数据 | 写操作、全局玩家查询、邀请、导出、请求删除 |
 | 租户 admin | 管理服务器、策略、白名单、封禁与凭据；导出租户数据；查询全局玩家身份 | 管理成员、请求删除租户 |
 | 租户 owner | 拥有 admin 能力，并可邀请/移除成员、请求删除租户 | 访问其他租户或平台紧急控制 |
-| 平台超管 | 在现有管理面创建租户与首位 owner，查看租户/服务器状态与配额，紧急停服、吊销凭据、切换全局 fallback、执行到期删除与查看审计 | 用机器管理员令牌调用平台服务器接入接口 |
+| 平台超管 | 在现有管理面创建租户与首位 owner，查看租户/服务器状态与配额，紧急停服、吊销凭据、切换全局 fallback、执行到期删除与查看审计 | 用 `permission=2` 的网页超管会话调用平台服务器接入接口 |
 
 租户范围来自当前网页会话的成员关系，不信任请求中的租户 id。平台接口只接受 `permission=2` 的网页超管会话，不接受 `X-Admin-Token`。服主门户使用普通同源会话，不使用管理员令牌。平台停服、配额、fallback、凭据吊销与到期删除，以及平台创建租户、服主组合更新服务器，均与对应审计在同一事务中提交；审计写入失败时操作回滚，不出现“操作已生效但没有审计”。
+
+### 浏览器管理面与机器 API
+
+浏览器管理面板和 `/servers` 只使用同源 `skin_session` Cookie：前端不读取、不持久化、不发送 `admin_token` 或 `X-Admin-Token`，并在加载与退出时清理旧令牌。普通管理 API 仍保留无 Cookie 的 `X-Admin-Token` 机器通道；请求一旦带有非空会话 Cookie，就只按该会话判定，无效或权限不足的会话不会回退到机器令牌。服务器接入的平台接口不开放机器令牌，只认网页超管会话。
+
+### Origin 与 Fetch Metadata
+
+Cookie 会话的写操作共用 `origingate.SameOrigin`：非空且非 `null` 的 `Origin` 必须可解析，并按不区分大小写的方式与请求 `Host` 一致；没有这种 `Origin` 时，`Sec-Fetch-Site` 只能是 `same-origin` 或 `none`。证据缺失、格式错误或跨源均返回 403 `admin.origin_mismatch`。`GET`、`HEAD`、`OPTIONS` 不要求该证据。
+
+该门禁覆盖 Web API 的 Cookie 写请求、管理 API 的会话写请求、服务器接入控制面写请求，以及 OIDC Device API 的会话 POST。无 Cookie 的公开请求和无 Cookie 的机器令牌请求保持原行为；`/v/<secret>/...` 与 Server Access Header 验证由路径 secret 或 Bearer credential 认证，不套用 Cookie 门禁。OIDC 的 `/oauth/token`、`/device_authorization`、`/authorize`、`/revoke` 是协议端点，也不套用 Device API 的 Origin 门禁。
 
 ## 全局玩家查询
 
@@ -57,7 +67,7 @@ SkinNexus 的服务器接入模块让一个站点为多个 Minecraft 服务器�
 - `GET /api/serveraccess/v1/servers/{id}/whitelist`：响应为 `{"whitelist":[],"total":0,"page":1,"size":50}`，总数只统计当前租户的指定服务器。
 - `GET /api/serveraccess/v1/servers/{id}/bans`：响应为 `{"bans":[],"total":0,"page":1,"size":50}`，总数只统计当前租户的指定服务器。
 
-平台租户、服务器与审计列表继续使用 `page`/`size`，默认每页 20、最大 200，响应保留 `total`、`page`、`size`。服主与平台的分页默认值互不影响。导出、恢复与验证仍使用原有非分页查询和独立上限，不调用这些分页方法。
+平台 `GET /api/admin/v1/serveraccess/tenants`、`GET /api/admin/v1/serveraccess/servers` 与 `GET /api/admin/v1/serveraccess/audit` 也使用 `page`/`size`，默认每页 20、最大 200，响应分别保留 `tenants`、`servers`、`audit` 键及 `total`、`page`、`size`。服主与平台的分页默认值互不影响。导出、恢复与验证仍使用原有非分页查询和独立上限，不调用这些分页方法。
 
 服主门户的服务器、邀请、白名单与封禁列表使用共用分页组件，每页默认 50；平台列表仍为每页 20。服务器徽章和创建门槛使用响应中的 `quotaUsed`，不再把当前页条数当作租户总用量。切换服务器或状态筛选会回到第一页，删除邀请、白名单或封禁导致末页为空时会自动钳制到最后一个有效页；较晚返回的旧列表响应不会覆盖新页面。
 
@@ -181,11 +191,11 @@ owner/admin 可在 `/servers` 点击“导出租户数据”，浏览器下载�
 
 ## 可复现验收
 
-在仓库根目录运行 `node scripts/e2e-serveraccess.mjs`。脚本会构建当前二进制，通过 Node API 预留可用的临时回环端口，在 `127.0.0.1` 上启动隔离 SQLite 实例，并通过真实 HTTP API 创建两个租户、两台服务器与两名玩家。覆盖族为：邀请未验证 403、验证后接受 200、重放/无效 404 与 viewer 只读；配额 250 下四类列表各 201 条夹具的默认 50、最大 200、完整 `total`、第五页与服务器 `quotaUsed=201`；平台租户/服务器名称中 `%`、`_` 的字面搜索；真实 JSON 附件导出与两租户内容隔离；viewer、tenant admin、owner、平台超管权限矩阵及机器令牌拒绝；精确名称删除请求、全部服务器暂停与所列凭据吊销、宽限期导出、提前 409、到期 200、重放 404 与全局用户/玩家/UUID 映射/纹理保留。原有 authlib-injector 元数据、URL secret 与 Header 两种验证、白名单拒绝/允许、租户封禁隔离、平台封禁、所列跨租户服务器操作 404、事件隔离、凭据脱敏、模块热开关及全局 Yggdrasil 回归也继续执行。
+在仓库根目录运行 `node scripts/e2e-serveraccess.mjs`。脚本会构建当前二进制，通过 Node API 预留可用的临时回环端口，在 `127.0.0.1` 上启动隔离 SQLite 实例，并通过真实 HTTP API 创建两个租户、两台服务器与两名玩家。覆盖族为：邀请未验证 403、验证后接受 200、重放/无效 404；viewer 只读、邀请/导出拒绝与玩家查询 403；配额 250 下四类列表各 201 条夹具的默认 50、最大 200、完整 `total`、第五页与服务器 `quotaUsed=201`；平台租户/服务器名称中 `%`、`_` 的字面搜索；真实 JSON 附件导出与两租户内容隔离；viewer、tenant admin、owner、平台超管权限矩阵及机器令牌拒绝；owner 与平台删除对空值、部分名称、大小写变体和尾随空格的 400，精确名称删除请求、全部服务器暂停与所列凭据吊销、宽限期导出、提前 409、到期 200、重放 404 与全局用户/玩家/UUID 映射/纹理保留。原有 authlib-injector 元数据、URL secret 与 Header 两种验证、白名单拒绝/允许、租户封禁隔离、平台封禁、所列跨租户服务器操作 404、事件隔离、凭据脱敏、模块热开关及全局 Yggdrasil 回归也继续执行。
 
 批量分页夹具直接写入临时 SQLite；到期删除场景在提前删除断言后停止子进程，只把临时数据库的 `deletion_due_at` 改为过去时间，再重启执行精确名称物理删除，不增加生产时钟 hook。SQLite 操作优先使用 Node 22 内置 `node:sqlite`，不可用时使用 Python `sqlite3` 一次性命令。子进程只接收操作系统运行所需的白名单环境变量与显式 `SKIN_*` 测试配置，不继承外部服务配置；普通请求设有 10 秒超时，失败时打印有界的 stdout/stderr 尾部，并在确认子进程退出后清理临时目录。脚本只使用临时目录与回环地址，不连接生产环境。
 
-本脚本只验证服务端 HTTP 契约，不启动真实 Minecraft 服务器或 authlib-injector 客户端，也不连接外部数据库；真实客户端、服务器与外部数据库验收均不在本脚本范围内，公开公测前必须另行完成。
+本脚本只验证服务端 HTTP 契约，不启动真实 Minecraft 服务器或 authlib-injector 客户端，也不连接外部数据库。因此，隔离 SQLite E2E 的通过结论不能外推为真实 Minecraft/authlib-injector 客户端验收或 MySQL/MariaDB/PostgreSQL 数据库验收；这些边界由各自独立环境验证。
 
 ## 排错
 

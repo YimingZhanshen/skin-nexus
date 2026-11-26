@@ -130,7 +130,7 @@ environment:
 
 ### 2.3 环境变量
 
-取值优先级三层：**显式 env（compose / systemd / shell）＞ 镜像内 `ENV` 默认（`Dockerfile:49-52`）＞
+取值优先级三层：**显式 env（compose / systemd / shell）＞ 镜像内 `ENV` 默认（`Dockerfile`）＞
 源码默认（`server/internal/config/config.go`）**。因此下表「默认」列同时给出两个数：源码默认只对
 源码构建 + systemd 生效，Docker 部署看到的是镜像内值。
 
@@ -141,7 +141,7 @@ environment:
 
 | 必填性 | 含义 |
 |---|---|
-| 必填 | 照 §2.1 的 quickstart 部署时不设就拒绝启动（compose 的 `:?` 守卫拦下）。共四项：站点地址与两个库口令加管理令牌；站点地址这项在装好之后由面板 `site_url` 接管 |
+| 必填 | 照 §2.1 的 quickstart 部署时不设就拒绝启动（compose 的 `:?` 守卫拦下）。共四项：站点地址、两个库口令与无 Cookie 机器 API 管理令牌；站点地址这项在装好之后由面板 `site_url` 接管 |
 | 分模式必填 | 内置库保持默认即可，接外部库必须改 |
 | 面板真源 | 面板里已能设置；env 只在新站首次启动时当默认值，之后可以整行不写 |
 | 可选 | 有合理默认，不改也能跑（含只有 env 能设的目录、密钥、市场地址等） |
@@ -299,6 +299,12 @@ app 进程能看到哪些变量，取决于 compose 文件里 `environment:` 段
 
 平台创建租户时，租户、首位 owner 成员关系与 `serveraccess_tenant_create` 审计在同一事务中提交。服主 `PATCH /api/serveraccess/v1/servers/{id}` 的稀疏服务器字段、owner 策略字段与 `serveraccess_server_update` 审计也在同一事务中提交；store 按 tenant → server → policy 加锁，拒绝 deleting 租户更新，并防止 owner 状态更新覆盖平台停服。审计表写入失败时返回 5xx，相关业务写入全部回滚；排错时不要通过关闭审计或忽略审计错误来恢复写入。此修复不新增环境变量、表或列，也不需要数据迁移。
 
+**管理浏览器会话、机器令牌与 Origin 门禁**
+
+- 浏览器管理面板与 `/servers` 只发送同源 `skin_session` Cookie，不读取、保存或发送 `admin_token` / `X-Admin-Token`。普通管理 API 的无 Cookie `X-Admin-Token` 机器通道仍保留；带非空会话 Cookie 时只按会话判定，坏会话不会回退到机器令牌。Server Access 平台接口只接受网页超管会话。
+- Cookie 会话写请求共用 `origingate.SameOrigin`：非空且非 `null` 的 `Origin` 必须可解析且 `Host` 与请求 `Host` 不区分大小写地一致；否则 `Sec-Fetch-Site` 必须是 `same-origin` 或 `none`。缺失、畸形或跨源证据返回 403 `admin.origin_mismatch`，安全方法不要求证据。
+- Web API Cookie 写请求、管理 API 会话写请求、Server Access 控制面写请求和 OIDC Device API 会话 POST 都受该门禁保护。无 Cookie 公开请求、无 Cookie 机器令牌请求、按服 URL secret/Bearer 验证，以及 OIDC `/oauth/token`、`/device_authorization`、`/authorize`、`/revoke` 协议端点不套用此门禁。
+
 **服务器接入验证与凭证运维**
 
 当前实现提供两个标准 `hasJoined` 入口，成功返回本地签名 profile 或官方原样响应，拒绝/未命中/故障返回空 204：
@@ -436,7 +442,7 @@ Prometheus 告警示例（阈值需按实际流量调整；查询与通知均不
 3. 新配置确认可用后，调用 `POST /api/serveraccess/v1/servers/{id}/credentials/{cid}/revoke` 吊销旧凭证；重叠期结束旧凭证也会自动失效。
 4. 若 secret 已泄漏，跳过重叠等待，立即吊销旧凭证并换新；同时检查各层日志/追踪/缓存并按事件处置流程清理已采集的副本。URL secret 与 Header secret 都按同一凭据纪律处理。
 
-**联盟入站的部署形状（不是待办，是约束）**
+**联盟入站的部署约束**
 
 hub 会主动回调本站 `api/union/member/*`，每次请求带三头签名，验签窗口是
 `[-10s, +30s]`，重放防护靠 nonce 缓存。两件事因此成为硬约束：
@@ -491,6 +497,10 @@ hub 会主动回调本站 `api/union/member/*`，每次请求带三头签名，�
 > - 主题包上传上限固定 16 MiB（`internal/thememkt`），无对应 env。
 > - 市场安装只认签名与摘要，不认 CI 状态；registry 有 90 天有效期，到期续签由分发仓库 CI 每周自动完成
 >   （剩余 <60 天即重签推送），站长无需动手；细节见 [plugin-publishing.md](plugin-publishing.md) §7。
+
+**签名 ZIP 资源上限**
+
+签名包在摘要与解压时都执行有界读取：最多 4096 个条目，单条目名称不超过 512 字节且必须是安全相对路径，单个非目录条目不超过 32 MiB，全部条目解压总量不超过 64 MiB，压缩比不超过 200；`bundle.json` 元数据读取上限为 1 MiB。摘要路径按实际解压字节复核单条目与总量，解压路径校验声明总量并限制每次实际读取；超限即拒绝，不会静默截断。市场下载的单个 ZIP 制品上限 32 MiB，与解压后的 64 MiB 总量是两个不同预算。完整格式见 [plugin-spec.md](plugin-spec.md) 与 [plugin-publishing.md](plugin-publishing.md)。
 
 **compose 文件专用**（不是进程变量，由 `docker-compose*.yml` 展开）
 
@@ -634,7 +644,7 @@ docker compose exec db sh -c 'exec mysqldump -uskin -p"$MYSQL_PASSWORD" skin_nex
 
 服务器接入的租户、服务器、策略、白名单、封禁、事件、凭据摘要/吊销状态与删除期限都在数据库备份中。`skin-data` 还需覆盖插件主密钥 `plugin-secrets.key`；可选 verify-proxy 的凭据文件与私有 CA 不在数据库内，必须单独加密备份并限制为 owner-only。备份不包含任何可恢复的 credential secret 明文。
 
-**恢复演练状态**：SQLite 已由 `TestServerAccessSQLiteRestoreDrill` 真正执行关闭、复制文件、删除原文件、复制恢复、重新打开，并核验 deleting/suspended/revoked 状态与策略、白名单、封禁、事件。MySQL 与 PostgreSQL 的恢复命令仅作为 runbook，本地 **not-run**；应在一次性数据库环境执行后再纳入发布检查。
+**恢复演练状态**：SQLite 已由 `TestServerAccessSQLiteRestoreDrill` 真正执行关闭、复制文件、删除原文件、复制恢复、重新打开，并核验 deleting/suspended/revoked 状态与策略、白名单、封禁、事件。MySQL/MariaDB 与 PostgreSQL 部分提供隔离环境中的逻辑备份、恢复与恢复后验收 runbook；执行结果由操作环境记录，本文不把 SQLite 结论外推为其他引擎的验收。
 
 #### SQLite 文件恢复
 
@@ -662,7 +672,7 @@ cp -p "$BACKUP_DIR/skin.db" "$SQLITE_DB"
 go test -count=1 ./internal/store -run TestServerAccessSQLiteRestoreDrill -v
 ```
 
-#### MySQL / MariaDB 逻辑备份与恢复（not-run）
+#### MySQL / MariaDB 逻辑备份与恢复
 
 使用独立备份账号，口令通过安全环境或凭据文件提供，不写进命令历史。下列命令在 Bash 中执行：`SOURCE_CNF` 是源库备份凭据，`RESTORE_CNF` 必须连接一次性/隔离实例，绝不能指向生产实例；恢复账号只授权访问该实例的目标库。两个凭据文件均应限制为 `chmod 600`。
 
@@ -705,7 +715,7 @@ gzip -dc "$BACKUP_FILE" | mysql --defaults-extra-file="$RESTORE_CNF" --database=
 
 MariaDB 使用同一 MySQL 线协议与 DSN 形状。备份/恢复后都要检查 `schema_migrations`、`sa_*` 行数与吊销/删除状态；不要靠导出文件里是否出现 `secret_hash` 判断备份完整性。
 
-#### PostgreSQL 逻辑备份与恢复（not-run）
+#### PostgreSQL 逻辑备份与恢复
 
 `pg_dump` 使用自定义归档，恢复到新建的空库；不要对生产库直接执行 `--clean`。
 
@@ -1069,7 +1079,7 @@ Nginx 反代与 §三完全相同。日志 `journalctl -u skin-nexus -f`。
 ## 六、运维周期检查
 
 - **弱哈希看板**：管理面板仪表盘 `weakHashUsers` 归零前保持关注（用户登录即惰性换 argon2id）
-- **部署自检**：管理面板「运行状态 → 部署自检」七项（站点地址 / 迁移水位 / 邮件 / 邮件域名解析 / 预览渲染 / 前端资源 / 插件签名密钥），改完配置点「重新检查」即可，不用重启也不用翻日志；机器接法 `GET /api/admin/v1/diagnostics`（带 `X-Admin-Token`）
+- **部署自检**：管理面板「运行状态 → 部署自检」七项（站点地址 / 迁移水位 / 邮件 / 邮件域名解析 / 预览渲染 / 前端资源 / 插件签名密钥），改完配置点「重新检查」即可，不用重启也不用翻日志；无 Cookie 机器接法 `GET /api/admin/v1/diagnostics`（带 `X-Admin-Token`，不发送 `skin_session`）
 - **测试发信**：同页「邮件服务」一行有「发送测试邮件」，收件人恒为**当前管理员账号自己的邮箱**（端点没有收件人字段，不做中继），失败会直接把 SMTP 的拒绝原因报出来并写进审计。只在网页会话下可用，`X-Admin-Token` 会被拒；未配置 SMTP 时明确回答「站点未配置邮件服务」而不是静默
 - **Union 开关**：管理面板「站点设置」热切换——关 = 全 union 路由 404 + 纹理签名回本地密钥；开 = 即时恢复。开启前须已有成员密钥；面板展示信任声明（Union 模式下纹理签名私钥全网共享）
 - **主题/外观**：主题包放 `skin-data` 卷的 `themes/`（规范见 [theme-spec.md](theme-spec.md)）；自定义 CSS/JS 与 SEO 在管理面板对应区块
@@ -1082,7 +1092,7 @@ Nginx 反代与 §三完全相同。日志 `journalctl -u skin-nexus -f`。
 | 层 | 当前值 | 支持窗口 | 谁负责升 |
 |---|---|---|---|
 | 运行时 | `alpine:3.24` | Alpine 分支约 2 年（3.24 至 2028-06） | 维护者，分支到期前换 tag 提 PR |
-| Go 构建器 | `golang:1.26-alpine` | 1.26.x 补丁随 Go 发布 | 浮动 tag + CI `pull: true`，重建即最新补丁 |
+| Go 构建器 | `golang:1.27-alpine` | 1.27.x 补丁随 Go 发布 | 浮动 tag + CI `pull: true`，重建即最新补丁 |
 | Node 构建器 | `node:22-alpine` | Node 22 LTS | 同上 |
 | 数据库 | `mysql:8.0`（内置模式） | Oracle 维护窗口 | 站长自选；外部库（MySQL / MariaDB / PostgreSQL）与 SQLite 文件库同理，见 §2.2 |
 
@@ -1099,7 +1109,7 @@ docker run --rm skin-nexus:audit --version       # 版本号
 ```
 
 再对照上游：Go 的 release notes、Alpine 安全公告、`cd web && npm audit --audit-level=high`
-（CI 只把 critical 设为阻塞，high 写进 step summary——修 high 常要大版本升级，不能混进功能轮）。
+（CI 将 high 与 critical 设为阻塞，low 及以上另写 step summary；修复高风险告警时仍应避免夹带无关大版本升级）。
 
 **依赖更新已自动化**：`.github/dependabot.yml` 每周一（Asia/Shanghai）检查四类更新并开 PR——
 go.mod（`server/`）、npm（`web/`）、Dockerfile 的 `FROM` 行、GitHub Actions。minor/patch 合并成每个

@@ -120,7 +120,7 @@ docker compose -f docker-compose.quickstart.yml up -d
 | 启动器对接 | [docs.skin.yimingzhanshen.cn/launcher-api](https://docs.skin.yimingzhanshen.cn/launcher-api) |
 | 翻知识手册 | [docs.skin.yimingzhanshen.cn/handbook](https://docs.skin.yimingzhanshen.cn/handbook/) |
 
-当前版本 v0.6.0；迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)。可选的服务器接入模块已在默认关闭的面板开关后实现：超管可在同一事务中创建租户与首位 owner，`/servers` 服主门户覆盖服务器、凭证、策略、白名单、封禁与进服事件，平台控制面覆盖状态、配额、紧急控制、字段白名单导出与按截止时间删除；URL secret 与 Bearer Header 可信验证链、可选的免数据库验证代理命令、按服 fallback 熔断、按策略清理进服事件与宽限期租户删除也已实现。服主导出与输入名称确认删除、平台到期删除门禁已接入真实 API；运维文档、安全监控标签与已执行的 SQLite 恢复演练均已包含。详细文档以中文为主。
+当前版本 v0.6.0；迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)。可选的服务器接入模块已在默认关闭的面板开关后实现：超管可在同一事务中创建租户与首位 owner；`/servers` 服主门户包含邀请接受、带配额元数据的分页列表、服务器、凭证、策略、白名单、封禁、进服事件、JSON 导出与精确租户名称删除确认，平台控制面覆盖状态、配额、紧急控制与按截止时间删除。浏览器管理面仅使用会话，无 Cookie 机器令牌仍是后端 API 契约，但平台服务器接入接口不接受它。URL secret 与 Bearer Header 按服验证、可选的免数据库验证代理命令、按服 fallback 熔断、按策略清理进服事件、运维文档、安全监控标签与已执行的 SQLite 恢复演练均已包含。本地验收包含隔离 SQLite HTTP E2E；真实 Minecraft/authlib-injector 客户端与外部数据库不在该脚本范围内。详细文档以中文为主。
 
 ## 兼容承诺
 
