@@ -91,6 +91,11 @@ type Config struct {
 	// the alliance list is unreadable otherwise. Off = zero outbound for names.
 	UnionResolveNames bool // SKIN_UNION_RESOLVE_NAMES
 
+	// Optional server-access module. Off by default; the panel option wins over
+	// this environment fallback and can toggle the request gate without restart.
+	ServerAccessEnabled            bool // SKIN_SERVERACCESS_ENABLED
+	ServerAccessDeletionGraceHours int  // SKIN_SERVERACCESS_DELETION_GRACE_HOURS (default 168)
+
 	// Phase 3 (docker-first): unified data root + schema bootstrap.
 	DataDir         string // SKIN_DATA_DIR — textures/keys/themes live under it
 	ThemesDir       string // SKIN_THEMES_DIR — theme packs (default <DataDir>/themes)
@@ -169,6 +174,18 @@ func themeTrustKeys() string {
 
 func Load() (*Config, error) {
 	dataDir := getenv("SKIN_DATA_DIR", "./data")
+	serverAccessEnabled, err := envBool("SKIN_SERVERACCESS_ENABLED")
+	if err != nil {
+		return nil, err
+	}
+	serverAccessDeletionGraceHours := 168
+	if raw := strings.TrimSpace(os.Getenv("SKIN_SERVERACCESS_DELETION_GRACE_HOURS")); raw != "" {
+		hours, parseErr := strconv.Atoi(raw)
+		if parseErr != nil || hours < 1 || hours > 8760 {
+			return nil, fmt.Errorf("config: SKIN_SERVERACCESS_DELETION_GRACE_HOURS must be an integer between 1 and 8760")
+		}
+		serverAccessDeletionGraceHours = hours
+	}
 	c := &Config{
 		Listen:         getenv("SKIN_LISTEN", ":8080"),
 		BaseURL:        strings.TrimRight(getenv("SKIN_BASE_URL", "http://localhost:8080"), "/"),
@@ -207,6 +224,9 @@ func Load() (*Config, error) {
 		UnionHubOrigin:         getenv("SKIN_UNION_HUB_ORIGIN", "https://skin.mualliance.ltd"),
 		UnionResolveNames:      getenv("SKIN_UNION_RESOLVE_NAMES", "true") == "true",
 
+		ServerAccessEnabled:            serverAccessEnabled,
+		ServerAccessDeletionGraceHours: serverAccessDeletionGraceHours,
+
 		DataDir:         dataDir,
 		ThemesDir:       getenv("SKIN_THEMES_DIR", filepath.Join(dataDir, "themes")),
 		PluginsDir:      resolveDataPath("SKIN_PLUGINS_DIR", dataDir, "plugins"),
@@ -236,6 +256,20 @@ func getenv(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// envBool validates opt-in switches instead of silently treating a typo as off.
+// An unset or empty value preserves the documented default.
+func envBool(k string) (bool, error) {
+	v := strings.TrimSpace(os.Getenv(k))
+	if v == "" {
+		return false, nil
+	}
+	on, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, fmt.Errorf("config: %s must be a boolean: %w", k, err)
+	}
+	return on, nil
 }
 
 func atoiDefault(s string, def int) int {

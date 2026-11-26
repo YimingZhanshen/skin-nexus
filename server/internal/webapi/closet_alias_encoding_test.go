@@ -38,6 +38,7 @@ func closetCall(t *testing.T, h http.Handler, method, path, body string) *httpte
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "skin_session", Value: "sess-own"})
+	req.Header.Set("Origin", "http://example.com")
 	h.ServeHTTP(rec, req)
 	return rec
 }

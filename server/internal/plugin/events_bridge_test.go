@@ -52,12 +52,16 @@ func TestGenericEventDelivered(t *testing.T) {
 	host.EmitEvent(context.Background(), "player.added", EventPayload{PlayerName: "Steve"})
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if st.kvs["events//last-player"].Value == "Steve" {
+		value, _, ok, err := st.GetPluginKV(context.Background(), "events", "", "last-player")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok && value == "Steve" {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("event not delivered: %+v", st.kvs)
+	t.Fatal("event not delivered")
 }
 
 func TestGuardDenyAllowAndTimeout(t *testing.T) {

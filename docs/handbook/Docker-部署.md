@@ -190,7 +190,7 @@ flowchart TD
 | `SKIN_BASE_URL` | 必填 | 站点公网地址 |
 | `SKIN_DB_PASSWORD` | 必填 | MySQL 用户密码 |
 | `SKIN_DB_ROOT_PASSWORD` | 必填 | MySQL root 密码 |
-| `SKIN_ADMIN_TOKEN` | 必填 | 管理接口或机器回退令牌 |
+| `SKIN_ADMIN_TOKEN` | 必填 | 无 Cookie 机器/API 客户端的管理令牌；面板本身使用管理员账号会话 |
 | `SKIN_SETUP_TOKEN` | 可选 | 安装向导令牌，为空则每次启动随机生成 |
 | `SKIN_DATABASE_DSN` | 自动生成 | 指向内部 `db:3306` |
 | `SKIN_ENV` | 可选，默认 `production` | 运行环境标签 |
@@ -293,7 +293,7 @@ SkinNexus 读取 `SKIN_*` 环境变量，并通过配置文件加载逻辑解析
 | 数据库 | `SKIN_DATABASE_DSN` | 数据库连接串 |
 | 数据目录 | `SKIN_DATA_DIR` | 默认 `/data` |
 | 迁移 | `SKIN_MIGRATIONS_DIR`、`SKIN_AUTO_MIGRATE` | 迁移目录和自动迁移开关 |
-| 管理员 | `SKIN_ADMIN_TOKEN`、`SKIN_SETUP_TOKEN` | 管理令牌和安装向导令牌 |
+| 管理员 | `SKIN_ADMIN_TOKEN`、`SKIN_SETUP_TOKEN` | 无 Cookie 机器 API 管理令牌和安装向导令牌；面板使用账号会话 |
 | CSP | `SKIN_CSP_SCRIPT_EXTRA_SOURCES`、`SKIN_CSP_CONNECT_EXTRA_SOURCES` | 第三方脚本和连接来源白名单 |
 | 插件市场 | `SKIN_PLUGIN_MARKET_URL`、`SKIN_PLUGIN_TRUST_KEYS`、`SKIN_PLUGIN_STATE_DIR`、`SKIN_PLUGIN_UPLOAD_MAX` | 插件市场、信任密钥、状态目录、上传大小 |
 | 主题市场 | `SKIN_THEME_MARKET_URL`、`SKIN_THEME_TRUST_KEYS` | 主题市场和信任密钥 |
@@ -502,7 +502,7 @@ SkinNexus 的 Docker 部署以单二进制为核心，通过三阶段构建提�
 | `SKIN_DATA_DIR` | `/data` | 数据目录 |
 | `SKIN_MIGRATIONS_DIR` | `./migrations` | 迁移 SQL 目录 |
 | `SKIN_AUTO_MIGRATE` | `false` | 启动时自动迁移 |
-| `SKIN_ADMIN_TOKEN` | 空 | 管理令牌 |
+| `SKIN_ADMIN_TOKEN` | 空 | 无 Cookie 机器/API 客户端的管理令牌；浏览器面板不使用 |
 | `SKIN_SETUP_TOKEN` | 空 | 安装向导令牌 |
 | `SKIN_CSP_SCRIPT_EXTRA_SOURCES` | 空 | 第三方脚本来源 |
 | `SKIN_CSP_CONNECT_EXTRA_SOURCES` | 空 | 第三方连接来源 |

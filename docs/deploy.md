@@ -1,5 +1,5 @@
 ---
-description: "Docker Compose 部署 SkinNexus 的完整手册：quickstart、53 个环境变量、启动验收、升级备份、Nginx 反代与宝塔、排错表。"
+description: "Docker Compose 部署 SkinNexus 的完整手册：quickstart、环境变量、启动验收、升级备份、服务器接入运维、Nginx 反代与宝塔、排错表。"
 ---
 
 # SkinNexus 部署手册（Docker 优先）
@@ -18,6 +18,7 @@ description: "Docker Compose 部署 SkinNexus 的完整手册：quickstart、53 
 |---|---|
 | [一](#一、部署方式选择) 部署方式 | Docker Compose（推荐）还是裸二进制 |
 | [二](#二、docker-compose-部署-主线) Compose 主线 | 准备 → 选库 → 环境变量 → 启动验收 → 升级 → 备份 → 排错 → 宝塔 |
+| [服务器接入](#服务器接入模块控制面可信验证链可选代理与治理加固已实现默认关闭真源在管理-站点设置) | 服主门户、按服验证、可选代理、监控与恢复 |
 | [三](#三、nginx-反代-前置-https-证书) 反代与 CDN | Nginx 必传头、安全头/CORS 归属、宝塔 WAF 跨域坑、CDN 真实 IP |
 | [四](#四、从老站迁移) 迁移 | Docker 下的 migrate 入口（详见 migration.md） |
 | [五](#五、备选-源码构建-systemd-无-docker-环境) 源码 + systemd | 无 Docker 环境的完整单元示例 |
@@ -129,7 +130,7 @@ environment:
 
 ### 2.3 环境变量
 
-取值优先级三层：**显式 env（compose / systemd / shell）＞ 镜像内 `ENV` 默认（`Dockerfile:49-52`）＞
+取值优先级三层：**显式 env（compose / systemd / shell）＞ 镜像内 `ENV` 默认（`Dockerfile`）＞
 源码默认（`server/internal/config/config.go`）**。因此下表「默认」列同时给出两个数：源码默认只对
 源码构建 + systemd 生效，Docker 部署看到的是镜像内值。
 
@@ -140,7 +141,7 @@ environment:
 
 | 必填性 | 含义 |
 |---|---|
-| 必填 | 照 §2.1 的 quickstart 部署时不设就拒绝启动（compose 的 `:?` 守卫拦下）。共四项：站点地址与两个库口令加管理令牌；站点地址这项在装好之后由面板 `site_url` 接管 |
+| 必填 | 照 §2.1 的 quickstart 部署时不设就拒绝启动（compose 的 `:?` 守卫拦下）。共四项：站点地址、两个库口令与无 Cookie 机器 API 管理令牌；站点地址这项在装好之后由面板 `site_url` 接管 |
 | 分模式必填 | 内置库保持默认即可，接外部库必须改 |
 | 面板真源 | 面板里已能设置；env 只在新站首次启动时当默认值，之后可以整行不写 |
 | 可选 | 有合理默认，不改也能跑（含只有 env 能设的目录、密钥、市场地址等） |
@@ -274,7 +275,174 @@ app 进程能看到哪些变量，取决于 compose 文件里 `environment:` 段
 | `SKIN_UNION_QUERYEMAIL_MODE` | 面板真源 | `full` | 联盟邮箱查询应答：`full` = 返回邮箱、`off` = 403 拒绝；其他值按 `off` 处理（fail-closed） |
 | `SKIN_UNION_RESOLVE_NAMES` | 面板真源 | `true` | 是否由本站后台向各成员站的 `/api/yggdrasil` 读取站名（hub 不存站名）。读取只走受控出站（公网地址、禁重定向、固定单一路径、限响应体），且不在请求路径上等待；设为 `false` 后连已读到的名字也不再显示。面板项 `union_resolve_names` 热生效 |
 
-**联盟入站的部署形状（不是待办，是约束）**
+**服务器接入模块**（控制面、可信验证链、可选代理与治理加固已实现，默认关闭；真源在「管理 → 站点设置」）
+
+产品配置、角色、零组件 URL、策略与排错见 [服务器接入手册](server-access.md)。
+
+| 变量 | 必填性 | 默认（源码 / 镜像内） | 说明 |
+|---|---|---|---|
+| `SKIN_SERVERACCESS_ENABLED` | 面板真源 | `false` | 服务器接入模块开关；启动时仅在面板选项 `serveraccess_enabled` 不存在时使用环境变量兜底，选项存在且合法时优先。读取错误、空值/纯空白或非法值均 fail-closed 关闭，不回退环境变量；合法值为 `1/true/on/yes` 与 `0/false/off/no`（忽略首尾空白、不区分大小写）。面板选项后续热生效。关闭时所有模块 API 统一 404，`/servers` 仍提供 SPA 壳并明确显示模块不可用；开启后提供独立 `/servers` 服主门户、租户/服务器/成员/邀请控制面、按服凭证与白名单/封禁策略、进服事件、平台状态/配额/紧急管理，以及 URL secret / Bearer Header 两种 `hasJoined` 验证入口。进服事件与验证配额持久化；可选 `verify-proxy` 独立子命令、按服 fallback 熔断、按 `EventRetentionDays` 的事件清理、字段白名单导出与宽限期删除均已实现 |
+| `SKIN_SERVERACCESS_DELETION_GRACE_HOURS` | 可选 | `168` | 租户删除请求的宽限期小时数，允许 1–8760。请求发生时把截止时间写入 `deletion_due_at`，之后修改配置不会缩短已承诺的期限；平台超管只能在截止时间到达后执行物理删除 |
+
+**服主门户接口**
+
+`/servers` 使用普通网页会话，不接受管理员令牌；租户 owner/admin 可写，viewer 只读。以下端点要求有效的租户成员会话：
+
+- `GET /api/serveraccess/v1/servers?status={status}`、`GET /api/serveraccess/v1/tenants/me/invites`、`GET /api/serveraccess/v1/servers/{id}/whitelist`、`GET /api/serveraccess/v1/servers/{id}/bans`：服主列表按 `id DESC` 分页，`page` 默认 1，`size` 默认 50、最大 200；无法解析或小于 1 的值使用默认值。响应分别保留 `servers`、`invites`、`whitelist`、`bans` 键，并返回 `total`、`page`、`size`。服务器列表额外返回 `quotaUsed`，表示当前租户全部服务器数；`total` 则跟随 `status` 筛选，二者在筛选时可能不同。所有计数均限定当前成员租户，白名单与封禁还限定路径服务器。导出、恢复与验证的非分页路径不受影响。
+- `GET /api/serveraccess/v1/servers/{id}/events?before={event_id}&size={1..200}`：按 `id DESC` 游标分页，默认最近 24 小时。`before` 为上一页最后一个事件 id；响应包含 `events`、`nextBefore`、`hasMore`。每条事件只暴露 `id`、`createdAt`、`outcome`、`reasonCode`、`durationMs`、`sourceMode`，不返回玩家身份、IP、邮箱、令牌、全局角色或皮肤。可用 RFC3339 的 `from`/`to` 缩小时间范围，最长为 366 天。
+- `GET /api/serveraccess/v1/players/lookup?q={name-or-uuid}`：仅限当前租户 admin/owner；viewer 返回 403。按角色名（不区分大小写）或 32 位 UUID 精确解析，成功只返回 `{uid,name,uuid}`，未找到返回 404。该端点不返回邮箱、IP 或全局资料，服务端门禁不依赖前端是否显示查询表单。
+- `GET /api/serveraccess/v1/tenants/me/export`：owner/admin 可下载当前成员租户的 JSON 附件。仅包含租户元数据、服务器与策略、白名单 uid/note/时间、封禁 uid/reason/expiry/时间、owner 可见进服事件，以及凭据 id/mode/status/created/last_used/expires；不包含邮箱、IP、token、secret/hash、全局用户/玩家/纹理或邀请数据。审计只记录租户 id，不记录导出内容。首版按租户批量查询（非空租户固定 6 条数据查询，不随服务器数增长），并执行显式硬上限：1000 个服务器、10000 条白名单、10000 条封禁、100000 条进服事件、10000 条凭据元数据、16 MiB 最终 JSON（含末尾换行）。任一超限返回 `413` 与 `serveraccess.export_too_large`，错误消息注明超限集合及上限；不静默截断、不返回附件、不写导出审计。内部配置只能降低上限，不能抬高这些硬上限。
+- `POST /api/serveraccess/v1/tenants/me/delete-request`：仅 owner。要求 `application/json` 请求体 `{"confirmation":"<精确租户名>"}`。服务端在锁定生命周期行后直接比较，不 trim、不忽略大小写；缺失、部分名称或首尾空格返回 400 且不写状态。精确匹配时原子把租户置为 `deleting`、暂停全部服务器、吊销全部凭据并固定删除截止时间；默认宽限期 7 天。重放仍要求精确确认并返回原截止时间。viewer/admin 返回 403。
+- `POST /api/admin/v1/serveraccess/tenants/{id}/delete`：仅 permission=2 网页超管会话。要求 `application/json` 请求体 `{"confirmation":"<精确租户名>"}`，按同一锁定行精确比较；确认错误（含 `{}`）返回 400，不删除任何 `sa_*` 数据、不写删除审计。租户未请求删除或截止时间未到时返回 409；到期后在事务内执行既有 `sa_*` 级联删除，重复删除返回 404。全局用户、玩家和纹理始终保留。
+
+服务器 id 始终从当前成员租户解析；跨租户服务器返回 404。模块关闭时上述 API 均返回 404；`/servers` 不受模块门禁拦截，仍返回 SPA 壳并显示明确的不可用状态。未知 `/servers/` 子路径仍为 404，不退化成 SPA 页面。
+
+平台创建租户时，租户、首位 owner 成员关系与 `serveraccess_tenant_create` 审计在同一事务中提交。服主 `PATCH /api/serveraccess/v1/servers/{id}` 的稀疏服务器字段、owner 策略字段与 `serveraccess_server_update` 审计也在同一事务中提交；store 按 tenant → server → policy 加锁，拒绝 deleting 租户更新，并防止 owner 状态更新覆盖平台停服。审计表写入失败时返回 5xx，相关业务写入全部回滚；排错时不要通过关闭审计或忽略审计错误来恢复写入。此修复不新增环境变量、表或列，也不需要数据迁移。
+
+**管理浏览器会话、机器令牌与 Origin 门禁**
+
+- 浏览器管理面板与 `/servers` 只发送同源 `skin_session` Cookie，不读取、保存或发送 `admin_token` / `X-Admin-Token`。普通管理 API 的无 Cookie `X-Admin-Token` 机器通道仍保留；带非空会话 Cookie 时只按会话判定，坏会话不会回退到机器令牌。Server Access 平台接口只接受网页超管会话。
+- Cookie 会话写请求共用 `origingate.SameOrigin`：非空且非 `null` 的 `Origin` 必须可解析且 `Host` 与请求 `Host` 不区分大小写地一致；否则 `Sec-Fetch-Site` 必须是 `same-origin` 或 `none`。缺失、畸形或跨源证据返回 403 `admin.origin_mismatch`，安全方法不要求证据。
+- Web API Cookie 写请求、管理 API 会话写请求、Server Access 控制面写请求和 OIDC Device API 会话 POST 都受该门禁保护。无 Cookie 公开请求、无 Cookie 机器令牌请求、按服 URL secret/Bearer 验证，以及 OIDC `/oauth/token`、`/device_authorization`、`/authorize`、`/revoke` 协议端点不套用此门禁。
+
+**服务器接入验证与凭证运维**
+
+当前实现提供两个标准 `hasJoined` 入口，成功返回本地签名 profile 或官方原样响应，拒绝/未命中/故障返回空 204：
+
+- URL secret：`GET /v/<secret>/sessionserver/session/minecraft/hasJoined`，secret 只放在独立路径段。
+- Bearer Header：`GET /api/serveraccess/v1/servers/<public_id>/hasJoined`，请求头为 `Authorization: Bearer <secret>`。
+
+凭证只展示一次，数据库只存 SHA-256 摘要。白名单按本地账号 `uid` 执行；`whitelist_enabled=true` 时完全禁用官方 fallback，已知玩家没有本地 join session 与未知玩家一样拒绝，不按昵称认领官方身份。未开启白名单时，官方 fallback 只在真实本地 miss、按服开关与平台全局开关均开启、且既有 Yggdrasil fallback 开关也开启时回源；官方 identity 用于事件，但未显式绑定时事件 `uid` 必须为空。
+
+**fallback 熔断、事件保留与紧急治理**
+
+- 每个服务器进程独立维护按服熔断：连续 5 次官方上游故障打开 30 秒；半开只放行 1 次探测，健康响应（包括正常 204）关闭熔断。上游 4xx/204 不计为基础设施故障。`MaxConcurrent` 同时约束本地验证与官方 fallback，并按服务器隔离。
+- 熔断只拦官方 fallback，不拦本地 session、白名单、平台/本服封禁、租户停用、服务器停用或凭证吊销；这些判定每次请求都读实时状态。proxy 只是无缓存转发，因此紧急控制同样立即生效。
+- 模块开启时启动一个事件保留 worker，启动时立即清理一次，此后每小时一次；按每服 `EventRetentionDays` 计算 UTC 截止时间并每批删除 1000 条，严格早于截止时间的事件才删除。模块关闭、面板热关或进程退出会停止 worker；单服失败记指标并继续其他服务器。多实例同时清理是幂等的，但没有分布式 leader。
+- 熔断与并发计数是进程内状态，多副本部署时每个副本独立执行；需要全局限流时应只在网关/单副本层部署验证面。
+
+**可选 `skin-nexus verify-proxy`（S3/S4 不依赖）**
+
+proxy 不读 `SKIN_*` 主站配置、不连接数据库，只接收 public server id、upstream API root 和 Header 模式 credential。它暴露：
+
+- `GET /sessionserver/session/minecraft/hasJoined` 与 `GET /api/yggdrasil/sessionserver/session/minecraft/hasJoined`：本地标准入口；
+- `GET /healthz`：进程健康；
+- `GET /metrics`：proxy 指标，默认只监听 `127.0.0.1:25565`，不要暴露到公网。
+
+请求只转发 `username`、`serverId`、`ip`，去掉客户端 Authorization/Cookie 并注入配置的 Bearer credential。成功 profile 原样返回；上游 204、4xx、认证失败、重定向与最终 5xx/网络/超时均保持标准空 204。仅网络瞬断、超时和 5xx 重试，默认最多重试 2 次（总计 3 次），204/4xx 不重试。TLS 默认校验系统根证书，可指定私有 CA；没有跳过校验开关。响应统一带 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`。
+
+| 环境变量 | flag | 默认 | 说明 |
+|---|---|---|---|
+| `SKINNEXUS_VERIFY_PROXY_PUBLIC_ID` | `--public-id` | 无 | 必填，`srv_` 开头的 public server id |
+| `SKINNEXUS_VERIFY_PROXY_UPSTREAM` | `--upstream` | 无 | 必填，HTTP(S) API root；禁止 query、fragment、userinfo |
+| `SKINNEXUS_VERIFY_PROXY_CREDENTIAL` | 无 | 无 | Header 模式 secret；与 credential-file 二选一，不提供命令行 flag |
+| `SKINNEXUS_VERIFY_PROXY_CREDENTIAL_FILE` | `--credential-file` | 无 | secret 文件；Unix 权限必须为 owner-only，Windows 需自行限制 ACL |
+| `SKINNEXUS_VERIFY_PROXY_CA_FILE` | `--ca-file` | 无 | 可选私有上游 CA PEM |
+| `SKINNEXUS_VERIFY_PROXY_LISTEN` | `--listen` | `127.0.0.1:25565` | 本地监听地址 |
+| `SKINNEXUS_VERIFY_PROXY_READ_TIMEOUT` | `--read-timeout` | `5s` | 本地读超时 |
+| `SKINNEXUS_VERIFY_PROXY_WRITE_TIMEOUT` | `--write-timeout` | `15s` | 本地写超时，覆盖默认 3 次上游尝试与退避 |
+| `SKINNEXUS_VERIFY_PROXY_HEADER_TIMEOUT` | `--header-timeout` | `5s` | 本地请求头读取超时 |
+| `SKINNEXUS_VERIFY_PROXY_REQUEST_TIMEOUT` | `--request-timeout` | `4s` | 每次上游尝试总超时 |
+| `SKINNEXUS_VERIFY_PROXY_MAX_BODY_BYTES` | `--max-body-bytes` | `65536` | 本地请求体上限；hasJoined 本体必须为空 |
+| `SKINNEXUS_VERIFY_PROXY_MAX_HEADER_BYTES` | `--max-header-bytes` | `16384` | 本地请求头上限 |
+| `SKINNEXUS_VERIFY_PROXY_RETRIES` | `--retries` | `2` | 瞬断重试次数，范围 0..5 |
+| `SKINNEXUS_VERIFY_PROXY_RETRY_BACKOFF` | `--retry-backoff` | `100ms` | 首次重试等待，指数退避且单次封顶 2s |
+
+推荐把 header secret 写入仅服务账号可读的文件，而不是放进命令行或 unit 的 `Environment=`：
+
+```bash
+install -m 600 /dev/null /etc/skin-nexus/verify-proxy.credential
+# 用安全编辑器把控制面创建的 Header secret 写入该文件，不加引号或额外空格
+/opt/skin-nexus/skin-nexus verify-proxy \
+  --public-id srv_你的公网id \
+  --upstream https://skin.example.com \
+  --credential-file /etc/skin-nexus/verify-proxy.credential
+```
+
+配置缺失、secret 无效、文件权限过宽、TLS 证书不受信或 listener 失败都会拒绝启动/请求；非法配置的错误文本不回显 secret。日志只写固定标签（`verify_proxy listening`、`verify_proxy upstream_failure`、固定 reason），不写 secret、URL、query、body、玩家身份或客户端头。轮换后必须重启 proxy 进程加载新文件；吊销和停服不需要重启。
+
+**监控与告警**
+
+主站 `SKIN_METRICS=1` 的 `/metrics` 与 proxy 本地 `/metrics` 默认关闭/仅环回监听，采集端需先做网络访问控制。应用直接导出的服务器接入指标如下：
+
+| 指标 | 标签 | 含义 |
+|---|---|---|
+| `http_requests_total` | `method`、`status` | 全站 HTTP 请求数；可观察 204/5xx，但没有路由标签，不能单独筛出验证请求 |
+| `serveraccess_event_write_failures_total` | 无 | 进服事件持久化失败；验证结果不变，但事件/配额派生监控会漏计 |
+| `serveraccess_fallback_breaker_open_total` | 无 | 按服官方 fallback 熔断打开次数 |
+| `serveraccess_retention_cleanup_failures_total` | 无 | 保留策略读取或单服事件清理失败 |
+| `verify_proxy_upstream_failures_total` | `reason` | proxy 最终上游失败；reason 仅为 `network`、`timeout`、`upstream_status`、`response_too_large`、`canceled`、`invalid_request` |
+
+应用没有直接导出按验证路由的延迟直方图或配额拒绝计数器。部署采集器时，把 URL secret 与 Header 两种验证路由归一为固定 `route="serveraccess.verify"`，不得使用原始 URI；`source_mode` 只能取 `url_secret` 或 `header`。采集器侧使用以下固定名称（不是应用内置指标）：
+
+- `serveraccess_verify_requests_total{route,status,source_mode}`：验证请求数，status 使用实际 HTTP 状态；204 是正常的拒绝/未命中，不能当作 5xx。
+- `serveraccess_verify_duration_seconds{route,source_mode}`：验证延迟直方图，必须含 `le` 桶。
+- `serveraccess_quota_denials_total{route,source_mode}`：从 `sa_join_events.reason_code` 的 `quota_exceeded` 与 `concurrent_limit` 聚合。事件写入失败会漏计，因此必须与 `serveraccess_event_write_failures_total` 同时告警。
+
+安全标签白名单只有 `route`、`status`、`source_mode`、固定 `reason` 与直方图 `le`。禁止添加 secret、原始 path/query、Authorization、body、玩家名/UUID/uid、邮箱、IP、tenant_id、server_id、credential_id、request_id；告警正文与工单也不得回显这些值。
+
+Prometheus 告警示例（阈值需按实际流量调整；查询与通知均不带凭据或路径）：
+
+```yaml
+- alert: ServerAccessVerify5xx
+  expr: sum(rate(serveraccess_verify_requests_total{route="serveraccess.verify",status=~"5.."}[5m])) > 0.05
+  for: 5m
+  labels: { severity: page }
+  annotations: { summary: "Server-access verification is returning 5xx" }
+- alert: ServerAccessVerifyLatency
+  expr: histogram_quantile(0.95, sum by (le, route, source_mode) (rate(serveraccess_verify_duration_seconds_bucket{route="serveraccess.verify"}[5m]))) > 1
+  for: 10m
+  labels: { severity: ticket }
+  annotations: { summary: "Server-access verification p95 exceeds one second" }
+- alert: ServerAccessQuotaDenials
+  expr: sum(rate(serveraccess_quota_denials_total{route="serveraccess.verify"}[5m])) / clamp_min(sum(rate(serveraccess_verify_requests_total{route="serveraccess.verify"}[5m])), 0.001) > 0.2
+  for: 10m
+  labels: { severity: ticket }
+  annotations: { summary: "Server-access quota denials exceed one fifth of requests" }
+- alert: ServerAccessEventWriteFailures
+  expr: increase(serveraccess_event_write_failures_total[5m]) > 0
+  for: 1m
+  labels: { severity: page }
+  annotations: { summary: "Server-access join events are not being persisted" }
+- alert: ServerAccessFallbackBreaker
+  expr: increase(serveraccess_fallback_breaker_open_total[10m]) > 0
+  for: 1m
+  labels: { severity: ticket }
+  annotations: { summary: "Server-access official fallback circuit opened" }
+- alert: ServerAccessRetentionFailures
+  expr: increase(serveraccess_retention_cleanup_failures_total[15m]) > 0
+  for: 5m
+  labels: { severity: ticket }
+  annotations: { summary: "Server-access event retention cleanup is failing" }
+- alert: VerifyProxyUpstreamFailures
+  expr: sum(rate(verify_proxy_upstream_failures_total{reason=~"network|timeout|upstream_status|response_too_large"}[5m])) > 0.1
+  for: 5m
+  labels: { severity: ticket }
+  annotations: { summary: "Optional verify proxy upstream failures are sustained" }
+```
+
+204/5xx 的比例与延迟观察依赖上述采集器归一化；只开应用 `/metrics` 时只能看到全站状态计数。出现熔断打开/retention 失败时应用同时写固定标签 `serveraccess.fallback breaker_open` 或 `serveraccess.retention cleanup_failed`；proxy 上游失败写 `verify_proxy upstream_failure`。结构化日志不得附带原始验证 URL。
+
+**`/v/` 路径本身就是凭据，运维边界比普通页面更严格：**
+
+| 层 | 当前部署必须满足 |
+|---|---|
+| 应用 | 验证响应带 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`；应用日志只写固定路由标签，不记录原始 path/query、Authorization 或 body |
+| Nginx / 宝塔反代 | 对 `/v/` 关闭缓存（`proxy_cache off`）与访问日志（`access_log off`）；若必须留访问日志，只记状态、耗时、字节数，不启用带 `$request`/`$uri`/`$args` 的格式。禁止 rewrite、`return` 或错误页重定向到带原 URL 的 `Location` |
+| WAF / 入侵检测 | 禁止采集完整请求 URL/path/query、Authorization 与 body；拦截页、告警通知和工单导出不得回显 secret path |
+| CDN / 网关 | `/v/` 全部绕过缓存，不记录完整 URL，不做跨域/规范化重定向；边缘错误页不得回显原路径 |
+| APM / tracing | 将路由归一为固定标签 `serveraccess.verify`；关闭 raw URL/path/query/header/body 采集，secret 不得进入 span 名称、tag、异常文本或指标标签 |
+
+对外只允许 TLS（HTTPS）；不要给 secret 加 query 参数，也不要把带 secret 的 URL 放进 Referer、页面链接、工单、聊天记录或监控截图。反代不要覆盖应用已下发的 `Cache-Control` 与 `Referrer-Policy`。MC/authlib 调试日志、端侧配置和抓包仍可能暴露 URL，因此泄漏后按下面的流程立即吊销，不能只靠删除某一层日志。
+
+**凭证轮换与紧急吊销：**
+
+1. 在模块控制面为对应服务器创建 `url_secret` 或 `header` 凭证，或对现有凭证调用 `POST /api/serveraccess/v1/servers/{id}/credentials/{cid}/rotate`（JSON body 为 `{"mode":"url_secret"}` 或 `{"mode":"header"}`）。响应中的明文 secret 只出现一次。
+2. 把新 API root 配置到 authlib-injector，或把新 secret 配置到验证代理的 Bearer Header；先用新配置验证进服，再处理旧配置。轮换默认保留 24 小时重叠窗口。
+3. 新配置确认可用后，调用 `POST /api/serveraccess/v1/servers/{id}/credentials/{cid}/revoke` 吊销旧凭证；重叠期结束旧凭证也会自动失效。
+4. 若 secret 已泄漏，跳过重叠等待，立即吊销旧凭证并换新；同时检查各层日志/追踪/缓存并按事件处置流程清理已采集的副本。URL secret 与 Header secret 都按同一凭据纪律处理。
+
+**联盟入站的部署约束**
 
 hub 会主动回调本站 `api/union/member/*`，每次请求带三头签名，验签窗口是
 `[-10s, +30s]`，重放防护靠 nonce 缓存。两件事因此成为硬约束：
@@ -329,6 +497,10 @@ hub 会主动回调本站 `api/union/member/*`，每次请求带三头签名，�
 > - 主题包上传上限固定 16 MiB（`internal/thememkt`），无对应 env。
 > - 市场安装只认签名与摘要，不认 CI 状态；registry 有 90 天有效期，到期续签由分发仓库 CI 每周自动完成
 >   （剩余 <60 天即重签推送），站长无需动手；细节见 [plugin-publishing.md](plugin-publishing.md) §7。
+
+**签名 ZIP 资源上限**
+
+签名包在摘要与解压时都执行有界读取：最多 4096 个条目，单条目名称不超过 512 字节且必须是安全相对路径，单个非目录条目不超过 32 MiB，全部条目解压总量不超过 64 MiB，压缩比不超过 200；`bundle.json` 元数据读取上限为 1 MiB。摘要路径按实际解压字节复核单条目与总量，解压路径校验声明总量并限制每次实际读取；超限即拒绝，不会静默截断。市场下载的单个 ZIP 制品上限 32 MiB，与解压后的 64 MiB 总量是两个不同预算。完整格式见 [plugin-spec.md](plugin-spec.md) 与 [plugin-publishing.md](plugin-publishing.md)。
 
 **compose 文件专用**（不是进程变量，由 `docker-compose*.yml` 展开）
 
@@ -469,6 +641,105 @@ docker compose exec db sh -c 'exec mysqldump -uskin -p"$MYSQL_PASSWORD" skin_nex
 > `sign-key.pem` 是纹理签名私钥（**首次启动自动生成**，RSA-4096），建议额外**加密后异地**备份一份；
 > `oidc-key.pem` 与它分离（免密登录 token 专用），**仅在 `SKIN_OIDC_ENABLED=true` 时生成**——
 > OIDC 关闭时文件不存在属正常，开启后首启自动生成。两钥互不代替，都纳入备份。
+
+服务器接入的租户、服务器、策略、白名单、封禁、事件、凭据摘要/吊销状态与删除期限都在数据库备份中。`skin-data` 还需覆盖插件主密钥 `plugin-secrets.key`；可选 verify-proxy 的凭据文件与私有 CA 不在数据库内，必须单独加密备份并限制为 owner-only。备份不包含任何可恢复的 credential secret 明文。
+
+**恢复演练状态**：SQLite 已由 `TestServerAccessSQLiteRestoreDrill` 真正执行关闭、复制文件、删除原文件、复制恢复、重新打开，并核验 deleting/suspended/revoked 状态与策略、白名单、封禁、事件。MySQL/MariaDB 与 PostgreSQL 部分提供隔离环境中的逻辑备份、恢复与恢复后验收 runbook；执行结果由操作环境记录，本文不把 SQLite 结论外推为其他引擎的验收。
+
+#### SQLite 文件恢复
+
+停应用后再复制，避免把仍在写入的 WAL 当作完整备份。下列路径均为占位符，替换成实际持久卷；`sqlite3` 是宿主机工具，未安装时可在停止应用后完整复制主库及同目录 `-wal`/`-shm` 文件。
+
+```bash
+SQLITE_DB=/var/lib/skin-nexus/skin.db
+BACKUP_DIR=/backup/serveraccess/sqlite-$(date +%F)
+install -d -m 700 "$BACKUP_DIR"
+# 先停止 skin-nexus；不要用第二个进程同时写 SQLite。
+sqlite3 "$SQLITE_DB" 'PRAGMA wal_checkpoint(TRUNCATE);'
+cp -p "$SQLITE_DB" "$BACKUP_DIR/skin.db"
+sha256sum "$BACKUP_DIR/skin.db" > "$BACKUP_DIR/skin.db.sha256"
+
+# 恢复到原路径前保留旧文件，核对备份校验和后停应用。
+sha256sum -c "$BACKUP_DIR/skin.db.sha256"
+cp -p "$SQLITE_DB" "$SQLITE_DB.before-restore"
+cp -p "$BACKUP_DIR/skin.db" "$SQLITE_DB"
+# 启动后执行下方验收；失败时停应用并恢复 before-restore 文件。
+```
+
+自动验收命令（从 `server/` 目录执行，测试只使用临时目录，不碰运行库）：
+
+```bash
+go test -count=1 ./internal/store -run TestServerAccessSQLiteRestoreDrill -v
+```
+
+#### MySQL / MariaDB 逻辑备份与恢复
+
+使用独立备份账号，口令通过安全环境或凭据文件提供，不写进命令历史。下列命令在 Bash 中执行：`SOURCE_CNF` 是源库备份凭据，`RESTORE_CNF` 必须连接一次性/隔离实例，绝不能指向生产实例；恢复账号只授权访问该实例的目标库。两个凭据文件均应限制为 `chmod 600`。
+
+```bash
+set -euo pipefail
+SOURCE_DB=skin_nexus
+RESTORE_DB=skin_nexus_restore
+SOURCE_CNF=/etc/skin-nexus/backup.cnf
+RESTORE_CNF=/etc/skin-nexus/restore.cnf
+BACKUP_DIR=/backup/serveraccess/mysql-$(date +%F)
+BACKUP_FILE="$BACKUP_DIR/skin_nexus.sql.gz"
+install -d -m 700 "$BACKUP_DIR"
+
+# 不使用 --databases：只导出表，不生成 CREATE DATABASE / USE，避免导入时切回源库名。
+mysqldump --defaults-extra-file="$SOURCE_CNF" \
+  --single-transaction --quick --routines --events --hex-blob --no-tablespaces \
+  "$SOURCE_DB" | gzip > "$BACKUP_FILE"
+sha256sum "$BACKUP_FILE" > "$BACKUP_FILE.sha256"
+sha256sum -c "$BACKUP_FILE.sha256"
+
+# 导入前只读核对实例、端口与账号；确认 RESTORE_CNF 属于隔离环境，不是生产。
+mysql --defaults-extra-file="$RESTORE_CNF" --batch --skip-column-names \
+  --execute='SELECT @@hostname, @@port, CURRENT_USER();'
+
+# 拒绝包含数据库切换语句的备份；正常的不带 --databases 导出不会命中。
+if gzip -dc "$BACKUP_FILE" | grep -E '^[[:space:]]*(CREATE|DROP)[[:space:]]+DATABASE|^[[:space:]]*USE([[:space:]]|$)' > /dev/null; then
+  printf '%s\n' ' refusing dump containing database-level statements' >&2
+  exit 1
+fi
+
+# 在隔离实例创建一次性空库；若已由管理员建好并确认为空，跳过本行。
+mysql --defaults-extra-file="$RESTORE_CNF" \
+  --execute="CREATE DATABASE \`$RESTORE_DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+# 停应用后再导入；mysql 的 --database 固定选择隔离目标库。
+gzip -dc "$BACKUP_FILE" | mysql --defaults-extra-file="$RESTORE_CNF" --database="$RESTORE_DB"
+```
+
+若隔离实例内必须恢复原库名，将 `RESTORE_DB` 设为 `skin_nexus`，但仍只能使用隔离实例的 `RESTORE_CNF`。验收通过后再由应用 DSN 指向恢复库；不要把包含 `CREATE DATABASE` / `USE` 的整库导出直接导入同名生产实例。
+
+MariaDB 使用同一 MySQL 线协议与 DSN 形状。备份/恢复后都要检查 `schema_migrations`、`sa_*` 行数与吊销/删除状态；不要靠导出文件里是否出现 `secret_hash` 判断备份完整性。
+
+#### PostgreSQL 逻辑备份与恢复
+
+`pg_dump` 使用自定义归档，恢复到新建的空库；不要对生产库直接执行 `--clean`。
+
+```bash
+BACKUP_DIR=/backup/serveraccess/postgres-$(date +%F)
+install -d -m 700 "$BACKUP_DIR"
+pg_dump --format=custom --dbname=skin_nexus --file="$BACKUP_DIR/skin_nexus.dump"
+sha256sum "$BACKUP_DIR/skin_nexus.dump" > "$BACKUP_DIR/skin_nexus.dump.sha256"
+
+# 在一次性环境创建空库，停应用后恢复并核验，再切换 DSN。
+createdb skin_nexus_restore
+pg_restore --dbname=skin_nexus_restore "$BACKUP_DIR/skin_nexus.dump"
+```
+
+#### 恢复后验收
+
+1. 校验备份文件摘要，确认迁移标记覆盖 `0036_serveraccess_lifecycle.sql`。
+2. 对比恢复前后的全局用户、角色、纹理数量与关键引用；租户删除不得级联全局身份。
+3. 对吊销凭据发起验证应为 404；deleting 租户的服务器应为 suspended，凭据应为 revoked，请求/截止时间保持不变。
+4. 用未到期与已到期两个样本验证平台删除门禁；不要为验收提前删除需要保留的租户。
+5. 核对签名私钥、OIDC 私钥、插件主密钥与 proxy 凭据文件已恢复，且文件权限未放宽。
+6. 确认应用、反代、WAF、CDN、APM 的 `/v/` 日志与缓存禁令仍生效，再恢复流量。
+
+不要把旧备份直接覆盖到更新状态的生产库：备份可能回滚已吊销凭据或已承诺的删除期限，这类恢复必须作为安全事件审批。
 
 ### 2.7 日志与排错
 
@@ -808,7 +1079,7 @@ Nginx 反代与 §三完全相同。日志 `journalctl -u skin-nexus -f`。
 ## 六、运维周期检查
 
 - **弱哈希看板**：管理面板仪表盘 `weakHashUsers` 归零前保持关注（用户登录即惰性换 argon2id）
-- **部署自检**：管理面板「运行状态 → 部署自检」七项（站点地址 / 迁移水位 / 邮件 / 邮件域名解析 / 预览渲染 / 前端资源 / 插件签名密钥），改完配置点「重新检查」即可，不用重启也不用翻日志；机器接法 `GET /api/admin/v1/diagnostics`（带 `X-Admin-Token`）
+- **部署自检**：管理面板「运行状态 → 部署自检」七项（站点地址 / 迁移水位 / 邮件 / 邮件域名解析 / 预览渲染 / 前端资源 / 插件签名密钥），改完配置点「重新检查」即可，不用重启也不用翻日志；无 Cookie 机器接法 `GET /api/admin/v1/diagnostics`（带 `X-Admin-Token`，不发送 `skin_session`）
 - **测试发信**：同页「邮件服务」一行有「发送测试邮件」，收件人恒为**当前管理员账号自己的邮箱**（端点没有收件人字段，不做中继），失败会直接把 SMTP 的拒绝原因报出来并写进审计。只在网页会话下可用，`X-Admin-Token` 会被拒；未配置 SMTP 时明确回答「站点未配置邮件服务」而不是静默
 - **Union 开关**：管理面板「站点设置」热切换——关 = 全 union 路由 404 + 纹理签名回本地密钥；开 = 即时恢复。开启前须已有成员密钥；面板展示信任声明（Union 模式下纹理签名私钥全网共享）
 - **主题/外观**：主题包放 `skin-data` 卷的 `themes/`（规范见 [theme-spec.md](theme-spec.md)）；自定义 CSS/JS 与 SEO 在管理面板对应区块
@@ -821,7 +1092,7 @@ Nginx 反代与 §三完全相同。日志 `journalctl -u skin-nexus -f`。
 | 层 | 当前值 | 支持窗口 | 谁负责升 |
 |---|---|---|---|
 | 运行时 | `alpine:3.24` | Alpine 分支约 2 年（3.24 至 2028-06） | 维护者，分支到期前换 tag 提 PR |
-| Go 构建器 | `golang:1.26-alpine` | 1.26.x 补丁随 Go 发布 | 浮动 tag + CI `pull: true`，重建即最新补丁 |
+| Go 构建器 | `golang:1.27-alpine` | 1.27.x 补丁随 Go 发布 | 浮动 tag + CI `pull: true`，重建即最新补丁 |
 | Node 构建器 | `node:22-alpine` | Node 22 LTS | 同上 |
 | 数据库 | `mysql:8.0`（内置模式） | Oracle 维护窗口 | 站长自选；外部库（MySQL / MariaDB / PostgreSQL）与 SQLite 文件库同理，见 §2.2 |
 
@@ -838,7 +1109,7 @@ docker run --rm skin-nexus:audit --version       # 版本号
 ```
 
 再对照上游：Go 的 release notes、Alpine 安全公告、`cd web && npm audit --audit-level=high`
-（CI 只把 critical 设为阻塞，high 写进 step summary——修 high 常要大版本升级，不能混进功能轮）。
+（CI 将 high 与 critical 设为阻塞，low 及以上另写 step summary；修复高风险告警时仍应避免夹带无关大版本升级）。
 
 **依赖更新已自动化**：`.github/dependabot.yml` 每周一（Asia/Shanghai）检查四类更新并开 PR——
 go.mod（`server/`）、npm（`web/`）、Dockerfile 的 `FROM` 行、GitHub Actions。minor/patch 合并成每个

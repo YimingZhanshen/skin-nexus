@@ -2,12 +2,16 @@ package ygg
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const fallbackCanned = `{"id":"000000000000000000000000000000ff","name":"Official","properties":[{"name":"textures","value":"dmFsdWU="}]}`
@@ -139,6 +143,72 @@ func TestFallbackDisabled(t *testing.T) {
 	}
 }
 
+func TestFallbackCancellationIsNotUpstreamFault(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		err       error
+		wantFault bool
+	}{
+		{name: "canceled", err: context.Canceled},
+		{name: "wrapped canceled", err: fmt.Errorf("local request stopped: %w", context.Canceled)},
+		{name: "deadline", err: context.DeadlineExceeded, wantFault: true},
+		{name: "network", err: errors.New("connection refused"), wantFault: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			f := &Fallback{BaseURL: "https://official.example", Enabled: func(context.Context) bool { return true }, Client: newFallbackClient(fallbackCounter(func(*http.Request) (*http.Response, error) {
+				calls++
+				return nil, tc.err
+			}))}
+			result := f.scopedHasJoined(context.Background(), "Unknown", "server-id", "")
+			if result.Matched || result.UpstreamFault != tc.wantFault {
+				t.Fatalf("fallback result = %+v, want matched=false fault=%v", result, tc.wantFault)
+			}
+			if calls != 1 {
+				t.Fatalf("upstream calls = %d, want 1", calls)
+			}
+		})
+	}
+}
+
+func TestFallbackBodyReadCancellationIsNotUpstreamFault(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		err       error
+		wantFault bool
+	}{
+		{name: "canceled", err: context.Canceled},
+		{name: "wrapped canceled", err: fmt.Errorf("response body read stopped: %w", context.Canceled)},
+		{name: "deadline", err: context.DeadlineExceeded, wantFault: true},
+		{name: "network", err: errors.New("connection reset"), wantFault: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			f := &Fallback{BaseURL: "https://official.example", Enabled: func(context.Context) bool { return true }, Client: newFallbackClient(fallbackCounter(func(*http.Request) (*http.Response, error) {
+				calls++
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(fallbackErrorReader{err: tc.err}),
+				}, nil
+			}))}
+			result := f.scopedHasJoined(context.Background(), "Unknown", "server-id", "")
+			if result.Matched || result.UpstreamFault != tc.wantFault {
+				t.Fatalf("fallback result = %+v, want matched=false fault=%v", result, tc.wantFault)
+			}
+			if calls != 1 {
+				t.Fatalf("upstream calls = %d, want 1", calls)
+			}
+		})
+	}
+}
+
+type fallbackErrorReader struct {
+	err error
+}
+
+func (r fallbackErrorReader) Read([]byte) (int, error) { return 0, r.err }
+
 func TestFallbackResponseGates(t *testing.T) {
 	cases := []struct {
 		name string
@@ -232,6 +302,104 @@ func TestIsPublicIP(t *testing.T) {
 }
 
 // ---- handler-level wiring ----
+
+type legacyFaultStore struct {
+	*memStore
+	playerNameErr error
+	playerUUIDErr error
+	joinErr       error
+}
+
+func (s *legacyFaultStore) PlayerByName(ctx context.Context, name string) (Player, error) {
+	if s.playerNameErr != nil {
+		return Player{}, s.playerNameErr
+	}
+	return s.memStore.PlayerByName(ctx, name)
+}
+
+func (s *legacyFaultStore) PlayerByUUID(ctx context.Context, uuid string) (Player, error) {
+	if s.playerUUIDErr != nil {
+		return Player{}, s.playerUUIDErr
+	}
+	return s.memStore.PlayerByUUID(ctx, uuid)
+}
+
+func (s *legacyFaultStore) FindLiveJoins(ctx context.Context, uuid string, now time.Time) ([]JoinSession, error) {
+	if s.joinErr != nil {
+		return nil, s.joinErr
+	}
+	return s.memStore.FindLiveJoins(ctx, uuid, now)
+}
+
+type failingSigner struct{}
+
+func (failingSigner) SignValue(string) (string, error) { return "", errors.New("signing unavailable") }
+func (failingSigner) PublicKeyPEM() string             { return "" }
+func (failingSigner) KeyFingerprint() string           { return "failing" }
+
+func TestLegacyFallbackFailsClosedForLocalFaults(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		path   string
+		store  *legacyFaultStore
+		signer Signer
+	}{
+		{name: "player lookup", path: "/api/yggdrasil/sessionserver/session/minecraft/hasJoined?username=Steve&serverId=abc", store: &legacyFaultStore{playerNameErr: errors.New("player lookup unavailable")}},
+		{name: "join lookup", path: "/api/yggdrasil/sessionserver/session/minecraft/hasJoined?username=Steve&serverId=abc", store: &legacyFaultStore{joinErr: errors.New("join lookup unavailable")}},
+		{name: "profile signing", path: "/api/yggdrasil/sessionserver/session/minecraft/hasJoined?username=Steve&serverId=abc", signer: failingSigner{}},
+		{name: "profile lookup", path: "/api/yggdrasil/sessionserver/session/minecraft/profile/" + testUUID, store: &legacyFaultStore{playerUUIDErr: errors.New("profile lookup unavailable")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			api, st := newTestAPI(t)
+			if tc.store != nil {
+				tc.store.memStore = st
+				api.svc.store = tc.store
+			}
+			if tc.signer != nil {
+				api.svc.signer = tc.signer
+				st.joins = append(st.joins, JoinSession{UUID: testUUID, ServerID: "abc", ExpiresAt: time.Now().Add(time.Minute)})
+			}
+			stub := newStubMojang(t, okJSON)
+			api.SetFallback(stub.fallback())
+
+			rec := do(t, api.Handler(), http.MethodGet, tc.path, "", nil)
+			if rec.Code != http.StatusNoContent {
+				t.Fatalf("local fault %s = %d %s, want 204", tc.name, rec.Code, rec.Body.String())
+			}
+			if hits := stub.hits.Load(); hits != 0 {
+				t.Fatalf("local fault %s consulted official fallback %d times", tc.name, hits)
+			}
+		})
+	}
+}
+
+func TestHasJoinedFallbackFailsClosedForLocalAccountDenial(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		permission int
+		lookupErr  error
+	}{
+		{name: "banned", permission: -1},
+		{name: "permission lookup failure", lookupErr: errors.New("permission lookup failed")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			api, st := newTestAPI(t)
+			st.permissions[1] = tc.permission
+			st.permissionErr = tc.lookupErr
+			stub := newStubMojang(t, okJSON)
+			api.SetFallback(stub.fallback())
+
+			rec := do(t, api.Handler(), http.MethodGet,
+				"/api/yggdrasil/sessionserver/session/minecraft/hasJoined?username=Steve&serverId=abc", "", nil)
+			if rec.Code != http.StatusNoContent {
+				t.Fatalf("denied local account hasJoined = %d %s, want 204", rec.Code, rec.Body.String())
+			}
+			if hits := stub.hits.Load(); hits != 0 {
+				t.Fatalf("denied local account consulted official fallback %d times", hits)
+			}
+		})
+	}
+}
 
 func TestProfileFallbackViaHandler(t *testing.T) {
 	api, _ := newTestAPI(t)

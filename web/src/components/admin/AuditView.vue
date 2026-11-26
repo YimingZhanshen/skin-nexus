@@ -3,7 +3,7 @@
 // table landed but the panel never read it, so the only way to check an action
 // trail was an X-Admin-Token call — which is also the only way to leave no trace
 // of having looked.
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import Pager from '../Pager.vue'
@@ -21,8 +21,10 @@ const action = ref('')
 const actions = ref([])
 let seq = 0
 let timer = null
+let disposed = false
 
 async function load() {
+  if (disposed) return
   const mine = ++seq
   loading.value = true
   error.value = ''
@@ -102,6 +104,7 @@ function detail(row) {
 }
 
 onMounted(load)
+onBeforeUnmount(() => { disposed = true; seq++; clearTimeout(timer) })
 </script>
 
 <template>

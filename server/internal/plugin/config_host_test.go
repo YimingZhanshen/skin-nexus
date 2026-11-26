@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -16,6 +17,7 @@ type memSecret struct {
 }
 
 type memPlatformStore struct {
+	mu         sync.Mutex
 	opts       map[string]string
 	configs    map[string][]byte
 	secrets    map[string]memSecret
@@ -34,42 +36,62 @@ func newMemPlatformStore() *memPlatformStore {
 }
 
 func (m *memPlatformStore) GetOption(_ context.Context, k string) (string, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	v, ok := m.opts[k]
 	return v, ok, nil
 }
 func (m *memPlatformStore) SetOption(_ context.Context, k, v string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.opts[k] = v
 	return nil
 }
 func (m *memPlatformStore) GetPluginConfig(_ context.Context, name string) ([]byte, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	v, ok := m.configs[name]
 	return v, ok, nil
 }
 func (m *memPlatformStore) SetPluginConfig(_ context.Context, name string, raw []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.configs[name] = append([]byte(nil), raw...)
 	return nil
 }
 func (m *memPlatformStore) GetPluginSecret(_ context.Context, plugin, key string) ([]byte, []byte, int, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	s, ok := m.secrets[plugin+"/"+key]
 	return s.ct, s.nonce, s.version, ok, nil
 }
 func (m *memPlatformStore) SetPluginSecret(_ context.Context, plugin, key string, ct, nonce []byte, version int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.secrets[plugin+"/"+key] = memSecret{ct: ct, nonce: nonce, version: version}
 	return nil
 }
 func (m *memPlatformStore) DeletePluginSecret(_ context.Context, plugin, key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	delete(m.secrets, plugin+"/"+key)
 	return nil
 }
 func (m *memPlatformStore) UpsertPluginMeta(_ context.Context, meta PluginMetaRecord) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.metas[meta.Name] = meta
 	return nil
 }
 func (m *memPlatformStore) GetPluginMeta(_ context.Context, name string) (PluginMetaRecord, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	rec, ok := m.metas[name]
 	return rec, ok, nil
 }
 func (m *memPlatformStore) UpdatePluginState(_ context.Context, name, state, lastErr string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	rec, ok := m.metas[name]
 	if !ok {
 		rec = PluginMetaRecord{Name: name}
@@ -127,8 +149,8 @@ func TestPluginConfigSaveMasksSecretAndLoads(t *testing.T) {
 	if view.Values["token"] != "********" || view.Values["name"] != "site" {
 		t.Fatalf("masked view = %+v", view.Values)
 	}
-	if _, ok := st.secrets["cfg/token"]; !ok {
-		t.Fatal("secret not persisted")
+	if _, _, _, ok, err := st.GetPluginSecret(context.Background(), "cfg", "token"); err != nil || !ok {
+		t.Fatalf("secret not persisted: ok=%v err=%v", ok, err)
 	}
 	// Saving the masked form must preserve the stored secret.
 	if _, err := host.SavePluginConfig(context.Background(), "cfg", map[string]any{
@@ -205,9 +227,9 @@ func TestPluginMetaPersisted(t *testing.T) {
 	if err := host.Load(root); err != nil {
 		t.Fatal(err)
 	}
-	meta, ok := st.metas["demo"]
-	if !ok || meta.Version != "2.0.0" {
-		t.Fatalf("meta = %+v", meta)
+	meta, ok, err := st.GetPluginMeta(context.Background(), "demo")
+	if err != nil || !ok || meta.Version != "2.0.0" {
+		t.Fatalf("meta = %+v ok=%v err=%v", meta, ok, err)
 	}
 }
 
@@ -248,18 +270,26 @@ func TestEntrypointLoadTimeout(t *testing.T) {
 }
 
 func (m *memPlatformStore) GetPluginKV(_ context.Context, p, ns, k string) (string, *time.Time, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	r, ok := m.kvs[p+"/"+ns+"/"+k]
 	return r.Value, r.ExpiresAt, ok, nil
 }
 func (m *memPlatformStore) SetPluginKV(_ context.Context, p, ns, k, v string, exp *time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.kvs[p+"/"+ns+"/"+k] = KVRecord{Namespace: ns, Key: k, Value: v, ExpiresAt: exp}
 	return nil
 }
 func (m *memPlatformStore) DeletePluginKV(_ context.Context, p, ns, k string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	delete(m.kvs, p+"/"+ns+"/"+k)
 	return nil
 }
 func (m *memPlatformStore) ListPluginKV(_ context.Context, p, ns, prefix string, limit int) ([]KVRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	var out []KVRecord
 	for _, r := range m.kvs {
 		if r.Namespace == ns && strings.HasPrefix(r.Key, prefix) {
@@ -272,6 +302,8 @@ func (m *memPlatformStore) ListPluginKV(_ context.Context, p, ns, prefix string,
 	return out, nil
 }
 func (m *memPlatformStore) CountPluginKV(_ context.Context, p string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	n := 0
 	for k := range m.kvs {
 		if strings.HasPrefix(k, p+"/") {
@@ -281,18 +313,26 @@ func (m *memPlatformStore) CountPluginKV(_ context.Context, p string) (int, erro
 	return n, nil
 }
 func (m *memPlatformStore) GetPluginDoc(_ context.Context, p, coll, id string) ([]byte, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	d, ok := m.docs[p+"/"+coll+"/"+id]
 	return d.Doc, ok, nil
 }
 func (m *memPlatformStore) PutPluginDoc(_ context.Context, p, coll, id string, doc []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.docs[p+"/"+coll+"/"+id] = DocRecord{Collection: coll, ID: id, Doc: doc}
 	return nil
 }
 func (m *memPlatformStore) DeletePluginDoc(_ context.Context, p, coll, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	delete(m.docs, p+"/"+coll+"/"+id)
 	return nil
 }
 func (m *memPlatformStore) ListPluginDocs(_ context.Context, p, coll, prefix string, limit int) ([]DocRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	var out []DocRecord
 	for _, d := range m.docs {
 		if d.Collection == coll && strings.HasPrefix(d.ID, prefix) {
@@ -305,6 +345,8 @@ func (m *memPlatformStore) ListPluginDocs(_ context.Context, p, coll, prefix str
 	return out, nil
 }
 func (m *memPlatformStore) CountPluginDocs(_ context.Context, p, coll string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	n := 0
 	for k := range m.docs {
 		if strings.HasPrefix(k, p+"/"+coll+"/") {
@@ -314,9 +356,13 @@ func (m *memPlatformStore) CountPluginDocs(_ context.Context, p, coll string) (i
 	return n, nil
 }
 func (m *memPlatformStore) PluginMigrationLatest(_ context.Context, p string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.migrations[p], nil
 }
 func (m *memPlatformStore) RecordPluginMigration(_ context.Context, p string, v int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.migrations[p] = v
 	return nil
 }

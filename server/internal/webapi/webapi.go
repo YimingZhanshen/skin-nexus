@@ -30,6 +30,7 @@ import (
 	"skin-nexus/server/internal/dbx"
 	"skin-nexus/server/internal/i18n"
 	"skin-nexus/server/internal/indexnow"
+	"skin-nexus/server/internal/origingate"
 	"skin-nexus/server/internal/plugin"
 	"skin-nexus/server/internal/ratelimit"
 	"skin-nexus/server/internal/redact"
@@ -89,6 +90,10 @@ type Backend struct {
 	// device pages on it: without the flag those pages are offered but answer
 	// 404. main wires cfg.OIDCEnabled — same source as the provider mount.
 	OIDCEnabled bool
+	// ServerAccessEnabled reports the live optional-module gate. The SPA uses
+	// this public capability to show /servers as unavailable while still
+	// serving its shell; nil keeps the default-off behavior.
+	ServerAccessEnabled func() bool
 	// Appearance supplies the public footer config (nil = default credit).
 	Appearance *appearance.Engine
 	// ThemePalette / ThemeID bake the active theme into outgoing mail (nil =
@@ -405,10 +410,28 @@ func (b *Backend) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/union/bindto", requireUnion(b.handleUnionBindTo))
 	mux.HandleFunc("POST /api/v1/union/unbind", requireUnion(b.handleUnionUnbind))
 	mux.HandleFunc("POST /api/v1/union/remapuuid", requireUnion(b.handleUnionRemapUUID))
-	// Outer-most is the body cap, then the verification gate: a pending
-	// account should read "verify first" rather than tripping over a size
-	// limit on a request that was never going to be served.
-	return maxBody(b.verifyWebGate(mux))
+	// Outer-most is the body cap, then the cookie origin gate, then the
+	// verification gate: a pending account should read "verify first" rather
+	// than tripping over a size limit on a request that was never going to be
+	// served. Requests without a non-empty session cookie keep their existing
+	// public and token-only behavior.
+	return maxBody(cookieOriginGate(b.verifyWebGate(mux)))
+}
+
+// cookieOriginGate protects cookie-authenticated mutations. Safe methods and
+// requests without a non-empty skin_session cookie pass through unchanged.
+func cookieOriginGate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" && !origingate.SameOrigin(r) {
+			writeErrCode(w, http.StatusForbidden, "origin check failed", i18n.MsgOriginMismatch)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // maxBody caps request bodies at 1 MiB (review B P2: unbounded JSON fed
@@ -596,9 +619,10 @@ func (b *Backend) handleSiteConfig(w http.ResponseWriter, r *http.Request) {
 		// The help page states the email-verification step only when the gate is
 		// actually on; without this it would either guess or stay silent on the
 		// one reason a player gets refused at the door.
-		"verify_gate_enabled": b.Ygg != nil && b.Ygg.VerificationRequired(r.Context()),
-		"oidc_enabled":        b.OIDCEnabled,
-		"footer":              footer,
+		"verify_gate_enabled":  b.Ygg != nil && b.Ygg.VerificationRequired(r.Context()),
+		"oidc_enabled":         b.OIDCEnabled,
+		"serveraccess_enabled": b.ServerAccessEnabled != nil && b.ServerAccessEnabled(),
+		"footer":               footer,
 	})
 }
 

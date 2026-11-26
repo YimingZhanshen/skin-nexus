@@ -8,7 +8,13 @@ import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 const toasts = ref([])
 let seq = 0
-const timers = []
+const timers = new Map()
+
+function clearTimer(id) {
+  if (!timers.has(id)) return
+  clearTimeout(timers.get(id))
+  timers.delete(id)
+}
 
 function push(detail) {
   const message = String((detail && detail.message) || '')
@@ -16,13 +22,19 @@ function push(detail) {
   const raw = String((detail && detail.level) || 'info')
   const level = raw === 'ok' || raw === 'success' ? 'success' : raw === 'error' ? 'error' : 'info'
   const id = ++seq
-  toasts.value = [...toasts.value.slice(-3), { id, message, level }]
-  timers.push(setTimeout(() => {
+  const kept = toasts.value.slice(-3)
+  for (const toast of toasts.value) {
+    if (!kept.some((entry) => entry.id === toast.id)) clearTimer(toast.id)
+  }
+  toasts.value = [...kept, { id, message, level }]
+  timers.set(id, setTimeout(() => {
+    clearTimer(id)
     toasts.value = toasts.value.filter((x) => x.id !== id)
   }, 4200))
 }
 
 function dismiss(id) {
+  clearTimer(id)
   toasts.value = toasts.value.filter((x) => x.id !== id)
 }
 
@@ -31,7 +43,7 @@ function onToast(e) { push(e.detail) }
 onMounted(() => window.addEventListener('skin-toast', onToast))
 onBeforeUnmount(() => {
   window.removeEventListener('skin-toast', onToast)
-  timers.forEach(clearTimeout)
+  for (const id of timers.keys()) clearTimer(id)
 })
 </script>
 

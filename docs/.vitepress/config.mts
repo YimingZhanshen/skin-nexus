@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs'
+import { dirname, isAbsolute, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitepress'
 import { withMermaid } from 'vitepress-plugin-mermaid'
 import { chineseSearchOptimize, pagefindPlugin } from 'vitepress-plugin-pagefind'
@@ -7,6 +10,9 @@ import llmstxt from 'vitepress-plugin-llms'
 // 内容 = 契约主目录（deploy/migration/build/spec…）+ handbook/ 知识手册（80 篇）。
 // SEO 是本站主因：静态渲染 + sitemap + llms.txt（AI 答案引擎入口）。
 const HOST = 'https://docs.skin.yimingzhanshen.cn'
+const DOCS_ROOT = fileURLToPath(new URL('../', import.meta.url))
+const REPOSITORY_ROOT = fileURLToPath(new URL('../..', import.meta.url))
+const REPOSITORY_SOURCE = 'https://github.com/YimingZhanshen/skin-nexus/blob/main/'
 
 export default withMermaid(
   defineConfig({
@@ -121,6 +127,35 @@ export default withMermaid(
     },
     markdown: {
       lineNumbers: false,
+      config(md) {
+        // handbook 的源码引用指向 docs/ 外的 web/ 与 server/。VitePress 只把站内
+        // 页面视为有效目标；先在本地确认文件存在，再改为 GitHub 源码链接，既不
+        // 关闭死链检查，也不让静态站生成指向 /web 或 /server 的失效 URL。
+        const renderLink = md.renderer.rules.link_open!
+        md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+          const href = tokens[idx].attrGet('href')
+          if (href && !/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(href)) {
+            const hashIndex = href.indexOf('#')
+            const filePart = hashIndex === -1 ? href : href.slice(0, hashIndex)
+            const hash = hashIndex === -1 ? '' : href.slice(hashIndex)
+            const sourcePath = resolve(dirname(env.path), filePart)
+            const fromDocs = relative(DOCS_ROOT, sourcePath)
+            const fromRepository = relative(REPOSITORY_ROOT, sourcePath)
+            if (
+              fromDocs.startsWith('..') &&
+              !fromRepository.startsWith('..') &&
+              !isAbsolute(fromRepository) &&
+              existsSync(sourcePath)
+            ) {
+              tokens[idx].attrSet(
+                'href',
+                REPOSITORY_SOURCE + fromRepository.replace(/\\/g, '/') + hash,
+              )
+            }
+          }
+          return renderLink(tokens, idx, options, env, self)
+        }
+      },
     },
     themeConfig: {
       editLink: {
@@ -141,6 +176,7 @@ export default withMermaid(
           text: '契约与部署',
           items: [
             { text: '部署运维', link: '/deploy' },
+            { text: '服务器接入', link: '/server-access' },
             { text: '从 blessing-skin-server 迁移', link: '/migration' },
             { text: '构建与 CI', link: '/build' },
             { text: '兼容矩阵', link: '/compat-matrix' },

@@ -318,8 +318,12 @@ func (m *Mysql) RevokeAccessToken(ctx context.Context, jti string) error {
 // RevokeUserAccessTokens revokes every live token of one user (password
 // change / signout semantics). Refresh tokens are deliberately out of scope.
 func (m *Mysql) RevokeUserAccessTokens(ctx context.Context, uid int64) error {
-	_, err := m.db.ExecContext(ctx,
-		`UPDATE oidc_access_tokens SET revoked_at = ? WHERE uid = ? AND revoked_at IS NULL`, m.now().UTC(), uid)
+	return revokeUserAccessTokens(ctx, m.db, uid, m.now().UTC())
+}
+
+func revokeUserAccessTokens(ctx context.Context, db sqlExecer, uid int64, now time.Time) error {
+	_, err := db.ExecContext(ctx,
+		`UPDATE oidc_access_tokens SET revoked_at = ? WHERE uid = ? AND revoked_at IS NULL`, now, uid)
 	return err
 }
 
@@ -474,7 +478,11 @@ func (m *Mysql) RevokeRefreshToken(ctx context.Context, token string) error {
 
 // RevokeUserRefreshTokens revokes every live refresh token of one user.
 func (m *Mysql) RevokeUserRefreshTokens(ctx context.Context, uid int64) error {
-	_, err := m.db.ExecContext(ctx,
+	return revokeUserRefreshTokens(ctx, m.db, uid)
+}
+
+func revokeUserRefreshTokens(ctx context.Context, db sqlExecer, uid int64) error {
+	_, err := db.ExecContext(ctx,
 		`UPDATE oidc_refresh_tokens SET revoked = 1 WHERE uid = ? AND revoked = 0`, uid)
 	return err
 }

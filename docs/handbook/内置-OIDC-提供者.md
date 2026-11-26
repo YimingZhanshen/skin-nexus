@@ -196,9 +196,11 @@ classDiagram
 | `/end_session` | 登出会话 | 触发服务端撤销两类 token。 |
 | `/device_authorization` | RFC 8628 设备授权 | 返回 device_code、user_code、verification_uri、expires_in、interval。 |
 | `/device.html` | 无 JS 设备确认页 | 最小化表单页面，供不支持 SPA 的环境使用。 |
-| `/api/v1/oidc/` | 设备查询、提交和用户授权管理 | 设备 info/submit、tokens 列表、revoke。 |
+| `/api/v1/oidc/` | 设备查询、提交和用户授权管理 | 设备 info/submit、tokens 列表、revoke；仅 POST 变异请求执行统一 Origin 校验。 |
 
 **章节来源**
+- [provider.go:383-397](https://github.com/YimingZhanshen/skin-nexus/blob/0a1b074/server/internal/oidc/provider.go#L383-L397)
+- [origin_gate_test.go:53-189](https://github.com/YimingZhanshen/skin-nexus/blob/0a1b074/server/internal/oidc/origin_gate_test.go#L53-L189)
 - [provider.go:97-152](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/oidc/provider.go#L97-L152)
 - [provider.go:152-200](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/oidc/provider.go#L152-L200)
 - [storage.go:200-360](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/oidc/storage.go#L200-L360)
@@ -514,6 +516,7 @@ graph LR
 - 严格校验 `redirect_uri`：只允许预注册的精确值，不要接受通配或动态拼接。
 - 限制 scope：为每个客户端配置最小必要 scope，尤其是 `offline_access` 和 Yggdrasil 相关 scope。
 - 启用 CSRF 防护：Web 授权码流程应使用 state 参数；PKCE 的 S256 challenge 已在引擎中启用。
+- 设备 API 的 POST 变异（device submit、tokens revoke）必须通过统一 Origin 校验；`/oauth/token`、`/device_authorization`、`/authorize`、`/revoke` 等协议端点不套用该门禁。
 - 使用 HTTPS：所有 OIDC 端点都应通过 TLS 暴露，避免 access token 和 refresh token 泄露。
 - 轮换签名密钥时做好公告与灰度：旧 JWT 会立即失效，客户端需要重新获取 JWKS。
 - 记录审计事件：客户端增删改、设备批准/拒绝、token 撤销都应落入审计日志。
@@ -521,6 +524,8 @@ graph LR
 - 控制公开客户端权限：共享启动器客户端不应被删除，也不应随意扩大其 grant types 或 scopes。
 
 **章节来源**
+- [provider.go:389-397](https://github.com/YimingZhanshen/skin-nexus/blob/0a1b074/server/internal/oidc/provider.go#L389-L397)
+- [origin_gate_test.go:145-189](https://github.com/YimingZhanshen/skin-nexus/blob/0a1b074/server/internal/oidc/origin_gate_test.go#L145-L189)
 - [client.go:18-101](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/oidc/client.go#L18-L101)
 - [provider.go:22-68](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/oidc/provider.go#L22-L68)
 - [userapi.go:60-124](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/oidc/userapi.go#L60-L124)

@@ -1,0 +1,194 @@
+import { ref, shallowRef, readonly } from 'vue'
+
+const quotaFields = ['verifyRateLimit', 'verifyBurst', 'maxConcurrent', 'whitelistLimit', 'eventRetentionDays']
+
+export function isTenantDeletionDue(row, now = Date.now()) {
+  if (!row || row.status !== 'deleting' || !row.deletionDueAt) return false
+  const due = Date.parse(row.deletionDueAt)
+  return Number.isFinite(due) && due <= now
+}
+
+export function buildServerQuotaPatch(draft = {}) {
+  const patch = {}
+  for (const field of quotaFields) {
+    const raw = draft[field]
+    if (raw === '' || raw === null || raw === undefined) continue
+    const value = Number(raw)
+    if (!Number.isSafeInteger(value) || value < 1 || value > 1000000) return { patch: {}, valid: false }
+    patch[field] = value
+  }
+  return { patch, valid: true }
+}
+
+export function useServerAccessPlatform(api) {
+  const tenants = ref([])
+  const servers = ref([])
+  const audit = ref([])
+  const tenantTotal = shallowRef(0)
+  const serverTotal = shallowRef(0)
+  const auditTotal = shallowRef(0)
+  const tenantPage = shallowRef(1)
+  const serverPage = shallowRef(1)
+  const auditPage = shallowRef(1)
+  const tenantSize = shallowRef(20)
+  const serverSize = shallowRef(20)
+  const auditSize = shallowRef(20)
+  const tenantQuery = shallowRef('')
+  const serverQuery = shallowRef('')
+  const auditQuery = shallowRef('')
+  const fallback = shallowRef(false)
+  const loading = shallowRef(false)
+  const busy = shallowRef(false)
+  const error = shallowRef('')
+  let tenantRequest = 0
+  let serverRequest = 0
+  let auditRequest = 0
+  let fallbackRequest = 0
+  let loadRequest = 0
+  let mutateRequest = 0
+  let disposed = false
+
+  async function loadTenants() {
+    if (disposed) return false
+    const current = ++tenantRequest
+    try {
+      const data = await api.platformTenants(tenantPage.value, tenantQuery.value)
+      if (current === tenantRequest) {
+        tenants.value = data.tenants || []
+        tenantTotal.value = data.total || 0
+        tenantPage.value = data.page ?? tenantPage.value
+        tenantSize.value = data.size ?? tenantSize.value
+        const lastPage = Math.max(1, Math.ceil(tenantTotal.value / tenantSize.value))
+        if (tenantPage.value > lastPage) {
+          tenantPage.value = lastPage
+          return loadTenants()
+        }
+      }
+      return current === tenantRequest
+    } catch (cause) { if (current === tenantRequest) error.value = cause.message; return false }
+  }
+
+  async function loadServers() {
+    if (disposed) return false
+    const current = ++serverRequest
+    try {
+      const data = await api.platformServers(serverPage.value, serverQuery.value)
+      if (current === serverRequest) {
+        servers.value = data.servers || []
+        serverTotal.value = data.total || 0
+        serverPage.value = data.page ?? serverPage.value
+        serverSize.value = data.size ?? serverSize.value
+        const lastPage = Math.max(1, Math.ceil(serverTotal.value / serverSize.value))
+        if (serverPage.value > lastPage) {
+          serverPage.value = lastPage
+          return loadServers()
+        }
+      }
+      return current === serverRequest
+    } catch (cause) { if (current === serverRequest) error.value = cause.message; return false }
+  }
+
+  async function loadAudit() {
+    if (disposed) return false
+    const current = ++auditRequest
+    try {
+      const data = await api.platformAudit(auditPage.value, auditQuery.value)
+      if (current === auditRequest) {
+        audit.value = data.audit || []
+        auditTotal.value = data.total || 0
+        auditPage.value = data.page ?? auditPage.value
+        auditSize.value = data.size ?? auditSize.value
+        const lastPage = Math.max(1, Math.ceil(auditTotal.value / auditSize.value))
+        if (auditPage.value > lastPage) {
+          auditPage.value = lastPage
+          return loadAudit()
+        }
+      }
+      return current === auditRequest
+    } catch (cause) { if (current === auditRequest) error.value = cause.message; return false }
+  }
+
+  async function loadFallback() {
+    if (disposed) return false
+    const current = ++fallbackRequest
+    try {
+      const data = await api.platformFallback()
+      if (current === fallbackRequest) fallback.value = !!data.enabled
+      return current === fallbackRequest
+    } catch (cause) { if (current === fallbackRequest) error.value = cause.message; return false }
+  }
+
+  async function load() {
+    if (disposed) return
+    const current = ++loadRequest
+    loading.value = true
+    error.value = ''
+    await Promise.all([loadTenants(), loadServers(), loadAudit(), loadFallback()])
+    if (current === loadRequest) loading.value = false
+  }
+
+  async function mutate(action, refresh) {
+    if (disposed || busy.value) return false
+    const current = ++mutateRequest
+    busy.value = true
+    error.value = ''
+    try {
+      await action()
+      if (current !== mutateRequest) return false
+      await refresh()
+      return current === mutateRequest
+    } catch (cause) {
+      if (current === mutateRequest) error.value = cause.message
+      return false
+    } finally {
+      if (current === mutateRequest) busy.value = false
+    }
+  }
+
+  function dispose() {
+    disposed = true
+    tenantRequest++
+    serverRequest++
+    auditRequest++
+    fallbackRequest++
+    loadRequest++
+    mutateRequest++
+  }
+
+  return {
+    tenants: readonly(tenants), servers: readonly(servers), audit: readonly(audit),
+    tenantTotal: readonly(tenantTotal), serverTotal: readonly(serverTotal), auditTotal: readonly(auditTotal),
+    tenantPage: readonly(tenantPage), serverPage: readonly(serverPage), auditPage: readonly(auditPage),
+    tenantSize: readonly(tenantSize), serverSize: readonly(serverSize), auditSize: readonly(auditSize),
+    tenantQuery: readonly(tenantQuery), serverQuery: readonly(serverQuery), auditQuery: readonly(auditQuery),
+    fallback: readonly(fallback), loading: readonly(loading), busy: readonly(busy), error: readonly(error),
+    load, loadTenants, loadServers, loadAudit, dispose,
+    searchTenants: (query) => { tenantQuery.value = query; tenantPage.value = 1; return loadTenants() },
+    searchServers: (query) => { serverQuery.value = query; serverPage.value = 1; return loadServers() },
+    searchAudit: (query) => { auditQuery.value = query; auditPage.value = 1; return loadAudit() },
+    pageTenants: (page) => { tenantPage.value = page; return loadTenants() },
+    pageServers: (page) => { serverPage.value = page; return loadServers() },
+    pageAudit: (page) => { auditPage.value = page; return loadAudit() },
+    createTenant: (body) => mutate(() => api.createPlatformTenant(body), async () => {
+      tenantPage.value = 1
+      tenantQuery.value = ''
+      auditPage.value = 1
+      auditQuery.value = ''
+      await Promise.all([loadTenants(), loadAudit()])
+    }),
+    updateTenant: (id, body) => mutate(() => api.updatePlatformTenant(id, body), loadTenants),
+    deleteTenant: (id, confirmation) => mutate(() => api.deletePlatformTenant(id, confirmation), async () => {
+      await Promise.all([loadTenants(), loadAudit()])
+    }),
+    updateServer: (id, body) => mutate(() => api.updatePlatformServer(id, body), loadServers),
+    setFallback: (enabled) => mutate(async () => {
+      fallbackRequest++
+      await api.setPlatformFallback(enabled)
+    }, async () => {
+      await Promise.all([loadFallback(), loadAudit()])
+    }),
+    revokeCredential: (id, cid) => mutate(() => api.revokePlatformCredential(id, cid), async () => {
+      await Promise.all([loadServers(), loadAudit()])
+    }),
+  }
+}

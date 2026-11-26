@@ -90,7 +90,7 @@ graph TB
 |---|---|---|
 | Yggdrasil | 无 HTTP 头认证；凭据由请求体中的用户名/密码或 accessToken 表达 | 符合 legacy Yggdrasil 语义；成功时返回 token 或 204 |
 | Web API | Cookie 会话 | 登录后由站点设置 SameSite/Lax/Secure；注册/登录/修改资料/上传均需要 |
-| 管理 API | 已登录且权限 > 0 的管理员，或 `X-Admin-Token` | 机器/API 场景用 `SKIN_ADMIN_TOKEN` 环境变量注入 |
+| 管理 API | 已登录且权限 > 0 的管理员；或无非空会话 Cookie 的机器客户端使用 `X-Admin-Token` | 浏览器面板只用会话；机器/API 场景从运行环境注入 `SKIN_ADMIN_TOKEN` |
 | 公开只读 | 无需认证 | 匿名浏览公开纹理；按会话可见性过滤私有项 |
 | 启动器 Bearer | `Authorization: Bearer <token>` | 支持 OIDC access_token 与 Yggdrasil accessToken |
 | 插件 API | 由插件声明；宿主统一解析 Bearer 身份 | 无效/过期 token 返回 401，禁用账户返回 403 |
@@ -648,10 +648,10 @@ Web API 面向浏览器 SPA，使用 Cookie 会话认证。除纹理文件外，
 
 ## 管理 API
 
-管理 API 要求管理员权限。两种认证方式等价：
+管理 API 要求管理员权限。浏览器面板与机器客户端使用不同通道：
 
-- 通过 Web API 登录后，账户权限 > 0
-- 通过 `X-Admin-Token` 请求头传入 `SKIN_ADMIN_TOKEN`
+- 浏览器面板：通过 Web API 登录后，账户权限 > 0，只发送同源会话 Cookie。
+- 无 Cookie 机器/API 客户端：通过 `X-Admin-Token` 请求头传入 `SKIN_ADMIN_TOKEN`。请求带非空会话 Cookie 时只按会话判定，机器令牌不能回退坏会话。
 
 常用端点：
 
@@ -660,13 +660,13 @@ Web API 面向浏览器 SPA，使用 Cookie 会话认证。除纹理文件外，
 | GET | `/api/admin/v1/overview` | 管理员 | 站点概览 |
 | GET | `/api/admin/v1/status` | 管理员 | 运行时状态 |
 | GET | `/api/admin/v1/diagnostics` | 管理员 | 部署自检 |
-| POST | `/api/admin/v1/mail-test` | 管理员 | 向当前管理员自身发送邮件测试 |
+| POST | `/api/admin/v1/mail-test` | Web 会话管理员 | 向当前管理员自身发送邮件测试 |
 | GET | `/api/admin/v1/users` | 管理员 | 用户列表 |
 | POST | `/api/admin/v1/users/{id}/password` | 管理员 | 重置密码 |
 | PUT | `/api/admin/v1/users/{id}/email` | 管理员 | 修改邮箱 |
 | PUT | `/api/admin/v1/users/{id}/nickname` | 管理员 | 修改昵称 |
 | PUT | `/api/admin/v1/users/{id}/verification` | 管理员 | 强制邮箱验证状态 |
-| PUT | `/api/admin/v1/users/{id}/permission` | 管理员 | 修改权限 |
+| PUT | `/api/admin/v1/users/{id}/permission` | Web 会话管理员 | 修改权限 |
 | DELETE | `/api/admin/v1/users/{id}` | 管理员 | 删除账户 |
 | GET | `/api/admin/v1/players` | 管理员 | 角色列表 |
 | PUT | `/api/admin/v1/players/{pid}/name` | 管理员 | 改名 |
@@ -952,9 +952,10 @@ curl -sS \
 curl -sS "https://skin.example.com/api/public/v1/players/byname/玩家"
 ```
 
-#### 管理 API
+#### 管理 API（无 Cookie 机器客户端）
 
 ```bash
+# 仅脚本/外部工具使用：不要发送 skin_session Cookie。
 curl -sS -H "X-Admin-Token: $SKIN_ADMIN_TOKEN" \
   "https://skin.example.com/api/admin/v1/status"
 ```

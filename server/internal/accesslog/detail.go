@@ -147,6 +147,14 @@ func Attach(r *http.Request) *Capture {
 	if r == nil {
 		return c
 	}
+	if l := liveOf(r.Context()); l != nil {
+		l.mu.Lock()
+		suppressed := l.suppressed
+		l.mu.Unlock()
+		if suppressed {
+			return nil
+		}
+	}
 	c.Headers = r.Header
 	if l := liveOf(r.Context()); l != nil {
 		c.StatusCode, c.DurationMS, c.Body, c.Credential = l.snapshot()

@@ -2,7 +2,7 @@
 // Texture report moderation: list open reports, dismiss/resolve, or hide the
 // texture. "Hide" strikes it — private, cleared from the public dedupe key, and
 // barred from being republished by its owner until an admin lifts the verdict.
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
@@ -26,6 +26,7 @@ const busy = ref(0)
 const error = ref('')
 const ok = ref('')
 let seq = 0
+let disposed = false
 
 // 状态三枚举（store/reports.go）：open / resolved / dismissed——与玩家侧
 // 我的举报共用一套状态词，面板不再裸显枚举原文。
@@ -46,6 +47,7 @@ const reasons = {
 }
 
 async function load() {
+  if (disposed) return
   const my = ++seq
   loading.value = true
   error.value = ''
@@ -152,6 +154,7 @@ async function purge(r) {
 }
 
 onMounted(load)
+onBeforeUnmount(() => { disposed = true; seq++ })
 </script>
 
 <template>

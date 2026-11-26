@@ -96,6 +96,13 @@ func buildVersionInfo() (string, string, string) {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "verify-proxy" {
+		if err := runVerifyProxy(context.Background(), os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "version" {
 		fmt.Println("skin-nexus", version)
 		return
@@ -383,6 +390,9 @@ func main() {
 	unionCtx, unionCancel := context.WithCancel(context.Background())
 	defer unionCancel()
 	ustack := newUnionStack(unionCtx, st, cfg, version, signer)
+	// Optional server access is always assembled for the panel hot toggle. The
+	// store reference is inert until the gate opens and a session is presented.
+	sastack := newServerAccessStack(st, st, cfg)
 	unionAPI, unionGrant := ustack.api, ustack.grant
 	unionOut, unionSigner := ustack.out, ustack.signer
 	var activeSigner ygg.Signer = signer
@@ -418,10 +428,11 @@ func main() {
 			},
 			User: st.UserBrief,
 		}, oidc.Config{
-			Issuer:         cfg.OIDCIssuer,
-			Key:            okey,
-			SharedClientID: cfg.SharedClientID,
-			LoginURL:       cfg.BaseURL + "/login",
+			Issuer:            cfg.OIDCIssuer,
+			Key:               okey,
+			SharedClientID:    cfg.SharedClientID,
+			YggdrasilAudience: strings.TrimRight(cfg.BaseURL, "/") + "/api/yggdrasil",
+			LoginURL:          cfg.BaseURL + "/login",
 		})
 		if err != nil {
 			logx.Fatal("oidc", "error", err)
@@ -444,7 +455,7 @@ func main() {
 		// ledger; opaque password-flow tokens fall back to the store lookup.
 		// Only ErrNotJOSE falls back — a JWT-shaped token that fails
 		// verification must not degrade to another authority (2026-10-23).
-		jwtResolve := oidc.NewYggTokenResolver(st, cfg.OIDCIssuer, &okey.PublicKey)
+		jwtResolve := oidc.NewYggTokenResolver(st, cfg.OIDCIssuer, &okey.PublicKey, oidcProvider.AccessTokenPolicy())
 		yggSvc.SetTokenResolver(func(ctx context.Context, access string) (ygg.Token, error) {
 			t, err := jwtResolve(ctx, access)
 			if errors.Is(err, oidc.ErrNotJOSE) {
@@ -480,6 +491,7 @@ func main() {
 		}
 		return mojangFallbackDefault
 	}))
+	sastack.setVerifier(yggAPI)
 	// 运维观测面（2026-10-26）：网页/启动器登录、Yggdrasil 服务器流量、
 	// 联盟出入站通信统一落 access_logs，管理面板可筛选分页查看。全程
 	// 旁路：nil 安全、写失败吞掉，任何情况下不改变协议响应。保留 90 天，
@@ -542,6 +554,9 @@ func main() {
 	// The SPA gates its authorized-apps/device pages on this flag; without it
 	// those nav entries lead to a 404 whenever OIDC is off.
 	backend.OIDCEnabled = cfg.OIDCEnabled
+	// The owner portal shell stays reachable while the module is off, but its
+	// unavailable state and navigation must follow the live gate.
+	backend.ServerAccessEnabled = sastack.Enabled
 	// The wizard is the one endpoint that answers before anyone exists. Guard it
 	// while it is still open, and say the token out loud in the log so the
 	// operator — the only person reading that log — can complete the install.
@@ -727,6 +742,17 @@ func main() {
 			}
 		case "union_member_key":
 			ustack.setMemberKey(value)
+		case "serveraccess_enabled":
+			sastack.setEnabled(context.Background(), value == "1")
+			on := value == "1"
+			if on {
+				if err := sastack.startRetention(context.Background()); err != nil {
+					slog.Error("serveraccess.retention start_failed")
+				}
+			} else {
+				sastack.stopRetention()
+			}
+			slog.Info("serveraccess: hot toggle", "value", value)
 		case "cdn_enabled", "cdn_headers":
 			applyCDN()
 			slog.Info("cdn: hot apply", "key", key, "value", value)
@@ -787,6 +813,7 @@ func main() {
 		"union_resolve_names":          boolStr(cfg.UnionResolveNames),
 		"union_oauth2_sig_private_key": "",
 		"union_oauth2_sig_public_key":  "",
+		"serveraccess_enabled":         boolStr(cfg.ServerAccessEnabled),
 		// A1 找回密码: SMTP env fallbacks shown as panel placeholders. Same map as
 		// the mailer's, minus the password — see config.SMTPConfig.PanelMap.
 		"smtp_host": cfg.SMTP.Host,
@@ -928,6 +955,7 @@ func main() {
 	}
 
 	root := http.NewServeMux()
+	mountServerAccess(root, sastack)
 	mountCompatSurfaces(root, yggAPI.Handler())
 	if oidcProvider != nil {
 		root.Handle("GET /api/yggdrasil/.well-known/openid-configuration", oidcProvider.DiscoveryHandler())
@@ -1130,6 +1158,10 @@ func main() {
 	// diagnostic detail rows and forwards every byte (see internal/accesslog/
 	// observe.go — it persists nothing by itself).
 	srv := newHTTPServer(addr, securityHeaders(accesslog.Observe(pub.WrapRoot(gzipHandler(root))), cspExtras{script: cspScript, connect: cspConnect}))
+	if err := sastack.startRetention(context.Background()); err != nil {
+		logx.Fatal("serveraccess retention", "error", err)
+	}
+	defer sastack.stopRetention()
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.ListenAndServe() }()
 
@@ -1147,6 +1179,7 @@ func main() {
 		slog.Info("received , shutting down", "sig", sig)
 		unionCancel()
 		_ = pluginHost.Close()
+		sastack.stopRetention()
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(ctx); err != nil {
@@ -1289,7 +1322,7 @@ func isKnownSPAPath(p string, uiPath func(string) bool) bool {
 	}
 	switch p {
 	case "index.html", "login", "register", "forgot-password", "reset-password", "email-verify", "device",
-		"setup", "skinlib", "help", "user/skinlib", "user/closet", "user/profile",
+		"setup", "skinlib", "help", "servers", "user/skinlib", "user/closet", "user/profile",
 		"user/players", "user/dashboard":
 		return true
 	}

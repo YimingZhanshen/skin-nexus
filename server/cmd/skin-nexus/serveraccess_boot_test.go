@@ -1,0 +1,222 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+
+	"skin-nexus/server/internal/accesslog"
+	"skin-nexus/server/internal/config"
+)
+
+type serverAccessOptionSpy struct {
+	values map[string]string
+	err    error
+	reads  int
+}
+
+func (s *serverAccessOptionSpy) GetOption(_ context.Context, key string) (string, bool, error) {
+	s.reads++
+	v, ok := s.values[key]
+	return v, ok, s.err
+}
+
+func TestServerAccessStackOptionsFirstAndFailClosed(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		option  string
+		present bool
+		readErr error
+		env     bool
+		want    bool
+	}{
+		{name: "default off"},
+		{name: "absent option falls back to env on", env: true, want: true},
+		{name: "option off wins over env on", option: "0", present: true, env: true},
+		{name: "option on wins over env off", option: "yes", present: true, want: true},
+		{name: "trimmed option on wins over env off", option: " \tYeS\n", present: true, want: true},
+		{name: "read error fails closed despite env on", option: "true", present: true, readErr: errors.New("synthetic option read failure"), env: true},
+		{name: "blank option fails closed despite env on", present: true, env: true},
+		{name: "whitespace option fails closed despite env on", option: " \t\n", present: true, env: true},
+		{name: "malformed option fails closed despite env on", option: "maybe", present: true, env: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spy := &serverAccessOptionSpy{values: map[string]string{}, err: tc.readErr}
+			if tc.present {
+				spy.values["serveraccess_enabled"] = tc.option
+			}
+			s := newServerAccessStack(spy, nil, &config.Config{ServerAccessEnabled: tc.env})
+			if s.Enabled() != tc.want {
+				t.Fatalf("Enabled() = %v, want %v", s.Enabled(), tc.want)
+			}
+			if spy.reads != 1 {
+				t.Fatalf("option reads = %d, want 1", spy.reads)
+			}
+		})
+	}
+}
+
+func TestServerAccessStackOptionReadErrorLogsFailureWithoutValue(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	const optionValue = "synthetic-option-value-must-not-be-logged"
+	readErr := errors.New("synthetic option read failure")
+	spy := &serverAccessOptionSpy{
+		values: map[string]string{"serveraccess_enabled": optionValue},
+		err:    readErr,
+	}
+	s := newServerAccessStack(spy, nil, &config.Config{ServerAccessEnabled: true})
+	if s.Enabled() {
+		t.Fatal("Enabled() = true after option read error, want false")
+	}
+	if !strings.Contains(logs.String(), readErr.Error()) {
+		t.Fatalf("read failure was not logged: %q", logs.String())
+	}
+	if strings.Contains(logs.String(), optionValue) {
+		t.Fatalf("option value leaked into logs: %q", logs.String())
+	}
+}
+
+func TestServerAccessRoutesPreemptSpaCatchAll(t *testing.T) {
+	s := newServerAccessStack(nil, nil, &config.Config{})
+	root := http.NewServeMux()
+	mountServerAccess(root, s)
+	root.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Model the real SPA known-path check: only the exact owner portal is
+		// served; unknown descendants must not receive the application shell.
+		if r.URL.Path != "/servers" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("SPA"))
+	})
+
+	paths := []string{
+		"/api/serveraccess",
+		"/api/serveraccess/v1/health",
+		"/api/serveraccess/v1/servers",
+		"/api/serveraccess/v1/unknown",
+		"/api/admin/v1/serveraccess/tenants",
+		"/v",
+		"/v/secret/sessionserver/session/minecraft/hasJoined",
+	}
+	for _, path := range paths {
+		rec := httptest.NewRecorder()
+		root.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), "SPA") {
+			t.Errorf("disabled GET %s = %d %q, want non-SPA 404", path, rec.Code, rec.Body.String())
+		}
+		if rec.Header().Get("Cache-Control") != "no-store" || rec.Header().Get("Referrer-Policy") != "no-referrer" {
+			t.Errorf("disabled GET %s security headers = %v", path, rec.Header())
+		}
+	}
+
+	// The owner portal is a normal SPA route in both states. When the module is
+	// off it must load far enough to explain that the feature is unavailable;
+	// only the module APIs are gated. Unknown descendants remain real 404s.
+	for _, path := range []string{"/servers/", "/servers/unknown"} {
+		rec := httptest.NewRecorder()
+		root.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), "SPA") {
+			t.Errorf("disabled GET %s = %d %q, want non-SPA 404", path, rec.Code, rec.Body.String())
+		}
+	}
+	for _, enabled := range []bool{false, true} {
+		s.setEnabled(context.Background(), enabled)
+		rec := httptest.NewRecorder()
+		root.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/servers", nil))
+		if rec.Code != http.StatusOK || rec.Body.String() != "SPA" {
+			t.Errorf("enabled=%v GET /servers = %d %q, want SPA shell", enabled, rec.Code, rec.Body.String())
+		}
+	}
+
+	s.setEnabled(context.Background(), true)
+	for _, path := range []string{"/api/serveraccess/v1/health", "/api/serveraccess/v1/servers", "/api/admin/v1/serveraccess/tenants"} {
+		rec := httptest.NewRecorder()
+		root.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		want := http.StatusUnauthorized
+		if path == "/api/serveraccess/v1/health" {
+			want = http.StatusOK
+		} else if strings.HasPrefix(path, "/api/admin/") {
+			want = http.StatusForbidden
+		}
+		if rec.Code != want || strings.Contains(rec.Body.String(), "SPA") {
+			t.Errorf("enabled GET %s = %d %q, want module %d", path, rec.Code, rec.Body.String(), want)
+		}
+	}
+}
+
+func TestServerAccessGuardSuppressesDiagnosticCapture(t *testing.T) {
+	s := newServerAccessStack(nil, nil, &config.Config{})
+	s.setEnabled(context.Background(), true)
+	h := accesslog.Observe(s.guard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.ReadAll(r.Body)
+		accesslog.MarkCredential(r.Context(), "never-capture-this")
+		if capture := accesslog.Attach(r); capture != nil {
+			t.Fatalf("server-access diagnostic capture = %+v, want nil", capture)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})))
+	r := httptest.NewRequest(http.MethodGet, "/v/secret/sessionserver/session/minecraft/hasJoined?username=Alice", strings.NewReader("never-capture-this-body"))
+	r.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, r)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rec.Code)
+	}
+}
+
+func TestMainWiresExplicitRetentionLifecycle(t *testing.T) {
+	raw, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(raw)
+	start := strings.Index(src, "if err := sastack.startRetention(context.Background()); err != nil")
+	stop := strings.Index(src, "defer sastack.stopRetention()")
+	listen := strings.Index(src, "srv.ListenAndServe()")
+	if start < 0 || stop < 0 || listen < 0 || start > stop || stop > listen {
+		t.Fatalf("retention must start explicitly before serving and stop on exit: start=%d stop=%d listen=%d", start, stop, listen)
+	}
+	if !strings.Contains(src, "sastack.startRetention(context.Background())") || !strings.Contains(src, "sastack.stopRetention()") {
+		t.Fatal("retention lifecycle is not connected to the module hot toggle")
+	}
+}
+
+func TestMainWiresServerAccessAssemblyHotToggleAndRoutes(t *testing.T) {
+	raw, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(raw)
+	assembly := strings.Index(src, "sastack := newServerAccessStack(st, st, cfg)")
+	mount := strings.Index(src, "mountServerAccess(root, sastack)")
+	verifier := strings.Index(src, "sastack.setVerifier(yggAPI)")
+	spa := strings.Index(src, `root.Handle("/", spa)`)
+	if assembly < 0 || verifier < 0 || mount < 0 || spa < 0 {
+		t.Fatalf("main.go missing server-access wiring: assembly=%d verifier=%d mount=%d spa=%d", assembly, verifier, mount, spa)
+	}
+	if assembly > verifier || verifier > mount || mount > spa {
+		t.Fatalf("server-access routes must be mounted before SPA: assembly=%d mount=%d spa=%d", assembly, mount, spa)
+	}
+	if !strings.Contains(src, `case "serveraccess_enabled":`) || !strings.Contains(src, "sastack.setEnabled(context.Background(), value == \"1\")") {
+		t.Fatal("main.go does not hot-apply serveraccess_enabled")
+	}
+	if !strings.Contains(src, `"serveraccess_enabled":`) || !strings.Contains(src, "boolStr(cfg.ServerAccessEnabled)") {
+		t.Fatal("main.go does not expose the env fallback in settings defaults")
+	}
+	if !strings.Contains(src, "backend.ServerAccessEnabled = sastack.Enabled") {
+		t.Fatal("main.go does not publish the live server-access capability to the SPA")
+	}
+}

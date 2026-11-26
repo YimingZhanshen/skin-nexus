@@ -1,11 +1,13 @@
 package ygg
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -46,6 +48,11 @@ type MetadataConfig struct {
 	ExtraSkinDomains func() []string
 }
 
+// maxYggJSONBodyBytes bounds every JSON request on the frozen Yggdrasil
+// surface. 64 KiB leaves ample room for authenticate/refresh/join credentials
+// and the maximum 100-name bulk lookup while preventing unbounded JSON buffering.
+const maxYggJSONBodyBytes int64 = 64 << 10
+
 // API serves the Yggdrasil HTTP surface mounted at /api/yggdrasil.
 type API struct {
 	svc *Service
@@ -65,7 +72,14 @@ func NewAPI(svc *Service, cfg MetadataConfig) *API {
 
 // SetFallback installs the official-sessionserver fallback (main wires the
 // hot `ygg_mojang_fallback` panel toggle).
-func (a *API) SetFallback(f *Fallback) { a.fallback = f }
+func (a *API) SetFallback(f *Fallback) {
+	a.fallback = f
+	if f == nil {
+		a.svc.scopedFallback = nil
+		return
+	}
+	a.svc.scopedFallback = f.scopedHasJoined
+}
 
 // SetAccess installs the traffic logger (main wires the access_logs sink).
 func (a *API) SetAccess(l *accesslog.Logger) { a.access = l }
@@ -144,7 +158,38 @@ func checkJSON(r *http.Request, w http.ResponseWriter) bool {
 	return true
 }
 
+// decodeYggJSONBody reads the complete body through a hard cap before decoding
+// one value. Reading only until the first JSON value ends would let trailing
+// whitespace or extra content bypass the limit. The overflow response stays on
+// the legacy error envelope; under-cap malformed bodies keep each handler's
+// existing status and message.
+func decodeYggJSONBody(w http.ResponseWriter, r *http.Request, v any) error {
+	if r.ContentLength > maxYggJSONBodyBytes {
+		return &http.MaxBytesError{Limit: maxYggJSONBodyBytes}
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxYggJSONBodyBytes)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+	return json.NewDecoder(bytes.NewReader(body)).Decode(v)
+}
+
+func yggBodyTooLarge(err error) bool {
+	var tooLarge *http.MaxBytesError
+	return errors.As(err, &tooLarge)
+}
+
+func writeYggBodyTooLarge(w http.ResponseWriter) {
+	writeError(w, http.StatusRequestEntityTooLarge, "IllegalArgumentException", "request body too large")
+}
+
 // ---- metadata ----
+
+// MetadataHandler exposes the same discovery document at authenticated API roots.
+func (a *API) MetadataHandler() http.Handler {
+	return http.HandlerFunc(a.handleMetadata)
+}
 
 func (a *API) handleMetadata(w http.ResponseWriter, r *http.Request) {
 	var b strings.Builder
@@ -303,7 +348,11 @@ func (a *API) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
 		ClientToken string `json:"clientToken"`
 		RequestUser bool   `json:"requestUser"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeYggJSONBody(w, r, &req); err != nil {
+		if yggBodyTooLarge(err) {
+			writeYggBodyTooLarge(w)
+			return
+		}
 		writeError(w, http.StatusBadRequest, "IllegalArgumentException", "invalid JSON body")
 		return
 	}
@@ -371,7 +420,11 @@ func (a *API) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		RequestUser     bool            `json:"requestUser"`
 		SelectedProfile json.RawMessage `json:"selectedProfile"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeYggJSONBody(w, r, &req); err != nil {
+		if yggBodyTooLarge(err) {
+			writeYggBodyTooLarge(w)
+			return
+		}
 		writeError(w, http.StatusBadRequest, "IllegalArgumentException", "invalid JSON body")
 		return
 	}
@@ -419,7 +472,11 @@ func (a *API) handleValidate(w http.ResponseWriter, r *http.Request) {
 		AccessToken string `json:"accessToken"`
 		ClientToken string `json:"clientToken"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeYggJSONBody(w, r, &req); err != nil {
+		if yggBodyTooLarge(err) {
+			writeYggBodyTooLarge(w)
+			return
+		}
 		writeError(w, http.StatusBadRequest, "IllegalArgumentException", "invalid JSON body")
 		return
 	}
@@ -442,7 +499,10 @@ func (a *API) handleInvalidate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		AccessToken string `json:"accessToken"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	if err := decodeYggJSONBody(w, r, &req); yggBodyTooLarge(err) {
+		writeYggBodyTooLarge(w)
+		return
+	}
 	a.svc.Invalidate(r.Context(), req.AccessToken)
 	noContent(w) // always 204
 }
@@ -455,7 +515,10 @@ func (a *API) handleSignout(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	if err := decodeYggJSONBody(w, r, &req); yggBodyTooLarge(err) {
+		writeYggBodyTooLarge(w)
+		return
+	}
 	// B5.2 gap throttle applies upstream (routes.php:11-15 puts Throttle on
 	// signout too), but the frozen wire contract is "signout always 204" —
 	// a throttle hit DROPS the work (no password check = anti-brute-force
@@ -477,7 +540,11 @@ func (a *API) handleJoin(w http.ResponseWriter, r *http.Request) {
 		SelectedProfile json.RawMessage `json:"selectedProfile"`
 		ServerID        string          `json:"serverId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeYggJSONBody(w, r, &req); err != nil {
+		if yggBodyTooLarge(err) {
+			writeYggBodyTooLarge(w)
+			return
+		}
 		writeError(w, http.StatusBadRequest, "IllegalArgumentException", "invalid arguments")
 		return
 	}
@@ -543,20 +610,24 @@ func (a *API) handleHasJoined(w http.ResponseWriter, r *http.Request) {
 	name, sid := q.Get("username"), q.Get("serverId")
 	p, err := a.svc.HasJoined(r.Context(), name, sid, q.Get("ip"))
 	if err != nil {
-		// A2 fallback: no local join record → ask the official sessionserver
-		// before answering 204 (Mojang confirms joins it recorded itself —
-		// official-account players on authlib-injector servers).
-		if body, ok := a.fallback.hasJoined(r.Context(), name, sid, q.Get("ip")); ok {
-			a.accessLog(r, accesslog.Entry{Kind: accesslog.YggHasJoined,
-				Outcome: accesslog.OutcomeOK, Who: name,
-				Detail: "src=official serverId=" + sid})
-			writeFallbackProfile(w, body)
-			return
+		// Only a proven local miss may use fallback. Policy denials, store
+		// failures and signing faults must never be overridden upstream.
+		if errors.Is(err, ErrProfileNotFound) || errors.Is(err, ErrSessionNotFound) {
+			// A2 fallback: no local join record → ask the official sessionserver
+			// before answering 204 (Mojang confirms joins it recorded itself —
+			// official-account players on authlib-injector servers).
+			if body, ok := a.fallback.hasJoined(r.Context(), name, sid, q.Get("ip")); ok {
+				a.accessLog(r, accesslog.Entry{Kind: accesslog.YggHasJoined,
+					Outcome: accesslog.OutcomeOK, Who: name,
+					Detail: "src=official serverId=" + sid})
+				writeFallbackProfile(w, body)
+				return
+			}
 		}
 		a.accessLog(r, accesslog.Entry{Kind: accesslog.YggHasJoined,
 			Outcome: accesslog.OutcomeMiss, Who: name,
 			Detail: "src=none serverId=" + sid})
-		noContent(w) // unknown / expired / mismatch: 204, never 4xx
+		noContent(w) // unknown / expired / mismatch / denied: 204, never 4xx
 		return
 	}
 	a.accessLog(r, accesslog.Entry{Kind: accesslog.YggHasJoined,
@@ -570,14 +641,14 @@ func (a *API) handleProfile(w http.ResponseWriter, r *http.Request) {
 	withSig := r.URL.Query().Get("unsigned") == "false"
 	p, err := a.svc.ProfileByUUID(r.Context(), uuid, withSig)
 	if err != nil {
-		// A2 fallback: unknown-to-us UUID → the official sessionserver may
-		// still know it (signature policy mirrored: unsigned=true only when
-		// our own handler would have stripped signatures).
-		if body, ok := a.fallback.profile(r.Context(), uuid, withSig); ok {
-			a.accessLog(r, accesslog.Entry{Kind: accesslog.YggProfile,
-				Outcome: accesslog.OutcomeOK, Who: uuid, Detail: "src=official"})
-			writeFallbackProfile(w, body)
-			return
+		// Only a proven missing profile may use fallback; local faults fail closed.
+		if errors.Is(err, ErrProfileNotFound) {
+			if body, ok := a.fallback.profile(r.Context(), uuid, withSig); ok {
+				a.accessLog(r, accesslog.Entry{Kind: accesslog.YggProfile,
+					Outcome: accesslog.OutcomeOK, Who: uuid, Detail: "src=official"})
+				writeFallbackProfile(w, body)
+				return
+			}
 		}
 		a.accessLog(r, accesslog.Entry{Kind: accesslog.YggProfile,
 			Outcome: accesslog.OutcomeMiss, Who: uuid, Detail: "src=none"})
@@ -609,7 +680,11 @@ func (a *API) handleLookupBulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var names []string
-	if err := json.NewDecoder(r.Body).Decode(&names); err != nil {
+	if err := decodeYggJSONBody(w, r, &names); err != nil {
+		if yggBodyTooLarge(err) {
+			writeYggBodyTooLarge(w)
+			return
+		}
 		writeError(w, http.StatusBadRequest, "IllegalArgumentException", "invalid JSON body")
 		return
 	}

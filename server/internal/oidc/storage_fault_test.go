@@ -182,7 +182,7 @@ func TestClientAuthWrongSecretIs401(t *testing.T) {
 func TestAuthorizeClientIDSecretClassifiesErrors(t *testing.T) {
 	b := newMemBackend()
 	fb := &flakyBackend{Backend: b, failGetClientCalls: 1}
-	s := NewStorage(fb, ProfileSource{}, testKey(t), "kid", "https://skin.test")
+	s := NewStorage(fb, ProfileSource{}, testKey(t), "kid", "https://skin.test", "")
 
 	err := s.AuthorizeClientIDSecret(context.Background(), "any", "any")
 	if err == nil {
@@ -209,7 +209,7 @@ func TestAuthorizeClientIDSecretClassifiesErrors(t *testing.T) {
 func TestTokenRequestByRefreshTokenClassifiesErrors(t *testing.T) {
 	b := newMemBackend()
 	fb := &flakyBackend{Backend: b, failGetRefreshToken: "rt"}
-	s := NewStorage(fb, ProfileSource{}, testKey(t), "kid", "https://skin.test")
+	s := NewStorage(fb, ProfileSource{}, testKey(t), "kid", "https://skin.test", "")
 
 	_, err := s.TokenRequestByRefreshToken(context.Background(), "rt")
 	if err == nil {
@@ -237,7 +237,7 @@ func TestTokenRequestByRefreshTokenClassifiesErrors(t *testing.T) {
 func TestGetRefreshTokenInfoClassifiesErrors(t *testing.T) {
 	b := newMemBackend()
 	fb := &flakyBackend{Backend: b, failGetRefreshToken: "rt"}
-	s := NewStorage(fb, ProfileSource{}, testKey(t), "kid", "https://skin.test")
+	s := NewStorage(fb, ProfileSource{}, testKey(t), "kid", "https://skin.test", "")
 
 	_, _, err := s.GetRefreshTokenInfo(context.Background(), "c", "rt")
 	if err == nil {
@@ -254,7 +254,7 @@ func TestGetRefreshTokenInfoClassifiesErrors(t *testing.T) {
 func TestCreateTokensRotationStoreFaultNotInvalidToken(t *testing.T) {
 	b := newMemBackend()
 	fb := &flakyBackend{Backend: b, failGetRefreshToken: "rt-old"}
-	s := NewStorage(fb, ProfileSource{}, testKey(t), "kid", "https://skin.test")
+	s := NewStorage(fb, ProfileSource{}, testKey(t), "kid", "https://skin.test", "")
 
 	req := &refreshTokenRequest{rec: RefreshTokenRecord{
 		Token: "rt-old", UserID: 42, ClientID: "2",

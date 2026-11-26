@@ -115,6 +115,7 @@ func postWithin(t *testing.T, h http.Handler, path, body, session string) *httpt
 		req.Header.Set("Content-Type", "application/json")
 		if session != "" {
 			req.AddCookie(&http.Cookie{Name: "skin_session", Value: session})
+			req.Header.Set("Origin", "http://example.com")
 		}
 		h.ServeHTTP(rec, req)
 		done <- rec

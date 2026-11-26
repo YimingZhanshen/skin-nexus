@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"skin-nexus/server/internal/dbx"
 )
 
 // InsertAudit appends one audit row. actorUID 0 = system/union event (the
@@ -18,29 +20,55 @@ func (m *Mysql) InsertAudit(ctx context.Context, actorUID int64, action string, 
 	if action == "" {
 		return
 	}
-	var payload any
-	switch d := detail.(type) {
-	case nil:
-		payload = nil
-	case string:
-		payload = d
-	default:
-		if b, err := json.Marshal(d); err == nil {
-			payload = string(b)
-		} else {
-			payload = "unmarshalable detail"
-		}
-	}
-	var actor sql.NullInt64
-	if actorUID > 0 {
-		actor = sql.NullInt64{Int64: actorUID, Valid: true}
-	}
-	// Stamp from the store clock, not the column DEFAULT: every windowed read
-	// (mail failures, access-log retention) compares against m.now(), and a
-	// DB-clock write would drift from it on a host whose clock differs.
 	_, _ = m.db.ExecContext(ctx,
 		`INSERT INTO audit_log (actor_uid, action, detail, created_at) VALUES (?,?,?,?)`,
-		actor, action, payload, m.now().UTC())
+		auditActor(actorUID), action, auditPayload(detail), m.now().UTC())
+}
+
+func auditActor(actorUID int64) sql.NullInt64 {
+	if actorUID > 0 {
+		return sql.NullInt64{Int64: actorUID, Valid: true}
+	}
+	return sql.NullInt64{}
+}
+
+func auditPayload(detail any) any {
+	switch d := detail.(type) {
+	case nil:
+		return nil
+	case string:
+		return d
+	default:
+		if b, err := json.Marshal(d); err == nil {
+			return string(b)
+		}
+		return "unmarshalable detail"
+	}
+}
+
+func insertAuditTx(ctx context.Context, tx *dbx.Tx, actorUID int64, action string, detail any, now time.Time) error {
+	if action == "" {
+		return errors.New("store: audit action is required")
+	}
+	_, err := tx.ExecContext(ctx,
+		`INSERT INTO audit_log (actor_uid, action, detail, created_at) VALUES (?,?,?,?)`,
+		auditActor(actorUID), action, auditPayload(detail), now.UTC())
+	return err
+}
+
+func (m *Mysql) withSAAudit(ctx context.Context, actorUID int64, action string, detail any, mutate func(*dbx.Tx) error) error {
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := mutate(tx); err != nil {
+		return err
+	}
+	if err := insertAuditTx(ctx, tx, actorUID, action, detail, m.now()); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // MailFailureActions are the audit rows that mean "a letter did not leave".

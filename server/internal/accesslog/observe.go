@@ -40,6 +40,7 @@ type live struct {
 	wroteHeader bool
 	body        []byte
 	credential  string
+	suppressed  bool
 	finalizers  []func(status int, durationMS int64)
 }
 
@@ -74,7 +75,7 @@ func (l *live) writeHeader(code int) {
 func (l *live) noteBody(p []byte) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if len(l.body) >= MaxBodyExcerpt || len(p) == 0 {
+	if l.suppressed || len(l.body) >= MaxBodyExcerpt || len(p) == 0 {
 		return
 	}
 	if free := MaxBodyExcerpt - len(l.body); len(p) > free {
@@ -86,6 +87,9 @@ func (l *live) noteBody(p []byte) {
 func (l *live) markCredential(credential string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.suppressed {
+		return
+	}
 	l.credential = credential
 }
 
@@ -114,6 +118,22 @@ func (l *live) finalize(panicked bool) {
 	l.mu.Unlock()
 	for _, f := range fs {
 		f(status, d)
+	}
+}
+
+// SuppressCapture permanently disables diagnostic material for a sensitive
+// route. Status/duration metrics remain available; headers, body and decoded
+// credentials are discarded and Attach returns nil.
+func SuppressCapture(ctx context.Context) {
+	if ctx == nil {
+		return
+	}
+	if l := liveOf(ctx); l != nil {
+		l.mu.Lock()
+		l.suppressed = true
+		l.body = nil
+		l.credential = ""
+		l.mu.Unlock()
 	}
 }
 

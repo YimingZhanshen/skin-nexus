@@ -9,7 +9,7 @@
 //
 // The API mirrors the native one so call sites keep their shape: prompt returns
 // the text or null, confirm returns true/false, alert just acknowledges.
-import { reactive, readonly } from 'vue'
+import { nextTick, reactive, readonly } from 'vue'
 
 const state = reactive({
   kind: '', // 'prompt' | 'confirm' | 'alert'
@@ -20,20 +20,38 @@ const state = reactive({
   danger: false,
 })
 
-let settle = null
+const queue = []
+let active = null
+let handoffPending = false
 
-function open(next) {
-  Object.assign(state, next, { open: true })
-  return new Promise((resolve) => { settle = resolve })
+function show(entry) {
+  active = entry
+  Object.assign(state, entry.options, { open: true })
 }
 
-// resolveDialog is called by the host component exactly once per dialog; a
-// second call (Escape fires cancel, then close) finds nothing to settle.
+function open(next) {
+  return new Promise((resolve) => {
+    const entry = { options: next, resolve }
+    if (active || handoffPending) queue.push(entry)
+    else show(entry)
+  })
+}
+
+// Only the active entry can settle. Keep the handoff pending across Vue's
+// render tick so the native dialog closes before the next entry is shown;
+// duplicate closes and newly opened dialogs cannot consume that next resolver.
 export function resolveDialog(result) {
+  if (!active || handoffPending) return
+  const done = active
+  active = null
+  handoffPending = true
   state.open = false
-  const done = settle
-  settle = null
-  if (done) done(result)
+  done.resolve(result)
+  nextTick(() => {
+    handoffPending = false
+    const next = queue.shift()
+    if (next) show(next)
+  })
 }
 
 export const dialogState = readonly(state)

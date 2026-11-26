@@ -5,11 +5,14 @@ package metrics
 //
 // The format is Prometheus text exposition, written by hand (this repository
 // takes no new dependencies): a HELP line and a TYPE line per family, then
-// one sample per label set, values sorted so two scrapes of an idle process
-// are byte-identical.
+// one sample per label set, values sorted so counter samples from two scrapes
+// of an idle process are byte-identical. The uptime gauge intentionally grows.
 
 import (
+	"fmt"
+	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -39,8 +42,8 @@ func TestCounterExpositionShape(t *testing.T) {
 	}
 }
 
-// Two scrapes of an untouched process must be byte-identical, so a diffing
-// scraper never reports motion where there is none.
+// Counter samples from two scrapes of an untouched process must be
+// byte-identical. Uptime is excluded because it is a deliberately live gauge.
 func TestExpositionIsDeterministic(t *testing.T) {
 	r := New()
 	c := r.NewCounter("demo_total", "Demo.", "stage")
@@ -52,10 +55,18 @@ func TestExpositionIsDeterministic(t *testing.T) {
 		if err := r.WriteText(&b); err != nil {
 			t.Fatal(err)
 		}
-		return b.String()
+		lines := strings.Split(b.String(), "\n")
+		out := lines[:0]
+		for _, line := range lines {
+			if !strings.HasPrefix(line, "process_uptime_seconds ") {
+				out = append(out, line)
+			}
+		}
+		return strings.Join(out, "\n")
 	}
-	if render() != render() {
-		t.Fatalf("two scrapes of the same registry differ:\n%s\n---\n%s", render(), render())
+	first, second := render(), render()
+	if first != second {
+		t.Fatalf("two scrapes of the same registry differ:\n%s\n---\n%s", first, second)
 	}
 	// label sets in sorted order, not insertion order
 	if strings.Index(render(), `stage="a"`) > strings.Index(render(), `stage="z"`) {
@@ -129,4 +140,61 @@ func TestWrongLabelCountPanics(t *testing.T) {
 		}
 	}()
 	c.Inc("a", "b")
+}
+
+// A live metrics endpoint must tolerate registration, increments and scrapes at
+// the same time. Reverting WriteText to rendering live counter pointers makes
+// the race detector report concurrent map/slice access here.
+func TestConcurrentRegistrationIncrementAndScrape(t *testing.T) {
+	const (
+		workers    = 8
+		iterations = 250
+	)
+	r := New()
+	shared := r.NewCounter("shared_total", "Shared counter.", "stage")
+	start := make(chan struct{})
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+
+	for worker := 0; worker < workers; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			own := r.NewCounter(fmt.Sprintf("worker_%d_total", worker), "Worker counter.", "stage")
+			for i := 0; i < iterations; i++ {
+				own.Inc("own")
+				shared.Inc("shared")
+				if err := r.WriteText(io.Discard); err != nil {
+					errs <- err
+					return
+				}
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("concurrent scrape failed: %v", err)
+	}
+
+	if got, want := shared.Value("shared"), uint64(workers*iterations); got != want {
+		t.Fatalf("shared count = %d, want %d", got, want)
+	}
+	var b strings.Builder
+	if err := r.WriteText(&b); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	for worker := 0; worker < workers; worker++ {
+		name := fmt.Sprintf("worker_%d_total", worker)
+		if got := r.NewCounter(name, "ignored", "stage").Value("own"); got != iterations {
+			t.Errorf("%s count = %d, want %d", name, got, iterations)
+		}
+		want := fmt.Sprintf("%s{stage=\"own\"} %d\n", name, iterations)
+		if !strings.Contains(out, want) {
+			t.Errorf("final exposition missing %q", want)
+		}
+	}
 }

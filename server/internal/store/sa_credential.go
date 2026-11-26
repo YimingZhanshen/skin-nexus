@@ -1,0 +1,267 @@
+package store
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"time"
+
+	"skin-nexus/server/internal/dbx"
+	"skin-nexus/server/internal/dialect"
+)
+
+const saCredentialSelect = `SELECT c.id,s.tenant_id,c.server_id,c.mode,c.secret_hash,c.scopes,c.status,c.expires_at,c.last_used_at,c.created_at
+	FROM sa_server_credentials c JOIN sa_servers s ON s.id=c.server_id`
+
+func scanSACredential(s rowScanner) (SACredential, error) {
+	var v SACredential
+	err := s.Scan(&v.ID, &v.TenantID, &v.ServerID, &v.Mode, &v.SecretHash, &v.Scopes, &v.Status, &v.ExpiresAt, &v.LastUsedAt, &v.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return SACredential{}, ErrNotFound
+	}
+	return v, err
+}
+
+func (m *Mysql) CreateSAServerCredential(ctx context.Context, tenantID, serverID int64, c SACredential) (int64, error) {
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	if err := saLockCredentialWriteScope(ctx, tx, tenantID, serverID, 0); err != nil {
+		return 0, err
+	}
+	id, err := tx.InsertReturningID(ctx,
+		`INSERT INTO sa_server_credentials (server_id,mode,secret_hash,scopes,status,expires_at,created_at)
+		 SELECT ?,?,?,?,?,?,? FROM sa_servers s JOIN sa_tenants t ON t.id=s.tenant_id
+		 WHERE s.id=? AND s.tenant_id=? AND s.status='active' AND t.status='active' AND t.deleted_at IS NULL`,
+		serverID, c.Mode, c.SecretHash, c.Scopes, c.Status, c.ExpiresAt, m.now().UTC(), serverID, tenantID)
+	if errors.Is(err, sql.ErrNoRows) || (id == 0 && err == nil) {
+		return 0, ErrNotFound
+	}
+	if isDupKey(err) {
+		return 0, ErrDuplicate
+	}
+	if err != nil {
+		return 0, err
+	}
+	return id, tx.Commit()
+}
+
+func (m *Mysql) ListSAServerCredentials(ctx context.Context, tenantID, serverID int64) ([]SACredential, error) {
+	rows, err := m.db.QueryContext(ctx,
+		saCredentialSelect+` WHERE s.tenant_id=? AND c.server_id=? ORDER BY c.id DESC`,
+		tenantID, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]SACredential, 0)
+	for rows.Next() {
+		v, err := scanSACredential(rows)
+		if err != nil {
+			return nil, err
+		}
+		v.SecretHash = ""
+		v.TenantID = tenantID
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+func (m *Mysql) platformSAServerCredentials(ctx context.Context, serverIDs []int64) (map[int64][]SACredentialSummary, error) {
+	placeholders, args := saIDPlaceholders(serverIDs)
+	rows, err := m.db.QueryContext(ctx,
+		`SELECT c.id,c.server_id,c.mode,c.status,c.last_used_at,c.expires_at
+		 FROM sa_server_credentials c WHERE c.server_id IN (`+placeholders+`) ORDER BY c.id DESC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[int64][]SACredentialSummary, len(serverIDs))
+	for rows.Next() {
+		var credential SACredential
+		if err := rows.Scan(&credential.ID, &credential.ServerID, &credential.Mode, &credential.Status, &credential.LastUsedAt, &credential.ExpiresAt); err != nil {
+			return nil, err
+		}
+		out[credential.ServerID] = append(out[credential.ServerID], summarizeSACredential(credential))
+	}
+	return out, rows.Err()
+}
+
+func summarizeSACredential(credential SACredential) SACredentialSummary {
+	summary := SACredentialSummary{ID: credential.ID, Mode: credential.Mode, Status: credential.Status}
+	if credential.LastUsedAt.Valid {
+		value := credential.LastUsedAt.Time
+		summary.LastUsedAt = &value
+	}
+	if credential.ExpiresAt.Valid {
+		value := credential.ExpiresAt.Time
+		summary.ExpiresAt = &value
+	}
+	return summary
+}
+
+// SACredentialBySecretHash is the machine-authentication lookup, not an owner
+// API. Tenant/server are derived from the credential row and active registry.
+func (m *Mysql) SACredentialBySecretHash(ctx context.Context, secretHash string, now time.Time) (SACredential, error) {
+	v, err := scanSACredential(m.db.QueryRowContext(ctx,
+		saCredentialSelect+` JOIN sa_tenants t ON t.id=s.tenant_id
+		 WHERE c.secret_hash=? AND c.status='active' AND (c.expires_at IS NULL OR c.expires_at>?)
+		   AND s.status='active' AND t.status='active' AND t.deleted_at IS NULL LIMIT 1`,
+		secretHash, now.UTC()))
+	if err != nil {
+		return SACredential{}, err
+	}
+	return v, nil
+}
+
+func (m *Mysql) RotateSAServerCredential(ctx context.Context, tenantID, serverID, oldID int64, fresh SACredential, overlap time.Duration, now time.Time) (int64, error) {
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	if err := saLockCredentialWriteScope(ctx, tx, tenantID, serverID, oldID); err != nil {
+		return 0, err
+	}
+	res, err := tx.ExecContext(ctx,
+		`UPDATE sa_server_credentials SET expires_at=CASE
+		   WHEN expires_at IS NULL OR expires_at>? THEN ? ELSE expires_at END
+		 WHERE id=? AND server_id=? AND status='active'
+		   AND server_id IN (SELECT s.id FROM sa_servers s JOIN sa_tenants t ON t.id=s.tenant_id
+		     WHERE s.id=? AND s.tenant_id=? AND t.status='active' AND t.deleted_at IS NULL)`,
+		now.Add(overlap).UTC(), now.Add(overlap).UTC(), oldID, serverID, serverID, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return 0, ErrNotFound
+	}
+	id, err := tx.InsertReturningID(ctx,
+		`INSERT INTO sa_server_credentials (server_id,mode,secret_hash,scopes,status,expires_at,created_at)
+		 SELECT ?,?,?,?,?,?,? FROM sa_servers s JOIN sa_tenants t ON t.id=s.tenant_id
+		 WHERE s.id=? AND s.tenant_id=? AND s.status='active' AND t.status='active' AND t.deleted_at IS NULL`,
+		serverID, fresh.Mode, fresh.SecretHash, fresh.Scopes, fresh.Status, fresh.ExpiresAt, now.UTC(), serverID, tenantID)
+	if errors.Is(err, sql.ErrNoRows) || (id == 0 && err == nil) {
+		return 0, ErrNotFound
+	}
+	if isDupKey(err) {
+		return 0, ErrDuplicate
+	}
+	if err != nil {
+		return 0, err
+	}
+	return id, tx.Commit()
+}
+
+// saLockCredentialWriteScope serializes credential writes with tenant deletion.
+// PostgreSQL/MySQL lock rows in tenant -> server -> credential order; SQLite
+// no-op writes acquire its equivalent single-writer lock before each status read.
+func saLockCredentialWriteScope(ctx context.Context, tx *dbx.Tx, tenantID, serverID, credentialID int64) error {
+	tenantStatus, _, err := saLockTenantRow(ctx, tx, tenantID)
+	if err != nil {
+		return err
+	}
+	if tenantStatus != "active" {
+		return ErrNotFound
+	}
+	if tx.Engine() == dialect.SQLite {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE sa_servers SET name=name WHERE id=? AND tenant_id=?`, serverID, tenantID); err != nil {
+			return err
+		}
+	}
+	var serverStatus string
+	err = tx.QueryRowContext(ctx,
+		`SELECT status FROM sa_servers WHERE id=? AND tenant_id=?`+tx.Engine().LockSQL(), serverID, tenantID).Scan(&serverStatus)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if serverStatus != "active" {
+		return ErrNotFound
+	}
+	if credentialID == 0 {
+		return nil
+	}
+	if tx.Engine() == dialect.SQLite {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE sa_server_credentials SET status=status WHERE id=? AND server_id=?`, credentialID, serverID); err != nil {
+			return err
+		}
+	}
+	var credentialStatus string
+	err = tx.QueryRowContext(ctx,
+		`SELECT status FROM sa_server_credentials WHERE id=? AND server_id=?`+tx.Engine().LockSQL(), credentialID, serverID).Scan(&credentialStatus)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if credentialStatus != "active" {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (m *Mysql) RevokeSAServerCredential(ctx context.Context, tenantID, serverID, credentialID int64, now time.Time) error {
+	res, err := m.db.ExecContext(ctx,
+		`UPDATE sa_server_credentials SET status='revoked' WHERE id=? AND server_id=?
+		   AND server_id IN (SELECT id FROM sa_servers WHERE id=? AND tenant_id=?)`,
+		credentialID, serverID, serverID, tenantID)
+	return saUpdateAffected(res, err, func() (bool, error) {
+		return m.saExists(ctx, `SELECT 1 FROM sa_server_credentials WHERE id=? AND server_id=? AND server_id IN (SELECT id FROM sa_servers WHERE id=? AND tenant_id=?)`, credentialID, serverID, serverID, tenantID)
+	})
+}
+
+func (m *Mysql) RevokeSAServerCredentialAudited(ctx context.Context, tenantID, serverID, credentialID int64, actorUID int64, action string, detail any) error {
+	return m.withSAAudit(ctx, actorUID, action, detail, func(tx *dbx.Tx) error {
+		res, err := tx.ExecContext(ctx,
+			`UPDATE sa_server_credentials SET status='revoked' WHERE id=? AND server_id=?
+			   AND server_id IN (SELECT id FROM sa_servers WHERE id=? AND tenant_id=?)`,
+			credentialID, serverID, serverID, tenantID)
+		return saUpdateAffected(res, err, func() (bool, error) {
+			var one int
+			err := tx.QueryRowContext(ctx,
+				`SELECT 1 FROM sa_server_credentials WHERE id=? AND server_id=?
+				   AND server_id IN (SELECT id FROM sa_servers WHERE id=? AND tenant_id=?)`,
+				credentialID, serverID, serverID, tenantID).Scan(&one)
+			if errors.Is(err, sql.ErrNoRows) {
+				return false, nil
+			}
+			return err == nil, err
+		})
+	})
+}
+
+func (m *Mysql) SetSAServerCredentialStatus(ctx context.Context, tenantID, serverID, credentialID int64, status string) error {
+	res, err := m.db.ExecContext(ctx,
+		`UPDATE sa_server_credentials SET status=? WHERE id=? AND server_id=?
+		   AND server_id IN (SELECT id FROM sa_servers WHERE id=? AND tenant_id=?)`,
+		status, credentialID, serverID, serverID, tenantID)
+	return saUpdateAffected(res, err, func() (bool, error) {
+		return m.saExists(ctx, `SELECT 1 FROM sa_server_credentials WHERE id=? AND server_id=? AND server_id IN (SELECT id FROM sa_servers WHERE id=? AND tenant_id=?)`, credentialID, serverID, serverID, tenantID)
+	})
+}
+
+func (m *Mysql) TouchSACredential(ctx context.Context, tenantID, serverID, credentialID int64, now time.Time) error {
+	res, err := m.db.ExecContext(ctx,
+		`UPDATE sa_server_credentials SET last_used_at=?
+		 WHERE id=? AND server_id=? AND status='active' AND (expires_at IS NULL OR expires_at>?)
+		   AND server_id IN (
+		     SELECT s.id FROM sa_servers s JOIN sa_tenants t ON t.id=s.tenant_id
+		      WHERE s.id=? AND s.tenant_id=? AND s.status='active' AND t.status='active' AND t.deleted_at IS NULL
+		   )`,
+		now.UTC(), credentialID, serverID, now.UTC(), serverID, tenantID)
+	return saUpdateAffected(res, err, func() (bool, error) {
+		return m.saExists(ctx, `SELECT 1 FROM sa_server_credentials c
+		  JOIN sa_servers s ON s.id=c.server_id JOIN sa_tenants t ON t.id=s.tenant_id
+		 WHERE c.id=? AND c.server_id=? AND s.tenant_id=? AND c.status='active'
+		   AND (c.expires_at IS NULL OR c.expires_at>?) AND s.status='active' AND t.status='active' AND t.deleted_at IS NULL`,
+			credentialID, serverID, tenantID, now.UTC())
+	})
+}

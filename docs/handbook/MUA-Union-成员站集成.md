@@ -526,10 +526,11 @@ graph LR
 - [union_boot.go:320-360](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/cmd/skin-nexus/union_boot.go#L320-L360)
 
 ### curl 调用诊断端点
-可通过管理面板的诊断接口测试成员站到 Hub 的连通性：
+浏览器管理面板使用管理员会话调用该诊断接口。无 Cookie 机器/API 客户端也可调用同一端点：
 
 ```bash
-curl -H "Authorization: Bearer <管理员令牌>" \
+# 仅脚本/外部工具使用：不要发送 skin_session Cookie。
+curl -H "X-Admin-Token: $SKIN_ADMIN_TOKEN" \
      -H "Content-Type: application/json" \
      -X POST "<SkinNexus 地址>/api/admin/v1/union/ops/diagnose"
 ```

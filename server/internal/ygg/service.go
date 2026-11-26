@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"log/slog"
@@ -19,12 +20,13 @@ import (
 
 // Errors map to the legacy response semantics (docs/phase1-dev-plan.md §1.3).
 var (
-	ErrBadCredentials  = errors.New("ygg: invalid credentials") // 403 ForbiddenOperationException
-	ErrTokenInvalid    = errors.New("ygg: invalid token")       // 403
-	ErrProfileNotFound = errors.New("ygg: profile not found")   // 204
-	ErrSessionNotFound = errors.New("ygg: session not found")   // 204
-	ErrEmailUnverified = errors.New("ygg: email not verified")  // 403 (join gate, fork behavior)
-	ErrPlayerMismatch  = errors.New("ygg: player mismatch")     // 403 player.not-match (live-captured legacy wording)
+	ErrBadCredentials  = errors.New("ygg: invalid credentials")   // 403 ForbiddenOperationException
+	ErrTokenInvalid    = errors.New("ygg: invalid token")         // 403
+	ErrProfileNotFound = errors.New("ygg: profile not found")     // 204
+	ErrSessionNotFound = errors.New("ygg: session not found")     // 204
+	ErrEmailUnverified = errors.New("ygg: email not verified")    // 403 (join gate, fork behavior)
+	ErrPlayerMismatch  = errors.New("ygg: player mismatch")       // 403 player.not-match (live-captured legacy wording)
+	ErrAccessDenied    = errors.New("ygg: account access denied") // local policy denial; never fall back upstream
 )
 
 // ---- storage ports (DB-backed impls land in M1; memory impls in tests) ----
@@ -72,6 +74,7 @@ type Token struct {
 
 // JoinSession is a join/hasJoined session (TTL 120s, legacy behavior).
 type JoinSession struct {
+	ID          int64
 	AccessToken string
 	UUID        string
 	ServerID    string
@@ -83,6 +86,7 @@ type JoinSession struct {
 type Store interface {
 	UserByID(ctx context.Context, id int64) (User, error)
 	UserByIdentifier(ctx context.Context, ident string) (User, error) // email or nickname
+	UserPermission(ctx context.Context, userID int64) (int, error)    // -1 = banned
 	VerifyPassword(ctx context.Context, userID int64, password string) (bool, error)
 	PlayersByUID(ctx context.Context, uid int64) ([]Player, error)
 	PlayerByUUID(ctx context.Context, uuid string) (Player, error)
@@ -138,6 +142,9 @@ type Service struct {
 	authGapResolver    func(ctx context.Context) time.Duration
 	tokenLimitResolver func(ctx context.Context) int
 	searchMaxResolver  func(ctx context.Context) int
+	// scopedFallback is installed only alongside the HTTP fallback and is used
+	// exclusively by ScopedHasJoined after policy allows a true session miss.
+	scopedFallback func(ctx context.Context, username, serverID, serverIP string) FallbackResult
 
 	// Plugin host hooks (v0.3.0). Nil = no plugins; all fail-open so a
 	// crashing plugin can never alter the frozen Yggdrasil wire.
@@ -515,6 +522,14 @@ func (s *Service) Refresh(ctx context.Context, accessToken, clientToken string, 
 	return t, players, nil
 }
 
+// accountAccessAllowed enforces the legacy permission gate. UserPermission is
+// part of the Store port, and a failed lookup denies access rather than weakening
+// the gate.
+func (s *Service) accountAccessAllowed(ctx context.Context, uid int64) bool {
+	permission, err := s.store.UserPermission(ctx, uid)
+	return err == nil && permission != -1
+}
+
 // Validate reports whether a token is currently usable (204 vs 403).
 // Dual-state: accepts both opaque tokens and OIDC JWTs (SJMCL validates the
 // OAuth access token via this endpoint). JWT-resolved tokens carry no
@@ -525,6 +540,9 @@ func (s *Service) Validate(ctx context.Context, accessToken, clientToken string)
 		return ErrTokenInvalid
 	}
 	if clientToken != "" && t.ClientToken != "" && subtle.ConstantTimeCompare([]byte(clientToken), []byte(t.ClientToken)) != 1 {
+		return ErrTokenInvalid
+	}
+	if !s.accountAccessAllowed(ctx, t.UserID) {
 		return ErrTokenInvalid
 	}
 	return nil
@@ -633,7 +651,13 @@ func (s *Service) HasJoined(ctx context.Context, username, serverID, serverIP st
 	}
 	p, err := s.store.PlayerByName(ctx, username)
 	if err != nil {
-		return Profile{}, ErrProfileNotFound
+		if errors.Is(err, ErrProfileNotFound) || errors.Is(err, sql.ErrNoRows) {
+			return Profile{}, ErrProfileNotFound
+		}
+		return Profile{}, err
+	}
+	if !s.accountAccessAllowed(ctx, p.UID) {
+		return Profile{}, ErrAccessDenied
 	}
 	// Find the most recent live join session for this player.
 	// (Store scan is O(sessions); acceptable — TTL 120s bounds the table.)
@@ -658,7 +682,7 @@ func (s *Service) findLiveJoin(ctx context.Context, p Player, serverID, serverIP
 	}
 	joins, err := sc.FindLiveJoins(ctx, p.UUID, s.now())
 	if err != nil {
-		return JoinSession{}, ErrSessionNotFound
+		return JoinSession{}, err
 	}
 	for _, j := range joins {
 		if serverID != "" && j.ServerID != serverID {
@@ -677,7 +701,10 @@ func (s *Service) findLiveJoin(ctx context.Context, p Player, serverID, serverIP
 func (s *Service) ProfileByUUID(ctx context.Context, uuid string, withSig bool) (Profile, error) {
 	p, err := s.store.PlayerByUUID(ctx, NormalizeUUID(uuid))
 	if err != nil {
-		return Profile{}, ErrProfileNotFound
+		if errors.Is(err, ErrProfileNotFound) || errors.Is(err, sql.ErrNoRows) {
+			return Profile{}, ErrProfileNotFound
+		}
+		return Profile{}, err
 	}
 	return s.buildProfile(ctx, p, withSig)
 }

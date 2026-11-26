@@ -361,26 +361,30 @@ func (b *Backend) handleUserSetPermission(w http.ResponseWriter, r *http.Request
 	// The notice fires on the transition, not on every write: re-saving the
 	// same permission must not add another row to the inbox.
 	prevPerm, prevErr := b.Store.UserPermission(r.Context(), id)
-	if err := b.Store.SetUserPermission(r.Context(), id, perm); err != nil {
+	if perm == -1 {
+		// The permission write and all credential-family revocations commit or
+		// roll back together. Never report a partial ban as successful.
+		if err := b.Store.BanUser(r.Context(), id); err != nil {
+			detail := map[string]any{"target": id, "permission": perm, "error": err.Error()}
+			b.Store.InsertAudit(r.Context(), actorUID(r), "admin_user_permission_update_access_revoke_failed", detail)
+			slog.Warn("admin ban: access revoke failed", "uid", id, "error", err)
+			writeStoreErr(w, err, i18n.MsgEmailTaken, "that email is already used by another account")
+			return
+		}
+	} else if err := b.Store.SetUserPermission(r.Context(), id, perm); err != nil {
 		writeStoreErr(w, err, i18n.MsgEmailTaken, "that email is already used by another account")
 		return
 	}
 	if prevErr == nil {
 		if perm == -1 && prevPerm != -1 {
 			b.notifyUser(r.Context(), id, store.NotifAccountBanned)
-			// A ban that leaves the web session alive only stops the launcher:
-			// the suspended account keeps publishing from the tab it already has
-			// open. Purge now — the login handler refuses the next one.
-			if err := b.Store.DeleteUserSessionsExcept(r.Context(), id, ""); err != nil {
-				slog.Info("admin ban: purge web sessions", "uid", id, "error", err)
-			}
 		} else if perm != -1 && prevPerm == -1 {
 			b.notifyUser(r.Context(), id, store.NotifAccountUnbanned)
 		}
 	}
-	// A demoted/banned admin's session must die now — the session gate
-	// re-checks permission per request, but their tokens/grants linger.
-	if perm < 1 {
+	// A demoted admin's session must die now. Bans already revoked opaque
+	// tokens in BanUser; do not repeat that update for the same write.
+	if perm < 1 && perm != -1 {
 		b.revokeUserTokens(r.Context(), actorUID(r), id, "admin_user_permission_update_token_revoke_failed", map[string]any{"permission": perm})
 	}
 	b.Store.InsertAudit(r.Context(), actorUID(r), "admin_user_permission_update", map[string]any{"target": id, "permission": perm})

@@ -32,6 +32,7 @@ func requestWithin(t *testing.T, h http.Handler, method, path, body, session str
 	req.Header.Set("Content-Type", "application/json")
 	if session != "" {
 		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+		req.Header.Set("Origin", "http://example.com")
 	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -173,6 +174,7 @@ func TestPendingSubjectKeepsTheWaysOut(t *testing.T) {
 		req := httptest.NewRequest(c.method, c.path, strings.NewReader(c.body))
 		req.Header.Set("Content-Type", "application/json")
 		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: sess})
+		req.Header.Set("Origin", "http://example.com")
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
 		if rec.Code == http.StatusForbidden {

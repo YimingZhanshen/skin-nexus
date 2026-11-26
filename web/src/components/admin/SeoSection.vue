@@ -4,7 +4,7 @@
 // It loads its own data on mount instead of being fed by the parent's load():
 // the card is independently retryable (the failure banner lives here) and the
 // settings screen has no reason to serialize its fetch behind the knobs.
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 
@@ -13,33 +13,54 @@ const { t } = useI18n()
 const seo = ref(null)
 const seoError = ref('')
 const seoOk = ref('')
+let seq = 0
+let actionSeq = 0
+let disposed = false
 async function loadSEO() {
+  if (disposed) return
+  const mine = ++seq
   seoError.value = ''
-  try { seo.value = await fetchJSON('/api/admin/v1/seo') } catch (e) { seoError.value = e.message }
+  try {
+    const data = await fetchJSON('/api/admin/v1/seo')
+    if (mine === seq) seo.value = data
+  } catch (e) { if (mine === seq) seoError.value = e.message }
 }
 async function seoOneClick() {
+  if (disposed) return
+  const mine = ++seq
   seoError.value = ''
-  try { seo.value = await fetchJSON('/api/admin/v1/seo/oneclick', { method: 'POST' }) }
-  catch (e) { seoError.value = e.message }
+  try {
+    const data = await fetchJSON('/api/admin/v1/seo/oneclick', { method: 'POST' })
+    if (mine === seq) seo.value = data
+  } catch (e) { if (mine === seq) seoError.value = e.message }
 }
 async function seoSave() {
+  if (disposed) return
+  const mine = ++actionSeq
+  // A save invalidates any older read before the POST starts; its successful
+  // reload below becomes the canonical SEO snapshot.
+  seq++
   seoError.value = ''
   seoOk.value = ''
   try {
     await fetchJSON('/api/admin/v1/seo', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(seo.value),
     })
+    if (mine !== actionSeq) return
     // Saving used to be silent on success: the operator was left staring at the
     // same fields, unsure whether the click had landed or the page had frozen.
     seoOk.value = t('common.saved')
+    await loadSEO()
   } catch (e) {
+    if (mine !== actionSeq || disposed) return
     // review P2-10: refetch so the UI doesn't keep unsaved values
     await loadSEO()
-    seoError.value = e.message
+    if (mine === actionSeq && !disposed) seoError.value = e.message
   }
 }
 
 onMounted(loadSEO)
+onBeforeUnmount(() => { disposed = true; seq++; actionSeq++ })
 </script>
 
 <template>

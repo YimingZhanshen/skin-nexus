@@ -5,7 +5,6 @@
 import { ref, shallowRef, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
-import { token, needToken, persistToken } from '../adminApi.js'
 import DashboardView from './admin/DashboardView.vue'
 import UsersView from './admin/UsersView.vue'
 import PlayersView from './admin/PlayersView.vue'
@@ -14,6 +13,7 @@ import SettingsView from './admin/SettingsView.vue'
 import StatusView from './admin/StatusView.vue'
 import UnionView from './admin/UnionView.vue'
 import AccessLogsView from './admin/AccessLogsView.vue'
+import ServerAccessAdminView from './admin/ServerAccessAdminView.vue'
 import ReportsView from './admin/ReportsView.vue'
 import TexturesView from './admin/TexturesView.vue'
 import ClosetView from './admin/ClosetView.vue'
@@ -23,6 +23,7 @@ import PluginsView from './admin/PluginsView.vue'
 import MarketView from './admin/MarketView.vue'
 import PluginPage from './plugin/PluginPage.vue'
 import { navPages, pluginLabel } from '../pluginUI.js'
+import { clearLegacyAdminToken } from '../session.js'
 
 const { t } = useI18n()
 
@@ -53,6 +54,7 @@ const nav = [
   { id: 'settings', labelKey: 'admin.navSettings', comp: SettingsView, icon: adminIcons.settings },
   { id: 'status', labelKey: 'admin.navStatus', comp: StatusView, icon: adminIcons.status },
   { id: 'access', labelKey: 'admin.navAccess', comp: AccessLogsView, icon: adminIcons.access },
+  { id: 'serveraccess', labelKey: 'adminServerAccess.title', comp: ServerAccessAdminView, icon: adminIcons.status },
   { id: 'reports', labelKey: 'admin.navReports', comp: ReportsView, icon: adminIcons.reports },
   { id: 'textures', labelKey: 'admin.navTextures', comp: TexturesView, icon: adminIcons.textures },
   { id: 'closet', labelKey: 'admin.navCloset', comp: ClosetView, icon: adminIcons.closet },
@@ -69,6 +71,8 @@ const props = defineProps({
   siteConf: { type: Object, default: () => ({}) },
   confLoaded: { type: Boolean, default: false },
 })
+const emit = defineEmits(['settings-changed'])
+clearLegacyAdminToken()
 const current = ref('dashboard')
 const menuOpen = ref(false)
 const currentLabel = computed(() => {
@@ -77,18 +81,23 @@ const currentLabel = computed(() => {
 })
 const currentComp = shallowRef(DashboardView)
 const currentPlugin = ref('')
-const pluginPages = ref([])
-const myPerm = ref(Number(props.user && props.user.permission) || 0)
+const myPerm = computed(() => Number(props.user && props.user.permission) || 0)
+const ready = computed(() => myPerm.value > 0)
+const pluginPages = computed(() => navPages('admin')
+  .filter((p) => myPerm.value >= Number(p.perm || 0))
+  .map((p) => ({ ...p, icon: adminIcons.plugins })))
 // Keep the initial sidebar stable: use the already-loaded site config, and
 // hide module entries while the state is unknown instead of adding/removing
 // them after the page has painted.
 const flags = ref({
   invite_required: props.confLoaded ? !!props.siteConf.invite_required : false,
   union_enabled: props.confLoaded ? !!props.siteConf.union_enabled : false,
+  serveraccess_enabled: props.confLoaded ? !!props.siteConf.serveraccess_enabled : false,
 })
 const visibleNav = computed(() => nav.filter((n) =>
   (n.id !== 'invitation' || flags.value.invite_required) &&
-  (n.id !== 'union' || flags.value.union_enabled)
+  (n.id !== 'union' || flags.value.union_enabled) &&
+  (n.id !== 'serveraccess' || (flags.value.serveraccess_enabled && myPerm.value === 2))
 ))
 
 async function loadFlags() {
@@ -102,6 +111,8 @@ async function loadFlags() {
 function onSettingsChanged(key, value) {
   if (key === 'invite_required') flags.value.invite_required = value === '1'
   if (key === 'union_enabled') flags.value.union_enabled = value === '1'
+  if (key === 'serveraccess_enabled') flags.value.serveraccess_enabled = value === '1'
+  emit('settings-changed', key, value)
   if (!visibleNav.value.some((n) => n.id === current.value)) go('dashboard')
 }
 
@@ -138,6 +149,12 @@ function applyAdminPath(p) {
     return
   }
   const item = nav.find((n) => n.id === rest)
+  if (item?.id === 'serveraccess' && !visibleNav.value.some((n) => n.id === item.id)) {
+    currentPlugin.value = ''
+    current.value = 'dashboard'
+    currentComp.value = DashboardView
+    return
+  }
   currentPlugin.value = ''
   current.value = item ? item.id : 'dashboard'
   currentComp.value = item ? item.comp : DashboardView
@@ -163,39 +180,9 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onAdminPop))
 // The load button re-runs the current view's data fetch: views fetch their
 // own data on mount, so remounting via a key bump is the reload contract.
 const reloadTick = ref(0)
-// Views mount (and fetch) only once admin access is established — a session
-// with permission > 0 or a persisted/entered token. Otherwise the shell
-// shows just the sidebar + token card (no 403 spam from every view).
-const ready = ref(false)
-
-async function submitToken() {
-  persistToken()
-  if (token.value) ready.value = true
-  reloadTick.value++
-}
-
-// A session admin who once pasted the machine token keeps sending it on every
-// request. The server now resolves the human first, but the secret is still
-// sitting in this browser, so let them see it and drop it.
-function clearStoredToken() {
-  token.value = ''
-  persistToken()
-  reloadTick.value++
-}
-
-onMounted(async () => {
-  // Session-admin detection: permission > 0 means the session alone reaches
-  // admin data — no token ceremony needed.
-  if (myPerm.value > 0) needToken.value = false
-  pluginPages.value = navPages('admin')
-    .filter((p) => myPerm.value >= Number(p.perm || 0))
-    .map((p) => ({ ...p, icon: adminIcons.plugins }))
-  await loadFlags()
-  if (!needToken.value || token.value) {
-    ready.value = true
-    reloadTick.value++
-  }
-})
+// Browser administration is session-only. Permission loss unmounts every data
+// view immediately; restoring permission mounts a fresh view and refetches it.
+onMounted(loadFlags)
 </script>
 
 <template>
@@ -210,15 +197,6 @@ onMounted(async () => {
         <span>{{ currentLabel }}</span>
       </button>
       <h2>{{ t('admin.title') }}</h2>
-      <!-- X-Admin-Token fallback row: only when the session can't reach admin data -->
-      <div v-if="needToken" class="admin-token">
-        <input v-model="token" type="password" :placeholder="t('admin.tokenPlaceholder')" />
-        <button @click="submitToken">{{ t('admin.load') }}</button>
-      </div>
-      <div v-else-if="token" class="admin-token">
-        <span class="muted">{{ t('admin.tokenStoredHint') }}</span>
-        <button class="secondary" @click="clearStoredToken">{{ t('admin.tokenClear') }}</button>
-      </div>
       <nav class="admin-nav" @click="menuOpen = false">
         <button v-for="n in visibleNav" :key="n.id" class="nav-item"
                 :class="{ active: current === n.id }" @click="go(n.id)">
@@ -238,7 +216,7 @@ onMounted(async () => {
       <!-- key bump remounts the active view => its onMounted refetches -->
       <PluginPage v-if="ready && currentPlugin" :path="currentPlugin" />
       <component v-else-if="ready" :is="currentComp" :key="`${current}-${reloadTick}`" @go="go" @settings-changed="onSettingsChanged" />
-      <div v-else class="card muted">{{ t('admin.enterTokenHint') }}</div>
+      <div v-else class="card muted">{{ t('errors.common.forbidden') }}</div>
     </main>
   </div>
 </template>
@@ -254,8 +232,6 @@ onMounted(async () => {
 }
 .admin-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; }
 /* nav items themselves come from the global .nav-item (user sidebar parity) */
-.admin-token { display: flex; gap: 8px; }
-.admin-token input { min-width: 0; flex: 1; }
 .admin-main { flex: 1; min-width: 0; }
 @media (max-width: 720px) {
   .admin-shell { flex-direction: column; }

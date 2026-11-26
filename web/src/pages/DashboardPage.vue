@@ -18,6 +18,7 @@ import { formatBytes } from '../format.js'
 import { guard401 } from '../session.js'
 
 const { t } = useI18n()
+const props = defineProps({ readMe: { type: Function, required: true } })
 const texCard = ref(null) // TexturesCard exposes reload(newId)
 
 const me = ref(null)
@@ -150,7 +151,7 @@ function onDragLauncher(e) {
 async function load() {
   // The texture rows live in TexturesCard now (it owns paging, search and the
   // row sequence guard); this half is the account the usage card renders.
-  try { me.value = await api.me() } catch (e) { if (!guard401(e)) pageErr.value = e.message }
+  try { me.value = await props.readMe() } catch (e) { pageErr.value = e.message }
 }
 
 async function loadAnnouncement() {  try {

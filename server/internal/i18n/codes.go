@@ -177,6 +177,17 @@ const (
 	MsgOIDCGrantNotFound = "oidc.grant_not_found" // no such jti, or it belongs to someone else
 	MsgOIDCRevokePartial = "oidc.revoke_partial"  // some tokens revoked, some survived — never report success
 
+	// server access control plane
+	MsgServerAccessNotFound       = "serveraccess.not_found"
+	MsgServerAccessForbidden      = "serveraccess.forbidden"
+	MsgServerAccessInvalid        = "serveraccess.invalid"
+	MsgServerAccessConflict       = "serveraccess.conflict"
+	MsgServerAccessQuota          = "serveraccess.quota_exceeded"
+	MsgServerAccessExportTooLarge = "serveraccess.export_too_large"
+	MsgServerAccessLastOwner      = "serveraccess.last_owner"
+	MsgServerAccessInvite         = "serveraccess.invite_invalid"
+	MsgServerAccessNotImpl        = "serveraccess.not_implemented"
+
 	// setup / install
 	MsgSetupDone      = "setup.already_done"
 	MsgSetupBadInput  = "setup.bad_input"

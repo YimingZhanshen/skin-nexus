@@ -1,12 +1,11 @@
 <script setup>
 // Signed plugin market. The server verifies the registry and artifacts; this
 // view only renders the verified catalog and sends super-admin actions.
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { api } from '../../api.js'
 import { loadPluginUI } from '../../pluginUI.js'
-import { describe } from '../../errors.js'
 import Pager from '../Pager.vue'
 import FilePicker from '../FilePicker.vue'
 import EmptyState from '../EmptyState.vue'
@@ -19,6 +18,7 @@ const actionError = ref('')
 const search = ref('')
 const page = ref(1)
 const pageSize = 10
+const UPLOAD_TIMEOUT_MS = 120000
 const installings = ref(new Set())
 const selected = ref(null)
 const consent = ref(false)
@@ -29,6 +29,9 @@ const uploadFile = ref(null)
 const uploading = ref(false)
 const inspection = ref(null)
 const riskAck = ref(false)
+let seq = 0
+let roleSeq = 0
+let disposed = false
 
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
@@ -38,15 +41,17 @@ const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / 
 const paged = computed(() => filtered.value.slice((page.value - 1) * pageSize, page.value * pageSize))
 
 async function load(refresh = false) {
+  if (disposed) return
+  const mine = ++seq
   loading.value = true
   loadError.value = ''
   try {
     const d = await fetchJSON(`/api/admin/v1/market/catalog${refresh ? '?refresh=1' : ''}`)
-    packages.value = d.packages || []
+    if (mine === seq) packages.value = d.packages || []
   } catch (e) {
-    loadError.value = e.message
+    if (mine === seq) loadError.value = e.message
   } finally {
-    loading.value = false
+    if (mine === seq) loading.value = false
   }
 }
 
@@ -101,10 +106,11 @@ async function uploadBundle() {
     const fd = new FormData()
     fd.append('file', uploadFile.value)
     fd.append('inspect', '1')
-    const r = await fetch('/api/admin/v1/market/upload', { method: 'POST', body: fd, credentials: 'same-origin' })
-    const d = await r.json().catch(() => ({}))
-    if (!r.ok) throw new Error(describe(d, r.status))
-    inspection.value = d
+    inspection.value = await fetchJSON(
+      '/api/admin/v1/market/upload',
+      { method: 'POST', body: fd },
+      UPLOAD_TIMEOUT_MS,
+    )
     riskAck.value = false
   } catch (e) {
     actionError.value = e.message
@@ -130,9 +136,11 @@ async function installInspected() {
     fd.append('consent', '1')
     fd.append('acceptUnverified', inspection.value.status === 'verified' ? '0' : '1')
     fd.append('expectDigest', inspection.value.zipSha || '')
-    const r = await fetch('/api/admin/v1/market/upload', { method: 'POST', body: fd, credentials: 'same-origin' })
-    const d = await r.json().catch(() => ({}))
-    if (!r.ok) throw new Error(describe(d, r.status))
+    await fetchJSON(
+      '/api/admin/v1/market/upload',
+      { method: 'POST', body: fd },
+      UPLOAD_TIMEOUT_MS,
+    )
     cancelInspection()
     await load()
   } catch (e) {
@@ -167,13 +175,16 @@ async function confirmInstall() {
 }
 
 onMounted(async () => {
+  const mine = ++roleSeq
   try {
     const me = await api.me()
-    isSuper.value = Number(me.permission) === 2
+    if (mine === roleSeq) isSuper.value = Number(me.permission) === 2
   } catch { /* read-only */ }
+  if (disposed || mine !== roleSeq) return
   readOnly.value = !isSuper.value
   await load()
 })
+onBeforeUnmount(() => { disposed = true; seq++; roleSeq++ })
 </script>
 
 <template>

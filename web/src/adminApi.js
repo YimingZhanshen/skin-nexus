@@ -1,32 +1,27 @@
-// adminApi.js: shared admin fetch plumbing (extracted from AdminPanel.vue
-// during the B1 sidebar refactor so every admin view speaks one envelope).
-//
-// Token semantics (blessing parity): an admin SESSION (me.permission > 0)
-// reaches /api/admin/v1/* with cookies alone; X-Admin-Token is the machine
-// fallback, attached only when present. A 401/403 flips needToken so the
-// shell surfaces the token card.
-import { ref } from 'vue'
+// Browser administration is session-only. Machine tokens remain a backend API
+// contract for cookie-less clients, but are never persisted or sent here.
 import { fetchWithTimeout } from './net.js'
 import { describe } from './errors.js'
+import { captureSessionVersion, clearLegacyAdminToken, guard401 } from './session.js'
 
-export const token = ref(localStorage.getItem('admin_token') || '')
-export const needToken = ref(true)
+clearLegacyAdminToken()
 
-export async function fetchJSON(path, opts) {
-  const headers = { ...(opts && opts.headers) }
-  if (token.value) headers['X-Admin-Token'] = token.value
-  const res = await fetchWithTimeout(path, { ...opts, headers }, 20000)
+export async function fetchJSON(path, opts, timeoutMS = 20000) {
+  // Also remove a key written by an older open tab; it is never read or sent.
+  clearLegacyAdminToken()
+  const epoch = captureSessionVersion()
+  const headers = {}
+  for (const [key, value] of Object.entries((opts && opts.headers) || {})) {
+    if (key.toLowerCase() !== 'x-admin-token') headers[key] = value
+  }
+  const res = await fetchWithTimeout(path, { ...opts, credentials: 'same-origin', headers }, timeoutMS)
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    if (res.status === 401 || res.status === 403) needToken.value = true
     const err = new Error(describe(data, res.status))
-    err.status = res.status // 404=模块关闭/未找到，401=会话失效：调用方按 status 分流
-    err.data = data // 409 的结构化细节（如删除被谁挡住）随错误一起交给调用方
+    err.status = res.status
+    err.data = data
+    guard401(err, epoch)
     throw err
   }
   return data
-}
-
-export function persistToken() {
-  localStorage.setItem('admin_token', token.value)
 }

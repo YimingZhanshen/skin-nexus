@@ -6,7 +6,7 @@
 // Permission guard semantics live server-side (adminapi.inlineGuard):
 // strictly-lower targets only, no self-edit, ADMIN grant needs SUPER_ADMIN.
 // The UI just renders the 403 message.
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { alertDialog, confirmDialog, promptDialog } from '../../dialog.js'
@@ -21,16 +21,21 @@ const pageSize = 50
 const query = ref('')
 const error = ref('')
 const busy = ref(false) // in-flight guard: no double submit
+let seq = 0
+let disposed = false
 
 async function load() {
+  if (disposed) return
+  const mine = ++seq
   error.value = ''
   try {
     const qs = new URLSearchParams({ page: String(page.value) })
     if (query.value.trim()) qs.set('q', query.value.trim())
     const d = await fetchJSON(`/api/admin/v1/users?${qs}`)
+    if (mine !== seq) return
     users.value = d.users || []
     total.value = d.total || 0
-  } catch (e) { error.value = e.message }
+  } catch (e) { if (mine === seq) error.value = e.message }
 }
 
 function search() {
@@ -86,40 +91,46 @@ async function putUser(id, path, body) {
   }
 }
 
-// Each edit keeps the old value until the PUT succeeds; on failure the
-// table refetches so the UI never shows an unsaved phantom state.
+function isCurrentUser(u, generation) {
+  return !disposed && generation === seq && users.value.includes(u)
+}
+
+// A successful PUT starts a fresh list generation instead of patching a row
+// that an older snapshot may overwrite. If pagination or filtering changed
+// while the PUT was pending, that reload targets the current view and the
+// detached row is left untouched.
 async function saveEmail(u) {
+  const generation = seq
   const prev = u.email
   if (await putUser(u.id, 'email', { email: u.email || '' })) {
-    u.email = String(u.email || '').trim()
+    await load()
   } else {
-    u.email = prev
+    if (isCurrentUser(u, generation)) u.email = prev
     await load()
   }
 }
 
 async function saveNickname(u) {
+  const generation = seq
   const prev = u.nickname
   if (await putUser(u.id, 'nickname', { nickname: u.nickname })) {
-    u.nickname = String(u.nickname).trim()
+    await load()
   } else {
-    u.nickname = prev
+    if (isCurrentUser(u, generation)) u.nickname = prev
     await load()
   }
 }
 
 async function toggleVerified(u) {
   const next = Number(u.emailVerified) ? 0 : 1
-  if (await putUser(u.id, 'verification', { verified: !!next })) {
-    u.emailVerified = next
-  } else {
-    await load()
-  }
+  await putUser(u.id, 'verification', { verified: !!next })
+  await load()
 }
 
 // Permission select: -1 banned / 0 normal / 1 admin. SUPER_ADMIN (2) is
 // never grantable from the UI (blessing parity: setup-created only).
 async function changePermission(u, ev) {
+  const generation = seq
   const next = Number(ev.target.value)
   const prev = Number(u.permission)
   if (next === prev) return
@@ -127,13 +138,13 @@ async function changePermission(u, ev) {
   if (!(await confirmDialog(t('admin.permChangeConfirm', {
     name: u.nickname, id: u.id, from: label(prev), to: label(next),
   }), { danger: true }))) {
-    ev.target.value = String(prev)
+    if (isCurrentUser(u, generation)) ev.target.value = String(prev)
     return
   }
   if (await putUser(u.id, 'permission', { permission: next })) {
-    u.permission = next
+    await load()
   } else {
-    ev.target.value = String(prev)
+    if (isCurrentUser(u, generation)) ev.target.value = String(prev)
     await load()
   }
 }
@@ -141,6 +152,7 @@ async function changePermission(u, ev) {
 const pageMax = () => Math.max(1, Math.ceil(total.value / pageSize))
 
 onMounted(load)
+onBeforeUnmount(() => { disposed = true; seq++ })
 </script>
 
 <template>

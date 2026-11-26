@@ -51,6 +51,7 @@ func patchTexture(h http.Handler, tid int64, body string) *httptest.ResponseReco
 	req := httptest.NewRequest("PATCH", "/api/v1/skinlib/"+strconv.FormatInt(tid, 10), strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "skin_session", Value: "sess-own"})
+	req.Header.Set("Origin", "http://example.com")
 	h.ServeHTTP(rec, req)
 	return rec
 }

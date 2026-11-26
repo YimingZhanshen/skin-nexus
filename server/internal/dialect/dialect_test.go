@@ -128,6 +128,27 @@ func TestUpsertShapes(t *testing.T) {
 	}
 }
 
+func TestAtomicCounterIncrementShapes(t *testing.T) {
+	keys := []string{"server_id", "window_start", "counter"}
+	for _, tc := range []struct {
+		eng       Engine
+		returning bool
+		clause    string
+	}{
+		{eng: MySQL, clause: "ON DUPLICATE KEY UPDATE value=LAST_INSERT_ID(IF(expires_at<=?,1,value+1)), expires_at=?"},
+		{eng: SQLite, returning: true, clause: "DO UPDATE SET value=CASE WHEN sa_quota_usage.expires_at <= ? THEN 1 ELSE sa_quota_usage.value+1 END, expires_at=? RETURNING value"},
+		{eng: Postgres, returning: true, clause: "DO UPDATE SET value=CASE WHEN sa_quota_usage.expires_at <= ? THEN 1 ELSE sa_quota_usage.value+1 END, expires_at=? RETURNING value"},
+	} {
+		query, returning := tc.eng.AtomicCounterIncrement("sa_quota_usage", keys, "value", "expires_at")
+		if returning != tc.returning || !contains(query, tc.clause) {
+			t.Errorf("%s atomic increment = %q returning=%v", tc.eng, query, returning)
+		}
+		if got := tc.eng.Bind(query); tc.eng == Postgres && !contains(got, "$6") {
+			t.Errorf("postgres atomic increment is not bindable: %q", got)
+		}
+	}
+}
+
 func TestInsertIgnore(t *testing.T) {
 	igs, err := MySQL.InsertIgnore("user_closet", []string{"user_uid", "texture_tid"})
 	if err != nil {

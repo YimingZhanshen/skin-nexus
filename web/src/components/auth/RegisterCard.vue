@@ -18,6 +18,7 @@ const auth = inject('authState')
 const goto = inject('gotoView')
 const {
   user, busy: authBusy, err: authErr, finishAuth, authWaitingElsewhere,
+  setSessionUser, refreshMe,
   verifyGateEnabled, inviteIsRequired, inviteFieldShown, emailFieldShown,
   verifyPending, verifyMailTo, verifyMailNote, verifyState, forgotSent,
   pluginFormData,
@@ -44,14 +45,15 @@ async function doRegister() {
   }
   authBusy.value = true
   try {
-    user.value = await api.register(email.value, nickname.value, password.value, invitationCode.value.trim(), pluginFormData.value)
-    if (user.value && user.value.permission === undefined) user.value = { ...user.value, permission: 0 }
+    const registered = await api.register(email.value, nickname.value, password.value, invitationCode.value.trim(), pluginFormData.value)
+    setSessionUser(registered && registered.permission === undefined
+      ? { ...registered, permission: 0 }
+      : registered)
     // Same reason as in doLogin: the pending screen quotes the address, and the
     // signup response does not carry it.
-    if (user.value && user.value.verifyRequired) {
-      try { user.value = await api.me() } catch { /* the screen still renders */ }
-    }
+    if (user.value && user.value.verifyRequired) await refreshMe()
   } catch (e) { authErr.value = e.message; return } finally { authBusy.value = false }
+  if (!user.value) return
   // The server mailed the verification link as it created the account, and the
   // gate keeps the player off the server until that link is clicked. Dropping
   // them on the dashboard, where the only trace is a muted 未验证 line on the

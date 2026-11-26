@@ -3,7 +3,7 @@
 // The queue has been running since P3 with no panel surface at all, so an
 // operator could only see it by calling the API with X-Admin-Token — including
 // the case where a batch stops moving and nobody knows it stopped.
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
@@ -24,10 +24,14 @@ const unavailable = ref(false)
 // One control action in flight: a second 取消 on the same job would only be
 // refused by the runner, and a double click on 恢复 reads as two resumes.
 const busy = ref('')
+let seq = 0
+let disposed = false
 
 const STATES = ['queued', 'running', 'paused', 'cancelling', 'cancelled', 'failed', 'done']
 
 async function load() {
+  if (disposed) return
+  const mine = ++seq
   loading.value = true
   error.value = ''
   unavailable.value = false
@@ -36,15 +40,17 @@ async function load() {
     if (state.value) qs.set('state', state.value)
     if (plugin.value.trim()) qs.set('plugin', plugin.value.trim())
     const d = await fetchJSON(`/api/admin/v1/jobs?${qs}`)
+    if (mine !== seq) return
     rows.value = d.jobs || []
     total.value = d.total || 0
   } catch (e) {
+    if (mine !== seq) return
     // The routes are mounted only when the queue is on, so 404 means "this site
     // has no job runner" — a fact about the deployment, not a failed request.
     if (e.status === 404) unavailable.value = true
     else error.value = e.message
   } finally {
-    loading.value = false
+    if (mine === seq) loading.value = false
   }
 }
 
@@ -89,6 +95,7 @@ function stateTone(s) {
 }
 
 onMounted(load)
+onBeforeUnmount(() => { disposed = true; seq++ })
 </script>
 
 <template>

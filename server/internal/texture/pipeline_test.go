@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -72,10 +73,21 @@ func TestPolyglotPayloadDropped(t *testing.T) {
 }
 
 func TestPNGBombGate(t *testing.T) {
-	// 65535x65535 = 4.29G pixels — must be rejected at IHDR, never decoded.
-	_, err := Process(bytes.NewReader(fakeHeader(65535, 65535)), TypeSkin)
-	if err != ErrPixelBomb {
-		t.Fatalf("want ErrPixelBomb, got %v", err)
+	// Header-only PNGs prove rejection happens at IHDR, before full decode.
+	cases := []struct {
+		w, h uint32
+	}{
+		{65535, 65535},  // 4.29G pixels without uint32 overflow
+		{65536, 65536},  // product is 2^32, which wraps to 0 in uint32
+		{2147483648, 2}, // product is 2^32, which wraps to 0 in uint32
+	}
+	for _, c := range cases {
+		t.Run(fmt.Sprintf("%dx%d", c.w, c.h), func(t *testing.T) {
+			_, err := Process(bytes.NewReader(fakeHeader(c.w, c.h)), TypeSkin)
+			if err != ErrPixelBomb {
+				t.Fatalf("want ErrPixelBomb, got %v", err)
+			}
+		})
 	}
 }
 

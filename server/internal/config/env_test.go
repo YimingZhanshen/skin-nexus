@@ -17,13 +17,13 @@ import (
 )
 
 // envCallNames are the readers whose first argument is a variable name: the two
-// stdlib calls plus this module's helpers. config.getenv and resolveDataPath
-// forward their first argument straight to os.Getenv, so leaving them out would
-// hide most of the real reads and make the "30 reads" floor the only thing
-// keeping the walk honest.
+// stdlib calls plus this module's helpers. config.getenv, envBool and
+// resolveDataPath forward their first argument to an env read, so leaving them
+// out would hide most of the real reads and make the "30 reads" floor the only
+// thing keeping the walk honest.
 var envCallNames = map[string]bool{
 	"Getenv": true, "LookupEnv": true, "envOr": true,
-	"getenv": true, "resolveDataPath": true,
+	"getenv": true, "envBool": true, "resolveDataPath": true,
 }
 
 // sourceEnvReads walks the whole module and returns every SKIN_* literal passed

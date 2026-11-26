@@ -25,6 +25,7 @@ Thumbs.db
 
 # 工具本地状态（Qoder RepoWiki 等）
 .qoder/
+.worktrees/
 
 # 开发过程中的临时产物（脚本日志、变异实验备份）。
 # 夜间一律改写到仓库外的 tmp 目录；这条只是兜住忘记改路径的那一次。

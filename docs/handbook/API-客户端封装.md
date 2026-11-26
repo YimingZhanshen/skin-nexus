@@ -45,14 +45,14 @@
 | `net.js` | 提供带超时的 `fetchWithTimeout`，把浏览器原生 `AbortError` 转为可翻译的网络错误。 |
 | `errors.js` | 把后端错误体翻译成用户可读句子，并提供网络级错误描述。 |
 | `api.js` | 封装 `/api/v1/*` 玩家侧 API，包括 JSON 请求、表单上传、OIDC 设备流程、Union 成员接口。 |
-| `adminApi.js` | 封装 `/api/admin/v1/*` 管理 API，附带可选的 `X-Admin-Token` 头和管理员令牌持久化。 |
-| `session.js` | 暴露 401 未授权通知和通用 401 守卫函数。 |
+| `adminApi.js` | 封装 `/api/admin/v1/*` 管理 API，只发送同源会话 Cookie，剥离 `X-Admin-Token` 并清理旧令牌存储。 |
+| `session.js` | 暴露会话失效通知和通用守卫函数。 |
 | `App.vue` | 启动时加载站点配置、插件 UI、当前用户，并把邮箱验证门控回调注入 `api.js`。 |
 | `DashboardPage.vue` | 玩家仪表盘，演示获取自身信息、纹理列表和上传纹理。 |
-| `AdminPanel.vue` | 管理面板外壳，负责管理员权限判断、侧边栏和机器令牌输入。 |
+| `AdminPanel.vue` | 管理面板外壳，根据当前用户权限渲染子视图或禁止访问提示。 |
 | `components/admin/DashboardView.vue` | 管理仪表盘视图，调用 `/api/admin/v1/overview` 展示统计卡片。 |
 | `server/internal/webapi/webapi.go` | 后端玩家侧 API 路由与错误体约定。 |
-| `server/internal/adminapi/adminapi.go` | 后端管理 API 路由及双通道认证（会话或机器令牌）。 |
+| `server/internal/adminapi/adminapi.go` | 后端管理 API 路由及认证（有效管理员会话，或无非空会话 Cookie 时的机器令牌）。 |
 
 ```mermaid
 graph TB
@@ -159,14 +159,14 @@ graph TB
 
 `adminApi.js` 提供 `fetchJSON(path, opts)`，专门面向 `/api/admin/v1/*`：
 
-- 如果存在 `token.value`，自动添加 `X-Admin-Token` 请求头；
+- 使用 `credentials: 'same-origin'`，只发送同源 `skin_session` Cookie；
+- 剥离调用方传入的任何大小写形式的 `X-Admin-Token`，不读取或持久化管理员令牌；
+- 模块初始化与每次请求都会删除旧 `admin_token` 存储键，应用启动和用户替换时也会清理；
 - 超时时间默认为 20000 毫秒；
-- 401 或 403 响应会将 `needToken` 标记设为 `true`，提示 UI 显示令牌输入框；
-- 所有非 2xx 响应都会构造带 `status` 和 `data` 的错误对象；
-- `token` 是 Vue 响应式变量，初始值来自 `localStorage`；
-- `persistToken()` 把当前令牌写入本地存储。
+- HTTP 401 或 HTTP 403 + `admin.token_invalid` 经 `guard401` 通知应用外壳清理会话；其他 403、404、网络错误和 5xx 仅作为普通错误抛出；
+- 所有非 2xx 响应都会构造带 `status` 和 `data` 的错误对象。
 
-注释明确说明：管理员可以通过“正常 Web 会话”访问管理接口，也可以通过 `X-Admin-Token` 作为机器回退路径。
+`X-Admin-Token` 仅是后端为无会话 Cookie 的机器/API 客户端保留的协议，不属于浏览器管理传输层。
 
 **章节来源**
 - [web/src/adminApi.js:1-32](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/web/src/adminApi.js#L1-L32)
@@ -199,7 +199,7 @@ sequenceDiagram
 - [web/src/net.js:1-23](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/web/src/net.js#L1-L23)
 - [server/internal/webapi/webapi.go:1-200](https://github.com/YimingZhanshen/skin-nexus/blob/797ae1a/server/internal/webapi/webapi.go#L1-L200)
 
-管理面板的统计查询链路类似，但走 `adminApi.js`，并可能附加 `X-Admin-Token`。
+管理面板的统计查询链路类似，但走 `adminApi.js`，只携带同源会话 Cookie，不附加机器令牌。
 
 ```mermaid
 sequenceDiagram
@@ -210,10 +210,10 @@ sequenceDiagram
     participant Server as "后端 adminapi.go"
 
     View->>AdminAPI: fetchJSON("/api/admin/v1/overview")
-    AdminAPI->>AdminAPI: 附加 X-Admin-Token（如有）
-    AdminAPI->>NET: fetchWithTimeout(path, opts, 20000)
+    AdminAPI->>AdminAPI: 清理旧 admin_token；剥离 X-Admin-Token
+    AdminAPI->>NET: fetchWithTimeout(path, {credentials:"same-origin"}, 20000)
     NET->>Browser: fetch(url, signal)
-    Browser->>Server: GET /api/admin/v1/overview
+    Browser->>Server: GET /api/admin/v1/overview<br/>携带同源 skin_session Cookie
     Server-->>Browser: JSON 响应
     Browser-->>NET: 响应
     NET-->>AdminAPI: 响应
@@ -264,29 +264,27 @@ flowchart TD
 
 #### 管理员权限校验
 
-管理员访问 `/api/admin/v1/*` 有两种方式：
+浏览器管理面板只允许会话管理员进入。后端另为无 Cookie 机器客户端保留独立令牌通道：
 
-| 方式 | 条件 | 凭证 |
+| 调用方 | 条件 | 凭证 |
 | --- | --- | --- |
-| Web 会话 | 账号 `permission > 0` | Cookie |
-| 机器令牌 | 环境变量 `SKIN_ADMIN_TOKEN` 已配置 | `X-Admin-Token` 请求头 |
+| 浏览器管理面板 | 账号 `permission > 0` | 同源 `skin_session` Cookie |
+| 无 Cookie 机器/API 客户端 | 无非空会话 Cookie，且环境变量 `SKIN_ADMIN_TOKEN` 已配置 | `X-Admin-Token` 请求头 |
 
-前端 `AdminPanel.vue` 会根据当前用户的 `permission` 决定是否仍需输入令牌。如果会话本身已经是管理员，则隐藏令牌输入区域。如果 401 或 403 返回，`adminApi.js` 会把 `needToken` 设为 `true`，让用户有机会粘贴机器令牌。
+`AdminPanel.vue` 的 `ready` 完全由当前用户的 `permission > 0` 派生。权限不足时，管理子视图和插件页不挂载，主区域只显示禁止访问提示；不存在令牌输入卡或 `localStorage` 回退。权限恢复后重新挂载当前视图并加载数据。
 
-后端 `adminapi.go` 也明确声明：管理门控等价于“Web 会话权限大于 0，或者共享管理员令牌”。
+后端 `adminapi.go` 在请求带非空会话 Cookie 时只按会话判定，坏会话不能借有效机器令牌回退；无会话 Cookie 时才接受机器令牌。
 
 ```mermaid
 flowchart TD
-    OpenAdmin["打开管理面板"] --> CheckPerm["检查 user.permission"]
+    OpenAdmin["打开或深链进入管理面板"] --> CheckPerm["检查当前 user.permission"]
     CheckPerm --> IsAdmin{"permission > 0 ?"}
-    IsAdmin -->|是| Ready["可直接访问管理 API"]
-    IsAdmin -->|否| ShowToken["显示令牌输入框"]
-    ShowToken --> InputToken["用户输入 X-Admin-Token"]
-    InputToken --> Persist["存入 localStorage"]
-    Persist --> CallAdmin["调用 /api/admin/v1/*"]
-    CallAdmin --> AuthResp{"401 或 403？"}
-    AuthResp -->|是| NeedToken["needToken = true"]
-    AuthResp -->|否| Data["返回管理数据"]
+    IsAdmin -->|是| Ready["ready=true；渲染目标管理视图"]
+    IsAdmin -->|否| Forbidden["ready=false；主区域显示 forbidden"]
+    Ready --> CallAdmin["adminApi 只携带同源 Cookie 调用管理 API"]
+    CallAdmin --> AuthResp{"401 或 403 + admin.token_invalid？"}
+    AuthResp -->|是| ClearSession["通知外壳清理会话并卸载管理视图"]
+    AuthResp -->|否| Result["返回数据或保留会话并显示普通错误"]
 ```
 
 **图表来源**
@@ -325,7 +323,7 @@ flowchart TD
 | --- | --- |
 | `net.js` | 超时中止，把 `AbortError` 转成 `networkTimeout` 错误。 |
 | `api.js` | JSON 请求体序列化、204 特殊处理、邮箱验证门控回调。 |
-| `adminApi.js` | 附加 `X-Admin-Token`、401/403 切换令牌提示。 |
+| `adminApi.js` | 同源 Cookie 传输、剥离 `X-Admin-Token`、清理旧令牌，并对会话失效错误调用 `guard401`。 |
 | `errors.js` | 后端错误码翻译。 |
 | `session.js` | 401 会话失效通知。 |
 
@@ -507,7 +505,7 @@ graph LR
 
 - `api.js` 与 `adminApi.js` 都依赖 `net.js` 和 `errors.js`，形成稳定的底层契约；
 - `api.js` 通过 `gateWatch` 与 `App.vue` 松耦合地通信邮箱验证门控事件；
-- `AdminPanel.vue` 通过 `adminApi.js` 的响应式 `token` 和 `needToken` 控制 UI；
+- `AdminPanel.vue` 根据当前会话的 `myPerm` 与 `ready` 控制管理视图；子视图通过 `adminApi.js` 请求数据；
 - 页面组件不应直接操作 Cookie、CSRF Token 或 Authorization 头，而应调用封装后的方法。
 
 **章节来源**
@@ -529,7 +527,7 @@ graph LR
 
 - 站点配置、插件 UI、当前用户等数据适合短期内存缓存；
 - 对于高频只读数据，可以考虑加入简单缓存层，例如基于 key 的结果缓存和 TTL；
-- 管理员令牌可以继续使用 `localStorage`，但应避免在日志中输出；
+- 当前用户与站点配置适合短期内存缓存；机器令牌只由无 Cookie API 客户端从运行环境或密钥系统读取，不进入浏览器存储；
 - 皮肤库等公开资源若服务端支持缓存头，可依赖浏览器缓存。
 
 ### 避免在循环中串行调用 API
@@ -576,8 +574,8 @@ graph LR
 | --- | --- | --- |
 | 请求一直等待 | 后端或 CDN 未返回响应，触发自定义超时 | 检查网络、CDN、后端健康状态 |
 | 显示“网络超时” | `AbortController` 超时 | 调整 `timeoutMS` 或检查后端响应时间 |
-| 登录后仍无法访问管理页面 | 会话权限不足或 `X-Admin-Token` 无效 | 确认 `permission > 0` 或更换令牌 |
-| 管理面板反复弹出令牌输入框 | 后端返回 401 或 403 | 检查会话、令牌和服务端配置 |
+| 登录后仍无法访问管理页面 | 当前会话 `permission <= 0`，或权限已被撤销 | 用管理员账号重新登录；面板没有机器令牌回退 |
+| 管理接口返回 401 或 403 | 会话失效、权限不足、来源校验失败或端点要求超管会话 | 按响应 `code` 处理；仅 401 与 `admin.token_invalid` 触发会话清理 |
 | 错误消息显示英文 | 后端返回未知 `code`，前端回退到原始消息 | 在后端新增稳定错误码，前端补充 i18n |
 | 上传失败但看不到 JSON | 服务器返回 HTML 错误页 | 检查上传限制、权限和后端错误响应 |
 | 邮箱验证突然不可用 | 验证门控在服务端切换 | 依赖 `gateWatch.onVerifyRequired` 刷新用户状态 |
@@ -586,11 +584,11 @@ graph LR
 
 1. 打开浏览器开发者工具的 Network 面板；
 2. 找到失败的请求，确认路径是 `/api/v1/*` 还是 `/api/admin/v1/*`；
-3. 检查请求头是否包含 Cookie 或 `X-Admin-Token`；
+3. 管理请求确认使用同源 Cookie，且没有 `X-Admin-Token`；机器 API 客户端才使用无 Cookie 令牌通道；
 4. 查看响应状态码和响应体；
 5. 确认响应体中是否存在 `code`；
 6. 检查 i18n 是否包含对应 `errors.<code>`；
-7. 如果是 401，检查 `session.js` 的未授权处理是否被调用；
+7. 如果是 401 或 403 + `admin.token_invalid`，检查 `guard401` 的会话清理处理是否被调用；
 8. 如果是上传问题，检查 `XMLHttpRequest` 的状态码和文本响应。
 
 ### 调试增强建议
@@ -613,8 +611,8 @@ graph LR
 - `net.js` 负责超时；
 - `errors.js` 负责错误翻译；
 - `api.js` 封装玩家侧 JSON 接口和纹理上传；
-- `adminApi.js` 封装管理侧接口和机器令牌；
+- `adminApi.js` 封装管理侧同源会话请求，并阻止机器令牌进入浏览器传输层；
 - `session.js` 提供 401 会话失效通知；
 - `App.vue` 和页面组件负责业务状态和用户体验。
 
-这种设计避免了在每个页面重复处理 Cookie、错误体和国际化。管理员通过 Web 会话或机器令牌两种方式访问管理接口，符合“人类管理员 + 机器回退”的双重语义。未来如需扩展插件 Bearer API，应保持同样的分层原则：网络层、错误层、业务封装层、页面层清晰分离。
+这种设计避免了在每个页面重复处理 Cookie、错误体和国际化。浏览器管理员只通过 Web 会话访问管理接口；机器令牌是后端为无 Cookie API 客户端保留的独立通道，不能回退坏会话。未来如需扩展插件 Bearer API，应保持同样的分层原则：网络层、错误层、业务封装层、页面层清晰分离。

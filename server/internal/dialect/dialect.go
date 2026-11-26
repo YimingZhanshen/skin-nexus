@@ -283,6 +283,24 @@ func (e Engine) Upsert(table string, cols, keys, update []string) (string, error
 	return "", fmt.Errorf("dialect: unsupported engine %q", e)
 }
 
+// AtomicCounterIncrement builds one insert-or-increment statement for a
+// time-windowed counter. An expired conflicting row resets to one. The caller
+// binds key values, the new expiry, the current snapshot, then the new expiry
+// again. SQLite/PostgreSQL return the new value with RETURNING; MySQL exposes it
+// through LAST_INSERT_ID in the statement result.
+func (e Engine) AtomicCounterIncrement(table string, keys []string, valueColumn, expiresColumn string) (string, bool) {
+	cols := append([]string{}, keys...)
+	cols = append(cols, expiresColumn, valueColumn)
+	values := strings.TrimSuffix(Placeholders(len(cols)-1), ")") + ",1)"
+	prefix := "INSERT INTO " + table + " (" + strings.Join(cols, ", ") + ") VALUES " + values + " "
+	if e == MySQL {
+		return prefix + "ON DUPLICATE KEY UPDATE " + valueColumn + "=LAST_INSERT_ID(IF(" + expiresColumn + "<=?,1," + valueColumn + "+1)), " + expiresColumn + "=?", false
+	}
+	return prefix + "ON CONFLICT (" + strings.Join(keys, ", ") + ") DO UPDATE SET " +
+		valueColumn + "=CASE WHEN " + table + "." + expiresColumn + " <= ? THEN 1 ELSE " + table + "." + valueColumn + "+1 END, " +
+		expiresColumn + "=? RETURNING " + valueColumn, true
+}
+
 // InsertIgnore builds an INSERT that silently skips rows whose primary or
 // unique key already exists — the idempotent-import primitive.
 //

@@ -87,7 +87,7 @@ docker compose -f docker-compose.quickstart.yml up -d
 
 - **玩家**——上传皮肤/披风（拖进去、3D 预览）、给角色换装、逛皮肤库、举报与收藏。
 - **站长**——玩家与内容管理、封禁与防撞库、邀请码、公告、一键换主题、找回密码 / 邮箱验证、操作记录；登录凭证只存「指纹」，拖走数据库也拿不到能用的登录态。
-- **接游戏**——主流启动器开箱即用、免密登录内置、MUA 联盟互通、正版账号兜底、皮肤批量导入。
+- **接游戏**——主流启动器开箱即用、免密登录内置、MUA 联盟互通、正版账号兜底、皮肤批量导入；可选按服接入策略与服主门户已包含。
 - **扩展**——中英双语、免构建换肤（主题包）、插件平台、搜索引擎与 AI 可见性。
 
 <p align="center">
@@ -120,7 +120,7 @@ docker compose -f docker-compose.quickstart.yml up -d
 | 启动器对接 | [docs.skin.yimingzhanshen.cn/launcher-api](https://docs.skin.yimingzhanshen.cn/launcher-api) |
 | 翻知识手册 | [docs.skin.yimingzhanshen.cn/handbook](https://docs.skin.yimingzhanshen.cn/handbook/) |
 
-当前版本 v0.6.0；迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)。详细文档以中文为主。
+当前版本 v0.6.0；迭代历史见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)。可选的服务器接入模块已在默认关闭的面板开关后实现：超管可在同一事务中创建租户与首位 owner；`/servers` 服主门户包含邀请接受、带配额元数据的分页列表、服务器、凭证、策略、白名单、封禁、进服事件、JSON 导出与精确租户名称删除确认，平台控制面覆盖状态、配额、紧急控制与按截止时间删除。浏览器管理面仅使用会话，无 Cookie 机器令牌仍是后端 API 契约，但平台服务器接入接口不接受它。URL secret 与 Bearer Header 按服验证、可选的免数据库验证代理命令、按服 fallback 熔断、按策略清理进服事件、运维文档、安全监控标签与已执行的 SQLite 恢复演练均已包含。本地验收包含隔离 SQLite HTTP E2E；真实 Minecraft/authlib-injector 客户端与外部数据库不在该脚本范围内。详细文档以中文为主。
 
 ## 兼容承诺
 

@@ -33,8 +33,8 @@
 本文面向站长和后台工具开发者，完整记录 `/api/admin/*` 管理 API。所有端点由 `adminapi.Backend` 注册到 `GET /api/admin/v1/overview`、`/status`、`/diagnostics`、用户、玩家、材质、邀请码、站点设置、主题市场、插件市场、后台任务、举报处理、Union 成员站、访问日志诊断、OIDC 客户端等管理路径上。
 
 管理面同时支持两类调用者：
-- Web 会话管理员：浏览器登录后携带 `skin_session` Cookie 的管理员账户。
-- 机器/API 回退：通过请求头 `X-Admin-Token` 调用，适合脚本和外部工具。
+- Web 会话管理员：浏览器登录后携带 `skin_session` Cookie 的管理员账户；浏览器管理面板只使用这一通道。
+- 无 Cookie 机器/API 客户端：通过请求头 `X-Admin-Token` 调用，适合脚本和外部工具；请求带非空 `skin_session` Cookie 时不适用。
 
 ## 项目结构与管理面总览
 `adminapi` 包集中实现管理路由表、认证包装器、统一错误封装和各管理域处理器；可选模块（Union、Appearance/Theme Market、Plugins/Jobs/OIDC）通过依赖注入挂载，未启用时对应路由不存在或返回特定状态。
@@ -82,10 +82,23 @@ graph TB
 | 身份 | 要求 | 审计 actor | 典型用途 |
 |---|---|---|---|
 | Web 会话管理员 | 有效 `skin_session` Cookie，且 `users.permission > 0` | 真实管理员 uid | 面板操作、需要审计归属的操作 |
-| 机器/API 调用 | 请求头 `X-Admin-Token` 等于环境变量 `SKIN_ADMIN_TOKEN` | uid 为 0 | 脚本、自动化、外部管理工具 |
+| 无 Cookie 机器/API 调用 | 无非空 `skin_session` Cookie，且请求头 `X-Admin-Token` 等于环境变量 `SKIN_ADMIN_TOKEN` | uid 为 0 | 脚本、自动化、外部管理工具 |
 | 无认证 | 拒绝 403 | 不写入成功审计行 | 非法访问 |
 
-当同时携带 `X-Admin-Token` 和 `skin_session` 时，认证层优先走 Web 会话身份，避免把人类操作降级为机器审计。
+当请求携带任何非空 `skin_session` Cookie 时，认证层只按该会话判定：有效管理员会话可以使用，令牌无效或缺失均不影响会话；无效、过期、封禁或非管理员会话一律返回 403，即使同时携带有效 `X-Admin-Token` 也不回退到机器模式。只有不存在非空会话 Cookie 时，有效机器令牌才可建立 `actor=0` 的调用；空值 Cookie 与没有 Cookie 等价。
+
+### Cookie 会话的 Origin/CSRF 门禁
+当认证层解析出真实管理员会话（`actorUID > 0`）后，除 `GET`、`HEAD`、`OPTIONS` 外的请求必须通过统一来源校验：
+
+- 非 `null` 的 `Origin` 必须与请求 `Host` 忽略大小写完全匹配；
+- 否则 `Sec-Fetch-Site` 必须是 `same-origin` 或 `none`；
+- 缺少有效证据时拒绝请求，返回 `403` 和稳定错误码 `admin.origin_mismatch`。
+
+仅携带 `X-Admin-Token`、没有非空会话 Cookie 的机器调用审计 actor 为 0，不经过此门禁。管理 API、Web API 与 OIDC 设备 API 共用同一谓词，错误文案统一为“请求来源校验失败”。
+
+本节来源：
+- [server/internal/adminapi/adminapi.go:298-305](https://github.com/YimingZhanshen/skin-nexus/blob/0a1b074/server/internal/adminapi/adminapi.go#L298-L305)
+- [server/internal/origingate/origin.go:11-24](https://github.com/YimingZhanshen/skin-nexus/blob/0a1b074/server/internal/origingate/origin.go#L11-L24)
 
 ### 权限等级
 - 普通管理员：`permission = 1`
@@ -104,20 +117,17 @@ graph TB
 
 ```mermaid
 flowchart TD
-    Start["收到 /api/admin/* 请求"] --> CheckToken{"是否携带 X-Admin-Token？"}
-    CheckToken -->|是| TokenValid{"令牌常量时间比较相等？"}
-    TokenValid -->|否| Forbidden["403 管理令牌无效"]
-    TokenValid -->|是| HasSession{"是否携带 skin_session？"}
-    HasSession -->|是| SessionAdmin{"Cookie 解析为 admin？"}
+    Start["收到 /api/admin/* 请求"] --> HasSession{"有非空 skin_session Cookie？"}
+    HasSession -->|是| SessionAdmin{"Cookie 解析为 permission > 0 的管理员？"}
+    SessionAdmin -->|否| SessionForbidden["403；有效机器令牌也不回退"]
     SessionAdmin -->|是| VerifyCheck{"VerifyGate 是否拒绝？"}
-    VerifyCheck -->|是| Forbidden
-    VerifyCheck -->|否| ActorWeb["actor=真实uid"]
-    HasSession -->|否| ActorMachine["actor=0"]
-    CheckToken -->|否| SessionAdmin2{"Cookie 解析为 admin？"}
-    SessionAdmin2 -->|否| Forbidden
-    SessionAdmin2 -->|是| VerifyCheck2{"VerifyGate 是否拒绝？"}
-    VerifyCheck2 -->|是| Forbidden
-    VerifyCheck2 -->|否| ActorWeb2["actor=真实uid"]
+    VerifyCheck -->|是| VerifyForbidden["403；要求完成邮箱验证"]
+    VerifyCheck -->|否| OriginCheck{"非安全写请求且来源校验失败？"}
+    OriginCheck -->|是| OriginForbidden["403 admin.origin_mismatch"]
+    OriginCheck -->|否| ActorWeb["actor=真实 uid；令牌有效或无效均不影响会话"]
+    HasSession -->|否| TokenValid{"X-Admin-Token 有效且配置非空？"}
+    TokenValid -->|是| ActorMachine["actor=0；无 Cookie 机器调用"]
+    TokenValid -->|否| TokenForbidden["403；无有效会话或机器令牌"]
 ```
 
 **图示来源**
@@ -169,7 +179,7 @@ flowchart TD
 
 #### GET /api/admin/v1/overview
 - **作用**：管理面板头部看板指标，包括用户数、玩家数、纹理数、弱哈希余量、签名密钥指纹和纹理存储大小。
-- **管理员权限**：任意管理员 Web 会话或机器令牌。
+- **管理员权限**：任意管理员 Web 会话，或没有非空会话 Cookie 的机器令牌调用。
 - **响应体**
   ```json
   {
@@ -854,7 +864,7 @@ sequenceDiagram
     participant Hook as "业务钩子"
 
     Client->>Router: "HTTP 请求"
-    Router->>Auth: "校验 X-Admin-Token 或 skin_session"
+    Router->>Auth: "非空会话 Cookie 只校验会话；无会话时校验 X-Admin-Token"
     Auth-->>Router: "actorUID 或 403"
     Router->>Handler: "分发到具体管理端点"
     Handler->>Store: "读写用户/玩家/纹理/设置/任务"
@@ -933,9 +943,9 @@ sequenceDiagram
 ## 故障排查指南
 
 ### 403 管理令牌无效
-- 检查是否设置了环境变量 `SKIN_ADMIN_TOKEN`。
-- 检查请求头 `X-Admin-Token` 是否完全匹配。
-- 若同时携带 Cookie，认证层会优先走 Web 会话，而非机器令牌。
+- 仅适用于无有效管理员会话的请求；先确认是否打算使用浏览器会话还是无 Cookie 机器客户端。
+- 机器客户端检查是否设置了环境变量 `SKIN_ADMIN_TOKEN`，且请求头 `X-Admin-Token` 完全匹配。
+- 浏览器面板只发送 `skin_session` Cookie，不发送机器令牌；无效或非管理员会话应重新登录，而不是补令牌。
 
 ### 403 需要超级管理员 Web 会话
 - 插件安装、插件配置、守卫绕过、访问日志诊断窗口、用户权限修改等操作拒绝机器令牌。

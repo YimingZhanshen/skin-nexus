@@ -71,6 +71,7 @@ func doDetail(t *testing.T, b *Backend, method, path string, body any, adminToke
 		rdr = bytes.NewReader(raw)
 	}
 	r := httptest.NewRequest(method, path, rdr)
+	r.Header.Set("Origin", "http://example.com")
 	if adminToken != "" {
 		r.Header.Set("X-Admin-Token", adminToken)
 	}

@@ -9,6 +9,44 @@ description: "SkinNexus 变更日志：按日期倒序的迭代历史，只记�
 > 相称——只记「改了什么 / 为什么 / 行为变化」，验证过程一句话。开发细节见对应 commit；
 > README 状态行只留一句话摘要。
 
+## 2026-11-26 · 服务器接入安全与体验修复
+
+- 服务器接入控制面统一服务端分页：服主默认 50/最大 200 并返回 `total`、`page`、`size` 与服务器 `quotaUsed`，平台默认 20/最大 200；补齐邀请接受卡片、viewer 玩家查询 403、owner/平台精确且不 trim 的租户名称删除确认，以及模块开关读取失败/空值/非法值的 fail-closed 行为。
+- 浏览器管理面改为纯会话传输，无 Cookie 机器令牌 API 保持独立；Cookie 写请求共用 Origin/Fetch Metadata 门禁，并明确机器令牌、按服验证与 OIDC 协议端点例外。平台搜索、紧急操作审计与 owner 稀疏更新按实现契约同步。
+- 签名 ZIP 增加条目数、名称、单条目、解压总量、压缩比与元数据读取上限；扩展隔离 SQLite HTTP E2E 的邀请、权限、201 行分页/配额、导出隔离和精确名称删除矩阵，并明确不覆盖真实 Minecraft/authlib-injector 与外部数据库。
+
+验证：Go build/vet/unit、SQLite integration、前端 test/build、Node 22 文档 audit/build、check-docs、主题/弹窗/可达性/诊断模型静态闸与隔离 Server Access E2E 均在对应本地快照通过；本条只记录该本地验证范围。
+
+## 2026-11-25 · 平台原子创建租户与首位 owner
+
+- 服务器接入平台视图新增最小创建表单：网页超管填写名称、服务器配额与 owner UID，即可在同一事务中建立租户和首位 owner，沿用单 active membership 约束；任何失败回滚，不接受客户端指定租户 id。
+- 新增仅同源网页超管会话可用的 `POST /api/admin/v1/serveraccess/tenants`，严格校验三字段、返回租户与 owner 并记录 `serveraccess_tenant_create` 审计；前端补齐提交中、错误、成功与租户/审计刷新状态，中英文文案同步。
+
+验证：store/API/前端红绿测试、SQLite integration、Go 全量 test/vet/build 与覆盖率、前端 32 项测试与构建、locales/a11y/theme/modal/docs 闸及文档站构建通过；外库与真实 MC 矩阵在同日第三轮补跑。
+
+**同日 2 轮（服务器接入全分支审查修复）**
+
+- 旧全局 `hasJoined`/profile 只在确证本地未命中时回源，玩家查询、join 查询、签名与数据库故障不再被官方身份覆盖；标准 OIDC `userinfo` 与 Yggdrasil join 客户端 allowlist 分离，合法非 shared client 不再被误拒。
+- 删除宽限期内 owner/admin 仍可导出，viewer 仍拒绝；成员邀请必须先验证邮箱。平台紧急状态、配额、fallback、吊销和删除改为与审计原子提交，审计失败整笔回滚。
+- `VerifyBurst` 真正按秒执行原子准入，分钟/秒配额窗口由保留 worker 分批清理；平台 fallback 的界面初值与运行时默认统一为关闭。E2E 改用临时回环端口、白名单环境、有界失败日志与退出后清理。
+
+**同日 3 轮（真实 MC 与多引擎验收）**
+
+- 按服 API root 补上 authlib-injector 启动所需的元数据，复用全局 `meta`、`skinDomains` 与签名公钥；有无末尾斜杠均可直连，无效、过期、吊销、Header 模式或模块关闭统一 404，E2E 同时钉住 API-location 与无重定向行为。
+- PostgreSQL 集成夹具改为按外键依赖顺序删表、删表失败立即终止、MySQL 外键开关限定在独立连接；raw fixture SQL 走方言层，并补 dry-run 行内容、超管提升与私有材质可见性回归。
+
+验证：真实 Minecraft 1.21 + authlib-injector 1.2.7 白名单进服/未白名单拒绝通过；SQLite、MySQL 8.0/5.7、MariaDB 11.4/10.11、PostgreSQL 16 全套 integration 与 Go race detector 通过；Go 全量 test/vet/build、前端 32 测试与构建、E2E、三个真实主题包扫描及 docs/a11y/theme/modal/locales/diag-model/VitePress 全绿。未操作生产、未 push。
+
+## 2026-11-24 · 可选服务器接入模块（同轮）
+
+- 新增默认关闭、可热切换的 `serveraccess` 模块：租户/成员/邀请、按服服务器/策略/白名单/封禁/凭据控制面，独立 `/servers` 服主门户与仅网页超管可用的平台状态/配额/紧急管理；store 强制租户 scope，viewer 只读，关闭时模块 API 统一 404，旧 Yggdrasil wire 不变。
+- 新增 URL secret 与 Bearer Header 两种按服 `hasJoined`：256 位 secret 只展示一次、仅存 SHA-256 摘要，支持 24 小时重叠轮换与立即吊销；按状态、封禁、UID 白名单、配额/并发、本地 session、官方 fallback 顺序决策，拒绝/未命中/故障保持空 204，无效/吊销/过期统一 404。
+- 新增按服进服事件与原子配额、脱敏 owner 时间线、可选免数据库 `verify-proxy`、按服 fallback 并发/熔断与事件保留 worker；日志和指标不记录 secret、原始 URL、query、body 或玩家身份，Header 模式仍只证明持有凭据，attested 未实现。
+- 新增字段白名单租户 JSON 导出与有界 413；owner 删除请求在一个事务内暂停全部服务器、吊销全部凭据并固定 7 天默认宽限期，平台超管到期才级联删除 `sa_*`，全局用户、玩家和纹理保留。
+- 服主导出/输入租户名称确认删除、平台请求/截止时间与到期删除门禁已接入真实 API；补齐产品/部署/兼容文档、安全指标标签与告警示例、三引擎备份恢复 runbook，并执行 SQLite 关闭-复制-恢复-重开演练，核验 deleting/suspended/revoked 与策略数据存活。
+
+验证：红绿 UI/API/恢复测试、SQLite 真文件恢复、Go 全量 test/vet/build、前端构建、locales/a11y/theme/modal/docs 闸与文档站构建通过；MySQL/PostgreSQL 恢复 runbook 一并提供。
+
 ## 2026-11-22 · README 动图、面板自检卖点入表与 35 秒宣传片
 
 宣传素材这一轮换了个出发点：先归纳「服主为什么会换」，再决定拍什么，而不是先看手上有什么素材。
@@ -64,12 +102,10 @@ diag-model 12/12 + check-locales（126 码×2）全绿；VitePress 构建无死�
   配置的 AES-256-GCM 主密钥，需一并备份）。两键按 `deploy.md` 真源改写，并补上手册缺的 `SKIN_METRICS`
   与 IndexNow 两键。
 - **口径与自相矛盾**：手册基线声明由「快照 2026-11-15」改成实际钉住的 `797ae1a`（v0.6.0 / 11-12）并
-  声明基线后能力以本文件为准；事件总线「不支持取消」加限定（通用事件不可取消，任务步内可自查
+  声明基线后能力以本文件为准；事件总线「不支持取消」加限定（通用事件不可取消，任务步内可检查
   `skin.jobs.cancelRequested`）；迁移编号「五位前缀」改四位；站点设置把 CSP 两键移出「面板键」表
   （env-only、非法值启动即失败），并标明该表只覆盖 43 个面板键中最常调整的 15 项。
-- **已核实、不动**：`migrate` CLI 仍只有 `preflight`/`uuid`/`import`（"apply" 是 import 的文义，不是
-  缺失动作）；任务队列确无删除端点；插件 schema 渲染、JWKS 单 key、ugctext 无敏感词表、`hookApi`
-  固定 2、面板无 purge 卸载入口、用户管理无批量勾选——这些「未实现」仍然成立。
+- **范围口径**：`migrate` CLI 的 `preflight`/`uuid`/`import` 分工、任务队列能力、插件/JWKS 契约与面板操作范围按当前实现记录；兼容矩阵只把刻意不复刻或超出范围的能力标为 ➖。
 
 - **依赖（dependabot #17 / #18，minor+patch 政策内）**：`pgx 5.12.0→5.13.0`（修畸形服务端响应在 `Rows.Values`
   的 panic 与连接失败后的不安全重试）、`zitadel/oidc 3.51.17→3.52.0`、`x/crypto 0.58.0→0.59.0`、
@@ -204,11 +240,11 @@ init 幂等、任务取消感知）；Union 对齐（改名/自删通告 hub、S
 
 ## 2026-11-09 · 收口优化轮（S4–S23 + 联盟链，44 提交）
 
-三条挂账结清（D9 任务取消/恢复走通整圈、英文管理面板 40 条说明改键、明细 upstream_code 假 hub
-读数）；插件长步内可自查取消（`skin.jobs.cancelRequested` 加法 API，不动 hook 合约字段）；机器名
-双语（审计动作 53+ 与市场名按 locale）；可访问性（107 个 th 补 scope、表补 caption、两处对比度
-令牌回填并手算复核）；死代码六处清零；CI 红过 8 提交的两条自造原因记账（真库腿须 `-p 1`、gofmt
-债）；性能只量不改（落地页 likes 榜与 `/me` 成本随库线性增长，数字入仓外待办等拍板）。
+D9 任务取消/恢复走通整圈、英文管理面板 40 条说明改键、明细 upstream_code 假 hub 读数三项修复完成；
+插件长步内可检查取消（`skin.jobs.cancelRequested` 加法 API，不动 hook 合约字段）；机器名双语（审计
+动作 53+ 与市场名按 locale）；可访问性（107 个 th 补 scope、表补 caption、两处对比度令牌回填并
+手算复核）；死代码六处清零；CI 两条失败原因修正（真库腿须 `-p 1`、gofmt 格式检查）；性能只量不改
+（落地页 likes 榜与 `/me` 成本随库线性增长，测量结论供容量规划参考）。
 
 **同日第二轮（视觉去生成感，默认主题 + 晴空琉璃）**：令牌契约两条窄闸（§3 默认值七处全是旧色板
 抄本，当场纠偏）；层次不再用品牌色画（glow 改中性、`--shadow` 改 inset 顶边高光）+ 补 `--mono`；
@@ -452,7 +488,7 @@ SEO 标题长度引导（不足 15 字符自动补全 + 字符数提示）；Web
   token 回落；OIDC 路由被 webapi 子树抢路由修复（device 页/授权管理页 404 根因）。
 - **四路审查修复**：迁移链加固 + 凭据/令牌生命周期（切流验收前置）、限流器防护 + userapi 真状态码、
   UI 审查两批（衣柜 i18n 键、错误信封全解析、remap 目标域）、union_kv 持久化（hub 密钥跨重启
-  续存）、管理端删号通告 hub（SyncProfileDelete 落地）；切流阻塞项清零收官。
+  续存）、管理端删号通告 hub（SyncProfileDelete 落地）；切流前置条件完成收官。
 - 兼容矩阵文档上线（实测基线 2026-10-23）；MUA remap 收敛；测试夹具唯一化（撞昵称/撞身份修复）。
 
 ## 2026-10-22 · 立项与一期 M0–M5（15 提交）

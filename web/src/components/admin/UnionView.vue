@@ -3,7 +3,7 @@
 // + union blacklist proxy (B5.4). The module-disabled case shows an empty
 // state. Release/Delete are irreversible-ish — both double-confirm, delete
 // is permanent (hub erases the record).
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '../../adminApi.js'
 import { confirmDialog } from '../../dialog.js'
@@ -19,15 +19,24 @@ const error = ref('')
 const loadFailed = ref(false)
 const opResult = ref('')
 const opBusy = ref(false)
+let seq = 0
+let opSeq = 0
+let diagSeq = 0
+let disposed = false
+const exportTimers = new Set()
 
 async function load() {
+  if (disposed) return
+  const mine = ++seq
   error.value = ''
   loadFailed.value = false
   // 404 = 模块关闭（预期空态）；其余错误必须可见且可重试，
   // 不能把「加载失败」伪装成「联盟功能未启用」（2026-10-27 逻辑修复）。
   try {
-    unionStatus.value = await fetchJSON('/api/admin/v1/union/status')
+    const data = await fetchJSON('/api/admin/v1/union/status')
+    if (mine === seq) unionStatus.value = data
   } catch (e) {
+    if (mine !== seq) return
     unionStatus.value = null
     if (e.status === 404) return
     loadFailed.value = true
@@ -36,26 +45,35 @@ async function load() {
 }
 
 async function resumeRotation() {
+  if (disposed) return
   if (!(await confirmDialog(t('admin.unionResumeConfirm'), { danger: true }))) return
+  if (disposed) return
+  const mine = ++opSeq
   try {
     await fetchJSON('/api/admin/v1/union/rotation/resume', { method: 'POST' })
+    if (disposed || mine !== opSeq) return
     await load()
-  } catch (e) { error.value = e.message }
+  } catch (e) {
+    if (!disposed && mine === opSeq) error.value = e.message
+  }
 }
 
 async function runOp(name, path, confirmMsg) {
   if (confirmMsg && !(await confirmDialog(confirmMsg, { danger: true }))) return
+  if (disposed) return
+  const mine = ++opSeq
   opBusy.value = true
   opResult.value = ''
   error.value = ''
   try {
     const d = await fetchJSON(path, { method: 'POST' })
+    if (mine !== opSeq) return
     opResult.value = t('admin.unionOpDone', { name: t(name), detail: JSON.stringify(d).slice(0, 400) })
     await load()
   } catch (e) {
-    error.value = e.message
+    if (mine === opSeq) error.value = e.message
   } finally {
-    opBusy.value = false
+    if (mine === opSeq) opBusy.value = false
   }
 }
 
@@ -82,6 +100,8 @@ const diag = ref(null) // {status, data, key_fingerprint, ...}
 const diagDlg = ref(null)
 
 function openDiagnose() {
+  diagSeq++
+  diagLoading.value = false
   diag.value = null
   diagOpen.value = true
   nextTick(() => {
@@ -96,6 +116,8 @@ function openDiagnose() {
 // diagOpen still true. Setting the flag here is the honest source of truth;
 // @close stays as a safety net for any other way the element can close.
 function closeDiagnose() {
+  diagSeq++
+  diagLoading.value = false
   diagOpen.value = false
   diag.value = null
   const el = diagDlg.value
@@ -103,6 +125,8 @@ function closeDiagnose() {
 }
 
 function onDiagClosed() {
+  diagSeq++
+  diagLoading.value = false
   diagOpen.value = false
   diag.value = null
 }
@@ -110,6 +134,8 @@ function onDiagClosed() {
 // Esc: `cancel` fires before the browser closes the dialog, so resetting the
 // state here is enough — calling close() as well would only race the default.
 function onDiagCancel() {
+  diagSeq++
+  diagLoading.value = false
   diagOpen.value = false
   diag.value = null
 }
@@ -120,16 +146,19 @@ function onDiagClick(e) {
 }
 
 async function triggerDiagnose() {
+  if (disposed) return
+  const mine = ++diagSeq
   diagLoading.value = true
   diag.value = null
   try {
     // Non-2xx / transport failures still come back as {status:'error',data}
     // so one table renders every outcome — mirror of legacy triggerDiagnose.
-    diag.value = await fetchJSON('/api/admin/v1/union/ops/diagnose', { method: 'POST' })
+    const data = await fetchJSON('/api/admin/v1/union/ops/diagnose', { method: 'POST' })
+    if (mine === diagSeq) diag.value = data
   } catch (e) {
-    diag.value = { status: 'error', data: { exception: e.message } }
+    if (mine === diagSeq) diag.value = { status: 'error', data: { exception: e.message } }
   } finally {
-    diagLoading.value = false
+    if (mine === diagSeq) diagLoading.value = false
   }
 }
 
@@ -182,7 +211,8 @@ function downloadFile(name, mime, content) {
   document.body.appendChild(a)
   a.click()
   a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 60000)
+  const timer = setTimeout(() => { exportTimers.delete(timer); URL.revokeObjectURL(url) }, 60000)
+  exportTimers.add(timer)
 }
 
 function diagStamp() { return Math.round(Date.now() / 1000) }
@@ -195,6 +225,14 @@ function exportDiagnoseJSON() {
 }
 
 onMounted(load)
+onBeforeUnmount(() => {
+  disposed = true
+  seq++
+  opSeq++
+  diagSeq++
+  for (const timer of exportTimers) clearTimeout(timer)
+  exportTimers.clear()
+})
 </script>
 
 <template>

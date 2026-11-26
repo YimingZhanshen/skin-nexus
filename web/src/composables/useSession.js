@@ -13,11 +13,25 @@
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api.js'
+import { bumpSessionVersion, clearLegacyAdminToken, isSessionLoss, notifyUnauthorized } from '../session.js'
 
 export function useSession() {
   const { t } = useI18n()
 
   const user = ref(null)
+  let generation = 0
+  // Every set invalidates older /me work, but only an authentication identity
+  // change invalidates in-flight transport responses from the previous account.
+  function setSessionUser(next) {
+    const previous = user.value
+    const nextUser = next || null
+    generation += 1
+    if ((previous === null) !== (nextUser === null) || previous?.id !== nextUser?.id) {
+      bumpSessionVersion()
+    }
+    clearLegacyAdminToken()
+    user.value = nextUser
+  }
   // Admin panel entry (blessing parity): only accounts with permission > 0 see
   // it — normal users never do. `permission` comes from GET /api/v1/me
   // (0 = normal, >0 = admin, -1 = banned).
@@ -42,7 +56,10 @@ export function useSession() {
       if (lockUntil.value <= nowTick.value) { clearInterval(tickTimer); tickTimer = null }
     }, 1000)
   }
-  onBeforeUnmount(() => { if (tickTimer) clearInterval(tickTimer) })
+  onBeforeUnmount(() => {
+    generation += 1
+    if (tickTimer) clearInterval(tickTimer)
+  })
 
   // The verdict, not the flag. /me, /login and /register all carry
   // `verifyRequired`, so the shell knows before it draws anything whether this
@@ -61,8 +78,48 @@ export function useSession() {
   const verifyMailBusy = ref(false)
   const verifyMailNote = ref('')
 
-  async function refreshMe() {
-    try { user.value = await api.me() } catch { /* the 401 path owns sign-out */ }
+  // Page-level account reads share the shell's generation gate. A stale value
+  // (including a stale 401) is discarded before it can mutate page or shell
+  // state; only a current session-loss response notifies the shell.
+  // Keep the generation beside the value until the caller commits it. A plain
+  // value alone leaves a microtask gap in which another account can be selected
+  // after validation but before the shell is updated.
+  async function readMeResult() {
+    const current = ++generation
+    try {
+      const next = await api.me()
+      return { current, next: current === generation ? next : null }
+    } catch (cause) {
+      if (current !== generation) return { current, next: null }
+      if (isSessionLoss(cause)) {
+        setSessionUser(null)
+        notifyUnauthorized()
+        return { current, next: null }
+      }
+      // Network/5xx failures say nothing about the current cookie. Callers
+      // that own an error surface decide whether to display the failure.
+      throw cause
+    }
+  }
+
+  // Page-level reads expose only the account value, never the internal token.
+  async function readMe() {
+    const { next } = await readMeResult()
+    return next
+  }
+
+  async function refreshMe(options) {
+    try {
+      const { current, next } = await readMeResult()
+      if (!next || current !== generation) return false
+      setSessionUser(next)
+      return true
+    } catch (cause) {
+      // Boot asks for propagation so it can show a retryable error; background
+      // refreshes keep the good session and stay quiet.
+      if (options && options.propagateErrors) throw cause
+      return false
+    }
   }
 
   async function pendingResend() {
@@ -113,7 +170,7 @@ export function useSession() {
   // The inbox clears its badge locally when the page marks rows read; the count
   // is re-fetched on the next boot anyway.
   function onInboxRead() {
-    if (user.value) user.value.unreadNotifications = 0
+    if (user.value) setSessionUser({ ...user.value, unreadNotifications: 0 })
   }
 
   return {
@@ -121,6 +178,6 @@ export function useSession() {
     locked, lockSecondsLeft, waitText, startWait,
     verifyPending, pendingBusy, pendingNote, pendingChangeOpen, pendingEmail,
     verifyMailTo, verifyMailBusy, verifyMailNote,
-    refreshMe, pendingResend, pendingSaveEmail, resendVerificationMail, onInboxRead,
+    readMe, refreshMe, setSessionUser, pendingResend, pendingSaveEmail, resendVerificationMail, onInboxRead,
   }
 }
