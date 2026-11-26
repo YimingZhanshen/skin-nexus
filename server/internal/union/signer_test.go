@@ -267,7 +267,14 @@ func TestStartRotationValidatesInterval(t *testing.T) {
 	hub := newKeyHub(t, []*rsa.PrivateKey{genRSA(t, 2048)})
 	s := newTestSigner(t, hub.URL, nil)
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Cleanup(func() {
+		cancel()
+		waitFor(t, 5*time.Second, func() bool {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			return !s.loopRunning
+		})
+	})
 
 	if err := s.StartRotation(ctx, 5*time.Minute); err == nil {
 		t.Fatal("interval below the 10-15min policy window must be refused")
