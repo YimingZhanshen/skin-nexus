@@ -16,8 +16,10 @@ export function useServerTenant(api) {
   const size = shallowRef(50)
   let request = 0
   let mutation = 0
+  let sessionVersion = 0
 
   function clearSessionState() {
+    sessionVersion += 1
     // Invalidate both the failing operation and any older request that may
     // still resolve after the shell has dropped back to login.
     request += 1
@@ -78,6 +80,7 @@ export function useServerTenant(api) {
     if (busy.value) return null
     const current = request
     const currentMutation = ++mutation
+    const currentSession = sessionVersion
     busy.value = true
     error.value = ''
     try {
@@ -86,6 +89,7 @@ export function useServerTenant(api) {
       // was in flight. Do not publish its result or start a post-loss reload.
       if (current !== request) return null
       await load()
+      if (currentSession !== sessionVersion) return null
       return result
     } catch (cause) {
       if (current !== request) return null
@@ -108,6 +112,7 @@ export function useServerTenant(api) {
     unavailable: readonly(unavailable), forbidden: readonly(forbidden),
     total: readonly(total), page: readonly(page), size: readonly(size), load,
     pageInvites: (nextPage) => { page.value = nextPage; return load() },
+    acceptInvite: (token) => mutate(() => api.acceptInvite(token)),
     invite: (email, memberRole) => mutate(() => api.inviteMember(email, memberRole)),
     removeMember: (uid) => mutate(() => api.removeMember(uid)),
     revokeInvite: (id) => mutate(() => api.revokeInvite(id)),

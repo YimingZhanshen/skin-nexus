@@ -12,6 +12,7 @@ import ServerWhitelistPanel from '../components/serveraccess/ServerWhitelistPane
 import ServerBansPanel from '../components/serveraccess/ServerBansPanel.vue'
 import ServerEventsPanel from '../components/serveraccess/ServerEventsPanel.vue'
 import ServerCredentialDialog from '../components/serveraccess/ServerCredentialDialog.vue'
+import InviteAcceptCard from '../components/serveraccess/InviteAcceptCard.vue'
 import TenantLifecyclePanel from '../components/serveraccess/TenantLifecyclePanel.vue'
 import EmptyState from '../components/EmptyState.vue'
 
@@ -43,6 +44,12 @@ async function invite(email, role) {
   const result = await portal.invite(email, role)
   if (result) inviteToken.value = result.token
 }
+async function acceptInvite(token) {
+  const result = await portal.acceptInvite(token)
+  if (!result) return
+  await catalog.load()
+  if (!catalog.selected.value && catalog.servers.value.length) await catalog.select(catalog.servers.value[0].id)
+}
 async function removeMember(uid) {
   if (!(await confirmDialog(t('serverAccess.confirmRemoveMember', { uid }), { danger: true }))) return
   await portal.removeMember(uid)
@@ -52,26 +59,29 @@ async function removeMember(uid) {
 <template>
   <div class="server-portal">
     <EmptyState v-if="!enabled" :text="t('serverAccess.unavailableTitle')" :hint="t('serverAccess.unavailableBody')" />
-    <EmptyState v-else-if="portal.forbidden.value" :text="t('serverAccess.forbiddenTitle')" :hint="t('serverAccess.forbiddenBody')" />
-    <EmptyState v-else-if="portal.unavailable.value" :text="t('serverAccess.unavailableTitle')" :hint="t('serverAccess.unavailableBody')" />
     <template v-else>
-      <header v-if="portal.tenant.value" class="portal-head">
-        <div><h1>{{ t('serverAccess.title') }}</h1><p class="muted">{{ portal.tenant.value?.name }} · {{ t(`serverAccess.roleMap.${portal.role.value}`) }}</p></div>
-        <span class="badge">{{ t('serverAccess.serverCount', { used: catalog.quotaUsed.value, limit: portal.tenant.value?.serverLimit || 0 }) }}</span>
-      </header>
-      <p v-if="loading" class="muted" role="status">{{ t('common.loading') }}</p>
-      <div v-if="error" class="error" role="alert">{{ error }} <button class="secondary small" @click="load">{{ t('common.retry') }}</button></div>
-      <TenantLifecyclePanel v-if="portal.tenant.value" :tenant="portal.tenant.value" :api="serverAccessApi" :can-export="canWrite" :can-delete="canManageMembers" :busy="portal.busy.value" @changed="load" />
-      <ServerMembersPanel :members="portal.members.value" :invites="portal.invites.value" :page="portal.page.value" :size="portal.size.value" :total="portal.total.value" :busy="portal.busy.value" :can-manage-members="canManageMembers" :invite-token="inviteToken" @invite="invite" @remove-member="removeMember" @revoke-invite="portal.revokeInvite" @update:page="portal.pageInvites" @hide-invite="inviteToken = ''" />
-      <div class="portal-grid">
-        <ServerListPanel :servers="catalog.servers.value" :selected-id="selectedId" :used="catalog.quotaUsed.value" :limit="portal.tenant.value?.serverLimit || 0" :page="catalog.page.value" :size="catalog.size.value" :total="catalog.total.value" :loading="catalog.loading.value" :busy="catalog.busy.value" :can-write="canWrite" :error="catalog.error.value" @select="catalog.select" @create="create" @update="(id, body) => catalog.update(id, body)" @update:page="catalog.goPage" @retry="load" />
-        <div v-if="catalog.selected.value" class="detail-column">
-          <ServerDetailPanel :detail="catalog.selected.value" :can-write="canWrite" :busy="catalog.busy.value" :error="catalog.error.value" @update="catalog.update(selectedId, $event)" @credentials="credentialOpen = true" />
-          <ServerWhitelistPanel :server-id="selectedId" :api="serverAccessApi" :can-write="canWrite" />
-          <ServerBansPanel :server-id="selectedId" :api="serverAccessApi" :can-write="canWrite" />
-          <ServerEventsPanel :server-id="selectedId" :api="serverAccessApi" />
+      <InviteAcceptCard v-if="portal.forbidden.value" :busy="portal.busy.value" :error="portal.error.value" @accept="acceptInvite" />
+      <EmptyState v-if="portal.forbidden.value" :text="t('serverAccess.forbiddenTitle')" :hint="t('serverAccess.forbiddenBody')" />
+      <EmptyState v-else-if="portal.unavailable.value" :text="t('serverAccess.unavailableTitle')" :hint="t('serverAccess.unavailableBody')" />
+      <template v-else>
+        <header v-if="portal.tenant.value" class="portal-head">
+          <div><h1>{{ t('serverAccess.title') }}</h1><p class="muted">{{ portal.tenant.value?.name }} · {{ t(`serverAccess.roleMap.${portal.role.value}`) }}</p></div>
+          <span class="badge">{{ t('serverAccess.serverCount', { used: catalog.quotaUsed.value, limit: portal.tenant.value?.serverLimit || 0 }) }}</span>
+        </header>
+        <p v-if="loading" class="muted" role="status">{{ t('common.loading') }}</p>
+        <div v-if="error" class="error" role="alert">{{ error }} <button class="secondary small" @click="load">{{ t('common.retry') }}</button></div>
+        <TenantLifecyclePanel v-if="portal.tenant.value" :tenant="portal.tenant.value" :api="serverAccessApi" :can-export="canWrite" :can-delete="canManageMembers" :busy="portal.busy.value" @changed="load" />
+        <ServerMembersPanel :members="portal.members.value" :invites="portal.invites.value" :page="portal.page.value" :size="portal.size.value" :total="portal.total.value" :busy="portal.busy.value" :can-manage-members="canManageMembers" :invite-token="inviteToken" @invite="invite" @remove-member="removeMember" @revoke-invite="portal.revokeInvite" @update:page="portal.pageInvites" @hide-invite="inviteToken = ''" />
+        <div class="portal-grid">
+          <ServerListPanel :servers="catalog.servers.value" :selected-id="selectedId" :used="catalog.quotaUsed.value" :limit="portal.tenant.value?.serverLimit || 0" :page="catalog.page.value" :size="catalog.size.value" :total="catalog.total.value" :loading="catalog.loading.value" :busy="catalog.busy.value" :can-write="canWrite" :error="catalog.error.value" @select="catalog.select" @create="create" @update="(id, body) => catalog.update(id, body)" @update:page="catalog.goPage" @retry="load" />
+          <div v-if="catalog.selected.value" class="detail-column">
+            <ServerDetailPanel :detail="catalog.selected.value" :can-write="canWrite" :busy="catalog.busy.value" :error="catalog.error.value" @update="catalog.update(selectedId, $event)" @credentials="credentialOpen = true" />
+            <ServerWhitelistPanel :server-id="selectedId" :api="serverAccessApi" :can-write="canWrite" />
+            <ServerBansPanel :server-id="selectedId" :api="serverAccessApi" :can-write="canWrite" />
+            <ServerEventsPanel :server-id="selectedId" :api="serverAccessApi" />
+          </div>
         </div>
-      </div>
+      </template>
     </template>
     <ServerCredentialDialog :open="credentialOpen" :server-id="selectedId" :api="serverAccessApi" :can-write="canWrite" @close="credentialOpen = false" />
   </div>

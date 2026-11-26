@@ -10,6 +10,12 @@ SkinNexus 的服务器接入模块让一个站点为多个 Minecraft 服务器�
 
 本模块没有公开自助注册或计费入口。平台超管可在现有管理面的服务器接入视图中原子创建租户与首位 owner；后续成员由 owner 在门户中邀请，接受邀请前必须完成邮箱验证。首位 owner 由平台超管基于现有账号人工建立，不经过成员邀请链接。玩家不需要成为租户成员。
 
+## 接受成员邀请
+
+已被邀请但尚未加入租户的已登录用户，在 `/servers` 的 membership-forbidden 提示之前会看到邀请接受卡片。用户把 owner 一次性交付的令牌粘贴进密码型输入框，并显式点击“接受邀请”；输入或打开页面不会自动消费令牌。
+
+卡片只调用 `POST /api/serveraccess/v1/invites/accept`，请求体为 `{"token":"..."}`。令牌不进入 URL、query 或 fragment，也不写入本地存储；提交后立即清空输入框。成功后页面重新加载租户成员关系和服务器目录。未验证邮箱返回 403 `auth.email_verify_required`；无效、过期或已使用的令牌返回 404 `serveraccess.invite_invalid`；已属于其他启用中租户的账号返回 403 `serveraccess.forbidden`。这些错误在卡片内以可访问的 alert 显示，不清空页面或伪装成成功。
+
 ## 角色与可见范围
 
 | 角色 | 能做什么 | 不能做什么 |

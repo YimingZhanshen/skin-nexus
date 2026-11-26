@@ -45,6 +45,78 @@ test('tenant portal loads membership and invitation state without hiding failure
   assert.equal(failed.tenant.value, null)
 })
 
+test('accepting an invitation exposes busy state and reloads the newly joined tenant', async () => {
+  let joined = false
+  let releaseAccept
+  let tenantReads = 0
+  let memberReads = 0
+  const acceptedTokens = []
+  const portal = useServerTenant({
+    tenantMe: async () => {
+      tenantReads++
+      if (!joined) throw Object.assign(new Error('forbidden'), { status: 403 })
+      return { tenant, role: 'viewer' }
+    },
+    members: async () => { memberReads++; return { members: [{ uid: 7, role: 'viewer' }] } },
+    invites: async () => { throw new Error('viewer must not load owner invitations') },
+    acceptInvite: (token) => {
+      acceptedTokens.push(token)
+      return new Promise((resolve) => { releaseAccept = resolve })
+    },
+  })
+  assert.equal(await portal.load(), false)
+  assert.equal(portal.forbidden.value, true)
+
+  const pending = portal.acceptInvite('pasted-invite-token')
+  assert.equal(portal.busy.value, true)
+  assert.equal(portal.error.value, '')
+  joined = true
+  releaseAccept({ tenantId: 1 })
+  assert.deepEqual(await pending, { tenantId: 1 })
+  assert.deepEqual(acceptedTokens, ['pasted-invite-token'])
+  assert.equal(tenantReads, 2)
+  assert.equal(memberReads, 1)
+  assert.equal(portal.tenant.value.id, 1)
+  assert.equal(portal.role.value, 'viewer')
+  assert.equal(portal.forbidden.value, false)
+  assert.equal(portal.busy.value, false)
+  assert.equal(portal.error.value, '')
+})
+
+test('invitation acceptance failures stay visible without reloading or joining a tenant', async () => {
+  for (const cause of [
+    Object.assign(new Error('The invitation is invalid, expired, or already used'), { status: 404 }),
+    Object.assign(new Error('Verify this email address first'), { status: 403 }),
+    Object.assign(new Error('The invitation is invalid, expired, or already used'), { status: 404 }),
+  ]) {
+    let tenantReads = 0
+    const portal = useServerTenant({
+      tenantMe: async () => { tenantReads++; throw Object.assign(new Error('forbidden'), { status: 403 }) },
+      members: async () => ({ members: [] }),
+      acceptInvite: async () => { throw cause },
+    })
+    assert.equal(await portal.load(), false)
+    assert.equal(await portal.acceptInvite('pasted-invite-token'), null)
+    assert.equal(tenantReads, 1)
+    assert.equal(portal.error.value, cause.message)
+    assert.equal(portal.forbidden.value, true)
+    assert.equal(portal.tenant.value, null)
+    assert.equal(portal.busy.value, false)
+  }
+})
+
+test('invitation acceptance does not report success when its tenant reload loses the session', async () => {
+  const portal = useServerTenant({
+    tenantMe: async () => { throw Object.assign(new Error('session lost'), { status: 401 }) },
+    members: async () => ({ members: [] }),
+    acceptInvite: async () => ({ tenantId: 1 }),
+  })
+  assert.equal(await portal.acceptInvite('pasted-invite-token'), null)
+  assert.equal(portal.tenant.value, null)
+  assert.equal(portal.error.value, '')
+  assert.equal(portal.busy.value, false)
+})
+
 test('tenant 401 clears loaded state and marks the load unsuccessful', async () => {
   let cause
   const portal = useServerTenant({

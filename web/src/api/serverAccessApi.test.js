@@ -48,6 +48,27 @@ test('owner lookup encodes the query and keeps ordinary session semantics', asyn
   }
 })
 
+test('invite acceptance posts only the pasted token with ordinary session semantics', async () => {
+  const previousFetch = globalThis.fetch
+  const previousStorage = globalThis.localStorage
+  globalThis.localStorage = { getItem: () => 'must-not-be-sent' }
+  globalThis.fetch = async (path, options) => {
+    assert.equal(path, '/api/serveraccess/v1/invites/accept')
+    assert.equal(options.method, 'POST')
+    assert.equal(options.credentials, 'same-origin')
+    assert.deepEqual(options.headers, { 'Content-Type': 'application/json' })
+    assert.equal(options.headers['X-Admin-Token'], undefined)
+    assert.equal(options.body, '{"token":"pasted-invite-token"}')
+    return jsonResponse(200, { tenantId: 12 })
+  }
+  try {
+    assert.deepEqual(await serverAccessApi.acceptInvite('pasted-invite-token'), { tenantId: 12 })
+  } finally {
+    globalThis.fetch = previousFetch
+    globalThis.localStorage = previousStorage
+  }
+})
+
 test('owner lists send explicit page and size with a default page size of 50', async () => {
   const previousFetch = globalThis.fetch
   const calls = []

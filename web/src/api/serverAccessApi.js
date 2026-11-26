@@ -33,6 +33,7 @@ function ownerList(path, page, size, status = '') {
 
 export const serverAccessApi = {
   tenantMe: () => request('GET', `${ownerBase}/tenants/me`),
+  acceptInvite: (token) => request('POST', `${ownerBase}/invites/accept`, { token }),
   members: () => request('GET', `${ownerBase}/tenants/me/members`),
   invites: (page = 1, size = 50) => ownerList(`${ownerBase}/tenants/me/invites`, page, size),
   inviteMember: (email, role) => request('POST', `${ownerBase}/tenants/me/members/invite`, { email, role }),
